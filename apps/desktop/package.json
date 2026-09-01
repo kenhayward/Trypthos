@@ -1,7 +1,7 @@
 {
   "name": "trypthos-desktop",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "main": "src/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -9,7 +9,7 @@
     "dist": "electron-builder --config electron-builder.config.cjs"
   },
   "devDependencies": {
-    "electron": "^44.1.0",
+    "electron": "44.1.0",
     "electron-builder": "^26.15.3"
   }
 }

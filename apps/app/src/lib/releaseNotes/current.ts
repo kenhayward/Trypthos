@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.4.2",
+    date: "2026-09-01",
+    pr: 10,
+    headline: "The installers actually build",
+    summary:
+      "The first attempt at cutting a release failed on both Windows and macOS before producing anything. The Electron version was written as a range rather than a fixed version, and the packaging tool needs an exact one because it downloads binaries for one specific release. Pinning it also means a rebuild of the same version ships the same runtime, rather than whatever was newest that day.",
+    fixed: [
+      "Release builds no longer fail before producing an installer.",
+    ],
+  },
+  {
     version: "0.4.1",
     date: "2026-09-01",
     pr: 9,
