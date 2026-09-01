@@ -10,3 +10,44 @@ body,
 #root {
   height: 100%;
 }
+
+/// Preview mode prose. Tailwind resets heading and list styling globally, so rendered markdown needs
+/// it putting back - scoped here rather than applied through a plugin, to keep the rendered output
+/// and the sanitiser the only two things that decide what preview looks like.
+.markdown-preview {
+  line-height: 1.7;
+  color: var(--color-neutral-800);
+}
+.markdown-preview h1 { font-size: 1.6em; font-weight: 600; margin: 0.6em 0 0.4em; }
+.markdown-preview h2 { font-size: 1.3em; font-weight: 600; margin: 0.6em 0 0.4em; }
+.markdown-preview h3 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.4em; }
+.markdown-preview p { margin: 0.7em 0; }
+.markdown-preview ul { list-style: disc; padding-left: 1.4em; margin: 0.7em 0; }
+.markdown-preview ol { list-style: decimal; padding-left: 1.4em; margin: 0.7em 0; }
+.markdown-preview li { margin: 0.2em 0; }
+.markdown-preview a { color: #2e7d6b; text-decoration: underline; text-underline-offset: 2px; }
+.markdown-preview code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-neutral-100);
+  border-radius: 3px;
+  padding: 0.08em 0.35em;
+}
+.markdown-preview pre {
+  background: var(--color-neutral-100);
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.markdown-preview pre code { background: none; padding: 0; }
+.markdown-preview blockquote {
+  border-left: 3px solid var(--color-neutral-300);
+  padding-left: 0.9em;
+  margin: 0.8em 0;
+  color: var(--color-neutral-600);
+  font-style: italic;
+}
+.markdown-preview table { border-collapse: collapse; margin: 0.8em 0; display: block; overflow-x: auto; }
+.markdown-preview th,
+.markdown-preview td { border: 1px solid var(--color-neutral-300); padding: 0.35em 0.7em; text-align: left; }

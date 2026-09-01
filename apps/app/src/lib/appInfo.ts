@@ -12,7 +12,7 @@ export const CAPABILITIES = `
 | Feature | Description |
 | --- | --- |
 | Workspace browser | Browse a local folder as a tree. Cloud accounts follow in a later release. |
-| Markdown editor | Edit markdown with Live, Source and Preview views over the same text. |
+| Markdown editor | Edit markdown in Source view, read it in Preview. Switching view never changes your file. |
 | AI chat | Ask about the open document and the wider folder, using an endpoint and model you configure. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();
@@ -21,5 +21,6 @@ export const CAPABILITIES = `
 /// provider is introduced.
 export const DISCLAIMERS: readonly string[] = [
   "Built with Electron and React.",
+  "Editing is provided by CodeMirror 6. Preview is rendered with marked and sanitised with DOMPurify.",
   "Chat requests go directly from this app to the endpoint you configure. No Trypthos server is involved.",
 ];

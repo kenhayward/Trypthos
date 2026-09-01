@@ -1,0 +1,32 @@
+import { useMemo } from "react";
+import { renderMarkdown } from "../lib/markdown";
+
+interface Props {
+  source: string;
+}
+
+/// Preview mode: read-only rendered prose.
+///
+/// Not an editor with editing switched off - no caret, no gutter, no line numbers. It stopped being
+/// an editing surface, which is the point of the mode.
+///
+/// The HTML is sanitised in `renderMarkdown` before it arrives here. That is the only reason
+/// dangerouslySetInnerHTML is acceptable at this boundary: a markdown file is untrusted input, and
+/// this component renders inside the app's own origin.
+export default function MarkdownPreview({ source }: Props) {
+  const html = useMemo(() => renderMarkdown(source), [source]);
+
+  if (html === "") {
+    return (
+      <div className="p-4 text-sm text-neutral-500">Nothing to preview yet.</div>
+    );
+  }
+
+  return (
+    <div
+      aria-label="Markdown preview"
+      className="markdown-preview h-full overflow-auto p-4"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
