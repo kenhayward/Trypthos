@@ -14,15 +14,21 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 ## Markdown editor
 
-The centre panel edits markdown in one of three views over the same document:
+The centre panel edits markdown in one of several views over the same document:
 
+- **Source** shows every character, colour-coded by role: markers stay dim, while headings,
+  emphasis, code and links stand out. Nothing is resized or bolded, so what you read is exactly what
+  is stored. Line numbers, undo and redo work as you would expect.
+- **Preview** is read-only rendered prose. No caret, no gutter - it stops being an editing surface.
 - **Live** hides syntax markers until your cursor reaches a line, which then shows its own
-  scaffolding. Reads like a document, edits like text.
-- **Source** shows every character, colour-coded by role.
-- **Preview** is read-only rendered prose.
+  scaffolding. Reads like a document, edits like text. **Not built yet**; it is the next thing.
 
-Switching view never rewrites your file. The bytes on disk are identical in all three, so a document
-can be shared between someone who wants to read it and someone who cares about its exact text.
+Switching view never rewrites your file. The bytes on disk are identical in every view, so a
+document can be shared between someone who wants to read it and someone who cares about its exact
+text, without either being surprised by what the other did to it.
+
+Preview renders whatever the file contains, and a markdown file is untrusted input like any other,
+so the rendered HTML is sanitised before it is shown.
 
 ## AI chat
 

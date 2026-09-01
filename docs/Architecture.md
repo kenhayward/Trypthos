@@ -50,6 +50,27 @@ both processes and testable without booting either.
   a **result, not an exception** - both shaped for GitHub, where a save is a commit, before any cloud
   backend exists.
 
+## The editor
+
+**CodeMirror 6 is the single editing surface.** There is no second editing engine and no markdown
+serialiser: Source, Preview and (next) Live are views over one document, so there is nothing to
+round-trip and nothing that can reformat a user's file behind their back.
+
+- `components/MarkdownEditor.tsx` hosts the CodeMirror view. It is created **once** and then fed
+  transactions. Recreating it per render would look correct while discarding undo history, selection
+  and scroll position on every keystroke.
+- The document lives **above** `EditorPanel`, which is what makes the mode invariant checkable rather
+  than merely intended: mode is local state and has no path to `onChange`, so a mode switch cannot
+  alter the document. `EditorPanel.test.tsx` asserts it.
+- `lib/editorTheme.ts` holds the Source palette. In Source mode colour **stands in for** formatting
+  rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
+  of the bytes.
+- `lib/markdown.ts` renders Preview through marked, sanitised with DOMPurify. One renderer for the
+  whole app: Preview now, chat replies later. Both display text the app did not write.
+
+Live mode is next: decorations that hide markers except on the caret line. Each construct is
+additive, and until one has a decoration it renders as source - a graceful floor.
+
 ## Storage providers
 
 Order: local (now), OneDrive, Google Drive, Dropbox, GitHub.
