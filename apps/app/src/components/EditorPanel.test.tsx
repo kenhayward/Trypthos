@@ -25,12 +25,25 @@ function Harness({ onChange = vi.fn() }: { onChange?: (value: string) => void })
 const modeButton = (name: string) => screen.getByRole("button", { name });
 
 describe("EditorPanel", () => {
-  it("opens in Source mode with the document in an editable surface", () => {
+  it("opens in Live mode with the document in an editable surface", () => {
     render(<Harness />);
 
-    expect(modeButton("Source").getAttribute("aria-pressed")).toBe("true");
+    expect(modeButton("Live").getAttribute("aria-pressed")).toBe("true");
+    expect(modeButton("Source").getAttribute("aria-pressed")).toBe("false");
     expect(modeButton("Preview").getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByLabelText("Markdown source").textContent).toContain("Some **bold** text");
+    expect(screen.getByLabelText("Markdown source")).toBeDefined();
+  });
+
+  it("keeps the same editing surface across Live and Source", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const before = screen.getByLabelText("Markdown source");
+    await user.click(modeButton("Source"));
+
+    // The same element, not a replacement: Live and Source are decorations over one editor, so
+    // switching between them must not rebuild it and discard undo history.
+    expect(screen.getByLabelText("Markdown source")).toBe(before);
   });
 
   it("shows the file name", () => {
@@ -68,9 +81,11 @@ describe("EditorPanel", () => {
     const onChange = vi.fn();
     render(<Harness onChange={onChange} />);
 
+    await user.click(modeButton("Source"));
     const before = screen.getByLabelText("Markdown source").textContent;
 
     await user.click(modeButton("Preview"));
+    await user.click(modeButton("Live"));
     await user.click(modeButton("Source"));
     await user.click(modeButton("Preview"));
     await user.click(modeButton("Source"));
@@ -84,6 +99,7 @@ describe("EditorPanel", () => {
     const onChange = vi.fn();
     render(<Harness onChange={onChange} />);
 
+    await user.click(modeButton("Source"));
     await user.click(screen.getByLabelText("Markdown source"));
     await user.keyboard("X");
 

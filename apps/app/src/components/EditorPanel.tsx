@@ -1,7 +1,14 @@
 import { useState } from "react";
 import MarkdownEditor from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
-import { EDITOR_MODES, MODE_DESCRIPTIONS, MODE_LABELS, isEditable, type EditorMode } from "../lib/editorMode";
+import {
+  DEFAULT_MODE,
+  EDITOR_MODES,
+  MODE_DESCRIPTIONS,
+  MODE_LABELS,
+  isEditable,
+  type EditorMode,
+} from "../lib/editorMode";
 
 interface Props {
   fileName: string | null;
@@ -15,7 +22,7 @@ interface Props {
 /// than merely intended: switching mode is local state here and cannot reach `onChange`, so a mode
 /// switch has no path by which to alter the document.
 export default function EditorPanel({ fileName, value, onChange }: Props) {
-  const [mode, setMode] = useState<EditorMode>("source");
+  const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
 
   return (
     <main aria-label="Editor" className="flex min-w-0 grow flex-col bg-white">
@@ -46,7 +53,12 @@ export default function EditorPanel({ fileName, value, onChange }: Props) {
 
       <div className="min-h-0 grow">
         {isEditable(mode) ? (
-          <MarkdownEditor value={value} onChange={onChange} ariaLabel="Markdown source" />
+          <MarkdownEditor
+            value={value}
+            onChange={onChange}
+            live={mode === "live"}
+            ariaLabel="Markdown source"
+          />
         ) : (
           <MarkdownPreview source={value} />
         )}
