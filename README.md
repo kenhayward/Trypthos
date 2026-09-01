@@ -29,13 +29,17 @@ right-click then Open. Developer ID signing and notarization are outstanding wor
 
 ```bash
 npm ci
-npm run dev --workspace trypthos-app     # renderer at http://localhost:5173
+npm run app
 ```
 
-To run the desktop shell against that dev server, in a second terminal:
+That starts the interface and the desktop window together, with hot reload - edit anything under
+`apps/app/src` and the running window updates. The window retries while the dev server is still
+starting, so the order they come up in does not matter.
+
+To run just the interface in a browser tab instead:
 
 ```bash
-npm run dev --workspace trypthos-desktop
+npm run dev --workspace trypthos-app     # http://localhost:5173
 ```
 
 Checks, all of which CI runs on every pull request:

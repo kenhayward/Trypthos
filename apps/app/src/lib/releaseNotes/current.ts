@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.2.1",
+    date: "2026-09-01",
+    pr: 3,
+    headline: "The desktop app runs, and finds its own interface once installed",
+    summary:
+      "Groundwork for running Trypthos as a desktop app rather than in a browser tab. One command now starts both halves together, and the window retries while the interface is still starting up instead of sitting blank. Also corrects where an installed copy looks for its interface - it would have opened to an empty window.",
+    fixed: [
+      "An installed copy looked for its interface in the wrong place and would have opened to a blank window.",
+      "The window no longer stays blank when it opens before the interface is ready; it retries and appears a moment later.",
+    ],
+    changed: [
+      "A single command starts the app and its interface together during development.",
+    ],
+  },
+  {
     version: "0.2.0",
     date: "2026-09-01",
     pr: 2,

@@ -92,6 +92,21 @@ while putting the whole history on every page load.
 
 The About box reads `lib/appInfo.ts` instead, which is why the capability table lives there.
 
+## Running it
+
+`npm run app` starts the Vite dev server and the Electron shell together. The two race, and the shell
+routinely wins, so `did-fail-load` retries on a capped backoff (`src/devReload.js`) rather than the
+launcher waiting on a port - which also covers restarting the dev server while the shell stays open.
+
+`TRYPTHOS_DEV=1` is set by `apps/desktop/scripts/dev.mjs` rather than inline in the npm script,
+because an inline environment variable is not portable between cmd and a POSIX shell.
+
+The built renderer is in **two different places** depending on the build: the app workspace's `dist`
+when running from the repo, and the packaged app's resources once installed (`src/builtIndex.js`).
+Getting it wrong produces a window that is blank only in the packaged build - the one place it is
+most awkward to notice, which is why it is a pure function with tests rather than a path expression
+inlined at the call site.
+
 ## Packaging
 
 `electron-builder` on a `v*` tag builds the Windows installer and the macOS `.dmg` and publishes them

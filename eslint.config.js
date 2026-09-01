@@ -34,4 +34,13 @@ export default tseslint.config(
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    // Node scripts that are ES modules. Kept separate from the CommonJS block above rather than
+    // widening its glob: that block sets sourceType "commonjs", which is wrong for these.
+    files: ["**/*.mjs"],
+    languageOptions: {
+      sourceType: "module",
+      globals: { ...globals.node },
+    },
+  },
 );
