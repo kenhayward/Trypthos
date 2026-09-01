@@ -195,7 +195,11 @@ inlined at the call site.
 ## Packaging
 
 `electron-builder` on a `v*` tag builds the Windows installer and the macOS `.dmg` and publishes them
-to GitHub Releases. Builds are **unsigned**: Developer ID signing, notarization and a working
+to GitHub Releases. Publishing needs **both** halves: a `publish` block in the electron-builder config
+and `--publish always` on the command. With neither, `dist` builds the installers and leaves them on
+the runner - the workflow's uploaded artifacts expire, and there is nothing durable to link to or for
+an updater to read. The workflow still uploads artifacts as well, because those are how you retrieve
+a build whose publish step failed. Builds are **unsigned**: Developer ID signing, notarization and a working
 Squirrel.Mac update path are outstanding.
 
 Because there is no server, **every user-facing change needs a release** to reach anyone.
