@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.4.1",
+    date: "2026-09-01",
+    pr: 9,
+    headline: "Tagged builds now produce a real, downloadable release",
+    summary:
+      "Groundwork for shipping. Cutting a release built the Windows and macOS installers but left them attached to the build job, where they expire after ninety days and cannot be linked to. They are now published as a proper release you can download from, which is also what a future in-app updater will read.",
+    fixed: [
+      "Installers built from a tag are published as a downloadable release rather than a temporary build attachment.",
+    ],
+  },
+  {
     version: "0.4.0",
     date: "2026-09-01",
     pr: 8,
