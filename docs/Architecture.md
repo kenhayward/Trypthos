@@ -88,6 +88,32 @@ Three things there that are easy to get wrong:
 Fenced code, tables, images and footnotes have no decoration yet and therefore render as source -
 a deliberate floor, and one no two-engine design can offer.
 
+## Two test suites, and which is which
+
+| Suite | Runs in | Command |
+| --- | --- | --- |
+| Unit and component | jsdom | `npm test` |
+| Rendered output | real Chromium, via Playwright | `npm run test:browser` |
+
+Split because they answer different questions, and because jsdom cannot answer the second at all.
+CodeMirror decides what to render by measuring text; jsdom has no layout engine, so the geometry it
+reports is a polyfill returning zeros. A test asserting Live mode's rendered output there would be
+testing that polyfill.
+
+**What belongs in the browser suite:** anything whose correctness is a rendering question - hidden
+markers, computed font sizes, real caret movement. **What does not:** logic. A rule expressible over
+data belongs in the jsdom suite or as a pure function, because a browser test that fails tells you
+much less about why.
+
+One trap it is worth knowing: `@testing-library/user-event` dispatches **synthetic** events, and
+CodeMirror does not move its caret for them - it resolves a position from real pointer input. Use
+`userEvent` from `@vitest/browser/context` in this suite. The synthetic version passes while the
+caret never moves, so every assertion after it measures the wrong state.
+
+The suite justified itself on its first run by catching a defect the jsdom suite structurally could
+not see: hidden `HeaderMark` covers `#` but not the space after it, so every heading rendered one
+character too far right.
+
 ## Storage providers
 
 Order: local (now), OneDrive, Google Drive, Dropbox, GitHub.

@@ -40,3 +40,13 @@ jobs:
       # bundle boundary and the no-fancy-dashes rule. A missed version bump fails here, not in a release.
       - name: Test
         run: npm test
+
+      # Chromium only, and only what Playwright needs. --with-deps installs the system libraries the
+      # runner lacks; without it the browser launches and immediately dies with a missing .so.
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
+
+      # The suite that needs real text measurement. CodeMirror decides what to render by measuring,
+      # and jsdom has no geometry, so Live mode's rendered output can only be checked here.
+      - name: Browser tests
+        run: npm run test:browser

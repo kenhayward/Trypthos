@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import version from "../../version.json" with { type: "json" };
 
@@ -16,5 +16,8 @@ export default defineConfig({
     globals: false,
     setupFiles: ["./src/test-setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // A browser test file ends in .test.tsx too, so the include glob above matches it. Without this
+    // the jsdom runner picks up the browser suite and fails on the first @vitest/browser import.
+    exclude: [...configDefaults.exclude, "**/*.browser.test.tsx"],
   },
 });
