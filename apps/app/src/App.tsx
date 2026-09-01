@@ -13,13 +13,13 @@ const SCRATCH = `# Scratch buffer
 
 No folder is open yet, so this text lives only in memory.
 
-Switch between **Source** and **Preview** above. The text is the same in both:
-a mode is a view, never a transform.
+**Live** hides markdown syntax except on the line your cursor is on. Click into
+this line to see its own markers appear.
 
-- Source shows every character, colour-coded by role
-- Preview renders it as prose
+- **Source** shows every character, colour-coded by role
+- **Preview** renders it as read-only prose
 
-> Live mode, which hides markers except on the line your cursor is on, comes next.
+> The text is identical in all three. A mode is a view, never a transform.
 
 Inline \`code\` and a [link](https://example.com) render too.
 `;

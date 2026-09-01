@@ -3,7 +3,7 @@ import { EDITOR_MODES, MODE_LABELS, isEditable, type EditorMode } from "./editor
 
 describe("editor modes", () => {
   it("offers only the modes that are actually implemented", () => {
-    expect(EDITOR_MODES).toEqual(["source", "preview"]);
+    expect(EDITOR_MODES).toEqual(["live", "source", "preview"]);
   });
 
   it("labels every mode it offers", () => {
@@ -12,13 +12,14 @@ describe("editor modes", () => {
     }
   });
 
-  it("makes source editable and preview not", () => {
+  it("makes the editing modes editable and preview not", () => {
+    expect(isEditable("live")).toBe(true);
     expect(isEditable("source")).toBe(true);
     expect(isEditable("preview")).toBe(false);
   });
 
   it("treats every listed mode as a known mode", () => {
-    const known: EditorMode[] = ["source", "preview"];
+    const known: EditorMode[] = ["live", "source", "preview"];
     expect(EDITOR_MODES.every((mode) => known.includes(mode))).toBe(true);
   });
 });
