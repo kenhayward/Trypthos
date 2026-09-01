@@ -1,11 +1,12 @@
 "use strict";
 
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
 const { builtIndexPath } = require("./builtIndex");
 const { nextRetryDelayMs } = require("./devReload");
+const { registerIpcHandlers } = require("./ipcHandlers");
 
 let mainWindow = null;
 let loadAttempt = 0;
@@ -91,6 +92,7 @@ if (!gotLock) {
   });
 
   void app.whenReady().then(() => {
+    registerIpcHandlers({ ipcMain, dialog, getWindow: () => mainWindow });
     createWindow();
 
     app.on("activate", () => {

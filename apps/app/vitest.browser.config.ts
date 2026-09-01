@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -18,6 +19,14 @@ import version from "../../version.json" with { type: "json" };
 /// What does NOT belong here: logic. If a rule can be expressed over data, it is tested in the jsdom
 /// suite or as a pure function, because a browser test that fails tells you far less about why.
 export default defineConfig({
+  resolve: {
+    alias: {
+      // The renderer uses the domain's SOURCE, not its build output, so a change there hot-reloads
+      // like any other file. Node consumers (the Electron shell) resolve package.json main to dist,
+      // which is why the package is built at all.
+      "@trypthos/domain": fileURLToPath(new URL("../../packages/domain/src/index.ts", import.meta.url)),
+    },
+  },
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(version.version),

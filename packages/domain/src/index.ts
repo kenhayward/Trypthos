@@ -12,6 +12,12 @@ export type { LoadFailure, LoadOptions, LoadResult, Migration } from "./persiste
 export { ChatProfileSchema, parseChatProfiles } from "./chat";
 export type { ChatProfile } from "./chat";
 
+export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
+export type { TreeEntry } from "./workspaceTree";
+
+export { IPC_CHANNELS, ListRequest, ReadRequest, RevisionSchema, WriteRequest } from "./ipc";
+export type { IpcChannel } from "./ipc";
+
 export type {
   ListPage,
   ListResult,
