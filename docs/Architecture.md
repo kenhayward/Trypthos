@@ -68,8 +68,25 @@ round-trip and nothing that can reformat a user's file behind their back.
 - `lib/markdown.ts` renders Preview through marked, sanitised with DOMPurify. One renderer for the
   whole app: Preview now, chat replies later. Both display text the app did not write.
 
-Live mode is next: decorations that hide markers except on the caret line. Each construct is
-additive, and until one has a decoration it renders as source - a graceful floor.
+**Live mode** (`lib/liveDecorations.ts` + `lib/liveExtension.ts`) hides markdown punctuation except
+on the line the caret is on. The split is deliberate: every decision - which nodes are markers, which
+lines are revealed, what to hide - is pure and tested, and the extension is only plumbing. CodeMirror
+measures text to decide what to render and jsdom has no geometry, so assertions through the rendered
+editor would be testing the harness rather than the rules.
+
+Three things there that are easy to get wrong:
+
+- **Decorations are collected then sorted, not appended while walking the tree.** The walk is in
+  document order but nesting is not: a heading starts at the same offset as its own hash, so the
+  parent's mark is produced before the child's replacement at an equal `from`. A `RangeSetBuilder`
+  rejects that outright.
+- **The parent node matters.** `CodeMark` is both an inline backtick and a fence; `URL` is both a
+  link target and content. Matching on name alone hides the wrong things.
+- **Only the visible ranges are decorated.** Walking the whole tree per keystroke is what makes naive
+  live-preview implementations crawl on long files.
+
+Fenced code, tables, images and footnotes have no decoration yet and therefore render as source -
+a deliberate floor, and one no two-engine design can offer.
 
 ## Storage providers
 

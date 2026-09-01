@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.3.0",
+    date: "2026-09-01",
+    pr: 4,
+    headline: "Live mode: markdown that reads like a document and edits like text",
+    summary:
+      "The editor now opens in Live mode. Markdown syntax is hidden, so a heading is simply large and bold, but the line your cursor is on shows its own markers - so you can always see and change the characters you are actually typing. Nothing is rewritten: the file is identical to what Source mode shows, which is the point of doing it this way rather than with a rich-text editor.",
+    added: [
+      "Live mode, now the default view: headings, bold, italic, inline code, links and quotes render in place.",
+      "The line your cursor is on reveals its own markdown syntax, and hides it again when you move away.",
+    ],
+    changed: [
+      "The editor opens in Live mode rather than Source. Source and Preview are unchanged and one click away.",
+      "Switching between Live and Source keeps your undo history, selection and scroll position.",
+    ],
+  },
+  {
     version: "0.2.1",
     date: "2026-09-01",
     pr: 3,
