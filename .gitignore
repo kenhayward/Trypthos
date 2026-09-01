@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-electron/
+release/
+out/
+coverage/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.env
+.env.local
