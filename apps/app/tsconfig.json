@@ -1,9 +1,29 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
-    "types": ["node", "vite/client"]
+    "types": [
+      "node",
+      "vite/client"
+    ],
+    "paths": {
+      // The renderer typechecks against the domain's SOURCE, matching the Vite alias that resolves
+      // it at runtime. Without this, tsc follows package.json types to dist/ - which does not exist
+      // on a clean checkout, so typecheck passes locally and fails in CI on the first build.
+      "@trypthos/domain": [
+        "../../packages/domain/src/index.ts"
+      ]
+    }
   },
-  "include": ["src", "vite.config.ts", "vitest.config.ts", "src/vite-env.d.ts"]
+  "include": [
+    "src",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "src/vite-env.d.ts"
+  ]
 }
