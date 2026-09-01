@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.3.1",
+    date: "2026-09-01",
+    pr: 7,
+    headline: "Headings line up properly in Live mode",
+    summary:
+      "Fixes a stray space that left every heading and blockquote sitting one character right of the surrounding text in Live mode. Found by a new test suite that runs in a real browser, which can check what the editor actually draws rather than only what it decides to draw.",
+    fixed: [
+      "Headings and blockquotes no longer sit one space right of body text in Live mode.",
+    ],
+  },
+  {
     version: "0.3.0",
     date: "2026-09-01",
     pr: 4,

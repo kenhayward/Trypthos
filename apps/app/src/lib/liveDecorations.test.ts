@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  consumesTrailingSpace,
   formatClassFor,
   isHiddenMarker,
   markersToHide,
@@ -38,6 +39,27 @@ describe("isHiddenMarker", () => {
   it("leaves ordinary content alone", () => {
     expect(isHiddenMarker("Paragraph", "Document")).toBe(false);
     expect(isHiddenMarker("CodeText", "FencedCode")).toBe(false);
+  });
+});
+
+describe("consumesTrailingSpace", () => {
+  // A block marker owns the space after it: "# " is the syntax, not "#" plus content that happens to
+  // start with a space. Hiding only the hash leaves every heading and quote indented by one space -
+  // visible immediately in a browser, and invisible to any test that cannot lay text out.
+  it("is true for the block markers that are followed by one", () => {
+    expect(consumesTrailingSpace("HeaderMark")).toBe(true);
+    expect(consumesTrailingSpace("QuoteMark")).toBe(true);
+  });
+
+  it("is false for inline markers, which sit flush against their content", () => {
+    expect(consumesTrailingSpace("EmphasisMark")).toBe(false);
+    expect(consumesTrailingSpace("CodeMark")).toBe(false);
+    expect(consumesTrailingSpace("LinkMark")).toBe(false);
+  });
+
+  // The bullet stays visible, so its space is part of what is drawn.
+  it("is false for list bullets", () => {
+    expect(consumesTrailingSpace("ListMark")).toBe(false);
   });
 });
 

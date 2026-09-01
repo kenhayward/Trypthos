@@ -56,6 +56,15 @@ export function isHiddenMarker(name: string, parent: string): boolean {
   return false;
 }
 
+/// Whether this marker owns the whitespace that follows it.
+///
+/// "# " is the heading syntax - the hash AND its space. Hiding only the hash leaves every heading and
+/// every blockquote indented by one space, which reads as a wobbly left margin rather than as a bug,
+/// and so survives review easily. Inline markers sit flush against their content and own nothing.
+export function consumesTrailingSpace(name: string): boolean {
+  return name === "HeaderMark" || name === "QuoteMark";
+}
+
 export function formatClassFor(name: string): string | null {
   return FORMAT_CLASSES[name] ?? null;
 }

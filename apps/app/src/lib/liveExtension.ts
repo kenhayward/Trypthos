@@ -2,7 +2,13 @@ import { syntaxTree } from "@codemirror/language";
 import type { Range as CmRange } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
-import { formatClassFor, isHiddenMarker, revealedLines, type SyntaxRange } from "./liveDecorations";
+import {
+  consumesTrailingSpace,
+  formatClassFor,
+  isHiddenMarker,
+  revealedLines,
+  type SyntaxRange,
+} from "./liveDecorations";
 
 type DecorationRange = CmRange<Decoration>;
 
@@ -13,6 +19,19 @@ type DecorationRange = CmRange<Decoration>;
 /// the result changes.
 
 const hidden = Decoration.replace({});
+
+/// Where a hidden marker's range ends, extended past the whitespace a block marker owns.
+///
+/// Bounded to the marker's own line: a trailing space run must never swallow the newline and pull the
+/// next line up into this one.
+function hideTo(view: EditorView, range: SyntaxRange): number {
+  if (!consumesTrailingSpace(range.name)) return range.to;
+
+  const lineEnd = view.state.doc.lineAt(range.from).to;
+  let to = range.to;
+  while (to < lineEnd && view.state.doc.sliceString(to, to + 1) === " ") to += 1;
+  return to;
+}
 
 function buildDecorations(view: EditorView): DecorationSet {
   // Collected then sorted, rather than appended to a RangeSetBuilder as the tree is walked. The walk
@@ -47,7 +66,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
 
         if (isHiddenMarker(range.name, range.parent) && !revealed.has(lineOf(node.from))) {
-          collected.push(hidden.range(node.from, node.to));
+          collected.push(hidden.range(node.from, hideTo(view, range)));
         }
       },
     });

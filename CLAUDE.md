@@ -347,8 +347,21 @@ npm ci                 # always ci, never install - install can resolve a differ
 npm run lint           # eslint, flat config at the root
 npm run typecheck      # tsc --noEmit across every workspace
 npm run build          # renderer build
-npm test               # every suite: renderer (vitest), domain (vitest), shell (node --test)
+npm test               # every suite: renderer (vitest/jsdom), domain (vitest), shell (node --test)
+npm run test:browser   # rendered output, in real Chromium via Playwright
 ```
+
+**Two test suites, deliberately.** `npm test` is jsdom and runs on every save. `npm run test:browser`
+starts a browser, so it is a different kind of thing to run - but it is the ONLY place a rendering
+question can be answered. CodeMirror decides what to render by measuring text, and jsdom has no layout
+engine, so its geometry is a polyfill returning zeros; a test asserting Live mode's rendered output
+there would be testing the polyfill. Rules expressible over data stay in the jsdom suite or as pure
+functions, because a browser failure tells you much less about why.
+
+In the browser suite use `userEvent` from **`@vitest/browser/context`**, not
+`@testing-library/user-event`: the latter dispatches synthetic events, and CodeMirror does not move
+its caret for them. The synthetic version passes while the caret never moves, so everything asserted
+afterwards measures the wrong state.
 
 Per workspace:
 

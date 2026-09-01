@@ -1,7 +1,7 @@
 {
   "name": "trypthos",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -12,7 +12,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:browser": "npm run test:browser --workspaces --if-present"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

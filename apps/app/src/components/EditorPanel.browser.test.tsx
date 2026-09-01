@@ -1,0 +1,115 @@
+import { useState } from "react";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@vitest/browser/context";
+import { describe, expect, it } from "vitest";
+import EditorPanel from "./EditorPanel";
+
+const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) here.\n";
+
+function Harness() {
+  const [value, setValue] = useState(DOC);
+  return <EditorPanel fileName="notes.md" value={value} onChange={setValue} />;
+}
+
+const modeButton = (name: string) => screen.getByRole("button", { name });
+const surface = () => document.querySelector(".cm-content") as HTMLElement;
+
+const lineWith = (text: string): HTMLElement => {
+  const line = [...document.querySelectorAll(".cm-line")].find((el) =>
+    el.textContent?.includes(text),
+  );
+  if (!line) throw new Error(`No rendered line containing ${JSON.stringify(text)}`);
+  return line as HTMLElement;
+};
+
+/// Moves the caret by clicking, using the browser's real input rather than a synthetic event.
+///
+/// This matters more than it looks. `@testing-library/user-event` dispatches synthetic events, and
+/// CodeMirror does not move its caret for them - it resolves a position from real pointer input. A
+/// test using the synthetic click passes while the caret never moves, so every assertion after it is
+/// measuring the wrong state. That is exactly how the first version of this file "passed" a
+/// reveal-tracking test that was doing nothing.
+async function putCaretOn(text: string): Promise<void> {
+  await userEvent.click(lineWith(text));
+}
+
+/// These assertions are impossible in jsdom.
+///
+/// CodeMirror decides what to render by measuring text, and jsdom has no layout engine, so nothing
+/// below would be testing the editor - it would be testing the polyfill that stands in for geometry.
+/// Everything here is a rendering question, which is what this suite is for.
+describe("Live mode, rendered", () => {
+  it("hides the heading's hash while the caret is elsewhere", async () => {
+    render(<Harness />);
+    // The caret starts at the top, which reveals line 1. Move it away first.
+    await putCaretOn("bold");
+
+    expect(lineWith("Title").textContent).toBe("Title");
+    expect(surface().textContent).not.toContain("# Title");
+  });
+
+  it("still holds the hidden characters in the document", async () => {
+    render(<Harness />);
+    await putCaretOn("bold");
+
+    // Nothing was rewritten: Source shows exactly what is stored, hash and all.
+    await userEvent.click(modeButton("Source"));
+    expect(surface().textContent).toContain("# Title");
+  });
+
+  it("reveals the caret line's own markers, and only that line's", async () => {
+    render(<Harness />);
+
+    await putCaretOn("bold");
+    expect(lineWith("bold").textContent).toContain("**");
+    expect(lineWith("Title").textContent).not.toContain("#");
+
+    await putCaretOn("Title");
+    expect(lineWith("Title").textContent).toContain("#");
+    expect(lineWith("bold").textContent).not.toContain("**");
+  });
+
+  it("draws a heading larger than body text, rather than colouring it", async () => {
+    render(<Harness />);
+    await putCaretOn("bold");
+
+    // The decoration is a span inside the line, not the line itself - measuring the line reports the
+    // editor's base size and compares it against itself.
+    const heading = document.querySelector(".cm-live-h1") as HTMLElement;
+    expect(heading).not.toBeNull();
+
+    const headingSize = parseFloat(getComputedStyle(heading).fontSize);
+    const bodySize = parseFloat(getComputedStyle(lineWith("bold")).fontSize);
+    expect(headingSize).toBeGreaterThan(bodySize);
+  });
+
+  it("draws bold text bold", async () => {
+    render(<Harness />);
+    await putCaretOn("Title");
+
+    const strong = document.querySelector(".cm-live-strong") as HTMLElement;
+    expect(strong).not.toBeNull();
+    expect(Number(getComputedStyle(strong).fontWeight)).toBeGreaterThanOrEqual(700);
+  });
+
+  it("shows a link as its text, not its target", async () => {
+    render(<Harness />);
+    await putCaretOn("Title");
+
+    const line = lineWith("link");
+    expect(line.textContent).toContain("link");
+    expect(line.textContent).not.toContain("https://example.com");
+  });
+});
+
+describe("Source mode, rendered", () => {
+  it("shows every character, on every line", async () => {
+    render(<Harness />);
+    await userEvent.click(modeButton("Source"));
+
+    const text = surface().textContent ?? "";
+    expect(text).toContain("# Title");
+    expect(text).toContain("**bold**");
+    expect(text).toContain("(https://example.com)");
+  });
+});
