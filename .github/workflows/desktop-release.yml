@@ -1,0 +1,49 @@
+name: Desktop release
+
+# Trypthos is a wholly local app: there is no server to redeploy, so a user only ever receives a
+# change through a new installer. Cutting one is deliberate - push a v* tag on a green main.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build --workspace trypthos-app
+
+      # Unsigned for now: SmartScreen warns on Windows, and macOS needs right-click then Open.
+      # Developer ID signing and notarization are outstanding, and the README says so.
+      - name: Package
+        run: npm run dist --workspace trypthos-desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.dmg
+          if-no-files-found: warn

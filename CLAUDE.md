@@ -12,8 +12,8 @@ Trypthos is a **cross-platform desktop (Windows + macOS) markdown editor**, laid
 | **Centre** | The **markdown editor** and preview - the primary surface |
 | **Right** | **AI chat**, working against the open document, the selection, and the wider folder |
 
-> **Status: pre-scaffold.** Sections marked **(TBD)** are filled in by the first scaffold PR - the
-> *process* rules (TDD, CI, versioning, release notes, docs, PR workflow) apply from the first commit.
+> **Status: scaffolded, not yet built.** The three panels render, the shell runs, and the release and
+> guard machinery is in place. The editor, the storage backends and the chat client are not written.
 
 ## Architecture & data flow
 
@@ -27,9 +27,9 @@ idle memory; neither is a product requirement here.
 
 | Component | Stack | Path |
 |---|---|---|
-| Desktop shell (main process) | Electron - windows, menus, fs, watching, OAuth, credential store, **provider calls** | `apps/desktop` (TBD) |
-| Editor / UI (renderer) | React 19 + TS + Vite + Tailwind v4 | `apps/app` (TBD) |
-| Domain (pure library) | TypeScript - no React, no Electron, no `fs` | `packages/domain` (TBD) |
+| Desktop shell (main process) | Electron (CommonJS) - windows, fs, watching, OAuth, credential store, **provider calls** | `apps/desktop` |
+| Editor / UI (renderer) | React 19 + TS + Vite + Tailwind v4 | `apps/app` |
+| Domain (pure library) | TypeScript + zod - no React, no Electron, no `fs` | `packages/domain` |
 
 **There is no server and no backend service.** Chat talks **direct to the provider from the main
 process**, and everything the app stores is a local file.
@@ -220,15 +220,17 @@ the **PR body** - `Fixes #<n>` (or `Closes #<n>`) on its own line. Do this witho
 - **Bump rule:** a **functional enhancement** bumps **Minor +1 and resets Build to 0** (e.g. `0.1.2` ->
   `0.2.0`); any other PR (fix / chore / docs / refactor) bumps **Build +1** (e.g. `0.2.0` -> `0.2.1`).
   **Only bump Major when the user explicitly asks.**
-- **The canonical version is `/version.json`, and every other copy is a mirror.** Bump them in lockstep -
-  each app/package manifest **and its lock file** (a lock file carries the version **twice**: top level and
-  again in `packages[""]`). Edit lock files by hand rather than regenerating them; regenerating churns
-  dependency resolution for no reason. **Write a mirror-guard test** (`versionMirrors.test.*`) that fails
-  the build when any copy drifts, and add each new mirror to it the moment the mirror exists - a stale
-  version in a published artifact cannot be corrected after the fact, and nothing at runtime reads a lock
-  file, so drift there is invisible until an unrelated `npm install` rewrites it.
-- **Add a release entry** to the top of `RECENT` in the release-notes module (path **TBD** with the
-  scaffold; see the epoch structure below) with: `version`, `date`, `pr` (the GitHub PR number),
+- **The canonical version is `/version.json`, and every other copy is a mirror.** This is one npm
+  workspace with **one** `package-lock.json`, so the mirrors are: the root `package.json`,
+  `apps/app/package.json`, `apps/desktop/package.json`, `packages/domain/package.json`, and inside
+  `package-lock.json` the top-level `version` **plus** `packages[""]`, `packages["apps/app"]`,
+  `packages["apps/desktop"]` and `packages["packages/domain"]`. Bump them in lockstep. Edit the lock
+  file by hand rather than regenerating it; regenerating churns dependency resolution for no reason.
+  `apps/app/src/lib/versionMirrors.test.ts` fails the build when any of them drifts - **add each new
+  workspace package to that test in the PR that creates it.** Nothing at runtime reads a lock file, so
+  drift there is invisible until an unrelated `npm install` rewrites it and turns a dependency bump
+  into a surprise version diff.
+- **Add a release entry** to the top of `RECENT` in `apps/app/src/lib/releaseNotes/current.ts` with: `version`, `date`, `pr` (the GitHub PR number),
   `headline`, a **PR-level prose `summary`** (enough for a user to understand the impact), and
   `added`/`changed`/`fixed` bullet lists as applicable. `RECENT[0].version` **must equal**
   `version.json` - assert it in a test.
@@ -336,33 +338,45 @@ A pure bug-fix / cosmetic PR still does 1-2 and 7; it touches 3-6 only when the 
 actually changed. A **docs/CI-only PR** skips 1-3 (no version bump) but keeps 4-6 accurate - say so in
 the PR.
 
-## Commands (TBD - confirm paths with the scaffold)
+## Commands
 
-Keep this section to commands a person actually runs.
-
-### Renderer (React + Vite)
+Everything below runs from the repo root. One npm workspace, one lock file.
 
 ```bash
-npm run dev          # Vite dev server
-npm run build        # tsc typecheck + vite build
-npm test             # vitest
-npm test -- ChatPanel            # one file / name substring
+npm ci                 # always ci, never install - install can resolve a different tree than the lock names
+npm run lint           # eslint, flat config at the root
+npm run typecheck      # tsc --noEmit across every workspace
+npm run build          # renderer build
+npm test               # every suite: renderer (vitest), domain (vitest), shell (node --test)
 ```
 
-Keep the vitest config **separate from the vite config** so the production build does not depend on
-vitest, and keep `reporters: ["default"]` pinned in it (see the reporter trap under TDD).
-
-### Desktop shell (Electron)
+Per workspace:
 
 ```bash
-npm run dev          # loads the Vite dev server; skips first-run setup
-npm test             # pure unit tests (node --test) - no Electron
-npm run dist         # NSIS installer on Windows; .dmg on macOS (run on a Mac)
+npm run dev   --workspace trypthos-app       # Vite dev server on :5173
+npm run dev   --workspace trypthos-desktop   # Electron against that dev server (TRYPTHOS_DEV=1)
+npm test      --workspace @trypthos/domain
+npm run dist  --workspace trypthos-desktop   # NSIS installer on Windows, .dmg on macOS
 ```
 
-The shell's testable logic - menu/tray state, update state, path resolution - lives in **pure
-modules** the test can import without booting Electron. Anything that needs a `BrowserWindow` is
-either not tested or moved until it is.
+One test file, or one name:
+
+```bash
+npx vitest run --root apps/app ChatPanel
+npx vitest run --root apps/app -t "opens and closes"
+```
+
+**TypeScript is pinned to 5.9, not 7.** `typescript-eslint` caps its peer at `<6.1.0`, so TS 7 would
+mean dropping the lint step. Revisit when typescript-eslint supports it.
+
+**Do not remove `reporters: ["default"]`** from either vitest config. Left implicit, vitest has
+printed nothing a test logged on Windows while the identical run on Linux printed all of it - a
+silent local run is the failure mode, so treat one with suspicion.
+
+**Writing files through a shell heredoc mangles backslashes** on this setup: a doubled backslash
+arrives halved, which silently turns `/\bARCHIVE\b/` into a regex matching a backspace character -
+a guard test that passes because it can never match anything. Use the editor tools for any file
+containing regex escapes or Windows paths, and prove a new guard test fails before trusting it.
 
 ## Conventions & gotchas
 
