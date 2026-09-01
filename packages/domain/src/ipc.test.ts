@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import { IPC_CHANNELS, ListRequest, ReadRequest, WriteRequest } from "./ipc";
+
+describe("IPC_CHANNELS", () => {
+  it("is a closed list, so the preload bridge stays enumerable", () => {
+    expect([...IPC_CHANNELS]).toEqual([
+      "workspace:open",
+      "workspace:list",
+      "file:read",
+      "file:write",
+    ]);
+  });
+});
+
+describe("ListRequest", () => {
+  it("accepts a workspace-relative path", () => {
+    expect(ListRequest.parse({ path: "notes" })).toEqual({ path: "notes" });
+  });
+
+  it("accepts the workspace root", () => {
+    expect(ListRequest.parse({ path: "" })).toEqual({ path: "" });
+  });
+
+  it("rejects anything that is not a string path", () => {
+    expect(() => ListRequest.parse({ path: 42 })).toThrow();
+    expect(() => ListRequest.parse({})).toThrow();
+  });
+
+  // The renderer is untrusted. The main process re-validates every argument, and a payload carrying
+  // extra fields is a sign something is wrong rather than something to quietly ignore.
+  it("rejects unknown fields", () => {
+    expect(() => ListRequest.parse({ path: "notes", root: "/etc" })).toThrow();
+  });
+});
+
+describe("ReadRequest", () => {
+  it("accepts a path", () => {
+    expect(ReadRequest.parse({ path: "a/b.md" })).toEqual({ path: "a/b.md" });
+  });
+
+  it("rejects an empty path, since there is no file at the root itself", () => {
+    expect(() => ReadRequest.parse({ path: "" })).toThrow();
+  });
+});
+
+describe("WriteRequest", () => {
+  it("requires the revision the caller last saw", () => {
+    const parsed = WriteRequest.parse({
+      path: "a.md",
+      content: "hello",
+      expectedRevision: { id: "123-45" },
+    });
+    expect(parsed.expectedRevision).toEqual({ id: "123-45" });
+  });
+
+  // Creating a new file is the only case with nothing to compare against, and it has to be stated
+  // rather than implied by omission - a missing field would otherwise read as "overwrite whatever
+  // is there", which is exactly the accident the revision exists to prevent.
+  it("accepts an explicit null revision, for creating a file", () => {
+    const parsed = WriteRequest.parse({ path: "a.md", content: "x", expectedRevision: null });
+    expect(parsed.expectedRevision).toBeNull();
+  });
+
+  it("rejects a write with no revision field at all", () => {
+    expect(() => WriteRequest.parse({ path: "a.md", content: "x" })).toThrow();
+  });
+
+  it("accepts empty content, which is a legitimate document", () => {
+    expect(WriteRequest.parse({ path: "a.md", content: "", expectedRevision: null }).content).toBe("");
+  });
+});

@@ -13,6 +13,13 @@ component, cross-process contract, external dependency, stored-data shape or pac
 
 One npm workspace, one lock file, one `npm ci`.
 
+**The domain package is built.** It emits CommonJS to `dist/`, because the Electron main process runs
+plain CommonJS and cannot import TypeScript - and the workspace path guard has to run there, since
+the renderer is untrusted. The renderer resolves `@trypthos/domain` to the **source** through a Vite
+alias, so a change to it hot-reloads; Node consumers resolve `package.json` main to `dist`. That is
+also why the package does not declare `"type": "module"`: node would then treat the emitted CommonJS
+as ESM and reject its own requires.
+
 There is **no server**. Chat calls the provider directly from the main process, and everything the
 app stores is a local file. That is the fact most other decisions here follow from.
 
@@ -116,7 +123,42 @@ character too far right.
 
 ## Storage providers
 
-Order: local (now), OneDrive, Google Drive, Dropbox, GitHub.
+Order: local (**built**), OneDrive, Google Drive, Dropbox, GitHub.
+
+`apps/desktop/src/localWorkspace.js` is the local backend. Two path checks, and both are needed:
+
+1. The **lexical** guard (`createPathGuard`) rejects traversal, absolute, drive-relative and UNC paths
+   before any syscall.
+2. **`realpath`**, checked against the root again. The lexical guard cannot see symlinks - it has no
+   filesystem access by design - and `notes.md` satisfies it perfectly while pointing at
+   `/etc/passwd`. Creating a *new* file is the awkward case: it has no realpath of its own, so the
+   parent directory is resolved and checked instead.
+
+Both are covered by tests against real temp directories, including escapes through a junction. The
+realpath check was verified by removing it and watching exactly those tests fail.
+
+Saving is conditional. `write` takes the revision the caller last read, and a mismatch is a
+**`conflict` result**, never an overwrite - in both directions, including "you thought you were
+creating a file that now exists". The revision is mtime plus size, opaque to callers.
+
+## The IPC surface
+
+Four channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge:
+`workspace:open`, `workspace:list`, `file:read`, `file:write`.
+
+Two properties do the work:
+
+- **Every payload is parsed with the shared schema in the main process**, before anything happens and
+  before the open-workspace check. A malformed payload is a protocol error whatever the app is doing,
+  and reporting it as "no workspace open" sends whoever is debugging it to the wrong place.
+- **The renderer cannot name a workspace root.** It can only ask the user to choose one; the main
+  process holds the result. A renderer that could name its own root could name any directory on the
+  machine.
+
+The renderer's own state machine is `apps/app/src/hooks/useWorkspace.ts`, deliberately separate from
+the panel so the interface can be redesigned without touching behaviour, and so the awkward cases -
+a conflicting save, a file that vanished, the browser preview with no filesystem at all - can be
+tested without rendering anything.
 
 The first three share a shape: OAuth, a mutable file at a stable id, delta sync, last-writer-wins.
 GitHub does not - there is no mutable path, and a save is a commit on a branch with history and merge

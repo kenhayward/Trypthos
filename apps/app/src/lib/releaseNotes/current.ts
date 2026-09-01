@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.4.0",
+    date: "2026-09-01",
+    pr: 8,
+    headline: "Open a folder and edit real files",
+    summary:
+      "Trypthos can now open a folder on your machine, browse it, and edit and save the files in it. Saving checks that the file has not changed underneath you since you opened it: if it has, the save is refused and your edits stay in the editor for you to decide about, rather than one version quietly overwriting the other.",
+    added: [
+      "Open a folder from the workspace panel and browse it.",
+      "Open a file into the editor, and save it with Ctrl+S (Cmd+S on macOS).",
+      "An asterisk beside the file name while there are unsaved changes.",
+      "Saves are refused when the file changed on disk since you opened it, with your edits kept.",
+    ],
+    changed: [
+      "The scratch buffer is still there until you open a folder, so the editor is usable straight away.",
+    ],
+  },
+  {
     version: "0.3.1",
     date: "2026-09-01",
     pr: 7,

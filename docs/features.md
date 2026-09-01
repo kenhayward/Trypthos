@@ -5,8 +5,14 @@ About box carries a shorter table again; all three change together.
 
 ## Workspace browser
 
-The left panel shows a workspace as a single tree. Local folders work today; OneDrive, Google Drive,
-Dropbox and GitHub arrive behind the same interface, in that order.
+The left panel shows a workspace. Open a folder from your machine, browse into subfolders, and click
+a file to open it in the editor. OneDrive, Google Drive, Dropbox and GitHub arrive behind the same
+interface, in that order.
+
+Saving is deliberate: press Ctrl+S (Cmd+S on macOS), and an asterisk beside the file name shows when
+there is something unsaved. If the file changed on disk since you opened it - another program, or
+another window - the save is **refused** rather than applied, and your edits stay exactly where they
+are. Trypthos will not decide for you which version wins.
 
 Local and cloud look like one tree to you, but they behave differently underneath: cloud listings are
 paged, slow, and can fail part-way through. Trypthos shows that on the node it affects rather than

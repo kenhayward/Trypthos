@@ -9,18 +9,21 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 
 | Feature | Description |
 | --- | --- |
-| Workspace browser | Browse a folder as a tree. Local now; OneDrive, Google Drive, Dropbox and GitHub follow. |
+| Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | Markdown editor | Live, Source and Preview views over one document. A mode is a view, never a transform. |
 | AI chat | Ask about the open document and the wider folder, using an endpoint and model you configure. |
+| Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
 | Local by default | No server, no account, no telemetry. Chats and settings live on your machine. |
 
 Full prose descriptions: [docs/features.md](docs/features.md).
 
 ## Status
 
-Early. The markdown editor works: Live, Source and Preview views over one document. The folder
-backends and the chat client are not built yet, so there is nothing to open or save - the editor
-opens on an in-memory scratch buffer. See the roadmap below.
+Early, but usable. Open a local folder, browse it, edit files and save them. The editor has Live,
+Source and Preview views over one document. Cloud folders and the chat client are not built yet.
+
+Run it in a browser tab and there is no filesystem, so the workspace panel says so - that is a
+supported way to work on the interface, not a broken state.
 
 **Builds are unsigned.** Windows SmartScreen will warn on first install, and macOS needs
 right-click then Open. Developer ID signing and notarization are outstanding work.
@@ -62,7 +65,8 @@ More detail: [docs/Architecture.md](docs/Architecture.md).
 
 1. **Editor** - Live, Source and Preview are in. Tables, images and footnotes still render as
    source in Live mode; each gets a decoration in turn.
-2. **Local workspace** - real folder tree, file watching, open and save.
+2. **Local workspace** - open, browse, edit and save are in. Still to come: a proper tree, file
+   watching, and creating or renaming files.
 3. **Chat** - provider calls from the main process, streamed to the panel.
 4. **Cloud providers** - OneDrive, then Google Drive, Dropbox and GitHub.
 5. **Signing** - Developer ID and notarization, so installs stop warning.

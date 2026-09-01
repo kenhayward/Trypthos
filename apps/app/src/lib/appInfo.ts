@@ -11,9 +11,10 @@ export const APP_VERSION = __APP_VERSION__;
 export const CAPABILITIES = `
 | Feature | Description |
 | --- | --- |
-| Workspace browser | Browse a local folder as a tree. Cloud accounts follow in a later release. |
+| Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
 | Markdown editor | Live, Source and Preview views over one document. Switching view never changes your file. |
 | AI chat | Ask about the open document and the wider folder, using an endpoint and model you configure. |
+| Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();
 

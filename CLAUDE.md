@@ -346,7 +346,7 @@ Everything below runs from the repo root. One npm workspace, one lock file.
 npm ci                 # always ci, never install - install can resolve a different tree than the lock names
 npm run lint           # eslint, flat config at the root
 npm run typecheck      # tsc --noEmit across every workspace
-npm run build          # renderer build
+npm run build          # domain (emits dist/) then the renderer
 npm test               # every suite: renderer (vitest/jsdom), domain (vitest), shell (node --test)
 npm run test:browser   # rendered output, in real Chromium via Playwright
 ```
@@ -378,6 +378,15 @@ One test file, or one name:
 npx vitest run --root apps/app ChatPanel
 npx vitest run --root apps/app -t "opens and closes"
 ```
+
+**The domain package is built, and the shell depends on the build.** `packages/domain` emits
+CommonJS to `dist/` because the Electron main process runs plain CommonJS and cannot import
+TypeScript - and the path guard has to run there, since the renderer is untrusted. The renderer
+resolves `@trypthos/domain` to the **source** (a Vite alias, and a `paths` entry so tsc agrees), so
+it hot-reloads; node resolves `main` to `dist`. Three consequences: `npm run app` builds the domain
+first, the package must not declare `"type": "module"` or node treats the emitted CommonJS as ESM and
+rejects its own requires, and typecheck must not depend on `dist` existing - it does not on a clean
+checkout, which is how a green local run becomes a red CI one.
 
 **TypeScript is pinned to 5.9, not 7.** `typescript-eslint` caps its peer at `<6.1.0`, so TS 7 would
 mean dropping the lint step. Revisit when typescript-eslint supports it.
