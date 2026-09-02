@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChatTurnSchema } from "./chatCompletion";
 import { SettingsSchema } from "./settings";
 
 /// The IPC contract between the renderer and the shell.
@@ -27,6 +28,8 @@ export const IPC_CHANNELS = [
   "secrets:list",
   "secrets:set",
   "secrets:delete",
+  "chat:send",
+  "chat:cancel",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -43,6 +46,13 @@ export const IPC_CHANNELS = [
 /// sides drifting silently: a shape change here would otherwise surface as a button that stops
 /// updating rather than as an error.
 export const WINDOW_STATE_CHANNEL = "window:state";
+
+/// Streamed reply tokens, pushed from the main process. The second channel flowing main to renderer.
+///
+/// A push rather than a return value because a reply arrives over seconds and has to render as it
+/// goes. Each message names the stream it belongs to, so a reply that arrives after the user has
+/// moved on can be discarded rather than appended to a different conversation.
+export const CHAT_EVENT_CHANNEL = "chat:event";
 
 export const WindowStateSchema = z.object({ maximized: z.boolean() }).strict();
 
@@ -73,6 +83,50 @@ export const WriteRequest = z
     expectedRevision: RevisionSchema.nullable(),
   })
   .strict();
+
+/// One turn of a conversation, on the way to the provider.
+///
+/// The renderer names a **profile id**, never an endpoint. The main process looks the profile up in
+/// the settings it already holds - so a renderer cannot point Trypthos at a server of its choosing,
+/// for the same reason it cannot name a workspace root. That is also what keeps the key out of
+/// reach: the key is stored per endpoint, and the renderer never gets to say which endpoint.
+export const SendChatRequest = z
+  .object({
+    profileId: z.string().min(1),
+    /// The whole conversation, resent each turn. Chat is stateless per turn, so switching model
+    /// mid-conversation needs nothing else - the history reaches the new model with the request.
+    turns: z.array(ChatTurnSchema).min(1),
+  })
+  .strict();
+
+export const CancelChatRequest = z.object({ streamId: z.string().min(1) }).strict();
+
+/// What the main process pushes back while a reply streams.
+///
+/// Strict, and a closed union. This is our own contract rather than a provider's response, so an
+/// unexpected shape means the two sides have drifted and should fail loudly - the opposite of the
+/// tolerance `parseStreamPayload` applies to somebody else's JSON.
+///
+/// `end` always arrives last, error or not, so the panel has ONE signal that the turn is over.
+export const ChatEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("token"), text: z.string() }).strict(),
+  z
+    .object({
+      type: z.literal("usage"),
+      promptTokens: z.number(),
+      replyTokens: z.number(),
+    })
+    .strict(),
+  z.object({ type: z.literal("error"), message: z.string() }).strict(),
+  z.object({ type: z.literal("end") }).strict(),
+]);
+
+export const ChatEventMessage = z
+  .object({ streamId: z.string().min(1), event: ChatEventSchema })
+  .strict();
+
+export type ChatEvent = z.infer<typeof ChatEventSchema>;
+export type SendChatRequest = z.infer<typeof SendChatRequest>;
 
 /// Storing a key for an endpoint. One way: nothing reads it back out.
 ///

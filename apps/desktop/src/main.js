@@ -19,6 +19,7 @@ const { nextRetryDelayMs } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
 const { createSecretStore } = require("./secretStore");
+const { createChatProvider } = require("./chatProvider");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
 const { createUpdater } = require("./updater");
@@ -151,14 +152,22 @@ if (!gotLock) {
   });
 
   void app.whenReady().then(async () => {
+    // safeStorage is only usable after the app is ready, which is why the store is built here
+    // rather than at module load. DPAPI on Windows, the Keychain on macOS.
+    const secrets = createSecretStore({
+      userDataDir: app.getPath("userData"),
+      encryptor: safeStorage,
+    });
+
     registerIpcHandlers({
       ipcMain,
       dialog,
       getWindow: () => mainWindow,
       userDataDir: app.getPath("userData"),
-      // safeStorage is only usable after the app is ready, which is why the store is built here
-      // rather than at module load. DPAPI on Windows, the Keychain on macOS.
-      secrets: createSecretStore({ userDataDir: app.getPath("userData"), encryptor: safeStorage }),
+      secrets,
+      // The provider call lives here and only here. The renderer never opens a socket to a provider
+      // and never holds the key.
+      chat: createChatProvider({ secrets }),
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
 

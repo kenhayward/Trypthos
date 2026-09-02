@@ -75,7 +75,15 @@ can read one back. If your computer cannot encrypt the key, Trypthos says so and
 rather than falling back to writing it in plain text. Removing a model, or pointing it at a different
 endpoint, deletes the key nothing uses any more.
 
-**The chat panel itself is not built yet.** What exists today is the configuration it will use.
+The panel itself works: type a question, press Enter, and the reply streams in as the model writes
+it. The model that answers is chosen from the picker at the top of the panel, which starts on the one
+marked as the default. While a reply is arriving the send button becomes a stop button in the same
+place, so an endpoint that accepts a request and then goes quiet is never a panel with no way out.
+Replies render as markdown, and are sanitised before they are shown - a model's output is text
+Trypthos did not write, and is treated with the same suspicion as a file from your workspace.
+
+**The panel cannot see your document yet.** It answers from the conversation alone. Sending it the
+open file, your selection and the surrounding folder is the next piece of work.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than
 being stored beside them, so it will tell you when that file has since been renamed, moved or

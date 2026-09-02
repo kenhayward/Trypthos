@@ -30,6 +30,20 @@ contextBridge.exposeInMainWorld("trypthos", {
   setApiKey: (endpoint, key) => ipcRenderer.invoke("secrets:set", { endpoint, key }),
   deleteApiKey: (endpoint) => ipcRenderer.invoke("secrets:delete", { endpoint }),
 
+  /// Chat. The renderer names a PROFILE, never an endpoint - the main process looks the endpoint,
+  /// model and key up from settings it already holds, for the same reason the renderer cannot name a
+  /// workspace root.
+  sendChat: (profileId, turns) => ipcRenderer.invoke("chat:send", { profileId, turns }),
+  cancelChat: (streamId) => ipcRenderer.invoke("chat:cancel", { streamId }),
+
+  /// Streamed reply tokens. Wrapped like `onWindowState`, so the renderer never receives the
+  /// IpcRendererEvent - it carries a `sender` that would hand a page a route back into main.
+  onChatEvent: (listener) => {
+    const wrapped = (_event, message) => listener(message);
+    ipcRenderer.on("chat:event", wrapped);
+    return () => ipcRenderer.removeListener("chat:event", wrapped);
+  },
+
   readSettings: () => ipcRenderer.invoke("settings:read"),
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
   reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),

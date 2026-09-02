@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PANEL_BOUNDS, resolvePanelWidths } from "@trypthos/domain";
+import { PANEL_BOUNDS, defaultChatProfile, resolvePanelWidths } from "@trypthos/domain";
 import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
@@ -10,10 +10,17 @@ import PanelRail from "./components/PanelRail";
 import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { useApiKeys } from "./hooks/useApiKeys";
+import { useChat } from "./hooks/useChat";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { isDesktop, keyBridge, settingsBridge, workspaceClient } from "./lib/workspaceClient";
+import {
+  chatBridge,
+  isDesktop,
+  keyBridge,
+  settingsBridge,
+  workspaceClient,
+} from "./lib/workspaceClient";
 import { currentPlatform } from "./lib/windowControls";
 
 /// Stand-in document, shown until a real file is opened.
@@ -53,6 +60,18 @@ export default function App() {
     [settings.chat.profiles],
   );
   const { keyedEndpoints, saveKey, deleteKey } = useApiKeys(keys, configuredEndpoints);
+
+  const chatModels = settings.chat.profiles;
+  /// Which model answers the next turn.
+  ///
+  /// Kept for the session rather than persisted: `isDefault` already records which model a new chat
+  /// starts on, and a second stored answer to the same question would be one more thing that could
+  /// disagree with it. Null falls back to the default, which is also what the shell does.
+  const [chosenModel, setChosenModel] = useState<string | null>(null);
+  const activeModel =
+    chatModels.find((profile) => profile.id === chosenModel) ?? defaultChatProfile(chatModels);
+
+  const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null);
 
   // The width the three panels share. Measured rather than assumed, because a stored width can come
   // from a wider window than the one it is being restored into.
@@ -198,7 +217,16 @@ export default function App() {
             <ChatPanel
               width={widths.chat}
               onCollapse={() => updatePanels({ chatCollapsed: true })}
-              profileLabel={null}
+              models={chatModels}
+              selectedId={activeModel?.id ?? null}
+              onSelectModel={setChosenModel}
+              turns={chat.turns}
+              streaming={chat.streaming}
+              error={chat.error}
+              onSend={(text) => void chat.send(text)}
+              onStop={() => void chat.stop()}
+              onClear={chat.clear}
+              onConfigure={() => setPrefsOpen(true)}
             />
           </>
         )}

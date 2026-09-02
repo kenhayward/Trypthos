@@ -1,4 +1,5 @@
 import type { Revision, Settings } from "@trypthos/domain";
+import type { ChatBridge } from "../hooks/useChat";
 import type { KeyBridge } from "../hooks/useApiKeys";
 import type { SettingsBridge } from "../hooks/useSettings";
 
@@ -38,7 +39,7 @@ export interface WorkspaceClient {
   writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
 }
 
-interface TrypthosBridge extends WorkspaceClient, KeyBridge {
+interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge {
   platform: string;
   isDesktop: true;
   readSettings(): Promise<{ ok: true; settings: Settings } | { ok: false; reason: string }>;
@@ -53,6 +54,20 @@ export function settingsBridge(): SettingsBridge | null {
   const bridge = window.trypthos;
   if (!bridge?.readSettings) return null;
   return { readSettings: bridge.readSettings, writeSettings: bridge.writeSettings };
+}
+
+/// The chat half of the bridge, or null outside the desktop shell.
+///
+/// Null rather than a stub: the browser preview has no main process to make the provider call, and a
+/// stub would give the panel a send button that silently does nothing.
+export function chatBridge(): ChatBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.sendChat) return null;
+  return {
+    sendChat: bridge.sendChat,
+    cancelChat: bridge.cancelChat,
+    onChatEvent: bridge.onChatEvent,
+  };
 }
 
 /// The API key half of the bridge, or null outside the desktop shell.

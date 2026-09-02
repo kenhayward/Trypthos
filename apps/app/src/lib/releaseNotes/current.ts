@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.13.0",
+    date: "2026-09-02",
+    pr: 30,
+    headline: "The chat panel works",
+    summary:
+      "Ask a question in the right-hand panel and the answer streams back as the model writes it. Pick which model answers from the menu at the top of the panel, stop a reply part-way with the same button you sent it with, and clear the thread to start again. Trypthos talks to your endpoint directly - there is no Trypthos server in between, and your API key never leaves the part of the app that stores it. What the panel does not do yet is see your document: it answers from the conversation alone. Sending it the open file, your selection and the folder around them is the next piece of work.",
+    added: [
+      "A working chat panel: ask a question, watch the reply stream in.",
+      "Choose which model answers from the picker at the top of the panel.",
+      "Stop a reply part-way through, or clear the conversation and start again.",
+      "Replies render as markdown, including code blocks.",
+    ],
+    changed: [
+      "The panel says when no model is configured, and offers to open Preferences.",
+    ],
+  },
+  {
     version: "0.12.0",
     date: "2026-09-02",
     pr: 29,

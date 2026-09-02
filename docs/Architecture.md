@@ -13,7 +13,7 @@ component, cross-process contract, external dependency, stored-data shape or pac
 
 Inside the shell, the modules worth knowing by name: `ipcHandlers.js` (the enumerated IPC surface),
 `localWorkspace.js` (the filesystem provider), `settingsStore.js`, `secretStore.js` (encrypted API
-keys), `updater.js` and `tray.js`.
+keys), `chatProvider.js` (the call to the AI endpoint), `updater.js` and `tray.js`.
 
 One npm workspace, one lock file, one `npm ci`.
 
@@ -287,14 +287,63 @@ character at a time is invalid for most of its life, and because saving settings
 keys, applying each keystroke would delete the user's key around the third character of a URL they
 were part-way through typing.
 
+## Chat, and how a reply gets to the screen
+
+**The provider call happens in the main process. Always.** The renderer sends a turn and receives
+tokens over IPC; it never holds the API key and never opens a socket to a provider. A key in the
+renderer is a key in devtools, in the network panel, and in any renderer crash dump. Do not move the
+call across that boundary to stream more simply.
+
+The path, end to end:
+
+1. The renderer calls `chat:send` with a **profile id** and the conversation so far.
+2. The main process looks the profile up **in the settings it already holds**. The renderer never
+   names an endpoint - the same rule that stops it naming a workspace root, and what keeps a stored
+   key out of reach, since keys are stored per endpoint.
+3. `chatProvider.js` POSTs to `{endpoint}/chat/completions` with `stream: true`, adding the key as a
+   bearer token if one is stored. **No key is not an error**: a local model served by Ollama or
+   llama.cpp needs none, and refusing would make the most private way to use Trypthos the one way
+   that does not work.
+4. Frames are decoded by `createSseDecoder` (domain, pure) and read by `parseStreamPayload`.
+5. Each event is pushed to the renderer on `chat:event`, tagged with a **stream id**.
+
+Four rules hold this together:
+
+- **`end` is always the last event**, error or not, so the panel has one signal that a turn is over
+  rather than two shapes of ending to get right. A stream that closes without `[DONE]` still ends.
+- **Every event names its stream.** A reply the user stopped, or one belonging to a conversation
+  they have since cleared, would otherwise append itself to whatever they typed next.
+- **Tolerant outward, strict inward.** A provider's chunk is parsed loosely and an unrecognised shape
+  is *ignored*, because a provider adding a field must not end a reply mid-sentence. Our own IPC
+  payloads are `.strict()`, where an unexpected field means the two sides have drifted.
+- **No error message repeats the key.** Every message is written locally from the status code; a
+  provider's own body is never forwarded, because some echo the rejected key back in it. An error
+  message is shown, logged, and pasted into bug reports.
+
+The renderer's half is `useChat`, deliberately separate from the panel so the awkward cases - a late
+token, a retry that drops the answer it did not like - can be tested without rendering anything. The
+panel itself is a port of Diariz's, including the send button that becomes a stop button in the same
+place: an endpoint that accepts a request and then goes quiet is otherwise a panel that looks broken
+with no way out. Replies go through the same `renderMarkdown` as Preview mode, sanitised: a model's
+output is text the app did not write, and is treated like a file from the workspace.
+
+`chatProvider.live.test.js` runs the same code against a **real local HTTP server** - Node's `fetch`,
+a real `ReadableStream`, bytes arriving in whatever pieces the socket delivers. That is what catches
+the class of bug a fake reader cannot produce, such as a multi-byte character split across two reads
+decoding as two replacement characters.
+
+**What chat does not do yet:** it has no access to the document. The open file, the selection and the
+folder scope are the next piece of work, along with saved conversations.
+
 ## The IPC surface
 
-Thirteen channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
+Fifteen channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:reopen`, `workspace:list`), files (`file:read`, `file:write`), window
 (`window:minimize`, `window:toggleMaximize`, `window:close`), settings (`settings:read`,
-`settings:write`) and keys (`secrets:list`, `secrets:set`, `secrets:delete`). One channel flows the
-other way: `window:state`, validated on arrival like everything else.
+`settings:write`), keys (`secrets:list`, `secrets:set`, `secrets:delete`) and chat (`chat:send`,
+`chat:cancel`). Two channels flow the other way, both validated on arrival like everything else:
+`window:state`, and `chat:event` for streamed reply tokens.
 
 Three properties do the work:
 
