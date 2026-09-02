@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.4.4",
+    date: "2026-09-02",
+    pr: 12,
+    headline: "The Windows download link in the update feed works",
+    summary:
+      "The Windows installer was published under a slightly different name from the one the update information pointed at, so anything following that link got a dead end. Nothing you can reach from the releases page was affected, and no updater exists yet - but it would have broken the first one quietly. The installer is now named so the two always agree.",
+    fixed: [
+      "The Windows installer is published under the name the update information refers to.",
+    ],
+  },
+  {
     version: "0.4.3",
     date: "2026-09-02",
     pr: 11,
