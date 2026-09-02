@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChatProfileListSchema } from "./chat";
 import { loadPersisted, type Migration } from "./persisted";
 
 /// Everything Trypthos remembers between launches, in one file.
@@ -10,7 +11,7 @@ import { loadPersisted, type Migration } from "./persisted";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 export const SettingsSchema = z
   .object({
@@ -39,6 +40,13 @@ export const SettingsSchema = z
         closeToTray: z.boolean(),
       })
       .strict(),
+    chat: z
+      .object({
+        /// The configured models, in the order the user arranged them - which is the order the
+        /// picker shows. No API keys: see `ChatProfileSchema`.
+        profiles: ChatProfileListSchema,
+      })
+      .strict(),
   })
   .strict();
 
@@ -55,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastWorkspace: null,
   appearance: { theme: "system" },
   window: { closeToTray: false },
+  chat: { profiles: [] },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
@@ -71,6 +80,11 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
       appearance: { theme: "system" },
       window: { closeToTray: false },
     }),
+  },
+  {
+    to: 3,
+    // Version 3 added chat profiles. Empty, not seeded: see the test.
+    migrate: (input) => ({ ...input, chat: { profiles: [] } }),
   },
 ];
 

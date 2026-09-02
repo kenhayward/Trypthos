@@ -24,7 +24,17 @@ export const IPC_CHANNELS = [
   "settings:read",
   "settings:write",
   "workspace:reopen",
+  "secrets:list",
+  "secrets:set",
+  "secrets:delete",
 ] as const;
+
+/// There is no channel that returns an API key, and there must never be one.
+///
+/// The renderer asks which endpoints HAVE a key and gets endpoints back; the key itself never leaves
+/// the main process. A key in the renderer is a key in devtools, in the network panel, and in a
+/// renderer crash dump - so the absence below is the security property, and `secretsLeakGuard` in
+/// the shell tests is what keeps it true as handlers are added.
 
 /// Pushed from the main process when the window is maximised or restored, so the maximise button can
 /// show the right glyph. The only channel that flows main to renderer.
@@ -64,10 +74,27 @@ export const WriteRequest = z
   })
   .strict();
 
+/// Storing a key for an endpoint. One way: nothing reads it back out.
+///
+/// The endpoint is validated as a URL here as well as in the profile schema, because this channel
+/// can be called with an endpoint that is not in the profile list yet - the user types the endpoint
+/// and pastes the key in the same edit.
+export const SetSecretRequest = z
+  .object({
+    endpoint: z.url(),
+    /// Trimmed by the caller. A key that is only whitespace is a mistake, not a key.
+    key: z.string().min(1),
+  })
+  .strict();
+
+export const DeleteSecretRequest = z.object({ endpoint: z.url() }).strict();
+
 /// The whole settings object, validated on the way in. The renderer is untrusted like any other
 /// caller, and a malformed write would be persisted and then read back on every launch.
 export const WriteSettingsRequest = SettingsSchema;
 
+export type SetSecretRequest = z.infer<typeof SetSecretRequest>;
+export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
 export type WriteRequest = z.infer<typeof WriteRequest>;

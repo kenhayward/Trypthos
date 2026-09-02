@@ -87,6 +87,33 @@
       "dark": "Always dark, whatever your system is set to."
     },
     "closeToTray": "Keep running when the window is closed",
-    "closeToTrayHint": "Closing hides Trypthos to the notification area. Quit it from the tray icon."
+    "closeToTrayHint": "Closing hides Trypthos to the notification area. Quit it from the tray icon.",
+    "chat": {
+      "section": "Chat models",
+      "empty": "No models configured yet. Add one to start chatting.",
+      "add": "Add a model",
+      "edit": "Edit {{label}}",
+      "default": "Default",
+      "name": "Name",
+      "endpoint": "Endpoint",
+      "model": "Model",
+      "modelHint": "The slug the endpoint expects, such as gpt-4o-mini or qwen2.5-coder.",
+      "temperature": "Temperature",
+      "maxTokens": "Max tokens",
+      "supportsImages": "This model accepts images",
+      "makeDefault": "Start new chats with this model",
+      "apiKey": "API key",
+      "pasteKey": "Paste a key to store it",
+      "replaceKey": "Paste a new key to replace the stored one",
+      "keyStored": "Key stored",
+      "noKey": "No key stored",
+      "saveKey": "Save key",
+      "removeKey": "Remove key",
+      "keyHint": "Keys are encrypted by your operating system and never leave this computer. Trypthos cannot show a stored key back to you.",
+      "keyFailed": "That key could not be stored securely on this computer, so it was not saved.",
+      "saveModel": "Save model",
+      "cancel": "Cancel",
+      "remove": "Remove"
+    }
   }
 }

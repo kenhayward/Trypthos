@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { IPC_CHANNELS, ListRequest, ReadRequest, WindowStateSchema, WriteRequest } from "./ipc";
+import {
+  IPC_CHANNELS,
+  ListRequest,
+  ReadRequest,
+  SetSecretRequest,
+  WindowStateSchema,
+  WriteRequest,
+} from "./ipc";
 
 describe("IPC_CHANNELS", () => {
   it("is a closed list, so the preload bridge stays enumerable", () => {
@@ -14,7 +21,20 @@ describe("IPC_CHANNELS", () => {
       "settings:read",
       "settings:write",
       "workspace:reopen",
+      "secrets:list",
+      "secrets:set",
+      "secrets:delete",
     ]);
+  });
+
+  // The security property, stated where someone adding a channel will read it. `secrets:list`
+  // answers with endpoints; nothing answers with a key. The shell's leak guard proves it holds by
+  // calling every handler - this is the reminder of why that guard exists.
+  it("has no channel that reads a stored key back", () => {
+    const readsSecrets = IPC_CHANNELS.filter((channel) =>
+      /^secrets:(get|read|reveal|export)/.test(channel),
+    );
+    expect(readsSecrets).toEqual([]);
   });
 });
 
@@ -87,5 +107,35 @@ describe("WriteRequest", () => {
 
   it("accepts empty content, which is a legitimate document", () => {
     expect(WriteRequest.parse({ path: "a.md", content: "", expectedRevision: null }).content).toBe("");
+  });
+});
+
+describe("SetSecretRequest", () => {
+  it("accepts an endpoint and a key", () => {
+    const parsed = SetSecretRequest.parse({
+      endpoint: "https://api.example.com/v1",
+      key: "sk-test-do-not-use-90210",
+    });
+    expect(parsed.endpoint).toBe("https://api.example.com/v1");
+  });
+
+  it("rejects an endpoint that is not a URL", () => {
+    expect(() => SetSecretRequest.parse({ endpoint: "localhost", key: "sk-test-1" })).toThrow();
+  });
+
+  it("rejects an empty key, which is a mistake rather than a key", () => {
+    expect(() =>
+      SetSecretRequest.parse({ endpoint: "https://api.example.com/v1", key: "" }),
+    ).toThrow();
+  });
+
+  it("rejects unknown fields", () => {
+    expect(() =>
+      SetSecretRequest.parse({
+        endpoint: "https://api.example.com/v1",
+        key: "sk-test-1",
+        profileId: "one",
+      }),
+    ).toThrow();
   });
 });

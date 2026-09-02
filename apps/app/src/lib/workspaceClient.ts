@@ -1,4 +1,5 @@
 import type { Revision, Settings } from "@trypthos/domain";
+import type { KeyBridge } from "../hooks/useApiKeys";
 import type { SettingsBridge } from "../hooks/useSettings";
 
 /// The renderer's view of the shell.
@@ -37,7 +38,7 @@ export interface WorkspaceClient {
   writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
 }
 
-interface TrypthosBridge extends WorkspaceClient {
+interface TrypthosBridge extends WorkspaceClient, KeyBridge {
   platform: string;
   isDesktop: true;
   readSettings(): Promise<{ ok: true; settings: Settings } | { ok: false; reason: string }>;
@@ -52,6 +53,20 @@ export function settingsBridge(): SettingsBridge | null {
   const bridge = window.trypthos;
   if (!bridge?.readSettings) return null;
   return { readSettings: bridge.readSettings, writeSettings: bridge.writeSettings };
+}
+
+/// The API key half of the bridge, or null outside the desktop shell.
+///
+/// Null rather than a stub for the same reason as settings: the browser preview has nowhere to store
+/// a key, and a stub that reported success would show "Key stored" against a key that went nowhere.
+export function keyBridge(): KeyBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.listKeyedEndpoints) return null;
+  return {
+    listKeyedEndpoints: bridge.listKeyedEndpoints,
+    setApiKey: bridge.setApiKey,
+    deleteApiKey: bridge.deleteApiKey,
+  };
 }
 
 declare global {

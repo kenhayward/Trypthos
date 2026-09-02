@@ -1,6 +1,16 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  Notification,
+  Tray,
+  dialog,
+  ipcMain,
+  safeStorage,
+  shell,
+} = require("electron");
 const path = require("node:path");
 const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
@@ -8,6 +18,7 @@ const { builtIndexPath } = require("./builtIndex");
 const { nextRetryDelayMs } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
+const { createSecretStore } = require("./secretStore");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
 const { createUpdater } = require("./updater");
@@ -145,6 +156,9 @@ if (!gotLock) {
       dialog,
       getWindow: () => mainWindow,
       userDataDir: app.getPath("userData"),
+      // safeStorage is only usable after the app is ready, which is why the store is built here
+      // rather than at module load. DPAPI on Windows, the Keychain on macOS.
+      secrets: createSecretStore({ userDataDir: app.getPath("userData"), encryptor: safeStorage }),
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
 

@@ -59,10 +59,23 @@ so the rendered HTML is sanitised before it is shown.
 
 The right panel answers questions about the open document, your selection, and the wider folder.
 
-You configure the endpoint, model and parameters yourself, as a list of named profiles you choose
-between per message. Requests go directly from Trypthos to the endpoint you named; no Trypthos
-server is involved, because there is not one. API keys are held in your operating system's
-credential store and are never written into settings files.
+You configure the endpoint, model and parameters yourself, as a list of named models you choose
+between per message. Preferences has a Chat models section for this: each entry carries a name you
+read, the address of an OpenAI-compatible endpoint, the model slug that endpoint expects, and
+optional temperature and token limits. One is marked as the model new chats start on.
+
+Requests go directly from Trypthos to the endpoint you named; no Trypthos server is involved,
+because there is not one.
+
+An API key is stored per endpoint, so two models at the same provider share one key. Keys are
+encrypted by Windows or macOS and held outside your settings file, which means a settings file you
+copy, sync or attach to a bug report carries no key with it. Trypthos will tell you whether a key is
+stored and let you replace or remove it, but it will not show you a stored key - nothing in the app
+can read one back. If your computer cannot encrypt the key, Trypthos says so and does not store it,
+rather than falling back to writing it in plain text. Removing a model, or pointing it at a different
+endpoint, deletes the key nothing uses any more.
+
+**The chat panel itself is not built yet.** What exists today is the configuration it will use.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than
 being stored beside them, so it will tell you when that file has since been renamed, moved or
