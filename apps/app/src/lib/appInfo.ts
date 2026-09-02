@@ -16,6 +16,7 @@ export const CAPABILITIES = `
 | AI chat | Ask about the open document and the wider folder, using an endpoint and model you configure. |
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk. |
 | Appearance | Follows your system light or dark theme, with the window drawing its own title bar. |
+| Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();
 

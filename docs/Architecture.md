@@ -199,6 +199,31 @@ deep a row sits and which folder is still loading are all testable without a tre
   on this repo, 80ms on Diariz, and **40 seconds across 113,000 folders on a home directory** - which
   is a perfectly plausible workspace. The footer therefore counts what is on screen.
 
+## Settings, and the panel layout
+
+One settings file in the app-data directory - one shape to migrate, one place to look, and no chance
+of two files disagreeing about which workspace was last open. It follows the chat-storage rule: never
+in the user's workspace.
+
+- **Reading is total.** A corrupt file, a file from a newer build, a file that is not an object -
+  every one answers with defaults. None of this is the user's work, and refusing to start because a
+  remembered panel width is malformed would be far worse than forgetting the width.
+- **Writing is atomic**: a temporary file and a rename, so a reader sees the old file or the new one
+  and never a half-written one. Settings are written whenever a panel drag settles, so "rarely" is
+  not an argument.
+- **Writes are debounced.** A drag produces a change per pointer move; waiting for it to settle
+  writes once.
+- **Nothing is written before the file has been read.** Until then the state is the DEFAULTS, and
+  saving would overwrite a real settings file with defaults on every launch.
+
+`resolvePanelWidths` decides who yields when the window is too narrow, and it is never the editor - a
+person can work with a cramped file list and cannot work in a cramped document. Below the point where
+even the minimums fit, the panels collapse entirely rather than squeezing the editor out of existence.
+
+The available width is measured **before the first paint** and observed afterwards. ResizeObserver
+fires after paint, so relying on it alone gave a first frame with nothing to divide up: every panel
+resolved to zero and the layout visibly snapped into place a moment later.
+
 ## The IPC surface
 
 Four channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge:

@@ -21,6 +21,8 @@ const FOLDERS: Record<string, FolderState> = {
 
 function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> = {}) {
   const props = {
+    width: 268,
+    onCollapse: vi.fn(),
     workspaceName: "Diariz",
     folders: FOLDERS,
     filter: "",

@@ -109,7 +109,12 @@ if (!gotLock) {
   });
 
   void app.whenReady().then(() => {
-    registerIpcHandlers({ ipcMain, dialog, getWindow: () => mainWindow });
+    registerIpcHandlers({
+      ipcMain,
+      dialog,
+      getWindow: () => mainWindow,
+      userDataDir: app.getPath("userData"),
+    });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
     createWindow();
 

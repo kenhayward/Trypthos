@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PANEL_BOUNDS, resolvePanelWidths } from "@trypthos/domain";
 import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
+import PanelDivider from "./components/PanelDivider";
+import PanelRail from "./components/PanelRail";
 import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
+import { useSettings } from "./hooks/useSettings";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { workspaceClient } from "./lib/workspaceClient";
+import { settingsBridge, workspaceClient } from "./lib/workspaceClient";
 import { currentPlatform } from "./lib/windowControls";
 
 /// Stand-in document, shown until a real file is opened.
@@ -34,7 +38,53 @@ export default function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
   const platform = useMemo(() => currentPlatform(), []);
+  const bridge = useMemo(() => settingsBridge(), []);
+  const { settings, loaded, updatePanels, update } = useSettings(bridge);
+
+  // The width the three panels share. Measured rather than assumed, because a stored width can come
+  // from a wider window than the one it is being restored into.
+  const body = useRef<HTMLDivElement | null>(null);
+  const [available, setAvailable] = useState(0);
+  useLayoutEffect(() => {
+    const element = body.current;
+    if (!element) return;
+
+    // Measured once BEFORE the first paint, then observed. ResizeObserver fires after paint, so
+    // relying on it alone meant the first frame had nothing to divide up: every panel resolved to
+    // zero width and the layout visibly snapped into place a moment later.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAvailable(element.getBoundingClientRect().width);
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setAvailable(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const panels = settings.panels;
+  const widths = resolvePanelWidths({
+    available,
+    workspace: panels.workspaceWidth,
+    chat: panels.chatWidth,
+    workspaceCollapsed: panels.workspaceCollapsed,
+    chatCollapsed: panels.chatCollapsed,
+  });
   const { state, actions } = useWorkspace(client, SCRATCH);
+
+  // Reopening the folder the app was last closed with. Only once, and only after settings have been
+  // read - before that `lastWorkspace` is the default, which is null.
+  const reopened = useRef(false);
+  useEffect(() => {
+    if (!loaded || reopened.current) return;
+    reopened.current = true;
+    if (settings.lastWorkspace !== null) void actions.reopen(settings.lastWorkspace);
+  }, [loaded, settings.lastWorkspace, actions]);
+
+  useEffect(() => {
+    const root = state.workspace?.root ?? null;
+    if (loaded && root !== null && root !== settings.lastWorkspace) update({ lastWorkspace: root });
+  }, [loaded, state.workspace, settings.lastWorkspace, update]);
 
   // Ctrl+S / Cmd+S. Bound on the window rather than inside the editor so it works wherever focus is,
   // and preventDefault matters: the browser's own save dialog would otherwise open over the app.
@@ -73,8 +123,18 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex min-h-0 grow">
+      <div ref={body} className="flex min-h-0 grow">
+        {panels.workspaceCollapsed ? (
+          <PanelRail
+            side="left"
+            label={t("panels.expandWorkspace")}
+            onExpand={() => updatePanels({ workspaceCollapsed: false })}
+          />
+        ) : (
+          <>
         <WorkspacePanel
+          width={widths.workspace}
+          onCollapse={() => updatePanels({ workspaceCollapsed: true })}
           workspaceName={state.workspace?.name ?? null}
           folders={state.folders}
           filter={state.filter}
@@ -86,6 +146,17 @@ export default function App() {
           onRetryFolder={(path) => void actions.retryFolder(path)}
           onOpenFile={(node) => void actions.openFile(node)}
         />
+            <PanelDivider
+              grows="right"
+              width={widths.workspace}
+              min={PANEL_BOUNDS.workspace.min}
+              max={PANEL_BOUNDS.workspace.max}
+              label={t("panels.workspaceDivider")}
+              onResize={(workspaceWidth) => updatePanels({ workspaceWidth })}
+            />
+          </>
+        )}
+
         <EditorPanel
           workspaceName={state.workspace?.name ?? null}
           filePath={state.file?.path ?? null}
@@ -93,7 +164,29 @@ export default function App() {
           value={state.content}
           onChange={actions.edit}
         />
-        <ChatPanel profileLabel={null} />
+        {panels.chatCollapsed ? (
+          <PanelRail
+            side="right"
+            label={t("panels.expandChat")}
+            onExpand={() => updatePanels({ chatCollapsed: false })}
+          />
+        ) : (
+          <>
+            <PanelDivider
+              grows="left"
+              width={widths.chat}
+              min={PANEL_BOUNDS.chat.min}
+              max={PANEL_BOUNDS.chat.max}
+              label={t("panels.chatDivider")}
+              onResize={(chatWidth) => updatePanels({ chatWidth })}
+            />
+            <ChatPanel
+              width={widths.chat}
+              onCollapse={() => updatePanels({ chatCollapsed: true })}
+              profileLabel={null}
+            />
+          </>
+        )}
       </div>
 
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />

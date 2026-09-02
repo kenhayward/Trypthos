@@ -60,5 +60,14 @@
     "maximize": "Maximise window",
     "restore": "Restore window",
     "close": "Close window"
+  },
+  "panels": {
+    "resize": "Drag to resize, or use the arrow keys",
+    "workspaceDivider": "Workspace panel width",
+    "chatDivider": "Chat panel width",
+    "collapseWorkspace": "Hide the workspace panel",
+    "expandWorkspace": "Show the workspace panel",
+    "collapseChat": "Hide the chat panel",
+    "expandChat": "Show the chat panel"
   }
 }

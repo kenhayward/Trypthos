@@ -1,4 +1,5 @@
-import type { Revision } from "@trypthos/domain";
+import type { Revision, Settings } from "@trypthos/domain";
+import type { SettingsBridge } from "../hooks/useSettings";
 
 /// The renderer's view of the shell.
 ///
@@ -28,6 +29,9 @@ export type WriteResult =
 
 export interface WorkspaceClient {
   openWorkspace(): Promise<OpenResult>;
+  /// Reopens a remembered folder without asking. The shell still checks it exists and is a
+  /// directory - a stored path can have been deleted, renamed or moved to another machine.
+  reopenWorkspace(root: string): Promise<OpenResult>;
   listDirectory(path: string): Promise<ListResult>;
   readFile(path: string): Promise<ReadResult>;
   writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
@@ -36,6 +40,18 @@ export interface WorkspaceClient {
 interface TrypthosBridge extends WorkspaceClient {
   platform: string;
   isDesktop: true;
+  readSettings(): Promise<{ ok: true; settings: Settings } | { ok: false; reason: string }>;
+  writeSettings(settings: Settings): Promise<unknown>;
+}
+
+/// The settings half of the bridge, or null outside the desktop shell.
+///
+/// Null rather than a stub, so the hook can tell "no shell, never write" from "write failed" - the
+/// browser preview should keep defaults, not silently pretend to save them.
+export function settingsBridge(): SettingsBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.readSettings) return null;
+  return { readSettings: bridge.readSettings, writeSettings: bridge.writeSettings };
 }
 
 declare global {
@@ -58,6 +74,7 @@ const unavailable = (): Failure => ({ ok: false, reason: "not-desktop" });
 
 export const browserClient: WorkspaceClient = {
   openWorkspace: async () => unavailable(),
+  reopenWorkspace: async () => unavailable(),
   listDirectory: async () => unavailable(),
   readFile: async () => unavailable(),
   writeFile: async () => unavailable(),

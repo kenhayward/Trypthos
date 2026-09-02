@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SettingsSchema } from "./settings";
 
 /// The IPC contract between the renderer and the shell.
 ///
@@ -20,6 +21,9 @@ export const IPC_CHANNELS = [
   "window:minimize",
   "window:toggleMaximize",
   "window:close",
+  "settings:read",
+  "settings:write",
+  "workspace:reopen",
 ] as const;
 
 /// Pushed from the main process when the window is maximised or restored, so the maximise button can
@@ -59,6 +63,10 @@ export const WriteRequest = z
     expectedRevision: RevisionSchema.nullable(),
   })
   .strict();
+
+/// The whole settings object, validated on the way in. The renderer is untrusted like any other
+/// caller, and a malformed write would be persisted and then read back on every launch.
+export const WriteSettingsRequest = SettingsSchema;
 
 export type ListRequest = z.infer<typeof ListRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
