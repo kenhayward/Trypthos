@@ -11,12 +11,27 @@ const config = require("../electron-builder.config.cjs");
 /// symptom is a 404 for whoever tries to update - months later, and only for the people who already
 /// installed it.
 
-test("artifact names contain no spaces", () => {
+const TARGETS = ["win", "mac"];
+
+test("every platform sets its own artifact name, with no spaces", () => {
   // GitHub rewrites spaces to dots on upload, so "Trypthos Setup 0.4.3.exe" is published as
   // "Trypthos.Setup.0.4.3.exe" while latest.yml still names it with hyphens. electron-builder's own
   // publisher normalised that; publishing from a separate job does not.
-  assert.ok(config.artifactName, "artifactName must be set, not left to the default");
-  assert.ok(!config.artifactName.includes(" "), "artifactName must not contain a space");
+  for (const target of TARGETS) {
+    const name = config[target].artifactName;
+    assert.ok(name, `${target} must set artifactName rather than leave it to the default`);
+    assert.ok(!name.includes(" "), `${target} artifactName must not contain a space`);
+  }
+});
+
+test("the macOS artifact name is qualified by architecture", () => {
+  // Without it, an arm64 and an x64 build produce the same filename and collide in one release.
+  assert.match(config.mac.artifactName, /\$\{arch\}/);
+});
+
+test("no global artifactName overrides the per-target ones", () => {
+  // A global name applies to every target, which is how the .dmg lost its architecture suffix.
+  assert.equal(config.artifactName, undefined);
 });
 
 test("the updater feed has somewhere to be written to", () => {

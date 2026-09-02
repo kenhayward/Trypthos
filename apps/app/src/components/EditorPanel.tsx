@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import MarkdownEditor from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
 import {
   DEFAULT_MODE,
   EDITOR_MODES,
-  MODE_DESCRIPTIONS,
-  MODE_LABELS,
+  MODE_HINT_KEYS,
+  MODE_LABEL_KEYS,
   isEditable,
   type EditorMode,
 } from "../lib/editorMode";
@@ -22,22 +23,23 @@ interface Props {
 /// than merely intended: switching mode is local state here and cannot reach `onChange`, so a mode
 /// switch has no path by which to alter the document.
 export default function EditorPanel({ fileName, value, onChange }: Props) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
 
   return (
-    <main aria-label="Editor" className="flex min-w-0 grow flex-col bg-app">
+    <main aria-label={t("editor.title")} className="flex min-w-0 grow flex-col bg-app">
       <div className="flex items-center justify-between border-b border-rule px-3 py-1.5">
         <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-ink-4">
-          {fileName ?? "Editor"}
+          {fileName ?? t("editor.title")}
         </h2>
 
-        <div role="group" aria-label="View mode" className="flex gap-0.5 rounded bg-hover p-0.5">
+        <div role="group" aria-label={t("editor.viewMode")} className="flex gap-0.5 rounded bg-hover p-0.5">
           {EDITOR_MODES.map((candidate) => (
             <button
               key={candidate}
               type="button"
               aria-pressed={mode === candidate}
-              title={MODE_DESCRIPTIONS[candidate]}
+              title={t(MODE_HINT_KEYS[candidate])}
               onClick={() => setMode(candidate)}
               className={
                 mode === candidate
@@ -45,7 +47,7 @@ export default function EditorPanel({ fileName, value, onChange }: Props) {
                   : "rounded px-2 py-0.5 text-xs text-ink-4 hover:text-ink"
               }
             >
-              {MODE_LABELS[candidate]}
+              {t(MODE_LABEL_KEYS[candidate])}
             </button>
           ))}
         </div>
@@ -57,7 +59,7 @@ export default function EditorPanel({ fileName, value, onChange }: Props) {
             value={value}
             onChange={onChange}
             live={mode === "live"}
-            ariaLabel="Markdown source"
+            ariaLabel={t("editor.surface")}
           />
         ) : (
           <MarkdownPreview source={value} />

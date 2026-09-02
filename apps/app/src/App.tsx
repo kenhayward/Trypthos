@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
@@ -28,6 +29,7 @@ Inline \`code\` and a [link](https://example.com) render too.
 
 /// The three-panel shell: workspace browser, editor, chat.
 export default function App() {
+  const { t } = useTranslation();
   const [aboutOpen, setAboutOpen] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
   const { state, actions } = useWorkspace(client, SCRATCH);
@@ -54,22 +56,22 @@ export default function App() {
           onClick={() => setAboutOpen(true)}
           className="rounded px-2 py-1 text-xs text-ink-4 hover:bg-hover"
         >
-          About {APP_VERSION}
+          {t("app.about", { version: APP_VERSION })}
         </button>
       </header>
 
-      {state.error !== null && (
+      {state.errorKey !== null && (
         <div
           role="alert"
           className="flex items-start justify-between gap-3 border-b border-rule bg-sunken px-3 py-2 text-sm text-ink-2"
         >
-          <span>{state.error}</span>
+          <span>{t(state.errorKey)}</span>
           <button
             type="button"
             onClick={actions.dismissError}
             className="shrink-0 rounded px-1.5 text-ink-4 hover:bg-hover"
           >
-            Dismiss
+            {t("app.dismiss")}
           </button>
         </div>
       )}
@@ -87,7 +89,13 @@ export default function App() {
           onOpenFile={(node) => void actions.openFile(node)}
         />
         <EditorPanel
-          fileName={state.file ? `${state.file.name}${state.dirty ? " *" : ""}` : null}
+          fileName={
+            state.file
+              ? state.dirty
+                ? t("editor.unsaved", { name: state.file.name })
+                : state.file.name
+              : null
+          }
           value={state.content}
           onChange={actions.edit}
         />

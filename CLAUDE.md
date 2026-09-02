@@ -140,6 +140,32 @@ markdown counts are recursive and shown on *collapsed* folders (a full tree walk
 requests per folder on a cloud provider), and the chat context dial wants a token count before a
 request is sent, which providers only report afterwards.
 
+### Every user-facing string comes from the catalogue
+
+`apps/app/src/locales/en.json`, reached through `react-i18next`. One catalogue with dotted keys rather
+than namespaces: namespaces would make each call site declare which one it reads, and the guard test
+would have to resolve that declaration before it could check a key exists. `chat.*` is reserved for
+the port.
+
+Two rules that are invisible when broken, so both are tested:
+
+- **A key that does not exist renders as the key.** i18next returns the key itself, so the failure is
+  `workspace.openFolder` sitting in the interface where a label should be - it throws nothing and
+  breaks no other test. `i18nKeys.test.ts` scans every `t("...")` in source and checks both
+  directions, since an orphaned key is the residue of a deleted component.
+- **`fallbackLng` is off.** With English as the only catalogue, a fallback would answer a missing key
+  with the same language it just failed to find, hiding exactly what the guard is looking for.
+
+Modules that are not components hold **keys, not wording** - `failureKey` in `useWorkspace` and the
+mode maps in `editorMode.ts`. That keeps them pure and testable without rendering, and translation
+happens at the edge where a component already has `t`. The product name is the exception: it lives in
+`appInfo`, because a proper noun is never translated and a second copy could disagree with the About
+box.
+
+Both test setups boot i18n pinned to `en`. Without it every component renders raw keys and every
+query by name fails; pinned rather than detected, because a test that follows the machine's language
+is a test that fails on somebody else's machine.
+
 ### Colour lives in tokens, and the editor reads the same ones
 
 Every colour resolves through a variable in `apps/app/src/index.css`. A hex written into a component

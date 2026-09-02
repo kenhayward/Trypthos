@@ -1,5 +1,6 @@
 import { afterEach, expect, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import "./lib/i18n";
 
 /// A passing run has no errors or warnings. This turns React's act(...) complaints into test
 /// failures rather than console noise nobody reads.

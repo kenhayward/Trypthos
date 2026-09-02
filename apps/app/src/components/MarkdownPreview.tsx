@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import { renderMarkdown } from "../lib/markdown";
 
@@ -14,17 +15,18 @@ interface Props {
 /// dangerouslySetInnerHTML is acceptable at this boundary: a markdown file is untrusted input, and
 /// this component renders inside the app's own origin.
 export default function MarkdownPreview({ source }: Props) {
+  const { t } = useTranslation();
   const html = useMemo(() => renderMarkdown(source), [source]);
 
   if (html === "") {
     return (
-      <div className="p-4 text-sm text-ink-4">Nothing to preview yet.</div>
+      <div className="p-4 text-sm text-ink-4">{t("editor.nothingToPreview")}</div>
     );
   }
 
   return (
     <div
-      aria-label="Markdown preview"
+      aria-label={t("editor.preview")}
       className="markdown-preview h-full overflow-auto p-4"
       dangerouslySetInnerHTML={{ __html: html }}
     />

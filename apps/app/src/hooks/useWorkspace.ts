@@ -27,7 +27,8 @@ export interface WorkspaceState {
   /// True when `content` differs from what is on disk.
   dirty: boolean;
   busy: boolean;
-  error: string | null;
+  /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
+  errorKey: string | null;
 }
 
 export interface WorkspaceActions {
@@ -48,30 +49,32 @@ const INITIAL: WorkspaceState = {
   content: "",
   dirty: false,
   busy: false,
-  error: null,
+  errorKey: null,
 };
 
-/// Human wording for a failure reason.
+/// The translation key for a failure reason, or null when there is nothing to say.
 ///
-/// An error a user reads should say what happened and what to do, never name an errno. "conflict" is
-/// the one that matters most: it is not a failure of theirs, and the wording has to make clear their
-/// work is still in the editor.
-export function describeFailure(reason: string): string {
+/// A key rather than a sentence, so this module stays free of both wording and of i18next - it is
+/// exercised without rendering anything. The component translates at the edge, where it already has
+/// `t`.
+///
+/// Cancelling a folder picker returns null: it is not a failure and must not raise anything.
+export function failureKey(reason: string): string | null {
   switch (reason) {
-    case "not-desktop":
-      return "Opening folders needs the desktop app. This is the browser preview.";
-    case "no-workspace":
-      return "No folder is open yet.";
-    case "not-found":
-      return "That file is no longer there. It may have been moved or deleted.";
-    case "permission-denied":
-      return "Trypthos is not allowed to open that.";
-    case "conflict":
-      return "This file changed on disk since you opened it. Your edits are still here - save to a new name, or reopen the file to discard them.";
     case "cancelled":
-      return "";
+      return null;
+    case "not-desktop":
+      return "errors.notDesktop";
+    case "no-workspace":
+      return "errors.noWorkspace";
+    case "not-found":
+      return "errors.notFound";
+    case "permission-denied":
+      return "errors.permissionDenied";
+    case "conflict":
+      return "errors.conflict";
     default:
-      return "Something went wrong.";
+      return "errors.unknown";
   }
 }
 
@@ -95,13 +98,12 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
   }, [state]);
 
   const fail = useCallback((reason: string) => {
-    const message = describeFailure(reason);
-    setState((prev) => ({ ...prev, busy: false, error: message === "" ? null : message }));
+    setState((prev) => ({ ...prev, busy: false, errorKey: failureKey(reason) }));
   }, []);
 
   const list = useCallback(
     async (directory: string) => {
-      setState((prev) => ({ ...prev, busy: true, error: null }));
+      setState((prev) => ({ ...prev, busy: true, errorKey: null }));
       const result = await client.listDirectory(directory);
       if (!result.ok) return fail(result.reason);
 
@@ -116,7 +118,7 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
   );
 
   const open = useCallback(async () => {
-    setState((prev) => ({ ...prev, busy: true, error: null }));
+    setState((prev) => ({ ...prev, busy: true, errorKey: null }));
     const result = await client.openWorkspace();
     if (!result.ok) return fail(result.reason);
 
@@ -126,7 +128,7 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
 
   const openFile = useCallback(
     async (node: RemoteNode) => {
-      setState((prev) => ({ ...prev, busy: true, error: null }));
+      setState((prev) => ({ ...prev, busy: true, errorKey: null }));
       const result = await client.readFile(node.id);
       if (!result.ok) return fail(result.reason);
 
@@ -145,7 +147,7 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     const open = stateRef.current.file;
     if (!open) return;
 
-    setState((prev) => ({ ...prev, busy: true, error: null }));
+    setState((prev) => ({ ...prev, busy: true, errorKey: null }));
 
     const result = await client.writeFile(open.path, stateRef.current.content, open.revision);
     if (!result.ok) return fail(result.reason);

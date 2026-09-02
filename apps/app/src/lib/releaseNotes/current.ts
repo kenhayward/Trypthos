@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.5.1",
+    date: "2026-09-02",
+    pr: 14,
+    headline: "Groundwork for other languages, and a tidier macOS download",
+    summary:
+      "Every word the app shows now comes from one place rather than being written into the screens themselves. Nothing reads differently today; it is what makes translating Trypthos possible later, and it was worth doing before the chat panel arrives with several hundred more phrases. The macOS download also gets its processor type back in the filename.",
+    changed: [
+      "All text the app displays now comes from a single catalogue.",
+    ],
+    fixed: [
+      "The macOS download is named with its processor type again, so future builds for other Mac processors cannot collide.",
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-09-02",
     pr: 13,

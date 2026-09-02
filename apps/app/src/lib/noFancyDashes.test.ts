@@ -17,9 +17,12 @@ const SURFACES = [repoPath("apps", "app", "src")];
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
+    if (entry === "__screenshots__") return [];
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) return sourceFiles(full);
-    return /\.tsx?$/.test(entry) ? [full] : [];
+    // The translation catalogue is now the largest user-facing surface in the app, and JSON has no
+    // comments to strip - so it is scanned whole.
+    return /\.tsx?$|\.json$/.test(entry) ? [full] : [];
   });
 }
 
@@ -29,7 +32,8 @@ describe("user-facing text", () => {
 
     for (const surface of SURFACES) {
       for (const file of sourceFiles(surface)) {
-        const stripped = stripComments(readFileSync(file, "utf8"));
+        const raw = readFileSync(file, "utf8");
+        const stripped = file.endsWith(".json") ? raw : stripComments(raw);
         stripped.split("\n").forEach((line, index) => {
           if (line.includes(EM_DASH) || line.includes(EN_DASH)) {
             offences.push(`${relative(repoPath(), file).split(sep).join("/")}:${index + 1}`);
