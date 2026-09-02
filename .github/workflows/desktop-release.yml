@@ -32,19 +32,15 @@ jobs:
       - name: Build renderer
         run: npm run build --workspace trypthos-app
 
+      # --publish never, deliberately. Letting each matrix job publish for itself is what produced
+      # TWO draft releases for v0.4.2, with one asset stranded on the wrong one: both jobs finish at
+      # roughly the same moment, each looks for a draft, neither sees the other's, and both create
+      # one. Packaging fans out; publishing must not.
+      #
       # Unsigned for now: SmartScreen warns on Windows, and macOS needs right-click then Open.
-      # Developer ID signing and notarization are outstanding, and the README says so.
-      # --publish always, not electron-builder's default. The default publishes only when it
-      # recognises the build as tagged, which depends on how the runner reports the ref - and a
-      # release that silently does not publish looks identical to one that did until someone goes
-      # looking for the installer.
-      - name: Package and publish
-        run: npm run dist --workspace trypthos-desktop -- --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package
+        run: npm run dist --workspace trypthos-desktop -- --publish never
 
-      # Kept alongside the release: the artifacts are how you retrieve a build whose publish step
-      # failed, which is exactly when you most want them.
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
@@ -52,4 +48,33 @@ jobs:
           path: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.dmg
-          if-no-files-found: warn
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Collect installers
+        uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: List what will be published
+        run: ls -lh installers
+
+      # One job, one release, every asset - so there is no window in which two writers race. Not a
+      # draft: the tag was already the deliberate act, and a release nobody can download is not one.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Trypthos ${GITHUB_REF_NAME#v}" \
+            --notes "Installers for Windows and macOS. Builds are unsigned: Windows SmartScreen will warn on first install, and macOS needs right-click then Open. The macOS build is Apple Silicon only." \
+            installers/*

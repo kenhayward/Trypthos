@@ -195,11 +195,14 @@ inlined at the call site.
 ## Packaging
 
 `electron-builder` on a `v*` tag builds the Windows installer and the macOS `.dmg` and publishes them
-to GitHub Releases. Publishing needs **both** halves: a `publish` block in the electron-builder config
-and `--publish always` on the command. With neither, `dist` builds the installers and leaves them on
-the runner - the workflow's uploaded artifacts expire, and there is nothing durable to link to or for
-an updater to read. The workflow still uploads artifacts as well, because those are how you retrieve
-a build whose publish step failed.
+to GitHub Releases. **Packaging fans out; publishing does not.** The matrix jobs build with `--publish never` and upload
+artifacts; a single later job collects them all and creates the release. Letting each job publish for
+itself is what produced *two* draft releases for v0.4.2, with one asset stranded on the wrong one:
+both finish at roughly the same moment, each looks for an existing draft, neither sees the other's,
+and both create one.
+
+The electron-builder `publish` block stays, because it is what makes electron-builder write the
+updater feed files (`latest.yml`, `latest-mac.yml`) - it just never publishes.
 
 **Electron is pinned to an exact version** in `apps/desktop/package.json`, not a range.
 electron-builder downloads platform binaries for one specific release and refuses a range - and in a
