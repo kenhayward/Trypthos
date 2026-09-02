@@ -18,8 +18,18 @@ module.exports = {
   // "Trypthos.Setup.0.4.3.exe" while latest.yml pointed at "Trypthos-Setup-0.4.3.exe", and the
   // updater feed 404'd. electron-builder's own publisher used to normalise that; publishing from a
   // separate job does not, so the name has to be right at build time.
-  artifactName: "${productName}-Setup-${version}.${ext}",
-  win: { target: "nsis" },
-  mac: { target: "dmg", identity: null },
+  //
+  // Set PER TARGET, not globally. Globally it also renamed the .dmg, which dropped the architecture
+  // suffix: harmless with one macOS build, a filename collision the moment an Intel one is added -
+  // and "Setup" is Windows wording on a disk image in any case.
+  win: {
+    target: "nsis",
+    artifactName: "${productName}-Setup-${version}.${ext}",
+  },
+  mac: {
+    target: "dmg",
+    identity: null,
+    artifactName: "${productName}-${version}-${arch}.${ext}",
+  },
   linux: { target: "AppImage" },
 };

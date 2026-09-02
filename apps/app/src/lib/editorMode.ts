@@ -9,16 +9,19 @@ export type EditorMode = "live" | "source" | "preview";
 /// Live first, because it is the default and the one most people stay in.
 export const EDITOR_MODES: readonly EditorMode[] = ["live", "source", "preview"];
 
-export const MODE_LABELS: Record<EditorMode, string> = {
-  live: "Live",
-  source: "Source",
-  preview: "Preview",
+/// Translation keys, not wording. Keeping the mapping here means the set of modes and the set of
+/// labels cannot drift apart, while the words themselves live in the catalogue with every other
+/// string a user reads.
+export const MODE_LABEL_KEYS: Record<EditorMode, string> = {
+  live: "editor.mode.live",
+  source: "editor.mode.source",
+  preview: "editor.mode.preview",
 };
 
-export const MODE_DESCRIPTIONS: Record<EditorMode, string> = {
-  live: "Markers hidden except on the line you are editing",
-  source: "Every character, colour-coded by role",
-  preview: "Read-only rendered prose",
+export const MODE_HINT_KEYS: Record<EditorMode, string> = {
+  live: "editor.modeHint.live",
+  source: "editor.modeHint.source",
+  preview: "editor.modeHint.preview",
 };
 
 export const DEFAULT_MODE: EditorMode = "live";

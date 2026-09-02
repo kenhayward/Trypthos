@@ -1,0 +1,48 @@
+{
+  "app": {
+    "about": "About {{version}}",
+    "dismiss": "Dismiss"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "openFolder": "Open folder",
+    "noFolder": "No folder open yet.",
+    "emptyFolder": "This folder is empty.",
+    "goUp": ".. {{directory}}"
+  },
+  "editor": {
+    "title": "Editor",
+    "viewMode": "View mode",
+    "surface": "Markdown source",
+    "preview": "Markdown preview",
+    "nothingToPreview": "Nothing to preview yet.",
+    "unsaved": "{{name}} *",
+    "mode": {
+      "live": "Live",
+      "source": "Source",
+      "preview": "Preview"
+    },
+    "modeHint": {
+      "live": "Markers hidden except on the line you are editing",
+      "source": "Every character, colour-coded by role",
+      "preview": "Read-only rendered prose"
+    }
+  },
+  "chat": {
+    "title": "Chat",
+    "notConfigured": "Configure an endpoint and model to start.",
+    "ready": "Ready with {{profile}}."
+  },
+  "errors": {
+    "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
+    "noWorkspace": "No folder is open yet.",
+    "notFound": "That file is no longer there. It may have been moved or deleted.",
+    "permissionDenied": "Trypthos is not allowed to open that.",
+    "conflict": "This file changed on disk since you opened it. Your edits are still here - save to a new name, or reopen the file to discard them.",
+    "unknown": "Something went wrong."
+  },
+  "about": {
+    "version": "Version {{version}}",
+    "close": "Close"
+  }
+}

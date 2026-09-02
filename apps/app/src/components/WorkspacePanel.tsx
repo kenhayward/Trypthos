@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { isMarkdownFile } from "@trypthos/domain";
 import type { RemoteNode } from "../lib/workspaceClient";
 
@@ -31,26 +32,28 @@ export default function WorkspacePanel({
   onGoUp,
   onOpenFile,
 }: Props) {
+  const { t } = useTranslation();
+
   return (
     <aside
-      aria-label="Workspace"
+      aria-label={t("workspace.title")}
       className="flex w-64 shrink-0 flex-col border-r border-rule bg-panel"
     >
       <div className="flex items-center justify-between border-b border-rule px-3 py-2">
         <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-ink-4">
-          {workspaceName ?? "Workspace"}
+          {workspaceName ?? t("workspace.title")}
         </h2>
         <button
           type="button"
           onClick={onOpenWorkspace}
           className="rounded px-1.5 py-0.5 text-xs text-ink-4 hover:bg-hover hover:text-ink"
         >
-          Open folder
+          {t("workspace.openFolder")}
         </button>
       </div>
 
       {workspaceName === null ? (
-        <p className="p-3 text-sm text-ink-3">No folder open yet.</p>
+        <p className="p-3 text-sm text-ink-3">{t("workspace.noFolder")}</p>
       ) : (
         <div className="min-h-0 grow overflow-auto py-1">
           {directory !== "" && (
@@ -59,12 +62,12 @@ export default function WorkspacePanel({
               onClick={onGoUp}
               className="block w-full truncate px-3 py-1 text-left text-sm text-ink-4 hover:bg-hover"
             >
-              .. {directory}
+              {t("workspace.goUp", { directory })}
             </button>
           )}
 
           {nodes.length === 0 && !busy && (
-            <p className="px-3 py-1 text-sm text-ink-4">This folder is empty.</p>
+            <p className="px-3 py-1 text-sm text-ink-4">{t("workspace.emptyFolder")}</p>
           )}
 
           {nodes.map((node) =>

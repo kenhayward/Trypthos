@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { describeFailure, parentOf, useWorkspace } from "./useWorkspace";
+import { failureKey, parentOf, useWorkspace } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
 /// A hand-written fake, not a mocking library. It records what it was asked to do, which is what most
@@ -48,24 +48,23 @@ describe("parentOf", () => {
   });
 });
 
-describe("describeFailure", () => {
-  it("explains a conflict in terms of what the user can do, and reassures them", () => {
-    const message = describeFailure("conflict");
-    expect(message).toMatch(/changed on disk/i);
-    expect(message).toMatch(/still here/i);
-  });
-
-  it("says the browser preview has no filesystem, rather than reporting an error", () => {
-    expect(describeFailure("not-desktop")).toMatch(/desktop app/i);
+describe("failureKey", () => {
+  it("maps each known reason to its own key", () => {
+    expect(failureKey("conflict")).toBe("errors.conflict");
+    expect(failureKey("not-desktop")).toBe("errors.notDesktop");
+    expect(failureKey("not-found")).toBe("errors.notFound");
+    expect(failureKey("permission-denied")).toBe("errors.permissionDenied");
   });
 
   // Cancelling a folder picker is not a failure and must not raise anything.
   it("has nothing to say about a cancelled dialog", () => {
-    expect(describeFailure("cancelled")).toBe("");
+    expect(failureKey("cancelled")).toBeNull();
   });
 
-  it("never leaks an errno to the user", () => {
-    expect(describeFailure("EACCES")).toBe("Something went wrong.");
+  // An errno must never reach the interface, whether as wording or as a key that renders raw.
+  it("maps anything unrecognised to the generic key", () => {
+    expect(failureKey("EACCES")).toBe("errors.unknown");
+    expect(failureKey("")).toBe("errors.unknown");
   });
 });
 
@@ -187,7 +186,7 @@ describe("useWorkspace", () => {
 
     expect(result.current.state.content).toBe("# Mine\n");
     expect(result.current.state.dirty).toBe(true);
-    expect(result.current.state.error).toMatch(/changed on disk/i);
+    expect(result.current.state.errorKey).toBe("errors.conflict");
     // The held revision must NOT advance: nothing was written, so nothing was agreed.
     expect(result.current.state.file?.revision.id).toBe("r1");
   });
@@ -202,7 +201,7 @@ describe("useWorkspace", () => {
       await result.current.actions.openFile({ id: "gone.md", name: "gone.md", kind: "file" });
     });
 
-    await waitFor(() => expect(result.current.state.error).toMatch(/no longer there/i));
+    await waitFor(() => expect(result.current.state.errorKey).toBe("errors.notFound"));
     expect(result.current.state.file).toBeNull();
   });
 
@@ -216,7 +215,7 @@ describe("useWorkspace", () => {
       await result.current.actions.open();
     });
 
-    expect(result.current.state.error).toMatch(/desktop app/i);
+    expect(result.current.state.errorKey).toBe("errors.notDesktop");
     expect(result.current.state.workspace).toBeNull();
   });
 
@@ -230,6 +229,6 @@ describe("useWorkspace", () => {
       await result.current.actions.open();
     });
 
-    expect(result.current.state.error).toBeNull();
+    expect(result.current.state.errorKey).toBeNull();
   });
 });

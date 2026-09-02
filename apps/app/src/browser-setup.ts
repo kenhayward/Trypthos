@@ -1,5 +1,6 @@
 import { afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
+import "./lib/i18n";
 import "./index.css";
 
 /// Setup for the real-browser suite.
