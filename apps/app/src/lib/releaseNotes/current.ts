@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.11.0",
+    date: "2026-09-02",
+    pr: 26,
+    headline: "Preferences: choose your theme, and what closing does",
+    summary:
+      "A Preferences dialog, reached from the cog in the title bar. Choose light, dark, or follow your system - and if you follow your system, Trypthos keeps following it while it is open rather than deciding once at startup. You can also make closing the window keep Trypthos running in the notification area instead of quitting. Everything you had set is carried forward.",
+    added: [
+      "A Preferences dialog, from the cog in the title bar.",
+      "Choose Light, Dark, or follow your system theme.",
+      "Optionally keep Trypthos running in the notification area when you close the window.",
+    ],
+  },
+  {
     version: "0.10.0",
     date: "2026-09-02",
     pr: 25,

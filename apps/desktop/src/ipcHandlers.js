@@ -8,7 +8,7 @@ const {
   WriteRequest,
   WriteSettingsRequest,
 } = require("@trypthos/domain");
-const { readSettings, writeSettings } = require("./settingsStore");
+const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
 const { createLocalWorkspace } = require("./localWorkspace");
 
 /// The main-process side of the IPC surface.
@@ -79,6 +79,7 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir }) {
       return { ok: false, reason: "bad-request" };
     }
     await writeSettings(userDataDir, parsed.data);
+    notifySettingsWritten(parsed.data);
     return { ok: true };
   });
 

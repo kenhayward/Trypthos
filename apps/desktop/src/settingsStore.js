@@ -46,4 +46,31 @@ async function writeSettings(userDataDir, settings) {
   await fs.rename(temporary, target);
 }
 
-module.exports = { readSettings, writeSettings, settingsPath };
+/// Just the one value the main process needs at close time.
+///
+/// Read through the same loader, so a v1 file on disk migrates rather than being treated as missing.
+async function readCloseToTray(userDataDir) {
+  return (await readSettings(userDataDir)).window.closeToTray;
+}
+
+/// Notified whenever the renderer saves, so the main process does not have to re-read the file on
+/// every window close - and cannot act on a preference the user changed a moment ago.
+const writeListeners = new Set();
+
+function onSettingsWritten(listener) {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
+function notifySettingsWritten(settings) {
+  for (const listener of writeListeners) listener(settings);
+}
+
+module.exports = {
+  readSettings,
+  writeSettings,
+  settingsPath,
+  readCloseToTray,
+  onSettingsWritten,
+  notifySettingsWritten,
+};

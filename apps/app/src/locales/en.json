@@ -69,5 +69,24 @@
     "expandWorkspace": "Show the workspace panel",
     "collapseChat": "Hide the chat panel",
     "expandChat": "Show the chat panel"
+  },
+  "preferences": {
+    "title": "Preferences",
+    "open": "Preferences",
+    "done": "Done",
+    "appearance": "Appearance",
+    "window": "Window",
+    "theme": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "themeHint": {
+      "system": "Follows your system setting, and changes with it.",
+      "light": "Always light, whatever your system is set to.",
+      "dark": "Always dark, whatever your system is set to."
+    },
+    "closeToTray": "Keep running when the window is closed",
+    "closeToTrayHint": "Closing hides Trypthos to the notification area. Quit it from the tray icon."
   }
 }

@@ -12,6 +12,7 @@ const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
 const { createUpdater } = require("./updater");
 const { createTray } = require("./tray");
+const { readCloseToTray, onSettingsWritten } = require("./settingsStore");
 
 let mainWindow = null;
 /// Held for the lifetime of the app. A Tray that is garbage collected disappears from the
@@ -20,6 +21,12 @@ let mainWindow = null;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let tray = null;
 let updater = null;
+/// Set only by an explicit quit - the tray's Quit, or the OS asking. Without it, close-to-tray would
+/// make the app unquittable: every close would hide the window, including the one during shutdown.
+let quitting = false;
+/// Mirrored from settings so the close handler can answer immediately. Re-read on every write, since
+/// the preference can change while the window is open.
+let closeToTray = false;
 let loadAttempt = 0;
 let retryTimer = null;
 
@@ -92,6 +99,13 @@ function createWindow() {
   mainWindow.on("unmaximize", pushWindowState);
   mainWindow.webContents.on("did-finish-load", pushWindowState);
 
+  mainWindow.on("close", (event) => {
+    if (!closeToTray || quitting) return;
+    // Hidden rather than closed, so reopening from the tray is instant and the document survives.
+    event.preventDefault();
+    mainWindow.hide();
+  });
+
   mainWindow.on("closed", () => {
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
@@ -116,7 +130,7 @@ if (!gotLock) {
     mainWindow.focus();
   });
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     registerIpcHandlers({
       ipcMain,
       dialog,
@@ -145,6 +159,13 @@ if (!gotLock) {
     });
 
     updater.start();
+
+    // The shell needs this at close time, and the renderer owns the settings file - so main reads it
+    // once at startup and is told about later changes rather than re-reading the file on every close.
+    closeToTray = await readCloseToTray(app.getPath("userData"));
+    onSettingsWritten((settings) => {
+      closeToTray = settings.window.closeToTray;
+    });
     createWindow();
 
     app.on("activate", () => {
@@ -152,7 +173,13 @@ if (!gotLock) {
     });
   });
 
+  app.on("before-quit", () => {
+    quitting = true;
+  });
+
   app.on("window-all-closed", () => {
+    // With close-to-tray on, the window is hidden rather than closed, so this does not fire - which
+    // is what keeps the app alive in the tray.
     if (process.platform !== "darwin") app.quit();
   });
 }
