@@ -11,6 +11,8 @@ interface Props {
   onChange: (value: string) => void;
   /// Whether markdown syntax is hidden away from the caret line.
   live: boolean;
+  /// Reports the caret, one-based on both axes, whenever it moves.
+  onCaret?: (line: number, column: number) => void;
   /// Labels the editing surface for assistive technology and for tests.
   ariaLabel: string;
 }
@@ -23,7 +25,7 @@ interface Props {
 /// The React integration has one rule worth stating, because getting it wrong is subtle: the view is
 /// created ONCE and then fed transactions. Recreating it on every render would work visually while
 /// discarding the undo history, the selection and the scroll position on each keystroke.
-export default function MarkdownEditor({ value, onChange, live, ariaLabel }: Props) {
+export default function MarkdownEditor({ value, onChange, live, onCaret, ariaLabel }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
   const view = useRef<EditorView | null>(null);
   /// Switching Live on and off reconfigures this compartment rather than rebuilding the editor, so
@@ -39,9 +41,11 @@ export default function MarkdownEditor({ value, onChange, live, ariaLabel }: Pro
   /// a ref there is a real hazard rather than a lint technicality. Effects run before any keystroke
   /// the listener could report, so the handler is never stale by the time it matters.
   const latestOnChange = useRef(onChange);
+  const latestOnCaret = useRef(onCaret);
   useEffect(() => {
     latestOnChange.current = onChange;
-  }, [onChange]);
+    latestOnCaret.current = onCaret;
+  }, [onChange, onCaret]);
 
   useEffect(() => {
     if (!host.current) return;
@@ -61,6 +65,14 @@ export default function MarkdownEditor({ value, onChange, live, ariaLabel }: Pro
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               latestOnChange.current(update.state.doc.toString());
+            }
+            // Selection changes without the document changing - arrow keys, a click - so this is a
+            // separate condition, not an else.
+            if (update.docChanged || update.selectionSet) {
+              const head = update.state.selection.main.head;
+              const line = update.state.doc.lineAt(head);
+              // CodeMirror counts columns from zero; every editor a person has used counts from one.
+              latestOnCaret.current?.(line.number, head - line.from + 1);
             }
           }),
           EditorView.contentAttributes.of({ "aria-label": ariaLabel }),

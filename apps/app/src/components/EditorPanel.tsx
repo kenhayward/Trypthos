@@ -1,57 +1,55 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { countWords, detectLineEnding } from "@trypthos/domain";
+import EditorHeader from "./EditorHeader";
+import EditorStatusBar from "./EditorStatusBar";
 import MarkdownEditor from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
-import {
-  DEFAULT_MODE,
-  EDITOR_MODES,
-  MODE_HINT_KEYS,
-  MODE_LABEL_KEYS,
-  isEditable,
-  type EditorMode,
-} from "../lib/editorMode";
+import { breadcrumbSegments, formatCaret } from "../lib/breadcrumb";
+import { DEFAULT_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 
 interface Props {
-  fileName: string | null;
+  workspaceName: string | null;
+  filePath: string | null;
+  dirty: boolean;
   value: string;
   onChange: (value: string) => void;
 }
 
-/// Centre panel: the editor.
+/// Centre panel: the editor, its header and its status bar.
 ///
 /// The document lives ABOVE this component, which is what makes the mode invariant checkable rather
 /// than merely intended: switching mode is local state here and cannot reach `onChange`, so a mode
 /// switch has no path by which to alter the document.
-export default function EditorPanel({ fileName, value, onChange }: Props) {
+export default function EditorPanel({ workspaceName, filePath, dirty, value, onChange }: Props) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
+  const [caret, setCaret] = useState({ line: 1, column: 1 });
+
+  const segments = useMemo(
+    () => breadcrumbSegments(workspaceName, filePath),
+    [workspaceName, filePath],
+  );
+
+  // Both walk the whole document, so they are memoised on the text rather than recomputed on every
+  // keystroke-driven render. A word count is cheap on a page and not on a book.
+  const words = useMemo(() => countWords(value), [value]);
+  const lineEnding = useMemo(() => detectLineEnding(value), [value]);
+
+  const stats = t("editor.stats", {
+    caret: formatCaret(caret.line, caret.column),
+    words: words.toLocaleString(),
+  });
 
   return (
     <main aria-label={t("editor.title")} className="flex min-w-0 grow flex-col bg-app">
-      <div className="flex items-center justify-between border-b border-rule px-3 py-1.5">
-        <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-ink-4">
-          {fileName ?? t("editor.title")}
-        </h2>
-
-        <div role="group" aria-label={t("editor.viewMode")} className="flex gap-0.5 rounded bg-hover p-0.5">
-          {EDITOR_MODES.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              aria-pressed={mode === candidate}
-              title={t(MODE_HINT_KEYS[candidate])}
-              onClick={() => setMode(candidate)}
-              className={
-                mode === candidate
-                  ? "rounded bg-app px-2 py-0.5 text-xs font-medium text-ink shadow-sm"
-                  : "rounded px-2 py-0.5 text-xs text-ink-4 hover:text-ink"
-              }
-            >
-              {t(MODE_LABEL_KEYS[candidate])}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EditorHeader
+        segments={segments}
+        dirty={dirty}
+        stats={stats}
+        mode={mode}
+        onModeChange={setMode}
+      />
 
       <div className="min-h-0 grow">
         {isEditable(mode) ? (
@@ -59,12 +57,15 @@ export default function EditorPanel({ fileName, value, onChange }: Props) {
             value={value}
             onChange={onChange}
             live={mode === "live"}
+            onCaret={(line, column) => setCaret({ line, column })}
             ariaLabel={t("editor.surface")}
           />
         ) : (
           <MarkdownPreview source={value} />
         )}
       </div>
+
+      <EditorStatusBar mode={mode} lineEnding={lineEnding} />
     </main>
   );
 }

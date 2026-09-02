@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   consumesTrailingSpace,
+  substituteFor,
   formatClassFor,
   isHiddenMarker,
   markersToHide,
@@ -23,9 +24,9 @@ describe("isHiddenMarker", () => {
     expect(isHiddenMarker("URL", "Link")).toBe(true);
   });
 
-  // The bullet is the rendered form of a list item. Hiding it would leave the item indented under
-  // nothing, which reads worse than the marker it removed.
-  it("keeps list bullets", () => {
+  // A list bullet is substituted rather than hidden, so it must not also be reported as hidden -
+  // doing both would replace the marker AND remove the replacement.
+  it("does not hide a marker that is substituted instead", () => {
     expect(isHiddenMarker("ListMark", "ListItem")).toBe(false);
   });
 
@@ -60,6 +61,24 @@ describe("consumesTrailingSpace", () => {
   // The bullet stays visible, so its space is part of what is drawn.
   it("is false for list bullets", () => {
     expect(consumesTrailingSpace("ListMark")).toBe(false);
+  });
+});
+
+describe("substituteFor", () => {
+  // Hiding "-" leaves the item indented under nothing, which reads worse than the marker it removed.
+  // Substituting a bullet is the option that resolves it, and the one we had not taken.
+  it("replaces an unordered list marker with a bullet", () => {
+    expect(substituteFor("ListMark", "ListItem")).toBe("•");
+  });
+
+  it("leaves every other marker to be hidden outright", () => {
+    expect(substituteFor("HeaderMark", "ATXHeading1")).toBeNull();
+    expect(substituteFor("EmphasisMark", "StrongEmphasis")).toBeNull();
+    expect(substituteFor("QuoteMark", "Blockquote")).toBeNull();
+  });
+
+  it("does not substitute a ListMark outside a list item", () => {
+    expect(substituteFor("ListMark", "Document")).toBeNull();
   });
 });
 

@@ -5,6 +5,24 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.7.0",
+    date: "2026-09-02",
+    pr: 16,
+    headline: "The editor tells you where you are",
+    summary:
+      "The editor gains a header and a status bar. The header shows the path to the document you have open, marks it when there is something unsaved, and reports your cursor position and word count. The status bar names the format, the encoding and the line endings your file actually uses - measured from the file rather than assumed, so it says so when a file mixes them. Bulleted lists now show a real bullet in Live view instead of the hyphen you typed.",
+    added: [
+      "A breadcrumb showing where the open document lives.",
+      "An Unsaved marker in the editor header.",
+      "Cursor position and word count.",
+      "A status bar naming the format, encoding and line endings of the open file.",
+      "The line you are editing is highlighted in Live view.",
+    ],
+    changed: [
+      "Bulleted lists show a bullet in Live view rather than the hyphen in the file. The file itself is unchanged.",
+    ],
+  },
+  {
     version: "0.6.0",
     date: "2026-09-02",
     pr: 15,

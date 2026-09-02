@@ -12,7 +12,9 @@ function Harness({ onChange = vi.fn() }: { onChange?: (value: string) => void })
   const [value, setValue] = useState(DOC);
   return (
     <EditorPanel
-      fileName="notes.md"
+      workspaceName="Diariz"
+      filePath="docs/notes.md"
+      dirty={false}
       value={value}
       onChange={(next) => {
         setValue(next);
@@ -46,8 +48,10 @@ describe("EditorPanel", () => {
     expect(screen.getByLabelText("Markdown source")).toBe(before);
   });
 
-  it("shows the file name", () => {
+  it("shows where the document is, as a breadcrumb", () => {
     render(<Harness />);
+    expect(screen.getByText("Diariz")).toBeDefined();
+    expect(screen.getByText("docs")).toBeDefined();
     expect(screen.getByText("notes.md")).toBeDefined();
   });
 
