@@ -6,7 +6,15 @@ module.exports = {
   appId: "com.trypthos.app",
   productName: "Trypthos",
   directories: { output: "release" },
-  files: ["src/**/*", "package.json"],
+  files: [
+    "src/**/*",
+    "package.json",
+    // The domain is a workspace dependency, so electron-builder copies the whole linked directory -
+    // TypeScript sources and tests included. Only its build output is needed at runtime.
+    "!node_modules/@trypthos/domain/src/**",
+    "!node_modules/@trypthos/domain/*.json",
+    "node_modules/@trypthos/domain/package.json",
+  ],
   extraResources: [{ from: "../app/dist", to: "app" }],
   // Declared so electron-builder writes the updater feed files (latest.yml, latest-mac.yml) that an
   // in-app updater will read. It does NOT publish: the workflow packages with --publish never and a

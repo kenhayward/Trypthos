@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.8.1",
+    date: "2026-09-02",
+    pr: 19,
+    headline: "The installed app starts",
+    summary:
+      "Every release before this one failed to open once installed, showing an error about a missing module and nothing else. A piece the app needs at runtime was never included in the download. It is now, and the build refuses to publish a release that is missing it.",
+    fixed: [
+      "The installed app opens instead of showing an error about a missing module.",
+      "The download no longer carries source files it has no use for.",
+    ],
+  },
+  {
     version: "0.8.0",
     date: "2026-09-02",
     pr: 17,
