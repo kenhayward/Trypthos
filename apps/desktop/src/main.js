@@ -120,6 +120,15 @@ function createWindow() {
   });
 }
 
+/// Must match `appId` in electron-builder.config.cjs.
+///
+/// Windows will not display a toast unless the process's App User Model ID matches that of a Start
+/// Menu shortcut, and the installer sets the shortcut's to the appId. Without this Electron derives
+/// an identity from the executable, the two do not match, and every notification is dropped -
+/// silently, with no error and nothing shown. Not needed on macOS, which has no such concept.
+const APP_USER_MODEL_ID = "com.trypthos.app";
+if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();

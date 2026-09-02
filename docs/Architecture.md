@@ -302,6 +302,16 @@ prereleases and tags that are not `Major.Minor.Build`. The comparison is numeric
 *before* `0.9.0` as text, so a string compare would tell someone on 0.9.0 that 0.10.0 was older - a bug
 that only appears once the minor version reaches double figures.
 
+**Windows drops every toast unless the process announces an App User Model ID matching a Start Menu
+shortcut.** The installer sets the shortcut's from `appId`, so `main.js` must announce the same one -
+a mismatch shows nothing and reports nothing. A packaging test compares the two, because the failure
+has no symptom to notice.
+
+**A notification can be accepted and then not delivered.** Windows answers `isSupported()` with true
+and declines afterwards if the user has notifications switched off, which is not observable except
+through the `failed` event. The updater therefore remembers what it found and the tray offers it -
+otherwise the startup check is silent and dead for anyone in that state, which is not rare.
+
 A development build never checks. Its version is whatever the repo says, so every run would announce
 an update to the release matching the source already checked out.
 
