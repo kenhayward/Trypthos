@@ -1,7 +1,7 @@
 {
   "name": "trypthos",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -11,7 +11,7 @@
     "app": "npm run build --workspace @trypthos/domain && concurrently -k -n web,shell -c blue,magenta \"npm run dev --workspace trypthos-app\" \"npm run dev --workspace trypthos-desktop\"",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run build --workspace @trypthos/domain && npm run test --workspaces --if-present",
     "lint": "eslint .",
     "test:browser": "npm run test:browser --workspaces --if-present"
   },

@@ -15,8 +15,19 @@ export type { ChatProfile } from "./chat";
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";
 
-export { IPC_CHANNELS, ListRequest, ReadRequest, RevisionSchema, WriteRequest } from "./ipc";
-export type { IpcChannel } from "./ipc";
+export { titleBarLayout, windowTitle } from "./windowChrome";
+export type { Platform, TitleBarLayout } from "./windowChrome";
+
+export {
+  IPC_CHANNELS,
+  ListRequest,
+  ReadRequest,
+  RevisionSchema,
+  WINDOW_STATE_CHANNEL,
+  WindowStateSchema,
+  WriteRequest,
+} from "./ipc";
+export type { IpcChannel, WindowState } from "./ipc";
 
 export type {
   ListPage,
