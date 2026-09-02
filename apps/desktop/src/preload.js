@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld("trypthos", {
   writeFile: (path, content, expectedRevision) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision }),
 
+  readSettings: () => ipcRenderer.invoke("settings:read"),
+  writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
+  reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),
+
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
   closeWindow: () => ipcRenderer.invoke("window:close"),

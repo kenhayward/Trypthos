@@ -43,6 +43,19 @@ const zeroRect = () =>
 Range.prototype.getClientRects = emptyRectList;
 Range.prototype.getBoundingClientRect = zeroRect;
 
+/// jsdom has no ResizeObserver, and no layout for one to observe.
+///
+/// A stub rather than a polyfill: reporting a width here would be inventing geometry that does not
+/// exist. Panels therefore resolve to zero width in this suite, which is correct - anything about
+/// their actual size belongs in the browser suite, where there is a real one.
+class NoLayoutResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+globalThis.ResizeObserver ??= NoLayoutResizeObserver as unknown as typeof ResizeObserver;
+
 const ACT_PATTERNS = [/not wrapped in act/i, /not configured to support act/i];
 
 let expected: RegExp[] = [];

@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.9.0",
+    date: "2026-09-02",
+    pr: 23,
+    headline: "Resize the panels, and Trypthos remembers",
+    summary:
+      "Drag the seams between the panels to resize them, or hide either side panel entirely and bring it back from the edge. Trypthos now remembers how you left things - panel sizes, which panels were hidden, and the folder you had open, which reopens on the next launch. If the window is too narrow for everything, the side panels give up their space rather than the editor.",
+    added: [
+      "Drag the seam beside a panel to resize it, or use the arrow keys once it has focus.",
+      "Hide either side panel and bring it back from a strip at the edge.",
+      "Panel sizes, hidden panels and the open folder are remembered between launches.",
+    ],
+    changed: [
+      "In a narrow window the side panels shrink first, so the editor keeps a usable width.",
+    ],
+  },
+  {
     version: "0.8.2",
     date: "2026-09-02",
     pr: 22,

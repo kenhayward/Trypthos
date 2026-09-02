@@ -4,6 +4,9 @@ import { treeRows, visibleFileCount, type FolderState, type TreeRow } from "../l
 import type { RemoteNode } from "../lib/workspaceClient";
 
 interface Props {
+  /// Rendered width, resolved against the window. The panel does not choose its own size.
+  width: number;
+  onCollapse: () => void;
   workspaceName: string | null;
   folders: Record<string, FolderState>;
   filter: string;
@@ -21,6 +24,8 @@ interface Props {
 /// Presentational. What is listed, what a click does and what a failure says all live in
 /// useWorkspace and treeRows, so this can be restyled without touching behaviour.
 export default function WorkspacePanel({
+  width,
+  onCollapse,
   workspaceName,
   folders,
   filter,
@@ -43,12 +48,24 @@ export default function WorkspacePanel({
   return (
     <aside
       aria-label={t("workspace.title")}
-      className="flex w-[268px] shrink-0 flex-col border-r border-rule bg-panel"
+      style={{ width }}
+      className="flex shrink-0 flex-col overflow-hidden bg-panel"
     >
-      <div className="flex items-center justify-between border-b border-rule px-3 py-2">
+      <div className="flex items-center gap-1 border-b border-rule px-3 py-2">
         <h2 className="truncate text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase">
           {workspaceName ?? t("workspace.title")}
         </h2>
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label={t("panels.collapseWorkspace")}
+          title={t("panels.collapseWorkspace")}
+          className="ml-auto rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+        >
+          <Glyph>
+            <path d="M15 6l-6 6 6 6" />
+          </Glyph>
+        </button>
         <button
           type="button"
           onClick={onOpenWorkspace}

@@ -1,7 +1,14 @@
 "use strict";
 
 const path = require("node:path");
-const { createPathGuard, ListRequest, ReadRequest, WriteRequest } = require("@trypthos/domain");
+const {
+  createPathGuard,
+  ListRequest,
+  ReadRequest,
+  WriteRequest,
+  WriteSettingsRequest,
+} = require("@trypthos/domain");
+const { readSettings, writeSettings } = require("./settingsStore");
 const { createLocalWorkspace } = require("./localWorkspace");
 
 /// The main-process side of the IPC surface.
@@ -60,7 +67,21 @@ function guarded(getWorkspace, schema, handler) {
   };
 }
 
-function registerIpcHandlers({ ipcMain, dialog, getWindow }) {
+function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir }) {
+  // Settings are not workspace-scoped, so they do not go through `guarded` - there is no workspace
+  // to require, and the app needs to read them before one is open.
+  ipcMain.handle("settings:read", async () => ({ ok: true, settings: await readSettings(userDataDir) }));
+
+  ipcMain.handle("settings:write", async (_event, payload) => {
+    const parsed = WriteSettingsRequest.safeParse(payload);
+    if (!parsed.success) {
+      console.error("Rejected malformed settings write.");
+      return { ok: false, reason: "bad-request" };
+    }
+    await writeSettings(userDataDir, parsed.data);
+    return { ok: true };
+  });
+
   ipcMain.handle("workspace:open", async () => {
     const window = getWindow();
     const result = await dialog.showOpenDialog(window, {
@@ -73,6 +94,22 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow }) {
     }
 
     return { ok: true, workspace: openWorkspace(result.filePaths[0]) };
+  });
+
+  // Reopening the folder the app was last closed with. Same validation path as the dialog, so a
+  // stored path that has since been deleted or moved is refused rather than trusted.
+  ipcMain.handle("workspace:reopen", async (_event, payload) => {
+    const root = typeof payload?.root === "string" ? payload.root : null;
+    if (root === null) return { ok: false, reason: "bad-request" };
+
+    try {
+      const stats = await require("node:fs/promises").stat(root);
+      if (!stats.isDirectory()) return { ok: false, reason: "not-found" };
+    } catch {
+      return { ok: false, reason: "not-found" };
+    }
+
+    return { ok: true, workspace: openWorkspace(root) };
   });
 
   const getWorkspace = () => current;

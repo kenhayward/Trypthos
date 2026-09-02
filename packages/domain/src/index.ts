@@ -15,6 +15,18 @@ export type { ChatProfile } from "./chat";
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";
 
+export {
+  DEFAULT_SETTINGS,
+  SETTINGS_MIGRATIONS,
+  SETTINGS_VERSION,
+  SettingsSchema,
+  loadSettings,
+} from "./settings";
+export type { Settings } from "./settings";
+
+export { PANEL_BOUNDS, resolvePanelWidths } from "./panelLayout";
+export type { PanelRequest, PanelWidths } from "./panelLayout";
+
 export { countWords, detectLineEnding } from "./documentStats";
 export type { LineEnding } from "./documentStats";
 
@@ -27,6 +39,7 @@ export {
   ReadRequest,
   RevisionSchema,
   WINDOW_STATE_CHANNEL,
+  WriteSettingsRequest,
   WindowStateSchema,
   WriteRequest,
 } from "./ipc";

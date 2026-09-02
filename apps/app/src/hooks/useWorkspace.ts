@@ -38,6 +38,8 @@ export interface WorkspaceState {
 
 export interface WorkspaceActions {
   open(): Promise<void>;
+  /// Opens a remembered folder on launch, without a dialog.
+  reopen(root: string): Promise<void>;
   /// Expands a collapsed folder, or collapses an expanded one.
   toggleFolder(path: string): Promise<void>;
   /// Re-lists a folder whose listing failed.
@@ -194,6 +196,20 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     }));
   }, [client, fail]);
 
+  const reopen = useCallback(
+    async (root: string) => {
+      const result = await client.reopenWorkspace(root);
+      // Silent on failure: a remembered folder that has since gone is not an error the user caused,
+      // and greeting them with a warning about a path they may not remember choosing is worse than
+      // simply opening with nothing.
+      if (!result.ok) return;
+
+      setState((prev) => ({ ...prev, workspace: result.workspace, folders: {} }));
+      await loadFolder("");
+    },
+    [client, loadFolder],
+  );
+
   const toggleFolder = useCallback(
     async (path: string) => {
       const current = stateRef.current.folders[path];
@@ -208,6 +224,7 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
 
   const actions: WorkspaceActions = {
     open,
+    reopen,
     toggleFolder,
     retryFolder: loadFolder,
     setFilter: (filter: string) => setState((prev) => ({ ...prev, filter })),

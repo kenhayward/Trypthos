@@ -11,6 +11,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
 
   const client: WorkspaceClient = {
     openWorkspace: async () => ({ ok: true, workspace: { root: "/ws", name: "ws" } }),
+    reopenWorkspace: async (root) => ({ ok: true, workspace: { root, name: "ws" } }),
     listDirectory: async (path) => ({
       ok: true,
       nodes:
@@ -168,6 +169,34 @@ describe("useWorkspace", () => {
       await result.current.actions.retryFolder("notes");
     });
     expect(result.current.state.folders["notes"]?.status).toBe("loaded");
+  });
+
+  // A remembered folder that has since gone is not an error the user caused, and a warning about a
+  // path they may not remember choosing is worse than simply opening with nothing.
+  it("says nothing when a remembered folder can no longer be opened", async () => {
+    const { client } = fakeClient({
+      reopenWorkspace: async () => ({ ok: false, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen("D:/Gone");
+    });
+
+    expect(result.current.state.workspace).toBeNull();
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  it("reopens a remembered folder and lists it", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen("D:/Notes");
+    });
+
+    expect(result.current.state.workspace?.root).toBe("D:/Notes");
+    expect(result.current.state.folders[""]?.status).toBe("loaded");
   });
 
   it("holds the filter text", () => {

@@ -76,6 +76,17 @@ The window draws its own title bar, which names the file you have open and carri
 the window buttons - one bar rather than the system's and the app's stacked together. On macOS the
 usual red, amber and green buttons stay where macOS puts them.
 
+## Layout, remembered
+
+Drag the seam beside either side panel to resize it, or focus the seam and use the arrow keys. Hide a
+panel entirely and a strip stays at the edge to bring it back.
+
+Panel sizes, which panels are hidden, and the folder you had open are remembered between launches -
+the folder reopens automatically, and is quietly ignored if it has since been moved or deleted.
+
+If the window is too narrow to fit everything, the side panels give up their space before the editor
+does. A cramped file list is workable; a cramped document is not.
+
 ## Local by default
 
 No account, no sign-in, no telemetry, no server. Everything Trypthos stores - settings, chats - is a

@@ -11,6 +11,9 @@ describe("IPC_CHANNELS", () => {
       "window:minimize",
       "window:toggleMaximize",
       "window:close",
+      "settings:read",
+      "settings:write",
+      "workspace:reopen",
     ]);
   });
 });

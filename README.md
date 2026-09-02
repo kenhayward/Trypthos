@@ -14,6 +14,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | AI chat | Ask about the open document and the wider folder, using an endpoint and model you configure. |
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
 | Appearance | Light and dark, following your system. The window draws its own title bar on both platforms. |
+| Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
 | Local by default | No server, no account, no telemetry. Chats and settings live on your machine. |
 
 Full prose descriptions: [docs/features.md](docs/features.md).
