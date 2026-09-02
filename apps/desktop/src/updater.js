@@ -38,6 +38,13 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
   let checking = false;
   /// Set once a download completes, so the tray can offer to restart into it.
   let downloaded = null;
+  /// The update found by the last check, remembered so the tray can surface it.
+  ///
+  /// This is what saves the feature on a machine with notifications switched off. Windows reports
+  /// `isSupported()` as true and then refuses delivery, so without somewhere else to show it the
+  /// startup check would be silent and dead - the user would simply never hear about an update.
+  let available = null;
+  let onStateChange = () => {};
 
   const isPackaged = app.isPackaged;
   const currentVersion = app.getVersion();
@@ -103,6 +110,9 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
         return { ok: true, state: "up-to-date" };
       }
 
+      available = update;
+      onStateChange();
+
       if (trigger === "startup") notifyAvailable(update);
       else await askToDownload(update);
 
@@ -134,6 +144,12 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
     });
     // Clicking the notification IS the consent - so nothing further is asked.
     notification.on("click", () => void download(update));
+    // Delivery can be refused after the fact: Windows answers isSupported() with true and then
+    // declines if the user has notifications switched off. Nothing is shown and nothing throws, so
+    // this is the only signal - and the tray label is what the user is left with.
+    notification.on("failed", (_event, error) => {
+      logger.error("The update notification could not be delivered:", error);
+    });
     notification.show();
   }
 
@@ -181,7 +197,17 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
     if (isPackaged) void check("startup");
   }
 
-  return { start, check, hasDownload: () => downloaded !== null };
+  return {
+    start,
+    check,
+    /// What the tray shows. Null when there is nothing to offer.
+    getAvailable: () => downloaded ?? available,
+    isDownloaded: () => downloaded !== null,
+    /// Lets the tray rebuild its menu when an update appears.
+    onChange: (listener) => {
+      onStateChange = listener;
+    },
+  };
 }
 
 module.exports = { createUpdater, fetchAvailableUpdate };

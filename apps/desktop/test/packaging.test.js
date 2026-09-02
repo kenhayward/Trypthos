@@ -2,6 +2,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const here = path.join(__dirname, "..");
 const config = require("../electron-builder.config.cjs");
 
 /// Packaging rules that are invisible when broken.
@@ -63,4 +67,14 @@ test("the tray icons are packed outside the asar", () => {
     resources.some((entry) => entry.to === "build"),
     "tray icons must be packed as extraResources, not into the asar",
   );
+});
+
+test("the App User Model ID matches the packaged appId", () => {
+  // Windows drops every toast when these disagree - silently, with no error and nothing shown. The
+  // installer sets the Start Menu shortcut's identity from appId, so main must announce the same one.
+  const main = fs.readFileSync(path.join(here, "src", "main.js"), "utf8");
+  const declared = /APP_USER_MODEL_ID = "([^"]+)"/.exec(main)?.[1];
+
+  assert.ok(declared, "main.js must set an App User Model ID");
+  assert.equal(declared, config.appId, "the identity must match the appId the installer uses");
 });

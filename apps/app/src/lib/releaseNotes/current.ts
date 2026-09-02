@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.11.1",
+    date: "2026-09-02",
+    pr: 28,
+    headline: "You will actually be told when there is an update",
+    summary:
+      "The update notification never appeared on Windows: notifications have to identify themselves in a particular way, and Trypthos was not doing it, so every one was quietly discarded. It now does. And if your notifications are switched off entirely, the tray icon says an update is available instead of the news being lost altogether.",
+    fixed: [
+      "Update notifications appear on Windows instead of being silently discarded.",
+      "With notifications switched off, the tray menu offers the update rather than saying nothing.",
+    ],
+  },
+  {
     version: "0.11.0",
     date: "2026-09-02",
     pr: 26,
