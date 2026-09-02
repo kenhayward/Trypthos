@@ -1,105 +1,232 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { isMarkdownFile } from "@trypthos/domain";
+import { treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { RemoteNode } from "../lib/workspaceClient";
 
 interface Props {
   workspaceName: string | null;
-  directory: string;
-  nodes: RemoteNode[];
+  folders: Record<string, FolderState>;
+  filter: string;
   openFilePath: string | null;
-  busy: boolean;
+  dirty: boolean;
   onOpenWorkspace: () => void;
-  onEnter: (directory: string) => void;
-  onGoUp: () => void;
+  onFilterChange: (filter: string) => void;
+  onToggleFolder: (path: string) => void;
+  onRetryFolder: (path: string) => void;
   onOpenFile: (node: RemoteNode) => void;
 }
 
 /// Left panel: the folder browser.
 ///
-/// Presentational. Every decision - what is listed, what happens on a click, what an error says -
-/// lives in useWorkspace, so this can be redesigned freely without touching behaviour.
-///
-/// Flat navigation with a breadcrumb rather than an expanding tree, for now. A tree is nicer and is
-/// worth adding; a flat list is what makes the backend usable in the meantime.
+/// Presentational. What is listed, what a click does and what a failure says all live in
+/// useWorkspace and treeRows, so this can be restyled without touching behaviour.
 export default function WorkspacePanel({
   workspaceName,
-  directory,
-  nodes,
+  folders,
+  filter,
   openFilePath,
-  busy,
+  dirty,
   onOpenWorkspace,
-  onEnter,
-  onGoUp,
+  onFilterChange,
+  onToggleFolder,
+  onRetryFolder,
   onOpenFile,
 }: Props) {
   const { t } = useTranslation();
+  const rows = useMemo(() => treeRows(folders, filter), [folders, filter]);
+  const fileCount = visibleFileCount(rows);
+  // Folders survive a filter, so the row list is never empty while any exist - which meant a filter
+  // matching nothing left folder rows on screen with no explanation at all. The message keys off the
+  // FILE count instead, and reads correctly beside folders nobody has opened yet.
+  const noMatches = filter.trim() !== "" && fileCount === 0;
 
   return (
     <aside
       aria-label={t("workspace.title")}
-      className="flex w-64 shrink-0 flex-col border-r border-rule bg-panel"
+      className="flex w-[268px] shrink-0 flex-col border-r border-rule bg-panel"
     >
       <div className="flex items-center justify-between border-b border-rule px-3 py-2">
-        <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-ink-4">
+        <h2 className="truncate text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase">
           {workspaceName ?? t("workspace.title")}
         </h2>
         <button
           type="button"
           onClick={onOpenWorkspace}
-          className="rounded px-1.5 py-0.5 text-xs text-ink-4 hover:bg-hover hover:text-ink"
+          aria-label={t("workspace.openFolder")}
+          title={t("workspace.openFolder")}
+          className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
         >
-          {t("workspace.openFolder")}
+          <Glyph>
+            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+            <path d="M12 10v6M9 13h6" />
+          </Glyph>
         </button>
       </div>
 
       {workspaceName === null ? (
         <p className="p-3 text-sm text-ink-3">{t("workspace.noFolder")}</p>
       ) : (
-        <div className="min-h-0 grow overflow-auto py-1">
-          {directory !== "" && (
-            <button
-              type="button"
-              onClick={onGoUp}
-              className="block w-full truncate px-3 py-1 text-left text-sm text-ink-4 hover:bg-hover"
-            >
-              {t("workspace.goUp", { directory })}
-            </button>
-          )}
+        <>
+          <div className="px-2 pt-2">
+            <input
+              type="search"
+              value={filter}
+              onChange={(event) => onFilterChange(event.target.value)}
+              placeholder={t("workspace.filter")}
+              aria-label={t("workspace.filter")}
+              className="w-full rounded-md border border-rule bg-app px-2 py-1 text-ui text-ink placeholder:text-faint"
+            />
+          </div>
 
-          {nodes.length === 0 && !busy && (
-            <p className="px-3 py-1 text-sm text-ink-4">{t("workspace.emptyFolder")}</p>
-          )}
+          <div className="min-h-0 grow overflow-auto px-1 py-2">
+            {rows.length === 0 && (
+              <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.emptyFolder")}</p>
+            )}
+            {noMatches && (
+              <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.noMatches")}</p>
+            )}
 
-          {nodes.map((node) =>
-            node.kind === "directory" ? (
-              <button
-                key={node.id}
-                type="button"
-                onClick={() => onEnter(node.id)}
-                className="block w-full truncate px-3 py-1 text-left text-sm text-ink-3 hover:bg-hover"
-              >
-                {node.name}/
-              </button>
-            ) : (
-              <button
-                key={node.id}
-                type="button"
-                onClick={() => onOpenFile(node)}
-                aria-current={node.id === openFilePath ? "true" : undefined}
-                className={
-                  node.id === openFilePath
-                    ? "block w-full truncate bg-hover px-3 py-1 text-left text-sm text-ink"
-                    : `block w-full truncate px-3 py-1 text-left text-sm hover:bg-hover ${
-                        isMarkdownFile(node.name) ? "text-ink-3" : "text-faint"
-                      }`
-                }
-              >
-                {node.name}
-              </button>
-            ),
-          )}
-        </div>
+            {rows.map((row) =>
+              row.node.kind === "directory" ? (
+                <FolderRow
+                  key={row.node.id}
+                  row={row}
+                  onToggle={() => onToggleFolder(row.node.id)}
+                  onRetry={() => onRetryFolder(row.node.id)}
+                />
+              ) : (
+                <FileRow
+                  key={row.node.id}
+                  row={row}
+                  selected={row.node.id === openFilePath}
+                  dirty={dirty && row.node.id === openFilePath}
+                  onOpen={() => onOpenFile(row.node)}
+                />
+              ),
+            )}
+          </div>
+
+          <div className="border-t border-rule px-3 py-1 text-xs text-faint">
+            {t("workspace.footer", { count: fileCount })}
+          </div>
+        </>
       )}
     </aside>
+  );
+}
+
+/// Rows indent by depth. The value is inline because it is computed; everything else is a class.
+const indent = (depth: number) => ({ paddingLeft: `${depth * 16 + 4}px` });
+
+function FolderRow({
+  row,
+  onToggle,
+  onRetry,
+}: {
+  row: TreeRow;
+  onToggle: () => void;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={row.expanded}
+        style={indent(row.depth)}
+        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
+      >
+        <Chevron open={row.expanded} />
+        <Glyph className={row.status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+        </Glyph>
+        <span className="min-w-0 truncate">{row.node.name}</span>
+        {row.status === "loading" && (
+          <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
+        )}
+      </button>
+
+      {/* Inline on the row that failed, never a toast. The rest of the tree still works, and the
+          retry belongs beside the thing it would retry. */}
+      {row.status === "error" && (
+        <p
+          style={indent(row.depth + 1)}
+          className="flex items-center gap-2 py-0.5 pr-2 text-xs text-danger"
+        >
+          <span>{t("workspace.listFailed")}</span>
+          <button type="button" onClick={onRetry} className="font-semibold underline">
+            {t("workspace.retry")}
+          </button>
+        </p>
+      )}
+    </>
+  );
+}
+
+function FileRow({
+  row,
+  selected,
+  dirty,
+  onOpen,
+}: {
+  row: TreeRow;
+  selected: boolean;
+  dirty: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-current={selected ? "true" : undefined}
+      style={indent(row.depth + 1)}
+      className={
+        selected
+          ? "flex w-full items-center gap-1.5 rounded-md bg-selected py-1 pr-2 text-left text-base font-semibold text-selected-ink"
+          : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink-3 hover:bg-hover"
+      }
+    >
+      <Glyph className="size-3.5 shrink-0 text-faint">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <path d="M14 2v6h6" />
+      </Glyph>
+      <span className="min-w-0 truncate">{row.node.name}</span>
+      {dirty && (
+        <span
+          title={t("workspace.unsavedDot")}
+          aria-label={t("workspace.unsavedDot")}
+          className="ml-auto size-1.5 shrink-0 rounded-full bg-accent"
+        />
+      )}
+    </button>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <Glyph className={open ? "size-3.5 shrink-0 rotate-90 text-ink-4" : "size-3.5 shrink-0 text-ink-4"}>
+      <path d="M9 6l6 6-6 6" />
+    </Glyph>
+  );
+}
+
+function Glyph({ className = "size-3.5", children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </svg>
   );
 }

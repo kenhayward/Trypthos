@@ -180,6 +180,25 @@ Two details that are easy to lose:
 The title separator is a **plain hyphen**. The design specifies U+2014; the project bans em and en
 dashes in user-facing text, and the guard test fails the build on one.
 
+## The workspace tree
+
+`treeRows` flattens a map of folder states into the rows to render. Pure, so what a filter hides, how
+deep a row sits and which folder is still loading are all testable without a tree or a filesystem.
+
+- **Status is per folder, never per panel.** A cloud listing can fail or hang for one folder while the
+  rest are fine, so the failure is recorded on the row and rendered inline with a Retry. A spinner
+  over the whole panel would hide the parts that worked.
+- **Collapsing forgets descendants** (`withoutSubtree`). Keeping them means re-expanding shows the
+  tree as it was however long ago, including files since deleted. It matches on `path + "/"`, so
+  `docs` does not take `docs-archive` with it - the same prefix trap the path guard has.
+- **Folders survive a filter, files do not.** What is inside an unexpanded folder is unknown, so
+  hiding it because nothing visible matches would hide matches nobody has looked for yet. That also
+  means the row list is never empty while folders exist, so the "no matches" message keys off the
+  file count rather than the row count.
+- **Counting is lazy, and that is measured rather than assumed.** A recursive markdown count took 5ms
+  on this repo, 80ms on Diariz, and **40 seconds across 113,000 folders on a home directory** - which
+  is a perfectly plausible workspace. The footer therefore counts what is on screen.
+
 ## The IPC surface
 
 Four channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge:

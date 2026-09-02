@@ -76,13 +76,14 @@ export default function App() {
       <div className="flex min-h-0 grow">
         <WorkspacePanel
           workspaceName={state.workspace?.name ?? null}
-          directory={state.directory}
-          nodes={state.nodes}
+          folders={state.folders}
+          filter={state.filter}
           openFilePath={state.file?.path ?? null}
-          busy={state.busy}
+          dirty={state.dirty}
           onOpenWorkspace={() => void actions.open()}
-          onEnter={(directory) => void actions.enter(directory)}
-          onGoUp={() => void actions.goUp()}
+          onFilterChange={actions.setFilter}
+          onToggleFolder={(path) => void actions.toggleFolder(path)}
+          onRetryFolder={(path) => void actions.retryFolder(path)}
           onOpenFile={(node) => void actions.openFile(node)}
         />
         <EditorPanel

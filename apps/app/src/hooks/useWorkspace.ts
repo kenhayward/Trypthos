@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sortNodes } from "@trypthos/domain";
 import type { Revision } from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
+import type { FolderState } from "../lib/treeRows";
 
 /// All the workspace state and the transitions between them.
 ///
@@ -19,9 +19,14 @@ export interface OpenFile {
 
 export interface WorkspaceState {
   workspace: WorkspaceInfo | null;
-  /// Directory currently listed, relative to the root. Empty string is the root itself.
-  directory: string;
-  nodes: RemoteNode[];
+  /// What is known about each folder, keyed by workspace-relative path. "" is the root.
+  ///
+  /// Absent means collapsed and never opened. Status is per folder rather than per panel because one
+  /// folder can fail or hang while the rest are fine, and a spinner over the whole panel would hide
+  /// the parts that worked.
+  folders: Record<string, FolderState>;
+  /// Narrows the visible markdown files by name.
+  filter: string;
   file: OpenFile | null;
   content: string;
   /// True when `content` differs from what is on disk.
@@ -33,8 +38,11 @@ export interface WorkspaceState {
 
 export interface WorkspaceActions {
   open(): Promise<void>;
-  enter(directory: string): Promise<void>;
-  goUp(): Promise<void>;
+  /// Expands a collapsed folder, or collapses an expanded one.
+  toggleFolder(path: string): Promise<void>;
+  /// Re-lists a folder whose listing failed.
+  retryFolder(path: string): Promise<void>;
+  setFilter(filter: string): void;
   openFile(node: RemoteNode): Promise<void>;
   edit(content: string): void;
   save(): Promise<void>;
@@ -43,8 +51,8 @@ export interface WorkspaceActions {
 
 const INITIAL: WorkspaceState = {
   workspace: null,
-  directory: "",
-  nodes: [],
+  folders: {},
+  filter: "",
   file: null,
   content: "",
   dirty: false,
@@ -84,6 +92,20 @@ export function parentOf(directory: string): string {
   return cut === -1 ? "" : directory.slice(0, cut);
 }
 
+/// Removes a folder and everything beneath it from the map.
+///
+/// Collapsing has to forget descendants, not just the folder itself. Keeping them would mean
+/// re-expanding shows a tree as it was however long ago, with files that have since been deleted.
+export function withoutSubtree(
+  folders: Record<string, FolderState>,
+  path: string,
+): Record<string, FolderState> {
+  const prefix = `${path}/`;
+  return Object.fromEntries(
+    Object.entries(folders).filter(([key]) => key !== path && !key.startsWith(prefix)),
+  );
+}
+
 export function useWorkspace(client: WorkspaceClient, initialContent = "") {
   const [state, setState] = useState<WorkspaceState>({ ...INITIAL, content: initialContent });
 
@@ -101,20 +123,29 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     setState((prev) => ({ ...prev, busy: false, errorKey: failureKey(reason) }));
   }, []);
 
-  const list = useCallback(
-    async (directory: string) => {
-      setState((prev) => ({ ...prev, busy: true, errorKey: null }));
-      const result = await client.listDirectory(directory);
-      if (!result.ok) return fail(result.reason);
+  const loadFolder = useCallback(
+    async (path: string) => {
+      setState((prev) => ({
+        ...prev,
+        folders: { ...prev.folders, [path]: { status: "loading" } },
+        errorKey: null,
+      }));
+
+      const result = await client.listDirectory(path);
 
       setState((prev) => ({
         ...prev,
-        directory,
-        nodes: sortNodes(result.nodes),
-        busy: false,
+        folders: {
+          ...prev.folders,
+          [path]: result.ok
+            ? { status: "loaded", children: result.nodes }
+            : // The failure is recorded on the FOLDER, not raised as a banner. An unreadable folder
+              // is a fact about that row, and the rest of the tree is still usable.
+              { status: "error" },
+        },
       }));
     },
-    [client, fail],
+    [client],
   );
 
   const open = useCallback(async () => {
@@ -122,9 +153,9 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     const result = await client.openWorkspace();
     if (!result.ok) return fail(result.reason);
 
-    setState((prev) => ({ ...prev, workspace: result.workspace, busy: false }));
-    await list("");
-  }, [client, fail, list]);
+    setState((prev) => ({ ...prev, workspace: result.workspace, folders: {}, busy: false }));
+    await loadFolder("");
+  }, [client, fail, loadFolder]);
 
   const openFile = useCallback(
     async (node: RemoteNode) => {
@@ -163,10 +194,23 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     }));
   }, [client, fail]);
 
+  const toggleFolder = useCallback(
+    async (path: string) => {
+      const current = stateRef.current.folders[path];
+      if (current !== undefined && current.status !== "error") {
+        setState((prev) => ({ ...prev, folders: withoutSubtree(prev.folders, path) }));
+        return;
+      }
+      await loadFolder(path);
+    },
+    [loadFolder],
+  );
+
   const actions: WorkspaceActions = {
     open,
-    enter: (directory: string) => list(directory),
-    goUp: () => list(parentOf(state.directory)),
+    toggleFolder,
+    retryFolder: loadFolder,
+    setFilter: (filter: string) => setState((prev) => ({ ...prev, filter })),
     openFile,
     edit: (content: string) =>
       setState((prev) => ({ ...prev, content, dirty: prev.file !== null })),
