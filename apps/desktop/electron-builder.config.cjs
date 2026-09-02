@@ -15,7 +15,11 @@ module.exports = {
     "!node_modules/@trypthos/domain/*.json",
     "node_modules/@trypthos/domain/package.json",
   ],
-  extraResources: [{ from: "../app/dist", to: "app" }],
+  extraResources: [
+    { from: "../app/dist", to: "app" },
+    // Outside the asar: Electron's Tray reads its icon from disk and cannot open an archive.
+    { from: "build", to: "build", filter: ["*.png"] },
+  ],
   // Declared so electron-builder writes the updater feed files (latest.yml, latest-mac.yml) that an
   // in-app updater will read. It does NOT publish: the workflow packages with --publish never and a
   // single later job creates the release, because two matrix jobs publishing concurrently each

@@ -54,3 +54,13 @@ test("macOS builds are explicitly unsigned rather than accidentally so", () => {
   // that the README claim needs changing too.
   assert.equal(config.mac.identity, null);
 });
+
+test("the tray icons are packed outside the asar", () => {
+  // Electron's Tray reads its icon from disk and cannot open an archive, so an icon packed inside
+  // app.asar produces a tray with no icon - which looks like the feature not working at all.
+  const resources = config.extraResources ?? [];
+  assert.ok(
+    resources.some((entry) => entry.to === "build"),
+    "tray icons must be packed as extraResources, not into the asar",
+  );
+});

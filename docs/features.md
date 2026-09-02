@@ -87,6 +87,22 @@ the folder reopens automatically, and is quietly ignored if it has since been mo
 If the window is too narrow to fit everything, the side panels give up their space before the editor
 does. A cramped file list is workable; a cramped document is not.
 
+## Updates
+
+On starting up, Trypthos checks whether a newer version has been published. If there is one you get a
+notification; clicking it downloads and installs the update, with nothing further asked - the click
+is the consent. If you are already up to date, startup says nothing: an app that announces good news
+every launch is one people learn to dismiss unread.
+
+A Trypthos icon sits in the notification area. Right-click it for **Check for Updates**, which answers
+either way and asks before downloading, since you went looking for it deliberately.
+
+On macOS, Trypthos cannot install its own updates yet - that needs a signed build - so it offers to
+open the releases page instead of failing part-way through.
+
+Closing the window quits the app. Closing to the tray will be an option once there is somewhere to set
+preferences.
+
 ## Local by default
 
 No account, no sign-in, no telemetry, no server. Everything Trypthos stores - settings, chats - is a

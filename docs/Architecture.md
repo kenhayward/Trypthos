@@ -275,6 +275,33 @@ Getting it wrong produces a window that is blank only in the packaged build - th
 most awkward to notice, which is why it is a pure function with tests rather than a path expression
 inlined at the call site.
 
+## Updates
+
+Two paths, because they are different problems. **Windows** uses `electron-updater`, which installs in
+place. **macOS cannot**: Squirrel.Mac refuses to update an unsigned app, so it checks the GitHub
+releases API directly and offers to open the releases page - honest about what it can do, rather than
+failing part-way through an install.
+
+Two consent models, which is why `check` takes a trigger:
+
+- **startup** shows a notification. The click IS the consent, so the download starts with nothing
+  further asked. Finding nothing says nothing - an app that announces being up to date every launch
+  trains people to dismiss it unread.
+- **manual**, from the tray, answers either way and asks before spending ~110 MB.
+
+`pickUpdate` takes the **highest** newer release, not the first newer one listed, and ignores drafts,
+prereleases and tags that are not `Major.Minor.Build`. The comparison is numeric: `0.10.0` sorts
+*before* `0.9.0` as text, so a string compare would tell someone on 0.9.0 that 0.10.0 was older - a bug
+that only appears once the minor version reaches double figures.
+
+A development build never checks. Its version is whatever the repo says, so every run would announce
+an update to the release matching the source already checked out.
+
+The tray icons are **generated** by `scripts/make-tray-icon.mjs` and packed as `extraResources`, not
+into the asar - Electron's `Tray` reads its icon from disk and cannot open an archive, and an icon
+packed inside produces a tray with no icon at all. macOS gets a Template variant so the menu bar can
+recolour it for either appearance.
+
 ## Packaging
 
 `electron-builder` on a `v*` tag builds the Windows installer and the macOS `.dmg` and publishes them

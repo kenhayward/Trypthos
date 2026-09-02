@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.10.0",
+    date: "2026-09-02",
+    pr: 25,
+    headline: "Trypthos tells you when there is a new version",
+    summary:
+      "On starting up, Trypthos quietly checks whether a newer version has been published. If there is one you get a notification; click it and the update downloads and installs itself. There is also a Trypthos icon in the notification area - right-click it for Check for Updates, which asks before downloading and tells you either way. If you are up to date, startup says nothing at all.",
+    added: [
+      "A check for a newer version when the app starts, with a notification if one is found.",
+      "A Trypthos icon in the notification area, with Check for Updates and Quit.",
+    ],
+    changed: [
+      "On macOS, where Trypthos cannot yet update itself, it offers to open the releases page instead.",
+    ],
+  },
+  {
     version: "0.9.0",
     date: "2026-09-02",
     pr: 23,

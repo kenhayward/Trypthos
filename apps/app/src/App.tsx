@@ -52,7 +52,6 @@ export default function App() {
     // Measured once BEFORE the first paint, then observed. ResizeObserver fires after paint, so
     // relying on it alone meant the first frame had nothing to divide up: every panel resolved to
     // zero width and the layout visibly snapped into place a moment later.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAvailable(element.getBoundingClientRect().width);
 
     const observer = new ResizeObserver(([entry]) => {

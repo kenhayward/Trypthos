@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
@@ -10,8 +10,16 @@ const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
+const { createUpdater } = require("./updater");
+const { createTray } = require("./tray");
 
 let mainWindow = null;
+/// Held for the lifetime of the app. A Tray that is garbage collected disappears from the
+/// notification area, which looks exactly like the feature never having worked - so the reference
+/// exists to be kept, not to be read.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let tray = null;
+let updater = null;
 let loadAttempt = 0;
 let retryTimer = null;
 
@@ -116,6 +124,27 @@ if (!gotLock) {
       userDataDir: app.getPath("userData"),
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
+
+    updater = createUpdater({
+      app,
+      dialog,
+      shell,
+      Notification,
+      getWindow: () => mainWindow,
+    });
+
+    tray = createTray({
+      Tray,
+      Menu,
+      app,
+      updater,
+      getWindow: () => mainWindow,
+      // Packed as extraResources, so it sits beside the app rather than inside the asar - a Tray
+      // cannot read an icon from an archive.
+      iconDir: app.isPackaged ? path.join(process.resourcesPath, "build") : path.join(__dirname, "..", "build"),
+    });
+
+    updater.start();
     createWindow();
 
     app.on("activate", () => {

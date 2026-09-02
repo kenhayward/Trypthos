@@ -15,6 +15,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
 | Appearance | Light and dark, following your system. The window draws its own title bar on both platforms. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
+| Updates | Checks GitHub for a newer release on startup, or on demand from the tray icon. |
 | Local by default | No server, no account, no telemetry. Chats and settings live on your machine. |
 
 Full prose descriptions: [docs/features.md](docs/features.md).

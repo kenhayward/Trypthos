@@ -17,6 +17,7 @@ export const CAPABILITIES = `
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk. |
 | Appearance | Follows your system light or dark theme, with the window drawing its own title bar. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
+| Updates | Checks for a newer version on startup, or on demand from the notification-area icon. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();
 
@@ -25,5 +26,6 @@ export const CAPABILITIES = `
 export const DISCLAIMERS: readonly string[] = [
   "Built with Electron and React.",
   "Editing is provided by CodeMirror 6. Preview is rendered with marked and sanitised with DOMPurify.",
+  "Updates are checked against this project's public GitHub releases. Nothing else is sent.",
   "Chat requests go directly from this app to the endpoint you configure. No Trypthos server is involved.",
 ];
