@@ -44,5 +44,11 @@
   "about": {
     "version": "Version {{version}}",
     "close": "Close"
+  },
+  "window": {
+    "minimize": "Minimise window",
+    "maximize": "Maximise window",
+    "restore": "Restore window",
+    "close": "Close window"
   }
 }

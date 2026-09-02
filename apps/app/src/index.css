@@ -214,6 +214,25 @@ body,
   height: 100%;
 }
 
+/*
+  Frameless-window drag regions.
+
+  Classes rather than inline styles, for two reasons. The property belongs in CSS with the rest of the
+  window's presentation, and jsdom drops `-webkit-app-region` silently - so an inline-style assertion
+  cannot see it and would pass whether or not the property was ever applied.
+
+  `app-drag` on a bar, `app-no-drag` on everything inside it that is clickable. Both are needed: a
+  frameless window that cannot be dragged cannot be moved at all, since there is no OS chrome left to
+  grab, and a control inside a drag region cannot be clicked.
+*/
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 body {
   /* Explicit, from a token. A transparent body borrows whatever is painted behind the window. */
   background: var(--color-app);

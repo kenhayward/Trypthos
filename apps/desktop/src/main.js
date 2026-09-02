@@ -6,7 +6,10 @@ const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
 const { builtIndexPath } = require("./builtIndex");
 const { nextRetryDelayMs } = require("./devReload");
+const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
+const { chromeOptionsFor } = require("./windowChrome");
+const { registerWindowHandlers } = require("./windowHandlers");
 
 let mainWindow = null;
 let loadAttempt = 0;
@@ -35,7 +38,10 @@ function createWindow() {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    backgroundColor: "#ffffff",
+    // Painted before the renderer loads, so the frameless window does not flash white on a dark
+    // system while the first paint is in flight.
+    backgroundColor: "#111827",
+    ...chromeOptionsFor(process.platform),
     webPreferences: webPreferencesFor(path.join(__dirname, "preload.js")),
   });
 
@@ -67,6 +73,17 @@ function createWindow() {
     if (mainWindow) mainWindow.show();
   });
 
+  // The maximise button has to show the right glyph, and the window can be maximised by ways the
+  // renderer never sees - a double-click on the bar, the OS snap gesture, a keyboard shortcut. So the
+  // state is pushed rather than asked for.
+  const pushWindowState = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send(WINDOW_STATE_CHANNEL, { maximized: mainWindow.isMaximized() });
+  };
+  mainWindow.on("maximize", pushWindowState);
+  mainWindow.on("unmaximize", pushWindowState);
+  mainWindow.webContents.on("did-finish-load", pushWindowState);
+
   mainWindow.on("closed", () => {
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
@@ -93,6 +110,7 @@ if (!gotLock) {
 
   void app.whenReady().then(() => {
     registerIpcHandlers({ ipcMain, dialog, getWindow: () => mainWindow });
+    registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
     createWindow();
 
     app.on("activate", () => {

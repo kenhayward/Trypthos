@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IPC_CHANNELS, ListRequest, ReadRequest, WriteRequest } from "./ipc";
+import { IPC_CHANNELS, ListRequest, ReadRequest, WindowStateSchema, WriteRequest } from "./ipc";
 
 describe("IPC_CHANNELS", () => {
   it("is a closed list, so the preload bridge stays enumerable", () => {
@@ -8,7 +8,24 @@ describe("IPC_CHANNELS", () => {
       "workspace:list",
       "file:read",
       "file:write",
+      "window:minimize",
+      "window:toggleMaximize",
+      "window:close",
     ]);
+  });
+});
+
+describe("WindowStateSchema", () => {
+  it("accepts a state push from the main process", () => {
+    expect(WindowStateSchema.parse({ maximized: true })).toEqual({ maximized: true });
+  });
+
+  // Validated even though main is trusted: without it a shape change surfaces as a button that
+  // quietly stops updating, rather than as an error anybody notices.
+  it("rejects a shape it does not recognise", () => {
+    expect(() => WindowStateSchema.parse({ maximized: "yes" })).toThrow();
+    expect(() => WindowStateSchema.parse({})).toThrow();
+    expect(() => WindowStateSchema.parse({ maximized: true, extra: 1 })).toThrow();
   });
 });
 

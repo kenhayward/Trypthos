@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next";
 import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
+import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { APP_NAME, APP_VERSION } from "./lib/appInfo";
 import { workspaceClient } from "./lib/workspaceClient";
+import { currentPlatform } from "./lib/windowControls";
 
 /// Stand-in document, shown until a real file is opened.
 ///
@@ -32,6 +33,7 @@ export default function App() {
   const { t } = useTranslation();
   const [aboutOpen, setAboutOpen] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
+  const platform = useMemo(() => currentPlatform(), []);
   const { state, actions } = useWorkspace(client, SCRATCH);
 
   // Ctrl+S / Cmd+S. Bound on the window rather than inside the editor so it works wherever focus is,
@@ -49,16 +51,11 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-app text-ink">
-      <header className="flex items-center justify-between border-b border-rule px-3 py-2">
-        <span className="text-sm font-semibold">{APP_NAME}</span>
-        <button
-          type="button"
-          onClick={() => setAboutOpen(true)}
-          className="rounded px-2 py-1 text-xs text-ink-4 hover:bg-hover"
-        >
-          {t("app.about", { version: APP_VERSION })}
-        </button>
-      </header>
+      <TitleBar
+        platform={platform}
+        fileName={state.file?.name ?? null}
+        onAbout={() => setAboutOpen(true)}
+      />
 
       {state.errorKey !== null && (
         <div

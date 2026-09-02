@@ -17,7 +17,22 @@ export const IPC_CHANNELS = [
   "workspace:list",
   "file:read",
   "file:write",
+  "window:minimize",
+  "window:toggleMaximize",
+  "window:close",
 ] as const;
+
+/// Pushed from the main process when the window is maximised or restored, so the maximise button can
+/// show the right glyph. The only channel that flows main to renderer.
+///
+/// Validated on arrival like everything else. Main is trusted, but the schema is what stops the two
+/// sides drifting silently: a shape change here would otherwise surface as a button that stops
+/// updating rather than as an error.
+export const WINDOW_STATE_CHANNEL = "window:state";
+
+export const WindowStateSchema = z.object({ maximized: z.boolean() }).strict();
+
+export type WindowState = z.infer<typeof WindowStateSchema>;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number];
 

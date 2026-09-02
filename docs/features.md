@@ -53,6 +53,14 @@ Chats are saved on your machine. A chat references the file and workspace it was
 being stored beside them, so it will tell you when that file has since been renamed, moved or
 deleted.
 
+## Appearance
+
+Trypthos follows your system's light or dark setting and switches with it while the app is open.
+
+The window draws its own title bar, which names the file you have open and carries About alongside
+the window buttons - one bar rather than the system's and the app's stacked together. On macOS the
+usual red, amber and green buttons stay where macOS puts them.
+
 ## Local by default
 
 No account, no sign-in, no telemetry, no server. Everything Trypthos stores - settings, chats - is a

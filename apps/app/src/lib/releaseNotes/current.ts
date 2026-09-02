@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.6.0",
+    date: "2026-09-02",
+    pr: 15,
+    headline: "One title bar instead of two",
+    summary:
+      "The window now draws its own title bar, showing the name of the file you have open, with About and the window buttons on the same row. Previously there were two bars stacked on top of each other: the system's and the app's. On a Mac the usual red, amber and green buttons stay exactly where they belong.",
+    added: [
+      "The title bar names the file you are editing.",
+    ],
+    changed: [
+      "The separate app header is gone; About moved into the title bar.",
+      "The window is dragged by its title bar, as before.",
+    ],
+  },
+  {
     version: "0.5.1",
     date: "2026-09-02",
     pr: 14,

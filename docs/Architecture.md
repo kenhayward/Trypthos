@@ -141,6 +141,34 @@ Saving is conditional. `write` takes the revision the caller last read, and a mi
 **`conflict` result**, never an overwrite - in both directions, including "you thought you were
 creating a file that now exists". The revision is mtime plus size, opaque to callers.
 
+## Window chrome
+
+The window is **frameless**, and the renderer draws the title bar. Getting there differs by platform,
+and the difference is not cosmetic:
+
+- Windows and Linux: `frame: false`, and the renderer draws minimise, maximise and close.
+- macOS: `titleBarStyle: "hiddenInset"`, keeping the traffic lights and hiding everything else.
+  `frame: false` there would remove the traffic lights too, leaving a window with **no way to close it
+  from inside the app**.
+
+Both sides read the same `titleBarLayout` from the domain, so they cannot disagree about who draws the
+controls - one set on every platform, never two and never none.
+
+Two details that are easy to lose:
+
+- **Drag regions are CSS classes** (`app-drag`, `app-no-drag`), not inline styles. jsdom drops
+  `-webkit-app-region` silently, so a style assertion passes whether or not it was ever applied.
+  Both classes are needed: a frameless window with no drag region cannot be moved at all, and a
+  control inside a drag region cannot be clicked.
+- **Window state is pushed, not polled.** `window:state` is the only channel flowing main to renderer,
+  because a window can be maximised by ways the renderer never sees - a double-click on the bar, an OS
+  snap gesture, a keyboard shortcut. It is schema-validated on arrival like everything else: main is
+  trusted, but the schema is what stops a shape change surfacing as a button that quietly stops
+  updating.
+
+The title separator is a **plain hyphen**. The design specifies U+2014; the project bans em and en
+dashes in user-facing text, and the guard test fails the build on one.
+
 ## The IPC surface
 
 Four channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge:

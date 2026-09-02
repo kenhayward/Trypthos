@@ -20,4 +20,17 @@ contextBridge.exposeInMainWorld("trypthos", {
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   writeFile: (path, content, expectedRevision) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision }),
+
+  minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
+  toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
+  closeWindow: () => ipcRenderer.invoke("window:close"),
+
+  /// The one channel flowing the other way. The listener is wrapped rather than passed through, so
+  /// the renderer never receives the IpcRendererEvent - it carries a `sender` that would hand a page
+  /// a route back into the main process.
+  onWindowState: (listener) => {
+    const wrapped = (_event, state) => listener(state);
+    ipcRenderer.on("window:state", wrapped);
+    return () => ipcRenderer.removeListener("window:state", wrapped);
+  },
 });
