@@ -300,6 +300,13 @@ the module in it.
 package at runtime and that package is built - building only the renderer left the shell importing a
 `dist/` the runner had never produced.
 
+**Cutting a release**: `deploy\PushVersion.cmd --current` pushes a `v<version>` tag matching
+`version.json`. It refuses unless HEAD is on `main`, clean, level with `origin/main`, and green in CI
+for that exact SHA - checked by SHA rather than by branch, since "the latest run on main" can belong
+to a different commit. Those are not conveniences: the release workflow runs **no tests**, so nothing
+else checks the commit before it is published, and a tag on a stale HEAD builds the previous commit's
+code while claiming the new version.
+
 **Artifact names must contain no spaces.** GitHub rewrites a space to a dot on upload, so
 electron-builder's default `Trypthos Setup x.y.z.exe` was published as `Trypthos.Setup.x.y.z.exe`
 while `latest.yml` pointed at `Trypthos-Setup-x.y.z.exe`, and the feed URL 404'd. electron-builder's
