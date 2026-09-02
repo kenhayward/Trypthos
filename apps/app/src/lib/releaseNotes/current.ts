@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.8.2",
+    date: "2026-09-02",
+    pr: 22,
+    headline: "Opening a file behaves like opening a file",
+    summary:
+      "Two things that made a freshly opened file look like one you had already been working on. It now opens at the top rather than wherever you had scrolled the previous file to, and it is only marked Unsaved once you actually change something.",
+    fixed: [
+      "A file opens at the top instead of at the previous file's scroll position.",
+      "The Unsaved marker appears only after a change, rather than the moment a file is opened.",
+    ],
+  },
+  {
     version: "0.8.1",
     date: "2026-09-02",
     pr: 19,
