@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.4.3",
+    date: "2026-09-02",
+    pr: 11,
+    headline: "Releases publish as one complete download",
+    summary:
+      "The 0.4.2 release was assembled by hand. The Windows and macOS builds each tried to create the release at the same moment, so two half-finished ones appeared with an installer stranded on the wrong one. Building and publishing are now separate steps, so a release is created once, with everything in it, and is downloadable straight away rather than waiting for someone to publish it.",
+    fixed: [
+      "A release is created once with every installer, instead of each build creating its own.",
+      "Releases are published rather than left as a draft nobody can download.",
+    ],
+  },
+  {
     version: "0.4.2",
     date: "2026-09-01",
     pr: 10,
