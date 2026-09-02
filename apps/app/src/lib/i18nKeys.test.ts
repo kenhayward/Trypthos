@@ -41,7 +41,18 @@ const CATALOGUE = new Set(flatten(en));
 const T_CALL = /\bt\(\s*"([a-zA-Z][\w.]*)"/g;
 
 /// Keys built at runtime, listed by the prefix they are built from.
-const DYNAMIC_PREFIXES = ["editor.mode.", "editor.modeHint.", "errors."];
+///
+/// Each entry is a promise that something iterates the set - the editor modes, the failure reasons,
+/// the themes - so the guard cannot see the individual `t()` call. Adding a prefix here is how a key
+/// stops being protected, so it wants a reason each time.
+const DYNAMIC_PREFIXES = [
+  "editor.mode.",
+  "editor.modeHint.",
+  "errors.",
+  // Built from THEME_PREFERENCES as the preferences dialog renders its options.
+  "preferences.theme.",
+  "preferences.themeHint.",
+];
 
 function usedKeys(): Map<string, string[]> {
   const used = new Map<string, string[]>();

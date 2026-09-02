@@ -70,7 +70,9 @@ deleted.
 
 ## Appearance
 
-Trypthos follows your system's light or dark setting and switches with it while the app is open.
+Choose Light, Dark, or follow your system, from Preferences - the cog in the title bar. Following the
+system means exactly that: Trypthos keeps up if your machine switches at dusk, rather than deciding
+once when it started.
 
 The window draws its own title bar, which names the file you have open and carries About alongside
 the window buttons - one bar rather than the system's and the app's stacked together. On macOS the
@@ -100,8 +102,8 @@ either way and asks before downloading, since you went looking for it deliberate
 On macOS, Trypthos cannot install its own updates yet - that needs a signed build - so it offers to
 open the releases page instead of failing part-way through.
 
-Closing the window quits the app. Closing to the tray will be an option once there is somewhere to set
-preferences.
+Closing the window quits the app, unless you turn on **Keep running when the window is closed** in
+Preferences - then it hides to the notification area and you quit it from the tray icon.
 
 ## Local by default
 

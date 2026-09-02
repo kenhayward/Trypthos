@@ -5,12 +5,14 @@ import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
 import PanelDivider from "./components/PanelDivider";
+import PreferencesDialog from "./components/PreferencesDialog";
 import PanelRail from "./components/PanelRail";
 import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { useSettings } from "./hooks/useSettings";
+import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { settingsBridge, workspaceClient } from "./lib/workspaceClient";
+import { isDesktop, settingsBridge, workspaceClient } from "./lib/workspaceClient";
 import { currentPlatform } from "./lib/windowControls";
 
 /// Stand-in document, shown until a real file is opened.
@@ -36,6 +38,7 @@ Inline \`code\` and a [link](https://example.com) render too.
 export default function App() {
   const { t } = useTranslation();
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
@@ -60,6 +63,8 @@ export default function App() {
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useTheme(settings.appearance.theme);
 
   const panels = settings.panels;
   const widths = resolvePanelWidths({
@@ -104,6 +109,7 @@ export default function App() {
         platform={platform}
         fileName={state.file?.name ?? null}
         onAbout={() => setAboutOpen(true)}
+        onPreferences={() => setPrefsOpen(true)}
       />
 
       {state.errorKey !== null && (
@@ -187,6 +193,14 @@ export default function App() {
           </>
         )}
       </div>
+
+      <PreferencesDialog
+        open={prefsOpen}
+        settings={settings}
+        isDesktop={isDesktop()}
+        onClose={() => setPrefsOpen(false)}
+        onChange={update}
+      />
 
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>

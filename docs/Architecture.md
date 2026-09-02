@@ -216,6 +216,14 @@ in the user's workspace.
 - **Nothing is written before the file has been read.** Until then the state is the DEFAULTS, and
   saving would overwrite a real settings file with defaults on every launch.
 
+Settings reached **version 2** here - the first real migration. A migration adds only what its own
+version introduced and touches nothing else: a file written by 0.9.0 must arrive intact, because
+somebody's panel widths and open folder are not worth losing over two fields that did not exist yet.
+Verified against a real settings file from this machine, not only fixtures.
+
+**Close-to-tray needs an `isQuitting` flag.** Without it the preference makes the app unquittable:
+every close hides the window, including the one during shutdown.
+
 `resolvePanelWidths` decides who yields when the window is too narrow, and it is never the editor - a
 person can work with a cramped file list and cannot work in a cramped document. Below the point where
 even the minimums fit, the panels collapse entirely rather than squeezing the editor out of existence.

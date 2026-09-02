@@ -79,3 +79,36 @@ test("overwrites cleanly when written repeatedly", async () => {
     assert.deepEqual(await fs.readdir(dir), ["settings.json"]);
   });
 });
+
+/// The main process needs closeToTray at window-close time, and the file on disk may still be the
+/// version that predates it - so it must migrate rather than read as missing.
+test("reads closeToTray, migrating a version 1 file rather than ignoring it", async () => {
+  await withDir(async (dir) => {
+    const { readCloseToTray } = require("../src/settingsStore");
+    await fs.writeFile(
+      settingsPath(dir),
+      JSON.stringify({
+        schemaVersion: 1,
+        panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+        lastWorkspace: "D:/Notes",
+      }),
+      "utf8",
+    );
+
+    assert.equal(await readCloseToTray(dir), false);
+  });
+});
+
+test("tells listeners when settings are written", async () => {
+  const { onSettingsWritten, notifySettingsWritten } = require("../src/settingsStore");
+  const seen = [];
+  const stop = onSettingsWritten((settings) => seen.push(settings.window.closeToTray));
+
+  notifySettingsWritten({ ...DEFAULT_SETTINGS, window: { closeToTray: true } });
+  assert.deepEqual(seen, [true]);
+
+  // Otherwise the main process would act on a preference the user changed a moment ago.
+  stop();
+  notifySettingsWritten({ ...DEFAULT_SETTINGS, window: { closeToTray: false } });
+  assert.deepEqual(seen, [true], "a removed listener must stop hearing");
+});

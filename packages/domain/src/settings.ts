@@ -10,7 +10,7 @@ import { loadPersisted, type Migration } from "./persisted";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 
 export const SettingsSchema = z
   .object({
@@ -25,6 +25,20 @@ export const SettingsSchema = z
       .strict(),
     /// Absolute path to the folder open when the app last closed, reopened on launch.
     lastWorkspace: z.string().nullable(),
+    appearance: z
+      .object({
+        /// "system" follows the OS and keeps following it while the app is open. The other two are
+        /// explicit choices that win in both directions - a media query alone cannot express
+        /// "light, on a dark OS".
+        theme: z.enum(["system", "light", "dark"]),
+      })
+      .strict(),
+    window: z
+      .object({
+        /// Whether closing the window hides it to the notification area instead of quitting.
+        closeToTray: z.boolean(),
+      })
+      .strict(),
   })
   .strict();
 
@@ -39,13 +53,26 @@ export const DEFAULT_SETTINGS: Settings = {
     chatCollapsed: false,
   },
   lastWorkspace: null,
+  appearance: { theme: "system" },
+  window: { closeToTray: false },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
 ///
-/// Empty while there is only one version - the machinery is here so the first shape change has
-/// somewhere to go, rather than being retrofitted once somebody's settings are already on disk.
-export const SETTINGS_MIGRATIONS: Migration[] = [];
+/// Each migration adds only what its version introduced, and touches nothing else. A settings file
+/// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
+/// two fields that did not exist yet.
+export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 2,
+    // Version 2 added appearance and window behaviour.
+    migrate: (input) => ({
+      ...input,
+      appearance: { theme: "system" },
+      window: { closeToTray: false },
+    }),
+  },
+];
 
 /// Reads stored settings, or the defaults.
 ///
