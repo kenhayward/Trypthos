@@ -54,6 +54,7 @@ export default function EditorPanel({ workspaceName, filePath, dirty, value, onC
       <div className="min-h-0 grow">
         {isEditable(mode) ? (
           <MarkdownEditor
+            documentId={filePath}
             value={value}
             onChange={onChange}
             live={mode === "live"}

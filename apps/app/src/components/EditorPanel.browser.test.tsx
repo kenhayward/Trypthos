@@ -121,3 +121,43 @@ describe("Source mode, rendered", () => {
     expect(text).toContain("(https://example.com)");
   });
 });
+
+/// Scroll position is geometry, so this is the only place it can be asserted at all.
+describe("Opening a different file, rendered", () => {
+  function TwoFiles() {
+    const [path, setPath] = useState("long.md");
+    const long = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join("\n");
+
+    return (
+      <>
+        <button type="button" onClick={() => setPath("short.md")}>
+          open short
+        </button>
+        {/* A definite height, or the editor simply grows to fit its content and there is nothing to
+            scroll - the assertion would then pass for the wrong reason. */}
+        <div style={{ height: 300, display: "flex" }}>
+          <EditorPanel
+            workspaceName="ws"
+            filePath={path}
+            dirty={false}
+            value={path === "long.md" ? long : "short file\n"}
+            onChange={() => {}}
+          />
+        </div>
+      </>
+    );
+  }
+
+  it("opens the new file at the top, not where the last one was left", async () => {
+    render(<TwoFiles />);
+
+    const scroller = document.querySelector(".cm-scroller") as HTMLElement;
+    scroller.scrollTop = 900;
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "open short" }));
+    // The same scroller element: the editor is reused, which is exactly why the position had to be
+    // reset rather than being discarded along with the old view.
+    expect((document.querySelector(".cm-scroller") as HTMLElement).scrollTop).toBe(0);
+  });
+});
