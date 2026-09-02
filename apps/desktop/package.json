@@ -1,12 +1,15 @@
 {
   "name": "trypthos-desktop",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.8.1",
   "main": "src/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "test": "node --test \"test/*.test.js\"",
     "dist": "electron-builder --config electron-builder.config.cjs"
+  },
+  "dependencies": {
+    "@trypthos/domain": "*"
   },
   "devDependencies": {
     "electron": "44.1.0",

@@ -262,6 +262,19 @@ and both create one.
 The electron-builder `publish` block stays, because it is what makes electron-builder write the
 updater feed files (`latest.yml`, `latest-mac.yml`) - it just never publishes.
 
+**The shell's runtime dependencies must be declared.** npm workspaces hoist packages to the repo root,
+so a module the shell requires but never lists resolves perfectly in development and is simply absent
+once packaged - electron-builder has no reason to bundle something nothing claims to need. That
+shipped in every release up to 0.8.0: the app packaged, published and downloaded correctly, and died
+on launch with `Cannot find module '@trypthos/domain'`. `apps/desktop/test/dependencies.test.js`
+compares what `src/` requires against the manifest, statically, so it runs in ordinary CI rather than
+only on a tag; the release workflow additionally reads the built asar and refuses to publish without
+the module in it.
+
+**The release build runs `npm run build`, not just the renderer.** The shell requires the domain
+package at runtime and that package is built - building only the renderer left the shell importing a
+`dist/` the runner had never produced.
+
 **Artifact names must contain no spaces.** GitHub rewrites a space to a dot on upload, so
 electron-builder's default `Trypthos Setup x.y.z.exe` was published as `Trypthos.Setup.x.y.z.exe`
 while `latest.yml` pointed at `Trypthos-Setup-x.y.z.exe`, and the feed URL 404'd. electron-builder's

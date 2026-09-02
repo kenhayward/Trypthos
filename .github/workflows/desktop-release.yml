@@ -29,8 +29,11 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build renderer
-        run: npm run build --workspace trypthos-app
+      # Everything, not just the renderer. The shell requires @trypthos/domain at runtime and that
+      # package is BUILT - building only the renderer left the shell importing a dist/ that the
+      # runner had never produced.
+      - name: Build
+        run: npm run build
 
       # --publish never, deliberately. Letting each matrix job publish for itself is what produced
       # TWO draft releases for v0.4.2, with one asset stranded on the wrong one: both jobs finish at
@@ -40,6 +43,21 @@ jobs:
       # Unsigned for now: SmartScreen warns on Windows, and macOS needs right-click then Open.
       - name: Package
         run: npm run dist --workspace trypthos-desktop -- --publish never
+
+      # The failure this catches shipped in every release up to 0.8.0: the app packaged, published and
+      # downloaded perfectly, and died on launch because a required module was never bundled. Reading
+      # the asar is the cheapest way to assert that what main.js requires is actually in there.
+      - name: Check the package contains what the shell requires
+        shell: bash
+        run: |
+          asar=apps/desktop/release/*-unpacked/resources/app.asar
+          [ -f $asar ] || asar=apps/desktop/release/mac*/Trypthos.app/Contents/Resources/app.asar
+          echo "inspecting $asar"
+          # Separator-agnostic: asar list prints backslashes on Windows and forward slashes on macOS,
+          # so a forward-slash pattern silently fails the check on exactly one of the two runners.
+          npx asar list $asar | tr '\' '/' > /tmp/asar.txt
+          grep -q "node_modules/@trypthos/domain/dist/index.js" /tmp/asar.txt             || { echo "FAIL: @trypthos/domain is not in the package"; wc -l < /tmp/asar.txt; exit 1; }
+          echo "ok: @trypthos/domain is packaged"
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
