@@ -13,6 +13,12 @@ module.exports = {
   // single later job creates the release, because two matrix jobs publishing concurrently each
   // create their own draft.
   publish: [{ provider: "github", owner: "kenhayward", repo: "Trypthos" }],
+  // No spaces in artifact names. electron-builder's default NSIS name is "Trypthos Setup x.y.z.exe",
+  // and GitHub rewrites spaces to dots on upload - so the published asset became
+  // "Trypthos.Setup.0.4.3.exe" while latest.yml pointed at "Trypthos-Setup-0.4.3.exe", and the
+  // updater feed 404'd. electron-builder's own publisher used to normalise that; publishing from a
+  // separate job does not, so the name has to be right at build time.
+  artifactName: "${productName}-Setup-${version}.${ext}",
   win: { target: "nsis" },
   mac: { target: "dmg", identity: null },
   linux: { target: "AppImage" },

@@ -204,6 +204,13 @@ and both create one.
 The electron-builder `publish` block stays, because it is what makes electron-builder write the
 updater feed files (`latest.yml`, `latest-mac.yml`) - it just never publishes.
 
+**Artifact names must contain no spaces.** GitHub rewrites a space to a dot on upload, so
+electron-builder's default `Trypthos Setup x.y.z.exe` was published as `Trypthos.Setup.x.y.z.exe`
+while `latest.yml` pointed at `Trypthos-Setup-x.y.z.exe`, and the feed URL 404'd. electron-builder's
+own publisher normalised that; publishing from a separate job does not, so the name has to be right
+at build time. `apps/desktop/test/packaging.test.js` pins it, along with the publish block and the
+renderer being copied into `resources/app` - all three fail silently rather than loudly.
+
 **Electron is pinned to an exact version** in `apps/desktop/package.json`, not a range.
 electron-builder downloads platform binaries for one specific release and refuses a range - and in a
 workspace it cannot fall back to reading the installed copy, because electron is hoisted to the root.
