@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { failureKey, parentOf, useWorkspace } from "./useWorkspace";
+import { failureKey, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
 /// A hand-written fake, not a mocking library. It records what it was asked to do, which is what most
@@ -48,6 +48,27 @@ describe("parentOf", () => {
   });
 });
 
+describe("withoutSubtree", () => {
+  const folders = {
+    "": { status: "loaded" as const },
+    docs: { status: "loaded" as const },
+    "docs/specs": { status: "loaded" as const },
+    other: { status: "loaded" as const },
+  };
+
+  // Collapsing must forget descendants too. Keeping them would mean re-expanding shows the tree as it
+  // was however long ago, including files that have since been deleted.
+  it("removes the folder and everything beneath it", () => {
+    expect(Object.keys(withoutSubtree(folders, "docs")).sort()).toEqual(["", "other"]);
+  });
+
+  // "docs" must not take "docs-archive" with it - the same prefix trap the path guard has.
+  it("does not remove a sibling whose name merely starts the same", () => {
+    const withSibling = { ...folders, "docs-archive": { status: "loaded" as const } };
+    expect(Object.keys(withoutSubtree(withSibling, "docs"))).toContain("docs-archive");
+  });
+});
+
 describe("failureKey", () => {
   it("maps each known reason to its own key", () => {
     expect(failureKey("conflict")).toBe("errors.conflict");
@@ -77,7 +98,7 @@ describe("useWorkspace", () => {
     expect(result.current.state.file).toBeNull();
   });
 
-  it("lists the root after a folder is opened, directories first", async () => {
+  it("lists the root after a folder is opened", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -86,10 +107,11 @@ describe("useWorkspace", () => {
     });
 
     expect(result.current.state.workspace?.name).toBe("ws");
-    expect(result.current.state.nodes.map((n) => n.name)).toEqual(["notes", "a.md", "b.md"]);
+    expect(result.current.state.folders[""]?.status).toBe("loaded");
+    expect(result.current.state.folders[""]?.children?.map((n) => n.name)).toContain("notes");
   });
 
-  it("navigates into a directory and back up", async () => {
+  it("expands a folder, then collapses it again", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -97,14 +119,65 @@ describe("useWorkspace", () => {
       await result.current.actions.open();
     });
     await act(async () => {
-      await result.current.actions.enter("notes");
+      await result.current.actions.toggleFolder("notes");
     });
-    expect(result.current.state.directory).toBe("notes");
+    expect(result.current.state.folders["notes"]?.status).toBe("loaded");
 
     await act(async () => {
-      await result.current.actions.goUp();
+      await result.current.actions.toggleFolder("notes");
     });
-    expect(result.current.state.directory).toBe("");
+    expect(result.current.state.folders["notes"]).toBeUndefined();
+  });
+
+  // A failed folder is a fact about that row. Raising it as a banner would suggest the workspace is
+  // broken when every other folder is fine.
+  it("records a failed listing on the folder, not as a panel-wide error", async () => {
+    const { client } = fakeClient({
+      listDirectory: async (path) =>
+        path === "notes" ? { ok: false, reason: "permission-denied" } : { ok: true, nodes: [] },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.toggleFolder("notes");
+    });
+
+    expect(result.current.state.folders["notes"]?.status).toBe("error");
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  it("retries a folder that failed", async () => {
+    let attempt = 0;
+    const { client } = fakeClient({
+      listDirectory: async () => {
+        attempt += 1;
+        return attempt === 1 ? { ok: false, reason: "offline" } : { ok: true, nodes: [] };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.retryFolder("notes");
+    });
+    expect(result.current.state.folders["notes"]?.status).toBe("error");
+
+    await act(async () => {
+      await result.current.actions.retryFolder("notes");
+    });
+    expect(result.current.state.folders["notes"]?.status).toBe("loaded");
+  });
+
+  it("holds the filter text", () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => {
+      result.current.actions.setFilter("plan");
+    });
+    expect(result.current.state.filter).toBe("plan");
   });
 
   it("opens a file, holding the revision it was read at", async () => {

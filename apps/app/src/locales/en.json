@@ -8,7 +8,13 @@
     "openFolder": "Open folder",
     "noFolder": "No folder open yet.",
     "emptyFolder": "This folder is empty.",
-    "goUp": ".. {{directory}}"
+    "filter": "Filter markdown files",
+    "loading": "Loading...",
+    "listFailed": "Couldn't list this folder.",
+    "retry": "Retry",
+    "unsavedDot": "Unsaved changes",
+    "noMatches": "No markdown files match.",
+    "footer": "Markdown only · {{count}} files"
   },
   "editor": {
     "title": "Editor",

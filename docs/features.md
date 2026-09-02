@@ -5,8 +5,17 @@ About box carries a shorter table again; all three change together.
 
 ## Workspace browser
 
-The left panel shows a workspace. Open a folder from your machine, browse into subfolders, and click
-a file to open it in the editor. OneDrive, Google Drive, Dropbox and GitHub arrive behind the same
+The left panel shows a workspace as a tree. Open a folder from your machine, expand folders in place,
+and click a file to open it in the editor. A filter box narrows the markdown files by name.
+
+Every folder is listed but only markdown files within them, and hidden entries such as `.git` are left
+out - they are not what this panel is for. The footer counts the markdown files currently on screen
+rather than the whole tree: a recursive count is not free, and measured on a home directory it took
+40 seconds across 113,000 folders.
+
+If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
+the tree keeps working, because one unreadable folder is a fact about that folder rather than about
+your workspace. OneDrive, Google Drive, Dropbox and GitHub arrive behind the same
 interface, in that order.
 
 Saving is deliberate: press Ctrl+S (Cmd+S on macOS), and an asterisk beside the file name shows when

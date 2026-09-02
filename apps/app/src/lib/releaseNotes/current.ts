@@ -5,6 +5,25 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.8.0",
+    date: "2026-09-02",
+    pr: 17,
+    headline: "A real folder tree, with a filter",
+    summary:
+      "The workspace panel is now a tree you can expand and collapse rather than one folder at a time. It shows every folder but only your markdown files, with a box to narrow them by name. If a folder cannot be read, that folder says so and offers to try again while the rest of the tree keeps working. Hidden folders like .git are left out - they are not what this panel is for.",
+    added: [
+      "Expand and collapse folders in place.",
+      "A filter box to narrow markdown files by name.",
+      "A count of the markdown files on screen.",
+      "A dot beside the open file when it has unsaved changes.",
+    ],
+    changed: [
+      "Only markdown files are listed, alongside every folder.",
+      "Hidden folders and files, such as .git, are no longer shown.",
+      "A folder that cannot be read reports it on its own row with a Retry, rather than as a message over the whole panel.",
+    ],
+  },
+  {
     version: "0.7.0",
     date: "2026-09-02",
     pr: 16,
