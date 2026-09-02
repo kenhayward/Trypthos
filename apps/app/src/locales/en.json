@@ -16,7 +16,6 @@
     "surface": "Markdown source",
     "preview": "Markdown preview",
     "nothingToPreview": "Nothing to preview yet.",
-    "unsaved": "{{name}} *",
     "mode": {
       "live": "Live",
       "source": "Source",
@@ -26,7 +25,12 @@
       "live": "Markers hidden except on the line you are editing",
       "source": "Every character, colour-coded by role",
       "preview": "Read-only rendered prose"
-    }
+    },
+    "breadcrumb": "Document location",
+    "unsavedPill": "Unsaved",
+    "format": "Markdown",
+    "encoding": "UTF-8",
+    "stats": "{{caret}} · {{words}} words"
   },
   "chat": {
     "title": "Chat",

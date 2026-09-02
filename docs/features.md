@@ -29,9 +29,15 @@ The centre panel edits markdown in one of three views over the same document:
 - **Live** hides syntax markers until your cursor reaches a line, which then shows its own
   scaffolding. Reads like a document, edits like text. This is the default view.
 
-  Headings, bold, italic, inline code, links and quotes render in place. Tables, images, footnotes
-  and fenced code blocks still show as source for now - a construct without a decoration renders as
+  Headings, bold, italic, inline code, links, quotes and list bullets render in place, and the line
+  you are editing is tinted. Tables, images, footnotes and fenced code blocks still show as source
+  for now - a construct without a decoration renders as
   itself rather than disappearing, so nothing is ever hidden that Trypthos cannot draw.
+
+The header above the editor shows where the document lives, marks it when there is something unsaved,
+and reports your cursor position and word count. The strip below names the format, the encoding and
+the line endings the file actually uses - measured rather than assumed, so a file that mixes Windows
+and Unix line endings is reported as mixed rather than as one or the other.
 
 Switching view never rewrites your file. The bytes on disk are identical in every view, so a
 document can be shared between someone who wants to read it and someone who cares about its exact

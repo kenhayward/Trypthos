@@ -15,6 +15,9 @@ export type { ChatProfile } from "./chat";
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";
 
+export { countWords, detectLineEnding } from "./documentStats";
+export type { LineEnding } from "./documentStats";
+
 export { titleBarLayout, windowTitle } from "./windowChrome";
 export type { Platform, TitleBarLayout } from "./windowChrome";
 

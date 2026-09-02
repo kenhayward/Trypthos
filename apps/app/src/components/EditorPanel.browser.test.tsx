@@ -8,7 +8,15 @@ const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) her
 
 function Harness() {
   const [value, setValue] = useState(DOC);
-  return <EditorPanel fileName="notes.md" value={value} onChange={setValue} />;
+  return (
+    <EditorPanel
+      workspaceName="Diariz"
+      filePath="notes.md"
+      dirty={false}
+      value={value}
+      onChange={setValue}
+    />
+  );
 }
 
 const modeButton = (name: string) => screen.getByRole("button", { name });

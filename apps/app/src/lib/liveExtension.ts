@@ -1,9 +1,17 @@
 import { syntaxTree } from "@codemirror/language";
 import type { Range as CmRange } from "@codemirror/state";
-import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  WidgetType,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
 
 import {
   consumesTrailingSpace,
+  substituteFor,
   formatClassFor,
   isHiddenMarker,
   revealedLines,
@@ -19,6 +27,32 @@ type DecorationRange = CmRange<Decoration>;
 /// the result changes.
 
 const hidden = Decoration.replace({});
+
+/// Renders a marker's stand-in glyph, currently only a list bullet.
+///
+/// A widget rather than CSS, because the character on screen is not the character in the file - and
+/// `ignoreEvent: false` lets a click on the bullet place the caret, which then reveals the real
+/// marker underneath. A widget that swallowed clicks would be a small dead zone on every list item.
+class GlyphWidget extends WidgetType {
+  constructor(private readonly glyph: string) {
+    super();
+  }
+
+  override eq(other: GlyphWidget): boolean {
+    return other.glyph === this.glyph;
+  }
+
+  override toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "cm-live-bullet";
+    span.textContent = this.glyph;
+    return span;
+  }
+
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}
 
 /// Where a hidden marker's range ends, extended past the whitespace a block marker owns.
 ///
@@ -46,6 +80,15 @@ function buildDecorations(view: EditorView): DecorationSet {
     lineOf,
   );
 
+  // The caret line gets a tint, so its revealed markers read as a state rather than as the document
+  // having suddenly grown extra characters. A LINE decoration, added at the line start - a mark
+  // spanning the line would not paint the full width past the end of the text.
+  for (const line of revealed) {
+    if (line < 1 || line > view.state.doc.lines) continue;
+    const at = view.state.doc.line(line).from;
+    collected.push(Decoration.line({ class: "cm-live-caret-line" }).range(at));
+  }
+
   // Only the visible ranges: decorating the whole document would walk the entire tree on every
   // keystroke, which is what makes naive live-preview implementations crawl on long files.
   for (const { from, to } of view.visibleRanges) {
@@ -65,7 +108,17 @@ function buildDecorations(view: EditorView): DecorationSet {
           // Deliberately no early return: the heading still has a hash inside it to hide.
         }
 
-        if (isHiddenMarker(range.name, range.parent) && !revealed.has(lineOf(node.from))) {
+        if (revealed.has(lineOf(node.from))) return;
+
+        const glyph = substituteFor(range.name, range.parent);
+        if (glyph !== null) {
+          collected.push(
+            Decoration.replace({ widget: new GlyphWidget(glyph) }).range(node.from, node.to),
+          );
+          return;
+        }
+
+        if (isHiddenMarker(range.name, range.parent)) {
           collected.push(hidden.range(node.from, hideTo(view, range)));
         }
       },
@@ -124,6 +177,11 @@ export const liveTheme = EditorView.theme({
     textUnderlineOffset: "2px",
   },
   ".cm-live-quote": { color: "var(--color-tok-quote)", fontStyle: "italic" },
+  ".cm-live-bullet": { color: "var(--color-ink-4)" },
+
+  // The line the caret is on, tinted so the revealed markers read as a state rather than as the
+  // document suddenly containing extra characters.
+  ".cm-line.cm-live-caret-line": { backgroundColor: "var(--color-caret-line)" },
 });
 
 export const liveMode = [livePreview(), liveTheme];

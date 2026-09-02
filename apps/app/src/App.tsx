@@ -86,13 +86,9 @@ export default function App() {
           onOpenFile={(node) => void actions.openFile(node)}
         />
         <EditorPanel
-          fileName={
-            state.file
-              ? state.dirty
-                ? t("editor.unsaved", { name: state.file.name })
-                : state.file.name
-              : null
-          }
+          workspaceName={state.workspace?.name ?? null}
+          filePath={state.file?.path ?? null}
+          dirty={state.dirty}
           value={state.content}
           onChange={actions.edit}
         />

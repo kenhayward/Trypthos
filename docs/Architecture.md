@@ -92,8 +92,19 @@ Three things there that are easy to get wrong:
 - **Only the visible ranges are decorated.** Walking the whole tree per keystroke is what makes naive
   live-preview implementations crawl on long files.
 
+A marker is either **hidden or substituted**, never both. Hiding a list's `-` leaves the item indented
+under nothing, which reads worse than the marker it removed, so `ListMark` is replaced by a bullet
+widget instead. `substituteFor` is checked before `isHiddenMarker` and short-circuits it; doing both
+would replace the marker and then remove the replacement. The widget sets `ignoreEvent(): false`, so
+clicking a bullet places the caret and reveals the real character underneath rather than being a dead
+zone on every list item.
+
 Fenced code, tables, images and footnotes have no decoration yet and therefore render as source -
 a deliberate floor, and one no two-engine design can offer.
+
+The status bar's facts are **measured, not assumed**. `detectLineEnding` reports `Mixed` when a file
+genuinely mixes them, because the strip presents these as claims about the user's document - and the
+one thing worse than not showing it is showing it wrongly.
 
 ## Two test suites, and which is which
 

@@ -50,10 +50,27 @@ const FORMAT_CLASSES: Record<string, string> = {
 ///  - `URL` is a link's target, which is hidden so the link reads as its text. Elsewhere a bare URL
 ///    is the content itself and must stay.
 export function isHiddenMarker(name: string, parent: string): boolean {
+  // A substituted marker is not hidden - it is replaced by its glyph, which is a different decoration.
+  if (substituteFor(name, parent) !== null) return false;
   if (ALWAYS_HIDDEN.has(name)) return true;
   if (name === "CodeMark") return parent === "InlineCode";
   if (name === "URL") return parent === "Link";
   return false;
+}
+
+/// The glyph a marker is replaced with, or null to hide it outright.
+///
+/// A list bullet is the case that needed this. Hiding `-` leaves the item indented under nothing,
+/// which reads worse than the marker it removed - so the marker is SUBSTITUTED rather than hidden,
+/// and the item keeps something to hang from. Every other marker has a rendered form that needs no
+/// stand-in: a heading is large, bold text is bold.
+export function substituteFor(name: string, parent: string): string | null {
+  if (name === "ListMark" && parent === "ListItem") {
+    // Only an unordered bullet. An ordered list's "1." is content - the number means something, and
+    // replacing it with a bullet would lose it.
+    return "•";
+  }
+  return null;
 }
 
 /// Whether this marker owns the whitespace that follows it.
