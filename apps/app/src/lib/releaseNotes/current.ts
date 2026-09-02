@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.5.0",
+    date: "2026-09-02",
+    pr: 13,
+    headline: "Trypthos follows your system theme",
+    summary:
+      "Dark mode. Trypthos now matches whatever your operating system is set to, and switches with it while the app is open - the editor's own colours included, so the text you are reading changes with everything around it rather than staying stubbornly bright. This is the first piece of the new interface design; the layout changes it prepares for come next.",
+    added: [
+      "Dark mode, following your system setting.",
+    ],
+    changed: [
+      "Every colour in the app now comes from one shared set, so the editor and the panels around it can never drift apart.",
+    ],
+  },
+  {
     version: "0.4.4",
     date: "2026-09-02",
     pr: 12,

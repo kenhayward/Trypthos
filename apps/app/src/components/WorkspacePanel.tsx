@@ -34,37 +34,37 @@ export default function WorkspacePanel({
   return (
     <aside
       aria-label="Workspace"
-      className="flex w-64 shrink-0 flex-col border-r border-neutral-200 bg-neutral-50"
+      className="flex w-64 shrink-0 flex-col border-r border-rule bg-panel"
     >
-      <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
-        <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <div className="flex items-center justify-between border-b border-rule px-3 py-2">
+        <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-ink-4">
           {workspaceName ?? "Workspace"}
         </h2>
         <button
           type="button"
           onClick={onOpenWorkspace}
-          className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 hover:text-neutral-900"
+          className="rounded px-1.5 py-0.5 text-xs text-ink-4 hover:bg-hover hover:text-ink"
         >
           Open folder
         </button>
       </div>
 
       {workspaceName === null ? (
-        <p className="p-3 text-sm text-neutral-600">No folder open yet.</p>
+        <p className="p-3 text-sm text-ink-3">No folder open yet.</p>
       ) : (
         <div className="min-h-0 grow overflow-auto py-1">
           {directory !== "" && (
             <button
               type="button"
               onClick={onGoUp}
-              className="block w-full truncate px-3 py-1 text-left text-sm text-neutral-500 hover:bg-neutral-200"
+              className="block w-full truncate px-3 py-1 text-left text-sm text-ink-4 hover:bg-hover"
             >
               .. {directory}
             </button>
           )}
 
           {nodes.length === 0 && !busy && (
-            <p className="px-3 py-1 text-sm text-neutral-500">This folder is empty.</p>
+            <p className="px-3 py-1 text-sm text-ink-4">This folder is empty.</p>
           )}
 
           {nodes.map((node) =>
@@ -73,7 +73,7 @@ export default function WorkspacePanel({
                 key={node.id}
                 type="button"
                 onClick={() => onEnter(node.id)}
-                className="block w-full truncate px-3 py-1 text-left text-sm text-neutral-700 hover:bg-neutral-200"
+                className="block w-full truncate px-3 py-1 text-left text-sm text-ink-3 hover:bg-hover"
               >
                 {node.name}/
               </button>
@@ -85,9 +85,9 @@ export default function WorkspacePanel({
                 aria-current={node.id === openFilePath ? "true" : undefined}
                 className={
                   node.id === openFilePath
-                    ? "block w-full truncate bg-neutral-200 px-3 py-1 text-left text-sm text-neutral-900"
-                    : `block w-full truncate px-3 py-1 text-left text-sm hover:bg-neutral-200 ${
-                        isMarkdownFile(node.name) ? "text-neutral-700" : "text-neutral-400"
+                    ? "block w-full truncate bg-hover px-3 py-1 text-left text-sm text-ink"
+                    : `block w-full truncate px-3 py-1 text-left text-sm hover:bg-hover ${
+                        isMarkdownFile(node.name) ? "text-ink-3" : "text-faint"
                       }`
                 }
               >

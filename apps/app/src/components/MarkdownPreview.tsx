@@ -18,7 +18,7 @@ export default function MarkdownPreview({ source }: Props) {
 
   if (html === "") {
     return (
-      <div className="p-4 text-sm text-neutral-500">Nothing to preview yet.</div>
+      <div className="p-4 text-sm text-ink-4">Nothing to preview yet.</div>
     );
   }
 

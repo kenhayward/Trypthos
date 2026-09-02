@@ -9,3 +9,6 @@ coverage/
 Thumbs.db
 .env
 .env.local
+
+# Failure screenshots written by the browser test suite.
+__screenshots__/

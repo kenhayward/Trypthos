@@ -11,12 +11,12 @@ export default function ChatPanel({ profileLabel }: Props) {
   return (
     <aside
       aria-label="Chat"
-      className="flex w-80 shrink-0 flex-col border-l border-neutral-200 bg-neutral-50"
+      className="flex w-80 shrink-0 flex-col border-l border-rule bg-panel"
     >
-      <h2 className="border-b border-neutral-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+      <h2 className="border-b border-rule px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-4">
         Chat
       </h2>
-      <div className="grow p-3 text-sm text-neutral-600">
+      <div className="grow p-3 text-sm text-ink-3">
         {profileLabel ? `Ready with ${profileLabel}.` : "Configure an endpoint and model to start."}
       </div>
     </aside>
