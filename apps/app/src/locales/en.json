@@ -40,8 +40,17 @@
   },
   "chat": {
     "title": "Chat",
-    "notConfigured": "Configure an endpoint and model to start.",
-    "ready": "Ready with {{profile}}."
+    "notConfigured": "No chat model is configured yet.",
+    "intro": "Ask a question about what you are working on.",
+    "message": "Message",
+    "askPlaceholder": "Ask anything...",
+    "send": "Send",
+    "stop": "Stop",
+    "clear": "Clear the conversation",
+    "thinking": "Thinking...",
+    "chooseModel": "Choose the model",
+    "noModel": "No model",
+    "openPreferences": "Open Preferences"
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",

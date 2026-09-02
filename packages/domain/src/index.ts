@@ -8,6 +8,17 @@ export type {
 
 export { normaliseEndpoint } from "./endpoints";
 
+export { createSseDecoder } from "./sse";
+export type { SseDecoder } from "./sse";
+
+export {
+  ChatTurnSchema,
+  buildChatRequest,
+  completionsUrl,
+  parseStreamPayload,
+} from "./chatCompletion";
+export type { ChatRequestBody, ChatTurn, StreamEvent } from "./chatCompletion";
+
 export { loadPersisted } from "./persisted";
 export type { LoadFailure, LoadOptions, LoadResult, Migration } from "./persisted";
 
@@ -44,9 +55,14 @@ export { titleBarLayout, windowTitle } from "./windowChrome";
 export type { Platform, TitleBarLayout } from "./windowChrome";
 
 export {
+  CHAT_EVENT_CHANNEL,
+  CancelChatRequest,
+  ChatEventMessage,
+  ChatEventSchema,
   DeleteSecretRequest,
   IPC_CHANNELS,
   ListRequest,
+  SendChatRequest,
   ReadRequest,
   RevisionSchema,
   SetSecretRequest,
@@ -55,7 +71,7 @@ export {
   WindowStateSchema,
   WriteRequest,
 } from "./ipc";
-export type { IpcChannel, WindowState } from "./ipc";
+export type { ChatEvent, IpcChannel, WindowState } from "./ipc";
 
 export type {
   ListPage,

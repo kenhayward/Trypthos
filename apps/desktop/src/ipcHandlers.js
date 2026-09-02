@@ -1,8 +1,12 @@
 "use strict";
 
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
 const {
+  CHAT_EVENT_CHANNEL,
+  CancelChatRequest,
   DeleteSecretRequest,
+  SendChatRequest,
   SetSecretRequest,
   createPathGuard,
   ListRequest,
@@ -69,7 +73,7 @@ function guarded(getWorkspace, schema, handler) {
   };
 }
 
-function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets }) {
+function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets, chat }) {
   // Settings are not workspace-scoped, so they do not go through `guarded` - there is no workspace
   // to require, and the app needs to read them before one is open.
   ipcMain.handle("settings:read", async () => ({ ok: true, settings: await readSettings(userDataDir) }));
@@ -116,6 +120,70 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets 
     if (!parsed.success) return { ok: false, reason: "bad-request" };
 
     await secrets.deleteKey(parsed.data.endpoint);
+    return { ok: true };
+  });
+
+  // Chat. Streams in flight, by id, so a reply can be cancelled and so a late event can be told
+  // apart from the conversation the user has since moved to.
+  const streams = new Map();
+
+  /// Pushes one event to the renderer.
+  ///
+  /// The window can be closed while a reply is still arriving, and sending to a destroyed
+  /// webContents throws - which would surface as an unhandled rejection in the main process rather
+  /// than as anything anyone could act on.
+  function pushChatEvent(streamId, event) {
+    const window = getWindow();
+    if (!window || window.isDestroyed()) return;
+    window.webContents.send(CHAT_EVENT_CHANNEL, { streamId, event });
+  }
+
+  ipcMain.handle("chat:send", async (_event, payload) => {
+    const parsed = SendChatRequest.safeParse(payload);
+    if (!parsed.success) {
+      // Not echoing the payload: it is the user's own prose, and a log is not where that belongs.
+      console.error("Rejected a malformed chat request.");
+      return { ok: false, reason: "bad-request" };
+    }
+
+    // The renderer named a profile ID. The endpoint, model and parameters come from settings HERE -
+    // a renderer that could name its own endpoint could point Trypthos at any server on the
+    // internet, and have it send whatever key was stored for that address.
+    const settings = await readSettings(userDataDir);
+    const profile = settings.chat.profiles.find(({ id }) => id === parsed.data.profileId);
+    if (profile === undefined) return { ok: false, reason: "no-such-profile" };
+
+    const streamId = randomUUID();
+    const controller = new AbortController();
+    streams.set(streamId, controller);
+
+    // Deliberately not awaited: the reply arrives over seconds, and the renderer needs the stream id
+    // now so it can match the events that follow.
+    void chat
+      .run({
+        profile,
+        turns: parsed.data.turns,
+        signal: controller.signal,
+        onEvent: (event) => pushChatEvent(streamId, event),
+      })
+      .catch(() => {
+        // `run` is documented never to reject, so this is belt and braces - but a turn that ended
+        // without an `end` event would leave the panel showing a reply that never finishes.
+        pushChatEvent(streamId, { type: "error", message: "The reply failed unexpectedly." });
+        pushChatEvent(streamId, { type: "end" });
+      })
+      .finally(() => streams.delete(streamId));
+
+    return { ok: true, streamId };
+  });
+
+  ipcMain.handle("chat:cancel", async (_event, payload) => {
+    const parsed = CancelChatRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    // A stream that has already finished is not an error: the user pressing stop as the last token
+    // arrives is a race nobody should have to think about.
+    streams.get(parsed.data.streamId)?.abort();
     return { ok: true };
   });
 

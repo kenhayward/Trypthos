@@ -301,7 +301,12 @@ the **PR body** - `Fixes #<n>` (or `Closes #<n>`) on its own line. Do this witho
   `packages["apps/desktop"]` and `packages["packages/domain"]`. Bump them in lockstep. Edit the lock
   file by hand rather than regenerating it; regenerating churns dependency resolution for no reason.
   `apps/app/src/lib/versionMirrors.test.ts` fails the build when any of them drifts - **add each new
-  workspace package to that test in the PR that creates it.** Nothing at runtime reads a lock file, so
+  workspace package to that test in the PR that creates it.** When editing the lock file, change only
+  the five entries listed above: **a dependency can share the old version string** (`retry` sat at
+  `0.12.0` while the app did), so a find-and-replace across the file silently rewrites a dependency's
+  version. Nothing catches that - the mirror test only checks our own entries agree, and npm will
+  happily install whatever the lock names. Match on the workspace `name` above each `version`, or
+  count the matches and stop when there are more than five. Nothing at runtime reads a lock file, so
   drift there is invisible until an unrelated `npm install` rewrites it and turns a dependency bump
   into a surprise version diff.
 - **Add a release entry** to the top of `RECENT` in `apps/app/src/lib/releaseNotes/current.ts` with: `version`, `date`, `pr` (the GitHub PR number),
