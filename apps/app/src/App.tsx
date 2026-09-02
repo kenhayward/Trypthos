@@ -46,13 +46,13 @@ export default function App() {
   }, [actions]);
 
   return (
-    <div className="flex h-full flex-col bg-white text-neutral-900">
-      <header className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
+    <div className="flex h-full flex-col bg-app text-ink">
+      <header className="flex items-center justify-between border-b border-rule px-3 py-2">
         <span className="text-sm font-semibold">{APP_NAME}</span>
         <button
           type="button"
           onClick={() => setAboutOpen(true)}
-          className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100"
+          className="rounded px-2 py-1 text-xs text-ink-4 hover:bg-hover"
         >
           About {APP_VERSION}
         </button>
@@ -61,13 +61,13 @@ export default function App() {
       {state.error !== null && (
         <div
           role="alert"
-          className="flex items-start justify-between gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          className="flex items-start justify-between gap-3 border-b border-rule bg-sunken px-3 py-2 text-sm text-ink-2"
         >
           <span>{state.error}</span>
           <button
             type="button"
             onClick={actions.dismissError}
-            className="shrink-0 rounded px-1.5 text-amber-700 hover:bg-amber-100"
+            className="shrink-0 rounded px-1.5 text-ink-4 hover:bg-hover"
           >
             Dismiss
           </button>

@@ -114,12 +114,16 @@ export const liveTheme = EditorView.theme({
   ".cm-live-em": { fontStyle: "italic" },
   ".cm-live-code": {
     fontFamily: "var(--font-mono, ui-monospace, monospace)",
-    backgroundColor: "#f0f2f5",
+    backgroundColor: "var(--color-sunken)",
     borderRadius: "3px",
     padding: "0.05em 0.3em",
   },
-  ".cm-live-link": { color: "#2e7d6b", textDecoration: "underline", textUnderlineOffset: "2px" },
-  ".cm-live-quote": { color: "#6b6280", fontStyle: "italic" },
+  ".cm-live-link": {
+    color: "var(--color-leaf)",
+    textDecoration: "underline",
+    textUnderlineOffset: "2px",
+  },
+  ".cm-live-quote": { color: "var(--color-tok-quote)", fontStyle: "italic" },
 });
 
 export const liveMode = [livePreview(), liveTheme];

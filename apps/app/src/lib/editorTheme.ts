@@ -12,13 +12,16 @@ import type { Extension } from "@codemirror/state";
 ///
 /// Markers (`#`, `**`, backticks, `>`) are deliberately the dimmest thing on screen. They are
 /// scaffolding, and in Live mode they will disappear entirely except on the caret line.
+/// Every value is a token, not a hex. CodeMirror themes are CSS, so the editor resolves the same
+/// variables as the chrome around it - which is the only reason the two stay in step across themes.
+/// A hex here would be a second palette that only ever matched in the theme it was written for.
 const PALETTE = {
-  marker: "#9aa3b0",
-  heading: "#2a5d9f",
-  strong: "#b0651e",
-  code: "#a6386b",
-  link: "#2e7d6b",
-  quote: "#6b6280",
+  marker: "var(--color-marker)",
+  heading: "var(--color-tok-head)",
+  strong: "var(--color-tok-strong)",
+  code: "var(--color-tok-code)",
+  link: "var(--color-leaf)",
+  quote: "var(--color-tok-quote)",
 };
 
 export const markdownHighlighting = HighlightStyle.define([
@@ -51,6 +54,12 @@ export const editorChrome = EditorView.theme({
     height: "100%",
     fontSize: "13px",
   },
+  "&, .cm-content": {
+    color: "var(--color-ink-2)",
+  },
+  ".cm-cursor, .cm-dropCursor": {
+    borderLeftColor: "var(--color-ink)",
+  },
   ".cm-scroller": {
     fontFamily: "var(--font-mono, ui-monospace, monospace)",
     lineHeight: "1.7",
@@ -61,7 +70,7 @@ export const editorChrome = EditorView.theme({
   ".cm-gutters": {
     backgroundColor: "transparent",
     border: "none",
-    color: "#c2c8d0",
+    color: "var(--color-gutter)",
   },
   "&.cm-focused": {
     outline: "none",

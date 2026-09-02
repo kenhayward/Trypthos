@@ -25,13 +25,13 @@ export default function EditorPanel({ fileName, value, onChange }: Props) {
   const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
 
   return (
-    <main aria-label="Editor" className="flex min-w-0 grow flex-col bg-white">
-      <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-1.5">
-        <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-neutral-500">
+    <main aria-label="Editor" className="flex min-w-0 grow flex-col bg-app">
+      <div className="flex items-center justify-between border-b border-rule px-3 py-1.5">
+        <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-ink-4">
           {fileName ?? "Editor"}
         </h2>
 
-        <div role="group" aria-label="View mode" className="flex gap-0.5 rounded bg-neutral-100 p-0.5">
+        <div role="group" aria-label="View mode" className="flex gap-0.5 rounded bg-hover p-0.5">
           {EDITOR_MODES.map((candidate) => (
             <button
               key={candidate}
@@ -41,8 +41,8 @@ export default function EditorPanel({ fileName, value, onChange }: Props) {
               onClick={() => setMode(candidate)}
               className={
                 mode === candidate
-                  ? "rounded bg-white px-2 py-0.5 text-xs font-medium text-neutral-900 shadow-sm"
-                  : "rounded px-2 py-0.5 text-xs text-neutral-500 hover:text-neutral-900"
+                  ? "rounded bg-app px-2 py-0.5 text-xs font-medium text-ink shadow-sm"
+                  : "rounded px-2 py-0.5 text-xs text-ink-4 hover:text-ink"
               }
             >
               {MODE_LABELS[candidate]}

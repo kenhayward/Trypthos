@@ -1,8 +1,211 @@
 @import "tailwindcss";
 
+/*
+  Design tokens, from the main-UX handoff.
+
+  Everything the interface is painted in resolves through a variable here. Two reasons that matters
+  beyond tidiness:
+
+    - A colour written directly into a component only ever works in the theme it was written for. The
+      classic symptom is one theme's text on the other theme's ground, and it appears only for people
+      whose OS setting differs from the author's.
+    - CodeMirror's themes are CSS too, so the editor reads the same variables as the chrome around it.
+      Without that the editor is a second, drifting palette that has to be updated in parallel.
+
+  Three theme states, not two. An explicit choice stamps data-theme on the root; the default "system"
+  stamps nothing, and the media query answers - so the theme keeps tracking the OS while the app is
+  open. Redefining the tokens in all three blocks is what makes an explicit choice win in BOTH
+  directions; a media query alone cannot express "light, on a dark OS".
+*/
+
+@theme inline {
+  /*
+    `inline` is load-bearing. Without it Tailwind bakes each token's value into the generated
+    utilities at build time, so `bg-app` would freeze at whatever light mode said and the dark blocks
+    below would change nothing. Mapping to a var keeps the utility pointing at the live value.
+  */
+  --color-app: var(--tp-app);
+  --color-panel: var(--tp-panel);
+  --color-sunken: var(--tp-sunken);
+  --color-hover: var(--tp-hover);
+  --color-rule: var(--tp-rule);
+  --color-hairline: var(--tp-hairline);
+  --color-menu-rule: var(--tp-menu-rule);
+  --color-ink: var(--tp-ink);
+  --color-ink-2: var(--tp-ink-2);
+  --color-ink-3: var(--tp-ink-3);
+  --color-ink-4: var(--tp-ink-4);
+  --color-ink-5: var(--tp-ink-5);
+  --color-faint: var(--tp-faint);
+  --color-accent: var(--tp-accent);
+  --color-accent-strong: var(--tp-accent-strong);
+  --color-selected: var(--tp-selected);
+  --color-selected-ink: var(--tp-selected-ink);
+  --color-leaf: var(--tp-leaf);
+  --color-danger: var(--tp-danger);
+  --color-danger-strong: var(--tp-danger-strong);
+  --color-gutter: var(--tp-gutter);
+  --color-marker: var(--tp-marker);
+  --color-tok-head: var(--tp-tok-head);
+  --color-tok-strong: var(--tp-tok-strong);
+  --color-tok-code: var(--tp-tok-code);
+  --color-tok-quote: var(--tp-tok-quote);
+  --color-caret-line: var(--tp-caret-line);
+
+  --shadow-tab: var(--tp-shadow-tab);
+  --shadow-popup: var(--tp-shadow-popup);
+  --shadow-menu: var(--tp-shadow-menu);
+}
+
 @theme {
   --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-mono: "Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono: "Cascadia Code", ui-monospace, "SF Mono", Consolas, monospace;
+
+  /* The handoff's type scale, which is finer than Tailwind's default. */
+  --text-2xs: 0.625rem;
+  --text-3xs: 0.656rem;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.71875rem;
+  --text-ui: 0.78125rem;
+  --text-base: 0.8125rem;
+  --text-body: 0.84375rem;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces, lightest to most recessed. */
+  --tp-app: #ffffff;
+  --tp-panel: #fafafa;
+  --tp-sunken: #f5f5f5;
+  --tp-hover: #f0f0f0;
+
+  /* Rules. `hairline` is for borders over a fill rather than between panels. */
+  --tp-rule: #e5e5e5;
+  --tp-hairline: rgba(15, 23, 42, 0.08);
+  --tp-menu-rule: #94a3b8;
+
+  /* Text, strongest to faintest. */
+  --tp-ink: #171717;
+  --tp-ink-2: #262626;
+  --tp-ink-3: #525252;
+  --tp-ink-4: #737373;
+  --tp-ink-5: #94a3b8;
+  --tp-faint: #a3a3a3;
+
+  /* Accent and selection. */
+  --tp-accent: #2f6bed;
+  --tp-accent-strong: #2563eb;
+  --tp-selected: rgba(47, 107, 237, 0.1);
+  --tp-selected-ink: #1e40af;
+
+  /* Diariz green: folders and links. */
+  --tp-leaf: #2e7d6b;
+
+  --tp-danger: #dc2626;
+  --tp-danger-strong: #e5484d;
+
+  /* Editor-specific. Source mode's colour stands in for formatting, so these are roles, not hues. */
+  --tp-gutter: #c2c8d0;
+  --tp-marker: #9aa3b0;
+  --tp-tok-head: #2a5d9f;
+  --tp-tok-strong: #b0651e;
+  --tp-tok-code: #a6386b;
+  --tp-tok-quote: #6b6280;
+  --tp-caret-line: rgba(47, 107, 237, 0.05);
+
+  --tp-shadow-tab: 0 1px 2px rgba(15, 23, 42, 0.1);
+  --tp-shadow-popup: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --tp-shadow-menu: 0 16px 40px rgba(15, 23, 42, 0.16);
+}
+
+/* No data-theme stamp: the OS answers. Guarded so an explicit light choice beats a dark OS. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --tp-app: #111827;
+    --tp-panel: #0d1524;
+    --tp-sunken: #131d31;
+    --tp-hover: rgba(255, 255, 255, 0.05);
+
+    --tp-rule: #374151;
+    --tp-hairline: rgba(255, 255, 255, 0.07);
+    --tp-menu-rule: #374151;
+
+    --tp-ink: #eef2f8;
+    --tp-ink-2: #d5dbe6;
+    --tp-ink-3: #c7d0e0;
+    --tp-ink-4: #9ca3af;
+    --tp-ink-5: #7c8aa3;
+    --tp-faint: #6b7890;
+
+    --tp-accent: #2563eb;
+    --tp-accent-strong: #2563eb;
+    --tp-selected: rgba(47, 107, 237, 0.14);
+    --tp-selected-ink: #cfe0ff;
+
+    /* The repo's CSS only ever defined the light green, so the dark one is new here. */
+    --tp-leaf: #5fc3ab;
+
+    --tp-danger: #ff8b8f;
+    --tp-danger-strong: #e5484d;
+
+    --tp-gutter: #4b5563;
+    --tp-marker: #6b7688;
+    --tp-tok-head: #7fb0e8;
+    --tp-tok-strong: #e0a567;
+    --tp-tok-code: #e58bb0;
+    --tp-tok-quote: #a79abf;
+    --tp-caret-line: rgba(47, 107, 237, 0.14);
+
+    --tp-shadow-tab: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --tp-shadow-popup: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --tp-shadow-menu: 0 24px 60px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Repeated so an explicit dark choice wins on a light OS. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --tp-app: #111827;
+  --tp-panel: #0d1524;
+  --tp-sunken: #131d31;
+  --tp-hover: rgba(255, 255, 255, 0.05);
+
+  --tp-rule: #374151;
+  --tp-hairline: rgba(255, 255, 255, 0.07);
+  --tp-menu-rule: #374151;
+
+  --tp-ink: #eef2f8;
+  --tp-ink-2: #d5dbe6;
+  --tp-ink-3: #c7d0e0;
+  --tp-ink-4: #9ca3af;
+  --tp-ink-5: #7c8aa3;
+  --tp-faint: #6b7890;
+
+  --tp-accent: #2563eb;
+  --tp-accent-strong: #2563eb;
+  --tp-selected: rgba(47, 107, 237, 0.14);
+  --tp-selected-ink: #cfe0ff;
+
+  --tp-leaf: #5fc3ab;
+
+  --tp-danger: #ff8b8f;
+  --tp-danger-strong: #e5484d;
+
+  --tp-gutter: #4b5563;
+  --tp-marker: #6b7688;
+  --tp-tok-head: #7fb0e8;
+  --tp-tok-strong: #e0a567;
+  --tp-tok-code: #e58bb0;
+  --tp-tok-quote: #a79abf;
+  --tp-caret-line: rgba(47, 107, 237, 0.14);
+
+  --tp-shadow-tab: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --tp-shadow-popup: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --tp-shadow-menu: 0 24px 60px rgba(0, 0, 0, 0.6);
 }
 
 html,
@@ -11,30 +214,38 @@ body,
   height: 100%;
 }
 
-/// Preview mode prose. Tailwind resets heading and list styling globally, so rendered markdown needs
-/// it putting back - scoped here rather than applied through a plugin, to keep the rendered output
-/// and the sanitiser the only two things that decide what preview looks like.
+body {
+  /* Explicit, from a token. A transparent body borrows whatever is painted behind the window. */
+  background: var(--color-app);
+  color: var(--color-ink-2);
+}
+
+/*
+  Preview mode prose. Tailwind resets heading and list styling globally, so rendered markdown needs it
+  putting back - scoped here rather than applied through a plugin, to keep the renderer and the
+  sanitiser the only two things deciding what preview shows.
+*/
 .markdown-preview {
   line-height: 1.7;
-  color: var(--color-neutral-800);
+  color: var(--color-ink-2);
 }
-.markdown-preview h1 { font-size: 1.6em; font-weight: 600; margin: 0.6em 0 0.4em; }
-.markdown-preview h2 { font-size: 1.3em; font-weight: 600; margin: 0.6em 0 0.4em; }
-.markdown-preview h3 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.4em; }
+.markdown-preview h1 { font-size: 1.6em; font-weight: 600; margin: 0.6em 0 0.4em; color: var(--color-ink); }
+.markdown-preview h2 { font-size: 1.3em; font-weight: 600; margin: 0.6em 0 0.4em; color: var(--color-ink); }
+.markdown-preview h3 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.4em; color: var(--color-ink); }
 .markdown-preview p { margin: 0.7em 0; }
 .markdown-preview ul { list-style: disc; padding-left: 1.4em; margin: 0.7em 0; }
 .markdown-preview ol { list-style: decimal; padding-left: 1.4em; margin: 0.7em 0; }
 .markdown-preview li { margin: 0.2em 0; }
-.markdown-preview a { color: #2e7d6b; text-decoration: underline; text-underline-offset: 2px; }
+.markdown-preview a { color: var(--color-leaf); text-decoration: underline; text-underline-offset: 2px; }
 .markdown-preview code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: var(--color-neutral-100);
+  background: var(--color-sunken);
   border-radius: 3px;
   padding: 0.08em 0.35em;
 }
 .markdown-preview pre {
-  background: var(--color-neutral-100);
+  background: var(--color-sunken);
   border-radius: 6px;
   padding: 0.8em 1em;
   overflow-x: auto;
@@ -42,12 +253,12 @@ body,
 }
 .markdown-preview pre code { background: none; padding: 0; }
 .markdown-preview blockquote {
-  border-left: 3px solid var(--color-neutral-300);
+  border-left: 3px solid var(--color-rule);
   padding-left: 0.9em;
   margin: 0.8em 0;
-  color: var(--color-neutral-600);
+  color: var(--color-ink-4);
   font-style: italic;
 }
 .markdown-preview table { border-collapse: collapse; margin: 0.8em 0; display: block; overflow-x: auto; }
 .markdown-preview th,
-.markdown-preview td { border: 1px solid var(--color-neutral-300); padding: 0.35em 0.7em; text-align: left; }
+.markdown-preview td { border: 1px solid var(--color-rule); padding: 0.35em 0.7em; text-align: left; }

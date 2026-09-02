@@ -12,8 +12,9 @@ Trypthos is a **cross-platform desktop (Windows + macOS) markdown editor**, laid
 | **Centre** | The **markdown editor** and preview - the primary surface |
 | **Right** | **AI chat**, working against the open document, the selection, and the wider folder |
 
-> **Status: scaffolded, not yet built.** The three panels render, the shell runs, and the release and
-> guard machinery is in place. The editor, the storage backends and the chat client are not written.
+> **Status: the left two panels work.** Open a local folder, browse it, edit markdown in Live, Source
+> or Preview, and save with conflict detection. Installers ship for Windows and macOS. The chat panel
+> is still a placeholder, and the cloud backends are not written.
 
 ## Architecture & data flow
 
@@ -111,6 +112,53 @@ coming, even while only the local backend exists:
 - **Local and cloud are one tree to the user and two very different things underneath** - cloud reads
   are slow, paged, rate-limited and can fail mid-listing. Loading and error states belong on the
   **node**, not as a spinner over the whole panel.
+
+### The main UX design, and the decisions taken with it
+
+A high-fidelity handoff covers the three-panel window in light and dark, plus a column source
+browser. Four decisions were taken alongside it; each is here because the design alone does not
+settle it:
+
+- **Frameless window on both platforms**, with a platform branch for the control cluster - Windows
+  draws the three glyphs, macOS gets inset traffic lights and none. The design is Windows-only
+  throughout (`Browse with Windows...`, `D:\` paths, Segoe UI first), and macOS is first-class here.
+  A frameless window also needs an explicit drag region or it cannot be moved at all.
+- **The chat panel is ported, not shared.** The handoff prefers extracting Diariz's panel into a
+  package. It is not currently extractable: `ChatPanel.tsx` imports 17 local modules and carries
+  ~70 references to rooms, recordings, transcript navigation and formula runs. Sharing it means
+  either dragging Diariz's domain across or inverting all of it behind adapters. The porting rule
+  above stands; revisit only if a third consumer appears.
+- **The native folder dialog now; the column browser with the second provider.** The columns are
+  designed for five sources and only local exists, and the OS dialog beats a popover at browsing
+  local storage - it types paths and knows the user's favourites. Cloud providers have no native
+  dialog, which is where the columns start earning their keep.
+- **i18n before any string-bearing UI.** Cheap at forty strings, expensive once the chat panel lands
+  with several hundred.
+
+Two elements of the design carry costs worth measuring before committing to them: per-folder
+markdown counts are recursive and shown on *collapsed* folders (a full tree walk on open, paged
+requests per folder on a cloud provider), and the chat context dial wants a token count before a
+request is sent, which providers only report afterwards.
+
+### Colour lives in tokens, and the editor reads the same ones
+
+Every colour resolves through a variable in `apps/app/src/index.css`. A hex written into a component
+only ever works in the theme its author was in, and the symptom - one theme's text on the other
+theme's ground - appears only for people whose OS setting differs from theirs.
+
+**CodeMirror themes are CSS**, so `editorTheme.ts` and `liveExtension.ts` read the same variables as
+the chrome around them. Without that the editor is a second palette that has to be updated in
+parallel and silently drifts.
+
+Three theme states, not two: an explicit choice stamps `data-theme`, and the default "system" stamps
+nothing so the media query keeps tracking the OS while the app is open. All three blocks redefine the
+tokens, because that is what makes an explicit choice win in **both** directions - a media query
+alone cannot express "light, on a dark OS".
+
+`@theme inline` is load-bearing. Plain `@theme` bakes each value into the generated utilities at build
+time, so `bg-app` would freeze at the light value and the dark blocks would change nothing on screen.
+`theme.browser.test.tsx` asserts both themes resolve, that every token is answered in each, and that
+a utility follows the live value - none of which jsdom can see.
 
 ### Chat configuration and storage
 
