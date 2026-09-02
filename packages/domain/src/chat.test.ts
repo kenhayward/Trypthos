@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ChatProfileSchema, parseChatProfiles } from "./chat";
+import {
+  ChatProfileListSchema,
+  ChatProfileSchema,
+  defaultChatProfile,
+  parseChatProfiles,
+} from "./chat";
 
 const valid = {
   id: "local-qwen",
@@ -56,5 +61,52 @@ describe("parseChatProfiles", () => {
     expect(() =>
       parseChatProfiles([valid, { ...valid, id: "other", isDefault: true }]),
     ).toThrow(/default/i);
+  });
+});
+
+// The same invariants, reachable as a schema so a settings file gets them too. Without this the
+// checks would live only in `parseChatProfiles`, and a hand-edited settings file with two defaults
+// would load happily - the picker then showing whichever the UI happened to find first.
+describe("ChatProfileListSchema", () => {
+  it("parses a valid list", () => {
+    expect(ChatProfileListSchema.parse([valid])).toHaveLength(1);
+  });
+
+  it("rejects two profiles sharing an id", () => {
+    expect(() => ChatProfileListSchema.parse([valid, { ...valid, label: "Copy" }])).toThrow(
+      /duplicate/i,
+    );
+  });
+
+  it("rejects more than one default", () => {
+    expect(() =>
+      ChatProfileListSchema.parse([valid, { ...valid, id: "other", isDefault: true }]),
+    ).toThrow(/default/i);
+  });
+});
+
+describe("defaultChatProfile", () => {
+  const parse = (profiles: unknown[]) => ChatProfileListSchema.parse(profiles);
+
+  it("has nothing to offer when nothing is configured", () => {
+    expect(defaultChatProfile([])).toBeNull();
+  });
+
+  it("picks the one marked default, wherever it sits in the list", () => {
+    const profiles = parse([
+      { ...valid, id: "first", isDefault: false },
+      { ...valid, id: "second", isDefault: true },
+    ]);
+    expect(defaultChatProfile(profiles)?.id).toBe("second");
+  });
+
+  // Deleting the default is one click away, and a chat panel with no model to start on would be a
+  // dead panel. The first configured profile is the sensible floor.
+  it("falls back to the first when none is marked", () => {
+    const profiles = parse([
+      { ...valid, id: "first", isDefault: false },
+      { ...valid, id: "second", isDefault: false },
+    ]);
+    expect(defaultChatProfile(profiles)?.id).toBe("first");
   });
 });

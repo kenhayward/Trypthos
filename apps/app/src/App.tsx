@@ -9,10 +9,11 @@ import PreferencesDialog from "./components/PreferencesDialog";
 import PanelRail from "./components/PanelRail";
 import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
+import { useApiKeys } from "./hooks/useApiKeys";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
-import { isDesktop, settingsBridge, workspaceClient } from "./lib/workspaceClient";
+import { isDesktop, keyBridge, settingsBridge, workspaceClient } from "./lib/workspaceClient";
 import { currentPlatform } from "./lib/windowControls";
 
 /// Stand-in document, shown until a real file is opened.
@@ -43,6 +44,15 @@ export default function App() {
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
   const { settings, loaded, updatePanels, update } = useSettings(bridge);
+
+  const keys = useMemo(() => keyBridge(), []);
+  /// Passed in so the hook re-checks when a profile is repointed or removed: saving settings sweeps
+  /// keys for endpoints nothing references any more, which changes what is stored.
+  const configuredEndpoints = useMemo(
+    () => settings.chat.profiles.map((profile) => profile.endpoint),
+    [settings.chat.profiles],
+  );
+  const { keyedEndpoints, saveKey, deleteKey } = useApiKeys(keys, configuredEndpoints);
 
   // The width the three panels share. Measured rather than assumed, because a stored width can come
   // from a wider window than the one it is being restored into.
@@ -198,8 +208,11 @@ export default function App() {
         open={prefsOpen}
         settings={settings}
         isDesktop={isDesktop()}
+        keyedEndpoints={keyedEndpoints}
         onClose={() => setPrefsOpen(false)}
         onChange={update}
+        onSaveKey={saveKey}
+        onDeleteKey={deleteKey}
       />
 
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />

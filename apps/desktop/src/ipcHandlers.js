@@ -2,6 +2,8 @@
 
 const path = require("node:path");
 const {
+  DeleteSecretRequest,
+  SetSecretRequest,
   createPathGuard,
   ListRequest,
   ReadRequest,
@@ -67,7 +69,7 @@ function guarded(getWorkspace, schema, handler) {
   };
 }
 
-function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir }) {
+function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets }) {
   // Settings are not workspace-scoped, so they do not go through `guarded` - there is no workspace
   // to require, and the app needs to read them before one is open.
   ipcMain.handle("settings:read", async () => ({ ok: true, settings: await readSettings(userDataDir) }));
@@ -80,6 +82,40 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir }) {
     }
     await writeSettings(userDataDir, parsed.data);
     notifySettingsWritten(parsed.data);
+
+    // Saving settings is the only moment the app learns that a profile was deleted, or its endpoint
+    // repointed. Without this, a live credential for a provider nothing references any more would
+    // stay on disk with no way for the user to remove it.
+    await secrets.retainOnly(parsed.data.chat.profiles.map((profile) => profile.endpoint));
+
+    return { ok: true };
+  });
+
+  // API keys. Write and delete only - see the note on IPC_CHANNELS. `secrets:list` answers with
+  // ENDPOINTS, which is how the renderer knows to show "key saved" without ever holding a key.
+  ipcMain.handle("secrets:list", async () => ({
+    ok: true,
+    endpoints: await secrets.endpointsWithKeys(),
+  }));
+
+  ipcMain.handle("secrets:set", async (_event, payload) => {
+    const parsed = SetSecretRequest.safeParse(payload);
+    // Never echoing the payload into a log: it contains the key.
+    if (!parsed.success) {
+      console.error("Rejected a malformed key write.");
+      return { ok: false, reason: "bad-request" };
+    }
+
+    // The store refuses rather than falling back to plaintext, and that refusal is passed straight
+    // through - the user has to be told their key was not saved.
+    return secrets.setKey(parsed.data.endpoint, parsed.data.key);
+  });
+
+  ipcMain.handle("secrets:delete", async (_event, payload) => {
+    const parsed = DeleteSecretRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    await secrets.deleteKey(parsed.data.endpoint);
     return { ok: true };
   });
 

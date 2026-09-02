@@ -11,6 +11,10 @@ component, cross-process contract, external dependency, stored-data shape or pac
 | Renderer | React 19, TypeScript, Vite, Tailwind v4 | `apps/app` |
 | Domain | Pure TypeScript, zod | `packages/domain` |
 
+Inside the shell, the modules worth knowing by name: `ipcHandlers.js` (the enumerated IPC surface),
+`localWorkspace.js` (the filesystem provider), `settingsStore.js`, `secretStore.js` (encrypted API
+keys), `updater.js` and `tray.js`.
+
 One npm workspace, one lock file, one `npm ci`.
 
 **The domain package is built.** It emits CommonJS to `dist/`, because the Electron main process runs
@@ -216,10 +220,16 @@ in the user's workspace.
 - **Nothing is written before the file has been read.** Until then the state is the DEFAULTS, and
   saving would overwrite a real settings file with defaults on every launch.
 
-Settings reached **version 2** here - the first real migration. A migration adds only what its own
-version introduced and touches nothing else: a file written by 0.9.0 must arrive intact, because
-somebody's panel widths and open folder are not worth losing over two fields that did not exist yet.
-Verified against a real settings file from this machine, not only fixtures.
+Settings are at **version 3**. A migration adds only what its own version introduced and touches
+nothing else: a file written by 0.9.0 must arrive intact, because somebody's panel widths and open
+folder are not worth losing over fields that did not exist yet. The chain runs end to end, so a
+version 1 file passes through version 2's migration on its way forward - a file that skipped straight
+to the current version would miss whatever version 2 added, which is the exact failure migrations
+exist to prevent. Version 2 added appearance and window behaviour; version 3 added chat models.
+
+**Chat models start empty rather than seeded.** There is no endpoint every user has, and a profile
+pointing somewhere that does not answer is worse than an empty list, which at least says what to do
+next.
 
 **Close-to-tray needs an `isQuitting` flag.** Without it the preference makes the app unquittable:
 every close hides the window, including the one during shutdown.
@@ -232,12 +242,63 @@ The available width is measured **before the first paint** and observed afterwar
 fires after paint, so relying on it alone gave a first frame with nothing to divide up: every panel
 resolved to zero and the layout visibly snapped into place a moment later.
 
+## Chat models, and where the keys live
+
+A chat model is a **profile**: a display label, an OpenAI-compatible endpoint, the model slug that
+endpoint expects, and optional generation parameters. `ChatProfileSchema` is `.strict()` and has no
+`apiKey` field, so a key that somehow reached a settings file is a loud parse failure rather than a
+field silently stripped and written back out on the next save.
+
+Two invariants belong to the list rather than to any profile, and so live in `ChatProfileListSchema`
+where the settings parser sees them too: **ids are unique**, and **at most one profile is the
+default**. Left to the standalone parser alone, a hand-edited settings file with two defaults would
+load happily and the picker would start on whichever one the UI reached first.
+
+**Keys never touch the settings file.** They live in `chatKeys.json` in the app-data directory,
+encrypted with Electron `safeStorage` - DPAPI on Windows, the Keychain on macOS - and keyed by
+endpoint rather than by profile, because two models at the same provider are one account. The file
+carries a `schemaVersion` like everything else the app persists, and a version it does not recognise
+reads as "no keys" rather than being guessed at.
+
+Four rules, each of which is a test in `apps/desktop/test/`:
+
+- **Ciphertext or nothing.** If `safeStorage` cannot encrypt, the write **fails** and the failure is
+  reported to the user. It never falls back to plaintext, which would put a live key in a readable
+  file on exactly the machines least able to protect it, silently.
+- **`getKey` is main-process only, and no IPC channel returns a key.** The renderer asks which
+  *endpoints* have one. `secretsIpc.test.js` proves this by calling every registered handler with
+  payloads shaped to draw a key out and failing if one appears in any response - so a future handler
+  that returns settings-plus-keys fails without anyone having thought to test for it.
+- **An unreadable blob reads as "no key".** `safeStorage` blobs are bound to the machine and the OS
+  user, so restoring a profile onto a new machine invalidates every one at once. That must be a
+  missing key, not a crash on the path that opens the chat panel.
+- **Saving settings sweeps keys nothing references.** Deleting a profile or repointing its endpoint
+  would otherwise leave a live credential on disk for a provider the app no longer knows about, with
+  nothing in the UI able to remove it.
+
+`normaliseEndpoint` decides when two URLs mean the same provider, and lives in the **domain** because
+both processes ask: the shell stores under that form, and the renderer uses it to decide whether to
+show "Key stored". Two implementations differing by a trailing slash would put the badge on the wrong
+profile - the key stored, working, and reported missing.
+
+Profiles are edited in a **form with a Save**, unlike every other preference, which applies as soon as
+it is chosen. A profile is several fields that are only meaningful together: an endpoint typed one
+character at a time is invalid for most of its life, and because saving settings sweeps unreferenced
+keys, applying each keystroke would delete the user's key around the third character of a URL they
+were part-way through typing.
+
 ## The IPC surface
 
-Four channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge:
-`workspace:open`, `workspace:list`, `file:read`, `file:write`.
+Thirteen channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
+The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
+(`workspace:open`, `workspace:reopen`, `workspace:list`), files (`file:read`, `file:write`), window
+(`window:minimize`, `window:toggleMaximize`, `window:close`), settings (`settings:read`,
+`settings:write`) and keys (`secrets:list`, `secrets:set`, `secrets:delete`). One channel flows the
+other way: `window:state`, validated on arrival like everything else.
 
-Two properties do the work:
+Three properties do the work:
+
+- **No channel reads a stored API key**, and there must never be one. See the section above.
 
 - **Every payload is parsed with the shared schema in the main process**, before anything happens and
   before the open-workspace check. A malformed payload is a protocol error whatever the app is doing,

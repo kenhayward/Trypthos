@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.12.0",
+    date: "2026-09-02",
+    pr: 29,
+    headline: "Set up the AI models you want to chat with",
+    summary:
+      "Preferences now has a Chat models section. Add as many models as you like - each one is a name you choose, the address of an OpenAI-compatible endpoint, and the model slug that endpoint expects - and mark the one new chats should start on. Your API key is encrypted by Windows or macOS and stored outside your settings file, so a settings file you copy or attach to a bug report carries no key with it. Trypthos cannot show a stored key back to you, which is deliberate: it can tell you a key is stored, and you can replace or remove it. The chat panel that uses all this comes next.",
+    added: [
+      "A Chat models section in Preferences: add, edit and remove models.",
+      "Each model has a name, an endpoint, a model slug, and optional temperature and token limits.",
+      "Mark which model new chats start on.",
+      "Store an API key per endpoint, encrypted by your operating system.",
+    ],
+    changed: [
+      "Removing a model, or pointing it somewhere else, deletes the API key nothing uses any more.",
+    ],
+  },
+  {
     version: "0.11.1",
     date: "2026-09-02",
     pr: 28,

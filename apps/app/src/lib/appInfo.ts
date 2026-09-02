@@ -13,7 +13,7 @@ export const CAPABILITIES = `
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
 | Markdown editor | Live, Source and Preview views over one document. Switching view never changes your file. |
-| AI chat | Ask about the open document and the wider folder, using an endpoint and model you configure. |
+| AI chat | Configure the models to chat with, and store a key for each. The chat panel itself follows in a later release. |
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |

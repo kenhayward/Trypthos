@@ -59,6 +59,81 @@ describe("migrating from version 1", () => {
   });
 });
 
+describe("migrating from version 2", () => {
+  const v2 = {
+    schemaVersion: 2,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+  };
+
+  it("keeps everything version 2 stored", () => {
+    const migrated = loadSettings(v2);
+    expect(migrated.appearance.theme).toBe("dark");
+    expect(migrated.window.closeToTray).toBe(true);
+    expect(migrated.panels.workspaceWidth).toBe(326);
+  });
+
+  // No invented endpoint. There is no provider every user has, and a profile pointing somewhere
+  // that does not answer is worse than an empty list, which at least says what to do next.
+  it("starts with no chat profiles rather than inventing one", () => {
+    const migrated = loadSettings(v2);
+    expect(migrated.chat.profiles).toEqual([]);
+  });
+
+  // The chain has to run end to end. A version 1 file skipping straight to the current version would
+  // miss whatever version 2 added, which is exactly the failure migrations exist to prevent.
+  it("brings a version 1 file all the way forward", () => {
+    const v1 = {
+      schemaVersion: 1,
+      panels: { workspaceWidth: 300, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: false },
+      lastWorkspace: null,
+    };
+    const migrated = loadSettings(v1);
+
+    expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
+    expect(migrated.panels.workspaceWidth).toBe(300);
+    expect(migrated.appearance.theme).toBe("system");
+    expect(migrated.chat.profiles).toEqual([]);
+  });
+});
+
+describe("chat profiles in settings", () => {
+  const profile = {
+    id: "local",
+    label: "Local model",
+    endpoint: "http://localhost:11434/v1",
+    model: "qwen2.5-coder",
+    supportsImages: false,
+    isDefault: true,
+  };
+  const stored = { ...DEFAULT_SETTINGS, chat: { profiles: [profile] } };
+
+  it("round-trips a configured profile", () => {
+    expect(loadSettings(stored).chat.profiles[0]?.label).toBe("Local model");
+  });
+
+  // Falling back to defaults rather than throwing is the settings contract, but the point here is
+  // that the list invariants are enforced at all when the profiles arrive from a file.
+  it("falls back to defaults when a stored list breaks its invariants", () => {
+    const twoDefaults = {
+      ...DEFAULT_SETTINGS,
+      chat: { profiles: [profile, { ...profile, id: "other" }] },
+    };
+    expect(loadSettings(twoDefaults).chat.profiles).toEqual([]);
+  });
+
+  // A key in a settings file is a key in a backup, a sync folder and a support bundle.
+  it("refuses a settings file whose profile carries an apiKey", () => {
+    const leaked = {
+      ...DEFAULT_SETTINGS,
+      chat: { profiles: [{ ...profile, apiKey: "sk-live-1234" }] },
+    };
+    expect(loadSettings(leaked).chat.profiles).toEqual([]);
+  });
+});
+
 describe("loadSettings", () => {
   it("returns the defaults when there is nothing stored", () => {
     expect(loadSettings(undefined)).toEqual(DEFAULT_SETTINGS);

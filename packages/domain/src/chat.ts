@@ -28,20 +28,46 @@ export const ChatProfileSchema = z
 
 export type ChatProfile = z.infer<typeof ChatProfileSchema>;
 
-/// Parses the configured profile list, enforcing the two invariants a per-item schema cannot see.
+/// The configured list, with the two invariants no per-item schema can see.
+///
+/// A schema rather than only a function, because the list is a field of the settings file and has to
+/// be checked wherever settings are parsed. Left as a bare array there, a hand-edited file with two
+/// defaults would load without complaint and the picker would start on whichever one the UI reached
+/// first - a difference nobody could explain from the file.
+export const ChatProfileListSchema = z
+  .array(ChatProfileSchema)
+  .superRefine((profiles, ctx) => {
+    const seen = new Set<string>();
+    profiles.forEach((profile, index) => {
+      if (seen.has(profile.id)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [index, "id"],
+          message: `Duplicate chat profile id: ${profile.id}`,
+        });
+      }
+      seen.add(profile.id);
+    });
+
+    const defaults = profiles.filter((profile) => profile.isDefault);
+    if (defaults.length > 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: [profiles.indexOf(defaults[1]!), "isDefault"],
+        message: `More than one default chat profile: ${defaults.map((p) => p.id).join(", ")}`,
+      });
+    }
+  });
+
+/// Parses the configured profile list. Throws, for call sites that want the failure.
 export function parseChatProfiles(input: unknown): ChatProfile[] {
-  const profiles = z.array(ChatProfileSchema).parse(input);
+  return ChatProfileListSchema.parse(input);
+}
 
-  const ids = new Set<string>();
-  for (const profile of profiles) {
-    if (ids.has(profile.id)) throw new Error(`Duplicate chat profile id: ${profile.id}`);
-    ids.add(profile.id);
-  }
-
-  const defaults = profiles.filter((profile) => profile.isDefault);
-  if (defaults.length > 1) {
-    throw new Error(`More than one default chat profile: ${defaults.map((p) => p.id).join(", ")}`);
-  }
-
-  return profiles;
+/// The profile a new chat starts on: the one marked default, else the first configured, else none.
+///
+/// Total on purpose. An empty list is the state every user is in before they configure anything, and
+/// a list whose default was deleted is one edit away at all times.
+export function defaultChatProfile(profiles: readonly ChatProfile[]): ChatProfile | null {
+  return profiles.find((profile) => profile.isDefault) ?? profiles[0] ?? null;
 }

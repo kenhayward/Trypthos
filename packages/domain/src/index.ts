@@ -6,10 +6,17 @@ export type {
   PathResolution,
 } from "./workspacePath";
 
+export { normaliseEndpoint } from "./endpoints";
+
 export { loadPersisted } from "./persisted";
 export type { LoadFailure, LoadOptions, LoadResult, Migration } from "./persisted";
 
-export { ChatProfileSchema, parseChatProfiles } from "./chat";
+export {
+  ChatProfileListSchema,
+  ChatProfileSchema,
+  defaultChatProfile,
+  parseChatProfiles,
+} from "./chat";
 export type { ChatProfile } from "./chat";
 
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
@@ -37,10 +44,12 @@ export { titleBarLayout, windowTitle } from "./windowChrome";
 export type { Platform, TitleBarLayout } from "./windowChrome";
 
 export {
+  DeleteSecretRequest,
   IPC_CHANNELS,
   ListRequest,
   ReadRequest,
   RevisionSchema,
+  SetSecretRequest,
   WINDOW_STATE_CHANNEL,
   WriteSettingsRequest,
   WindowStateSchema,

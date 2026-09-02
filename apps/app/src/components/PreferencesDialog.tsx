@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Settings } from "@trypthos/domain";
+import { normaliseEndpoint, type ChatProfile, type Settings } from "@trypthos/domain";
+import { blankDraft, draftFrom, removeProfile, upsertProfile } from "../lib/chatProfiles";
 import { THEME_PREFERENCES, type ThemePreference } from "../lib/theme";
+import ChatProfileForm, { type SaveKeyResult } from "./ChatProfileForm";
 
 interface Props {
   open: boolean;
@@ -8,24 +11,51 @@ interface Props {
   /// True in the desktop shell. In the browser preview there is nothing to close to, and nothing
   /// that would remember a preference anyway.
   isDesktop: boolean;
+  /// Endpoints the shell holds an API key for. Endpoints, never keys.
+  keyedEndpoints: string[];
   onClose: () => void;
   onChange: (change: Partial<Settings>) => void;
+  onSaveKey: (endpoint: string, key: string) => Promise<SaveKeyResult>;
+  onDeleteKey: (endpoint: string) => Promise<void>;
 }
 
 /// Preferences.
 ///
-/// Changes apply immediately rather than on an OK button. There is no state to abandon - each
-/// setting is a single value that takes effect as soon as it is chosen - so a confirm step would only
-/// add a way to lose the change you just made.
+/// Most changes apply immediately rather than on an OK button: each setting is a single value that
+/// takes effect as soon as it is chosen, so a confirm step would only add a way to lose the change
+/// you just made. Chat profiles are the exception, and `ChatProfileForm` says why.
 export default function PreferencesDialog({
   open,
   settings,
   isDesktop,
+  keyedEndpoints,
   onClose,
   onChange,
+  onSaveKey,
+  onDeleteKey,
 }: Props) {
   const { t } = useTranslation();
+  /// The profile being edited, or null when the list is just a list. Held here rather than in the
+  /// form so cancelling discards it entirely.
+  const [editing, setEditing] = useState<ReturnType<typeof blankDraft> | null>(null);
+
   if (!open) return null;
+
+  const profiles = settings.chat.profiles;
+  const keyed = new Set(keyedEndpoints.map(normaliseEndpoint));
+
+  const saveProfile = (profile: ChatProfile) => {
+    // The first model configured becomes the default without being asked. Otherwise every chat would
+    // have to be pointed at a model by hand before it could say anything.
+    const isFirst = profiles.length === 0;
+    onChange({ chat: { profiles: upsertProfile(profiles, { ...profile, isDefault: profile.isDefault || isFirst }) } });
+    setEditing(null);
+  };
+
+  const remove = (id: string) => {
+    onChange({ chat: { profiles: removeProfile(profiles, id) } });
+    setEditing(null);
+  };
 
   return (
     <div
@@ -34,7 +64,7 @@ export default function PreferencesDialog({
       aria-label={t("preferences.title")}
       className="fixed inset-0 flex items-center justify-center bg-[rgba(15,23,42,0.45)] p-4"
     >
-      <div className="max-h-full w-full max-w-md overflow-auto rounded-lg border border-rule bg-app p-5 shadow-menu">
+      <div className="max-h-full w-full max-w-lg overflow-auto rounded-lg border border-rule bg-app p-5 shadow-menu">
         <h1 className="text-base font-semibold text-ink">{t("preferences.title")}</h1>
 
         <fieldset className="mt-5">
@@ -86,6 +116,76 @@ export default function PreferencesDialog({
             </label>
           </fieldset>
         )}
+
+        <fieldset className="mt-5">
+          <legend className="text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase">
+            {t("preferences.chat.section")}
+          </legend>
+
+          {profiles.length === 0 && editing === null && (
+            <p className="mt-2 text-ui text-ink-4">{t("preferences.chat.empty")}</p>
+          )}
+
+          <ul className="mt-2">
+            {profiles.map((profile) => (
+              <li key={profile.id}>
+                {editing?.id === profile.id ? (
+                  <ChatProfileForm
+                    draft={editing}
+                    hasKey={keyed.has(normaliseEndpoint(editing.endpoint))}
+                    canRemove
+                    onSave={saveProfile}
+                    onCancel={() => setEditing(null)}
+                    onRemove={() => remove(profile.id)}
+                    onSaveKey={onSaveKey}
+                    onDeleteKey={onDeleteKey}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    // Named with the label, so a screen reader hears which model is being edited -
+                    // a row of buttons all called "Edit" is unusable.
+                    aria-label={t("preferences.chat.edit", { label: profile.label })}
+                    onClick={() => setEditing(draftFrom(profile))}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-sunken"
+                  >
+                    <span className="text-ui text-ink">{profile.label}</span>
+                    <span className="text-xs text-ink-4">{profile.model}</span>
+                    <span className="flex-1" />
+                    {profile.isDefault && (
+                      <span className="rounded bg-sunken px-1.5 py-0.5 text-xs text-ink-4">
+                        {t("preferences.chat.default")}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {editing !== null && !profiles.some((profile) => profile.id === editing.id) && (
+            <ChatProfileForm
+              draft={editing}
+              hasKey={keyed.has(normaliseEndpoint(editing.endpoint))}
+              canRemove={false}
+              onSave={saveProfile}
+              onCancel={() => setEditing(null)}
+              onRemove={() => setEditing(null)}
+              onSaveKey={onSaveKey}
+              onDeleteKey={onDeleteKey}
+            />
+          )}
+
+          {editing === null && (
+            <button
+              type="button"
+              onClick={() => setEditing(blankDraft())}
+              className="mt-2 rounded border border-rule px-2 py-1 text-ui text-ink"
+            >
+              {t("preferences.chat.add")}
+            </button>
+          )}
+        </fieldset>
 
         <button
           type="button"

@@ -21,6 +21,15 @@ contextBridge.exposeInMainWorld("trypthos", {
   writeFile: (path, content, expectedRevision) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision }),
 
+  /// API keys, write-only by construction.
+  ///
+  /// `listKeyedEndpoints` returns endpoints, never keys - it is how the settings UI shows whether a
+  /// key is stored. There is deliberately no `getKey`: a key that reached this side would be visible
+  /// in devtools, in the network panel, and in a renderer crash dump.
+  listKeyedEndpoints: () => ipcRenderer.invoke("secrets:list"),
+  setApiKey: (endpoint, key) => ipcRenderer.invoke("secrets:set", { endpoint, key }),
+  deleteApiKey: (endpoint) => ipcRenderer.invoke("secrets:delete", { endpoint }),
+
   readSettings: () => ipcRenderer.invoke("settings:read"),
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
   reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),
