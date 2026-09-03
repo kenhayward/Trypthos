@@ -62,7 +62,9 @@
       "cannotFindHeading": "That heading is no longer in the document.",
       "headingAmbiguous": "More than one heading has that name, so this cannot be placed.",
       "noSelection": "Nothing is selected any more. Select the text again."
-    }
+    },
+    "noAnswer": "The model finished without writing an answer. Try asking again.",
+    "showThinking": "Show what the model was thinking"
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",

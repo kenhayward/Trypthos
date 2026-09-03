@@ -186,3 +186,32 @@ describe("composeMessages", () => {
     expect(messages).toEqual([context]);
   });
 });
+
+/// Reasoning models stream their thinking separately from the answer.
+///
+/// Taken from a real local model, which ended a turn having sent reasoning and no content at all.
+/// Ignoring the field showed the user an empty bubble with no explanation.
+describe("the reasoning channel", () => {
+  it("reads reasoning under the name llama.cpp and LM Studio use", () => {
+    const payload = JSON.stringify({ choices: [{ delta: { reasoning: "Let me think." } }] });
+    expect(parseStreamPayload(payload)).toEqual({ type: "reasoning", text: "Let me think." });
+  });
+
+  it("reads reasoning under the name DeepSeek uses", () => {
+    const payload = JSON.stringify({ choices: [{ delta: { reasoning_content: "Hmm." } }] });
+    expect(parseStreamPayload(payload)).toEqual({ type: "reasoning", text: "Hmm." });
+  });
+
+  // The answer is what was asked for; the thinking is only shown when no answer arrives.
+  it("prefers the answer when a chunk carries both", () => {
+    const payload = JSON.stringify({
+      choices: [{ delta: { content: "The answer.", reasoning: "Working it out." } }],
+    });
+    expect(parseStreamPayload(payload)).toEqual({ type: "token", text: "The answer." });
+  });
+
+  it("ignores an empty reasoning delta", () => {
+    const payload = JSON.stringify({ choices: [{ delta: { reasoning: "" } }] });
+    expect(parseStreamPayload(payload)).toEqual({ type: "ignored" });
+  });
+});

@@ -8,15 +8,21 @@ export const RECENT: Release[] = [
     version: "0.15.1",
     date: "2026-09-03",
     pr: 34,
-    headline: "Document changes now work on an upgraded installation",
+    headline: "Document changes now actually appear",
     summary:
-      "In 0.15.0, asking chat to change your document produced an ordinary written answer instead of a card with an Apply button - but only if you had used an earlier version. The instructions that teach the model how to propose a change live in the system prompt, and the system prompt was copied into your settings the first time you ran 0.14.0. Improving it afterwards changed nothing for anyone who already had that copy. Trypthos now remembers that you have not written your own prompt, rather than keeping a copy of the one it gave you, so this and every future improvement arrives on its own. A prompt you have edited is left exactly as you wrote it.",
+      "Asking chat to change your document gave you a written answer, or nothing at all, instead of a card with an Apply button. Three separate causes, all fixed. The instructions that teach the model how to propose a change were copied into your settings the first time you ran 0.14.0, so improving them later reached nobody who already had that copy; Trypthos now remembers that you have not written your own prompt rather than keeping a copy of the one it gave you, and a prompt you have edited is still left exactly as you wrote it. Trypthos was also too strict about how a model closes a proposed change, and rejected perfectly good ones over the placement of three backticks. And when a model finishes without writing an answer - which reasoning models genuinely do - you now get a short explanation and can unfold what it was thinking, rather than an empty space.",
     fixed: [
       "Chat proposes document changes on an installation upgraded from an earlier version.",
       "Improvements to the built-in system prompt now reach existing installations.",
+      "A proposed change is recognised however the model closes it, or if it forgets to.",
+      "A reply that arrives with no answer says so, instead of showing an empty message.",
+    ],
+    added: [
+      "When a model thinks but does not answer, its thinking can be unfolded and read.",
     ],
     changed: [
       "A system prompt you have not edited is no longer copied into your settings file.",
+      "A proposed change becomes a card once the reply has finished, not part-way through it.",
     ],
   },
   {

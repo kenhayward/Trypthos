@@ -15,6 +15,8 @@ interface Props {
   turns: readonly Turn[];
   streaming: boolean;
   error: string | null;
+  /// What the model thought, when it produced no answer. See the empty-reply branch below.
+  reasoning: string;
   onSend: (text: string) => void;
   onStop: () => void;
   onClear: () => void;
@@ -48,6 +50,7 @@ export default function ChatPanel({
   turns,
   streaming,
   error,
+  reasoning,
   onSend,
   onStop,
   onClear,
@@ -179,9 +182,32 @@ export default function ChatPanel({
                   {turn.role === "assistant" ? (
                     waiting ? (
                       <span className="text-ink-4">{t("chat.thinking")}</span>
+                    ) : turn.content === "" && !streaming ? (
+                      // A turn that finished having produced nothing. Reasoning models do this:
+                      // they think, and then stop. An empty bubble tells the user nothing at all,
+                      // so say what happened and show the thinking if there is any.
+                      <div className="space-y-2">
+                        <p className="text-ui text-ink-4">{t("chat.noAnswer")}</p>
+                        {reasoning !== "" && (
+                          <details className="text-xs text-ink-4">
+                            <summary className="cursor-pointer">{t("chat.showThinking")}</summary>
+                            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap">
+                              {reasoning}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    ) : streaming && index === turns.length - 1 ? (
+                      // Still arriving. Rendered as plain text rather than split into cards: a
+                      // half-written block can transiently look complete, and a card that appears
+                      // mid-sentence could be applied with truncated content.
+                      <span className="whitespace-pre-wrap break-words">{turn.content}</span>
                     ) : (
                       <div className="space-y-2">
-                        {splitReply(turn.content).map((part, at) =>
+                        {/* `complete`: this branch only runs for a turn that has finished, so a
+                            block the model never closed is a forgotten fence rather than a
+                            half-written one. */}
+                        {splitReply(turn.content, { complete: true }).map((part, at) =>
                           part.kind === "edit" ? (
                             <ChatEditCard
                               key={at}

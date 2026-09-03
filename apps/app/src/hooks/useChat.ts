@@ -36,6 +36,13 @@ export function useChat(
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /// What the model thought, for the turn in flight.
+  ///
+  /// Kept apart from `turns` on purpose: turns are the wire format, resent to the provider every
+  /// message, and a model's own reasoning is not part of the conversation. It exists only so the
+  /// panel has something to show when a turn ends having produced reasoning and no answer, which is
+  /// how gpt-oss and DeepSeek-R1 sometimes finish.
+  const [reasoning, setReasoning] = useState("");
 
   /// The stream whose events count. Everything from any other stream is dropped.
   ///
@@ -69,6 +76,10 @@ export function useChat(
         setTurns((current) => appendToken(current, event.text));
         return;
       }
+      if (event.type === "reasoning") {
+        setReasoning((current) => current + event.text);
+        return;
+      }
       if (event.type === "error") {
         // The error goes beside the reply, not over it: tokens already on screen are the model's
         // actual words, and a partial answer is often worth reading.
@@ -90,6 +101,7 @@ export function useChat(
       if (bridge === null || profileId === null) return;
 
       setError(null);
+      setReasoning("");
       setTurns(beginReply(history));
       setStreaming(true);
 
@@ -148,8 +160,9 @@ export function useChat(
     activeStream.current = null;
     setTurns([]);
     setError(null);
+    setReasoning("");
     setStreaming(false);
   }, []);
 
-  return { turns, streaming, error, send, retry, stop, clear };
+  return { turns, streaming, error, reasoning, send, retry, stop, clear };
 }

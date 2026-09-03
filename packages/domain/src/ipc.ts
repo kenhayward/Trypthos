@@ -121,6 +121,7 @@ export const CancelChatRequest = z.object({ streamId: z.string().min(1) }).stric
 /// `end` always arrives last, error or not, so the panel has ONE signal that the turn is over.
 export const ChatEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("token"), text: z.string() }).strict(),
+  z.object({ type: z.literal("reasoning"), text: z.string() }).strict(),
   z
     .object({
       type: z.literal("usage"),

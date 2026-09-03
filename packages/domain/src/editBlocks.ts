@@ -55,10 +55,17 @@ function parseInfo(info: string): { op: EditOp; heading: string | null } | null 
 /// Splits a reply into prose and proposed edits, in order.
 ///
 /// Total: it never throws, and every part of the input appears in the output either as an edit or as
-/// text. Called on every render while a reply streams, so a partial block - which is what every
-/// prefix of a complete one looks like - must never produce an applicable edit. An unterminated
-/// fence stays text for exactly that reason.
-export function splitReply(reply: string): ReplyPart[] {
+/// text.
+///
+/// `complete` says whether the reply has finished arriving, and it changes exactly one thing: how a
+/// block that was never closed is read. Mid-stream, an unterminated fence is a cut-off reply, and
+/// turning it into an applicable card would let somebody apply half a sentence. Once the turn has
+/// ended it is a model that forgot the closing fence, which they do often enough that refusing would
+/// mean showing raw markup instead of a card.
+///
+/// Completeness relaxes how a block ENDS, never what it means: an unrecognised operation or empty
+/// content is still not an edit.
+export function splitReply(reply: string, { complete = false } = {}): ReplyPart[] {
   const lines = reply.split("\n");
   const parts: ReplyPart[] = [];
   let text: string[] = [];
@@ -86,15 +93,37 @@ export function splitReply(reply: string): ReplyPart[] {
 
     // Find the closing fence: a run of at least the same length, as CommonMark requires. That is
     // what lets a ```` block carry an ordinary ``` code sample inside it.
+    const ownLine = new RegExp(`^\\s{0,3}\`{${fence.length},}\\s*$`);
+    // Models routinely close a block by appending the backticks to the last line of content instead
+    // of giving them a line of their own. CommonMark says that is not a close; a model does not
+    // read CommonMark, and refusing it means the user sees raw markup instead of a card.
+    const appended = new RegExp(`^(.*\\S)\`{${fence.length},}\\s*$`);
+
     let close = -1;
+    let trailing = -1;
     for (let scan = at + 1; scan < lines.length; scan += 1) {
-      if (new RegExp(`^\\s{0,3}\`{${fence.length},}\\s*$`).test(lines[scan]!)) {
+      if (ownLine.test(lines[scan]!)) {
         close = scan;
         break;
       }
+      // Remembered, not taken: a proper close later in the block wins, so a stray fence at the end
+      // of a line cannot cut a well-formed block short.
+      if (trailing === -1 && appended.test(lines[scan]!)) trailing = scan;
     }
 
-    const content = close === -1 ? "" : lines.slice(at + 1, close).join("\n");
+    let content = "";
+    if (close !== -1) {
+      content = lines.slice(at + 1, close).join("\n");
+    } else if (trailing !== -1) {
+      const body = lines.slice(at + 1, trailing + 1);
+      body[body.length - 1] = appended.exec(body[body.length - 1]!)![1]!;
+      content = body.join("\n");
+      close = trailing;
+    } else if (complete) {
+      // Never closed, and nothing more is coming: the rest of the reply is the content.
+      content = lines.slice(at + 1).join("\n");
+      close = lines.length - 1;
+    }
 
     // Unclosed, unrecognised, or empty: keep every line as text. The user still has the markdown.
     if (close === -1 || info === null || content.trim() === "") {

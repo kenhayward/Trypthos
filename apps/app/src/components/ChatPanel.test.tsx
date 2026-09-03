@@ -25,6 +25,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     turns: [],
     streaming: false,
     error: null,
+    reasoning: "",
     onSend: vi.fn(),
     onStop: vi.fn(),
     onClear: vi.fn(),
@@ -396,6 +397,79 @@ describe("ChatPanel: proposed edits", () => {
     await user.click(screen.getByRole("button", { name: "Clear the conversation" }));
     // The turns are a prop, so the thread itself does not empty here - but the applied marks must,
     // or a new conversation would inherit them by position.
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDefined();
+  });
+});
+
+/// A turn that finished having produced nothing.
+///
+/// Reasoning models do this: they think, then stop. The panel used to render an empty bubble - no
+/// text, no error, no indication anything had happened.
+describe("ChatPanel: a reply with no answer", () => {
+  const empty = [
+    { role: "user" as const, content: "Summarise this" },
+    { role: "assistant" as const, content: "" },
+  ];
+
+  it("says the model wrote nothing, rather than showing an empty bubble", () => {
+    panel({ turns: empty, streaming: false });
+    expect(screen.getByText(/finished without writing an answer/)).toBeDefined();
+  });
+
+  it("offers the model's thinking when there is some", () => {
+    panel({ turns: empty, streaming: false, reasoning: "Working out the summary." });
+    expect(screen.getByText("Show what the model was thinking")).toBeDefined();
+  });
+
+  // Folded away, because it is not the answer and is often long. Asserted on the disclosure's own
+  // state rather than on whether the text is in the DOM: jsdom keeps a closed <details> element's
+  // children mounted, so a presence check would pass whether it was folded or not.
+  it("keeps the thinking behind a disclosure rather than in the thread", async () => {
+    const user = userEvent.setup();
+    panel({ turns: empty, streaming: false, reasoning: "Working out the summary." });
+
+    const disclosure = screen.getByText("Show what the model was thinking").closest("details")!;
+    expect(disclosure.open).toBe(false);
+
+    await user.click(screen.getByText("Show what the model was thinking"));
+    expect(disclosure.open).toBe(true);
+    expect(screen.getByText("Working out the summary.")).toBeDefined();
+  });
+
+  it("offers nothing to show when the model did not think out loud either", () => {
+    panel({ turns: empty, streaming: false, reasoning: "" });
+    expect(screen.queryByText("Show what the model was thinking")).toBeNull();
+  });
+
+  // While a reply is still on its way, an empty bubble means "waiting", not "gave up".
+  it("still says it is thinking while the reply is on its way", () => {
+    panel({ turns: empty, streaming: true });
+    expect(screen.getByText("Thinking...")).toBeDefined();
+    expect(screen.queryByText(/finished without writing/)).toBeNull();
+  });
+});
+
+/// A block only becomes a card once the turn is over.
+///
+/// Half a fenced block can transiently look complete while it streams - especially now that a
+/// closing fence appended to a line is accepted - and a card appearing mid-sentence could be applied
+/// with truncated content.
+describe("ChatPanel: edits while streaming", () => {
+  const partial = [
+    { role: "user" as const, content: "Summarise this" },
+    {
+      role: "assistant" as const,
+      content: '```trypthos-edit append\nHalf a sentence```',
+    },
+  ];
+
+  it("shows the reply as text while it is still arriving", () => {
+    panel({ turns: partial, streaming: true });
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+  });
+
+  it("offers the card once the turn has finished", () => {
+    panel({ turns: partial, streaming: false });
     expect(screen.getByRole("button", { name: "Apply" })).toBeDefined();
   });
 });
