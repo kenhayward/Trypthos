@@ -300,6 +300,15 @@ describe("PreferencesDialog: the system prompt", () => {
     expect(box.value).toBe(DEFAULT_SYSTEM_PROMPT);
   });
 
+  // Unset means "the current default", so the box shows that text rather than nothing. An empty box
+  // would read as "no prompt is being sent", which is a different setting entirely.
+  it("shows the default text when no prompt has been set", () => {
+    dialog({ settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: null } } });
+    expect((screen.getByLabelText("System prompt") as HTMLTextAreaElement).value).toBe(
+      DEFAULT_SYSTEM_PROMPT,
+    );
+  });
+
   // Driven through a stateful wrapper, the way App drives it. The dialog is controlled, so a test
   // holding `settings` fixed would feed every keystroke back the same stale text - and would report
   // a passing edit of one character while claiming to have typed a sentence.
@@ -346,7 +355,9 @@ describe("PreferencesDialog: the system prompt", () => {
     expect(last.chat?.profiles).toHaveLength(1);
   });
 
-  it("puts the default back", async () => {
+  // Back to null, not to a copy of the current text. A copy would stop tracking the default the
+  // moment the default next changed, which is the bug this behaviour exists to prevent.
+  it("puts the default back by unsetting the prompt", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     dialog({
@@ -357,12 +368,21 @@ describe("PreferencesDialog: the system prompt", () => {
     await user.click(screen.getByRole("button", { name: "Reset to the default" }));
 
     const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
-    expect(last.chat?.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
+    expect(last.chat?.systemPrompt).toBeNull();
   });
 
-  it("offers no reset when the prompt is already the default", () => {
+  it("offers no reset when the prompt is unset", () => {
     dialog();
     expect(screen.queryByRole("button", { name: "Reset to the default" })).toBeNull();
+  });
+
+  // The state an upgraded installation was left in: a stored copy of an older default. It is not
+  // the default any more, so the way back has to be offered.
+  it("offers the reset when a stored prompt has gone stale", () => {
+    dialog({
+      settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: "An older default" } },
+    });
+    expect(screen.getByRole("button", { name: "Reset to the default" })).toBeDefined();
   });
 
   // Clearing it is a legitimate choice - some endpoints are already configured with their own

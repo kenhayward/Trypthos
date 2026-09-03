@@ -7,6 +7,7 @@ const {
   CancelChatRequest,
   composeMessages,
   contextTurn,
+  effectiveSystemPrompt,
   DeleteSecretRequest,
   SendChatRequest,
   SetSecretRequest,
@@ -165,7 +166,9 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
     // to hold, and keeping the document's wording in one place means the panel cannot drift from
     // what the model is actually told.
     const messages = composeMessages({
-      systemPrompt: settings.chat.systemPrompt,
+      // Resolved here rather than stored: null means "the current default", so improving the
+      // default reaches everyone who has not written their own.
+      systemPrompt: effectiveSystemPrompt(settings.chat.systemPrompt),
       context: contextTurn(parsed.data.context),
       turns: parsed.data.turns,
     });

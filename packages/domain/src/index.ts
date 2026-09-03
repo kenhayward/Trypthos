@@ -27,7 +27,11 @@ export {
 } from "./chatContext";
 export type { ChatContext, ContextSource } from "./chatContext";
 
-export { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
+export {
+  DEFAULT_SYSTEM_PROMPT,
+  PREVIOUS_SYSTEM_PROMPTS,
+  effectiveSystemPrompt,
+} from "./systemPrompt";
 
 export { findHeadings, resolveEdit } from "./documentEdit";
 export type { EditOp, EditTarget, Heading, ProposedEdit } from "./documentEdit";
