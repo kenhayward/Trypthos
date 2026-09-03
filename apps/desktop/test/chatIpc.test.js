@@ -90,7 +90,14 @@ async function withHandlers(body, options = {}) {
 }
 
 const turns = [{ role: "user", content: "Hello" }];
-const NO_CONTEXT = { kind: "none" };
+const NO_CONTEXT = { document: { kind: "none" }, attachments: [], folder: null };
+/// A context carrying just the open document, which is the common case.
+const withDocument = (over = {}) => ({
+  document: { kind: "file", path: "notes/plan.md", text: "# Plan", truncated: false },
+  attachments: [],
+  folder: null,
+  ...over,
+});
 const send = (extra = {}) => ({ profileId: "one", turns, context: NO_CONTEXT, ...extra });
 
 test("starts a stream and names it, so replies can be told apart", async () => {
@@ -161,10 +168,13 @@ test("refuses a malformed request before anything is sent", async () => {
       send({ turns: [] }),
       send({ turns: [{ role: "wizard", content: "Hello" }] }),
       send({ turns: [{ role: "user" }] }),
-      send({ context: { kind: "elsewhere", text: "x" } }),
+      send({ context: { document: { kind: "elsewhere" }, attachments: [], folder: null } }),
+      send({ context: { document: { kind: "none" }, attachments: [] } }),
       // Larger than the cap the renderer applies, so it is a bug or a renderer doing as it pleases.
       send({
-        context: { kind: "file", path: "big.md", text: "x".repeat(60_001), truncated: false },
+        context: withDocument({
+          document: { kind: "file", path: "big.md", text: "x".repeat(60_001), truncated: false },
+        }),
       }),
     ]) {
       const result = await ipcMain.invoke("chat:send", payload);
@@ -276,9 +286,7 @@ test("puts the document before the question, labelled and fenced", async () => {
   await withHandlers(async ({ ipcMain, runs }) => {
     await ipcMain.invoke(
       "chat:send",
-      send({
-        context: { kind: "file", path: "notes/plan.md", text: "# Plan", truncated: false },
-      }),
+      send({ context: withDocument() }),
     );
 
     const sent = runs[0].turns;
@@ -298,7 +306,14 @@ test("says when the text was a selection rather than the whole file", async () =
     await ipcMain.invoke(
       "chat:send",
       send({
-        context: { kind: "selection", path: "notes/plan.md", text: "One paragraph", truncated: false },
+        context: withDocument({
+          document: {
+            kind: "selection",
+            path: "notes/plan.md",
+            text: "One paragraph",
+            truncated: false,
+          },
+        }),
       }),
     );
 
@@ -453,5 +468,65 @@ test("an id that could escape the chats directory never reaches the filesystem",
         reason: "not-found",
       });
     }
+  });
+});
+
+/// The folder outline and attachments, over IPC.
+test("sends the folder outline before the document", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      await ipcMain.invoke(
+        "chat:send",
+        send({
+          context: withDocument({
+            folder: { paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
+          }),
+        }),
+      );
+
+      const sent = runs[0].turns;
+      assert.match(sent[0].content, /notes\/risks\.md/);
+      assert.match(sent[0].content, /paths only|not been shown their contents/i);
+      assert.equal(sent.at(-1).content, "Hello");
+    },
+    { systemPrompt: "" },
+  );
+});
+
+test("sends an attached file, named", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      await ipcMain.invoke(
+        "chat:send",
+        send({
+          context: withDocument({
+            attachments: [{ path: "notes/risks.md", text: "# Risks", truncated: false }],
+          }),
+        }),
+      );
+
+      const attachment = runs[0].turns.find((turn) => turn.content.includes("notes/risks.md"));
+      assert.ok(attachment);
+      assert.match(attachment.content, /# Risks/);
+      assert.match(attachment.content, /not instructions/i);
+    },
+    { systemPrompt: "" },
+  );
+});
+
+// The renderer caps before sending, so anything larger is a bug or a renderer doing as it pleases.
+test("refuses an attachment larger than the cap", async () => {
+  await withHandlers(async ({ ipcMain, runs }) => {
+    const result = await ipcMain.invoke(
+      "chat:send",
+      send({
+        context: withDocument({
+          attachments: [{ path: "big.md", text: "x".repeat(60_001), truncated: false }],
+        }),
+      }),
+    );
+
+    assert.deepEqual(result, { ok: false, reason: "bad-request" });
+    assert.equal(runs.length, 0);
   });
 });

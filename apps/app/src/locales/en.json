@@ -72,6 +72,14 @@
       "noFile": "No file",
       "delete": "Delete \"{{title}}\"",
       "fileMissing": "This conversation was about {{file}}, which is not in the open folder any more."
+    },
+    "scope": {
+      "folder": "Folder",
+      "folderHint": "Send the list of markdown files in this folder, so the model can ask for one. Their contents are not sent.",
+      "attach": "Attach a file",
+      "detach": "Remove {{path}}",
+      "filter": "Find a file",
+      "noFiles": "No other markdown files to attach."
     }
   },
   "errors": {

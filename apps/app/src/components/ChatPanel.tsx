@@ -12,6 +12,7 @@ import type { Turn } from "../lib/conversation";
 import ChatEditCard from "./ChatEditCard";
 import ChatHistoryMenu from "./ChatHistoryMenu";
 import ChatModelPicker from "./ChatModelPicker";
+import ChatScope from "./ChatScope";
 
 interface Props {
   width: number;
@@ -44,6 +45,17 @@ interface Props {
   /// still opens - it is the user's own words - and this says what it was about.
   missingFile: string | null;
   onSaveChat: () => void;
+  /// What chat can see beyond the open document.
+  scope: {
+    attachments: readonly string[];
+    files: readonly string[];
+    includeFolder: boolean;
+    canUseFolder: boolean;
+    onToggleFolder: (include: boolean) => void;
+    onNeedFiles: () => void;
+    onAttach: (path: string) => void;
+    onDetach: (path: string) => void;
+  };
   onOpenChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
 }
@@ -78,6 +90,7 @@ export default function ChatPanel({
   openChatId,
   missingFile,
   onSaveChat,
+  scope,
   onOpenChat,
   onDeleteChat,
 }: Props) {
@@ -311,6 +324,20 @@ export default function ChatPanel({
           </p>
         )}
       </div>
+
+      {models.length > 0 && (
+        <ChatScope
+          attachments={scope.attachments}
+          files={scope.files}
+          includeFolder={scope.includeFolder}
+          canUseFolder={scope.canUseFolder}
+          disabled={streaming}
+          onToggleFolder={scope.onToggleFolder}
+          onNeedFiles={scope.onNeedFiles}
+          onAttach={scope.onAttach}
+          onDetach={scope.onDetach}
+        />
+      )}
 
       <div className="flex items-end gap-2 border-t border-rule p-2">
         <textarea

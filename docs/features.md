@@ -217,8 +217,27 @@ delete that file, or open the chat against a different folder, and the conversat
 is your own words and still worth reading - with a line saying which file it was about. Conversations
 also do not travel when a folder does: they live with Trypthos, not with your notes.
 
-**Chat still cannot see the wider folder.** That is the next piece of work, along with attaching
-other files to a question.
+### Looking beyond the open document
+
+A row above the message box shows what chat can see, and nothing is included unless you ask for it.
+A reply that quietly consulted five files, or quietly did not, is one you cannot judge.
+
+**Attach a file** and it is sent in full alongside your document, so you can ask how two notes relate
+without pasting one into the other. Attachments are read when you attach them, so editing a file
+afterwards does not silently change what an earlier answer was about.
+
+**Folder** sends the *list* of markdown files in your workspace - the paths, never the contents. A
+notes folder can be thousands of files; sending them would bury the document your question was
+actually about, and on a hosted endpoint it would cost real money. The list is enough for the model
+to say "that will be in notes/plan.md", and you can then attach it. Hidden folders, and the ones
+nobody means by their notes - `node_modules`, `dist`, `.git` - are skipped, and a very large folder is
+listed up to a limit and says it stopped.
+
+**Your document keeps its place.** Everything shares one budget, and the file you are editing is
+served first: an attachment that would push it out is shortened instead, and one there was no room
+for at all is still named, so the model knows it exists and did not see it.
+
+Starting a new conversation clears its attachments rather than carrying them into the next one.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than
 being stored beside them, so it will tell you when that file has since been renamed, moved or

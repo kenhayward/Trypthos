@@ -38,6 +38,16 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     onSaveChat: vi.fn(),
     onOpenChat: vi.fn(),
     onDeleteChat: vi.fn(),
+    scope: {
+      attachments: [] as string[],
+      files: [] as string[],
+      includeFolder: false,
+      canUseFolder: true,
+      onToggleFolder: vi.fn(),
+      onNeedFiles: vi.fn(),
+      onAttach: vi.fn(),
+      onDetach: vi.fn(),
+    },
     ...overrides,
   };
   render(<ChatPanel {...props} />);
@@ -571,5 +581,136 @@ describe("ChatPanel: saved conversations", () => {
   it("says nothing about the file when it is still there", () => {
     panel({ turns: [{ role: "user", content: "Hello" }], missingFile: null });
     expect(screen.queryByText(/not in the open folder/)).toBeNull();
+  });
+});
+
+/// What chat can see, beyond the open document.
+///
+/// Shown above the composer rather than hidden in a menu, because it changes what an answer is based
+/// on: a reply that quietly consulted five files, or quietly did not, is one nobody can judge.
+describe("ChatPanel: scope", () => {
+  const withScope = (over: Partial<React.ComponentProps<typeof ChatPanel>["scope"]> = {}) =>
+    panel({
+      scope: {
+        attachments: [],
+        files: ["notes/plan.md", "notes/risks.md"],
+        includeFolder: false,
+        canUseFolder: true,
+        onToggleFolder: vi.fn(),
+        onNeedFiles: vi.fn(),
+        onAttach: vi.fn(),
+        onDetach: vi.fn(),
+        ...over,
+      },
+    });
+
+  it("offers the folder, off by default", () => {
+    withScope();
+    expect(screen.getByRole("button", { name: "Folder" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  it("turns the folder on", async () => {
+    const user = userEvent.setup();
+    const props = withScope();
+
+    await user.click(screen.getByRole("button", { name: "Folder" }));
+    expect(props.scope.onToggleFolder).toHaveBeenCalledWith(true);
+  });
+
+  it("shows the folder as on when it is", () => {
+    withScope({ includeFolder: true });
+    expect(screen.getByRole("button", { name: "Folder" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  // Nothing to include, so nothing to offer.
+  it("cannot use the folder when none is open", () => {
+    withScope({ canUseFolder: false });
+    expect(screen.getByRole("button", { name: "Folder" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  // The walk is not free, so it happens when somebody actually wants to pick a file.
+  it("asks for the file list only when the picker opens", async () => {
+    const user = userEvent.setup();
+    const props = withScope();
+    expect(props.scope.onNeedFiles).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Attach a file" }));
+    expect(props.scope.onNeedFiles).toHaveBeenCalledOnce();
+  });
+
+  it("attaches a file from the picker", async () => {
+    const user = userEvent.setup();
+    const props = withScope();
+
+    await user.click(screen.getByRole("button", { name: "Attach a file" }));
+    await user.click(screen.getByRole("button", { name: "notes/risks.md" }));
+
+    expect(props.scope.onAttach).toHaveBeenCalledWith("notes/risks.md");
+  });
+
+  it("filters the list, for a folder with more files than fit", async () => {
+    const user = userEvent.setup();
+    withScope();
+
+    await user.click(screen.getByRole("button", { name: "Attach a file" }));
+    await user.type(screen.getByLabelText("Find a file"), "risks");
+
+    expect(screen.queryByRole("button", { name: "notes/plan.md" })).toBeNull();
+    expect(screen.getByRole("button", { name: "notes/risks.md" })).toBeDefined();
+  });
+
+  // Attaching the same file twice would send it twice and spend the budget on a duplicate.
+  it("does not offer a file that is already attached", async () => {
+    const user = userEvent.setup();
+    withScope({ attachments: ["notes/risks.md"] });
+
+    await user.click(screen.getByRole("button", { name: "Attach a file" }));
+    expect(screen.queryByRole("button", { name: "notes/risks.md" })).toBeNull();
+  });
+
+  it("lists what is attached, and removes one", async () => {
+    const user = userEvent.setup();
+    const props = withScope({ attachments: ["notes/risks.md"] });
+
+    expect(screen.getByText("notes/risks.md")).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Remove notes/risks.md" }));
+    expect(props.scope.onDetach).toHaveBeenCalledWith("notes/risks.md");
+  });
+
+  it("says when there is nothing left to attach", async () => {
+    const user = userEvent.setup();
+    withScope({ files: [] });
+
+    await user.click(screen.getByRole("button", { name: "Attach a file" }));
+    expect(screen.getByText(/No other markdown files/)).toBeDefined();
+  });
+
+  // Changing what an answer is based on mid-reply would make the reply unexplainable.
+  it("cannot be changed while a reply is arriving", () => {
+    panel({
+      streaming: true,
+      scope: {
+        attachments: [],
+        files: [],
+        includeFolder: false,
+        canUseFolder: true,
+        onToggleFolder: vi.fn(),
+        onNeedFiles: vi.fn(),
+        onAttach: vi.fn(),
+        onDetach: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Folder" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Attach a file" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  it("offers no scope at all when no model is configured", () => {
+    panel({ models: [], selectedId: null });
+    expect(screen.queryByRole("button", { name: "Folder" })).toBeNull();
   });
 });

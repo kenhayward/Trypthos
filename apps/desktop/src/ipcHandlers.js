@@ -9,7 +9,7 @@ const {
   SaveChatRequest,
   chatTitleFrom,
   composeMessages,
-  contextTurn,
+  contextTurns,
   effectiveSystemPrompt,
   DeleteSecretRequest,
   SendChatRequest,
@@ -23,6 +23,7 @@ const {
 const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
 const { createLocalWorkspace } = require("./localWorkspace");
 const chatStore = require("./chatStore");
+const { outlineWorkspace } = require("./workspaceOutline");
 
 /// The main-process side of the IPC surface.
 ///
@@ -173,7 +174,7 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
       // Resolved here rather than stored: null means "the current default", so improving the
       // default reaches everyone who has not written their own.
       systemPrompt: effectiveSystemPrompt(settings.chat.systemPrompt),
-      context: contextTurn(parsed.data.context),
+      context: contextTurns(parsed.data.context),
       turns: parsed.data.turns,
     });
 
@@ -196,6 +197,16 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
   });
 
   // Saved conversations. Files in the app-data directory, never in the user's workspace.
+  // The markdown files in the open folder, as a map for chat. A real recursive walk, so it happens
+  // here and is capped: measured on a home directory one took 39 seconds.
+  ipcMain.handle("workspace:outline", async () => {
+    const workspace = getWorkspace();
+    if (!workspace) return { ok: false, reason: "no-workspace" };
+
+    // The root comes from the workspace the main process holds, never from the renderer.
+    return { ok: true, outline: await outlineWorkspace(workspace.root) };
+  });
+
   ipcMain.handle("chats:list", async () => ({
     ok: true,
     chats: await chatStore.listSessions(userDataDir),

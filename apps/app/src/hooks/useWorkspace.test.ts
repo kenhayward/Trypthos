@@ -10,6 +10,9 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
   const writes: { path: string; content: string; revision: string | null }[] = [];
 
   const client: WorkspaceClient = {
+    // Chat's map of the folder. Nothing in this hook asks for it; it is here because the client is
+    // one interface.
+    workspaceOutline: async () => ({ ok: true, outline: { paths: [], truncated: false } }),
     openWorkspace: async () => ({ ok: true, workspace: { root: "/ws", name: "ws" } }),
     reopenWorkspace: async (root) => ({ ok: true, workspace: { root, name: "ws" } }),
     listDirectory: async (path) => ({

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChatEventMessage, type ChatContext, type ChatEvent } from "@trypthos/domain";
+import { ChatEventMessage, EMPTY_CONTEXT, type ChatContext, type ChatEvent } from "@trypthos/domain";
 import {
   appendToken,
   beginReply,
@@ -31,7 +31,7 @@ export function useChat(
   /// A function rather than a value because it must be read late: the user may select a passage,
   /// type a question, then change the selection before pressing Enter - and a retry minutes later
   /// should see the document as it is then, not as it was when the question was first asked.
-  getContext: () => ChatContext = () => ({ kind: "none" }),
+  getContext: () => ChatContext = () => EMPTY_CONTEXT,
 ) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState(false);
