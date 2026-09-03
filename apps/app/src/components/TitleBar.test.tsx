@@ -1,10 +1,31 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TitleBar from "./TitleBar";
 import { APP_VERSION } from "../lib/appInfo";
 
 const noop = () => {};
+
+/// Menus the title bar asked the shell to open.
+///
+/// The bridge is absent in jsdom, so `windowControls()` falls back to the browser stub. This stands
+/// one in, and is what lets the click be checked without a shell.
+const popped: { menu: string; x: number; y: number }[] = [];
+
+beforeEach(() => {
+  popped.length = 0;
+  (window as unknown as { trypthos?: unknown }).trypthos = {
+    onWindowState: () => () => {},
+    onMenuAction: () => () => {},
+    popupMenu: async (menu: string, x: number, y: number) => {
+      popped.push({ menu, x, y });
+    },
+  };
+});
+
+afterEach(() => {
+  delete (window as unknown as { trypthos?: unknown }).trypthos;
+});
 
 describe("TitleBar", () => {
   it("shows the app name alone when no file is open", () => {
@@ -79,5 +100,52 @@ describe("TitleBar", () => {
 
     const controls = container.querySelector("header > div") as HTMLElement;
     expect(controls.classList.contains("app-no-drag")).toBe(true);
+  });
+});
+
+/// The menu bar.
+///
+/// The window is frameless, so there is nowhere for Electron to draw a menu bar on Windows. These
+/// labels are drawn here instead, and clicking one asks the shell to open a real native menu under
+/// it - which is why nothing below asserts on menu CONTENTS. What is on each menu is decided in the
+/// main process, and tested there.
+describe("TitleBar: the menu bar", () => {
+  const bar = (platform: "win32" | "darwin" | "linux") =>
+    render(<TitleBar platform={platform} fileName={null} onAbout={noop} onPreferences={noop} />);
+
+  it("draws the four menus on Windows", () => {
+    bar("win32");
+    for (const label of ["File", "Edit", "Tools", "Help"]) {
+      expect(screen.getByRole("button", { name: label })).toBeDefined();
+    }
+  });
+
+  // macOS puts the application menu in the system menu bar at the top of the screen. A second one
+  // inside the window would be wrong on that platform in a way no user would forgive.
+  it("draws no menus on macOS, where the system menu bar has them", () => {
+    bar("darwin");
+    expect(screen.queryByRole("button", { name: "File" })).toBeNull();
+  });
+
+  it("asks the shell to open the menu that was clicked", async () => {
+    const user = userEvent.setup();
+    bar("win32");
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(popped.at(-1)?.menu).toBe("edit");
+  });
+
+  // Under the label, not at the pointer: a menu bar's menus hang off the label whether it was
+  // clicked at its left edge or its right.
+  it("opens the menu under the label rather than at the pointer", async () => {
+    const user = userEvent.setup();
+    bar("win32");
+
+    await user.click(screen.getByRole("button", { name: "File" }));
+    const opened = popped.at(-1)!;
+    expect(typeof opened.x).toBe("number");
+    expect(typeof opened.y).toBe("number");
+    expect(Number.isInteger(opened.x)).toBe(true);
+    expect(Number.isInteger(opened.y)).toBe(true);
   });
 });

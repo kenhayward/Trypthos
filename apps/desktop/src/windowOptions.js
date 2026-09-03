@@ -16,6 +16,11 @@ function webPreferencesFor(preloadPath) {
     webviewTag: false,
     // Off would let a page read any local file the user can read.
     webSecurity: true,
+    // On by default, pinned because the right-click menu depends on it: Electron reports the
+    // misspelled word and its suggestions on the click itself, and there is no way to ask for them
+    // afterwards. Turned off, the menu would simply never offer a correction and nothing would say
+    // why.
+    spellcheck: true,
   };
 }
 

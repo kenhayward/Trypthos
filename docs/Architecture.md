@@ -454,15 +454,63 @@ block.
 **What chat does not do yet:** it cannot see the wider folder, conversations are not saved between
 sessions, and tool calling is not yet offered as a second transport for endpoints that support it.
 
+## Menus
+
+**A frameless window on Windows has nowhere for a menu bar to go.** The menu bar belongs to the frame
+that is not there, so Electron draws none. The renderer draws the File / Edit / Tools / Help labels
+in its own title bar, and clicking one asks the main process to `Menu.popup()` a real native menu
+under it - native rendering, native accelerator text, and the native edit roles, in a window that
+draws its own chrome.
+
+macOS is set once with `Menu.setApplicationMenu`: the application menu lives in the system menu bar
+whether or not the window has a frame. Windows and Linux get `null` rather than an unused menu, which
+would otherwise leave stray Alt-key behaviour for a bar nobody can see. `titleBarLayout.drawsMenuBar`
+carries the difference, beside the same decision about window controls, so the two processes cannot
+disagree.
+
+The macOS menu is a **different shape**, not a translation: the platform expects About, Settings and
+Quit in an app menu named after the app, so Tools - which exists on Windows only to hold Settings -
+is not built there at all.
+
+Three rules:
+
+- **Roles, not hand-rolled clipboard calls.** `cut`, `copy`, `paste` and `selectAll` act on whatever
+  has focus through the platform's own editing machinery. Written as custom items firing clipboard
+  APIs they would work in a plain input and silently not in CodeMirror, or the reverse.
+- **No item is a second implementation.** A menu item the renderer carries out sends an ACTION over
+  `menu:action`, and the renderer drives the same open, save, preferences or about that its buttons
+  and shortcuts already use. The main process keeps only what the renderer has no business
+  arranging: quitting, closing the window, and the update check.
+- **The renderer never says what is on a menu.** `menu:popup` carries a menu NAME and a coordinate;
+  the items and their click handlers are built in main, so a page cannot invent either.
+
+The templates are plain arrays until Electron builds them, which is what makes them testable without
+a window - `menus.test.js` asserts what is on each menu, which items use a role, and which are
+enabled, with no Electron in the process at all.
+
+### The right-click menu
+
+Registered on the window's own web contents rather than through the preload bridge, because **the
+spelling information only exists there**: Electron reports the misspelled word and its suggestions on
+the `context-menu` event itself, and there is no way to ask for them afterwards. The renderer never
+sees them and does not need to.
+
+The template is built from what was clicked, and an empty template is a real answer - a right-click
+on a plain paragraph with nothing selected opens nothing, rather than a menu of dead items.
+
+**CodeMirror sets `spellcheck="false"` on its content element**, so the editor is an explicit
+override in `contentAttributes`. Without it the app's main text surface would be the one place with
+no corrections while the chat box and settings fields had them, and nothing would say why.
+
 ## The IPC surface
 
-Fifteen channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
+Sixteen channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:reopen`, `workspace:list`), files (`file:read`, `file:write`), window
 (`window:minimize`, `window:toggleMaximize`, `window:close`), settings (`settings:read`,
 `settings:write`), keys (`secrets:list`, `secrets:set`, `secrets:delete`) and chat (`chat:send`,
-`chat:cancel`). Two channels flow the other way, both validated on arrival like everything else:
-`window:state`, and `chat:event` for streamed reply tokens.
+`chat:cancel`) and menus (`menu:popup`). Three channels flow the other way, all validated on arrival
+like everything else: `window:state`, `chat:event` for streamed reply tokens, and `menu:action`.
 
 Three properties do the work:
 

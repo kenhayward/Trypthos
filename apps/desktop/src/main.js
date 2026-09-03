@@ -11,6 +11,7 @@ const {
   safeStorage,
   shell,
 } = require("electron");
+const { MENU_ACTION_CHANNEL, PopupMenuRequest } = require("@trypthos/domain");
 const path = require("node:path");
 const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
@@ -20,6 +21,8 @@ const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
 const { createSecretStore } = require("./secretStore");
 const { createChatProvider } = require("./chatProvider");
+const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
+const { APP_NAME } = require("./appName");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
 const { createUpdater } = require("./updater");
@@ -58,6 +61,12 @@ function loadRenderer(window) {
   return window.loadFile(target.value);
 }
 
+/// The menu handlers, shared between the popup channel and the context-menu listener.
+///
+/// A holder rather than a value: the window is created before the handlers are built, and the
+/// listener registered on it has to see them once they exist.
+const menuHandlersRef = { current: null };
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -75,6 +84,20 @@ function createWindow() {
   // In development the shell and the Vite server start together, so the shell routinely wins the
   // race. Retrying turns "blank window, no explanation" into "appears a moment later", and also
   // covers restarting the dev server while the shell stays open.
+  /// The right-click menu, for any text the user can select or edit.
+  ///
+  /// Registered on the window's own web contents rather than through a preload bridge, because the
+  /// spelling information only exists here: Electron reports the misspelled word and its
+  /// suggestions on the event itself, and there is no way to ask for them afterwards. The renderer
+  /// never sees them and does not need to.
+  mainWindow.webContents.on("context-menu", (_event, params) => {
+    const template = contextMenuTemplate(params, { on: menuHandlersRef.current });
+    // An empty menu is a real answer - a right-click on a plain paragraph with nothing selected has
+    // nothing to offer, and a menu of dead items would be worse than none.
+    if (template.length === 0) return;
+    Menu.buildFromTemplate(template).popup({ window: mainWindow });
+  });
+
   mainWindow.webContents.on("did-fail-load", () => {
     if (!mainWindow) return;
 
@@ -170,6 +193,47 @@ if (!gotLock) {
       chat: createChatProvider({ secrets }),
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
+
+    /// What a menu item does.
+    ///
+    /// Renderer actions go over IPC and drive the paths the user already has - the same open, save,
+    /// preferences and about the buttons and shortcuts use, rather than a second copy of each.
+    /// Everything the renderer has no business arranging stays here.
+    const menuHandlers = (menuHandlersRef.current = {
+      action: (name) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send(MENU_ACTION_CHANNEL, { action: name });
+      },
+      quit: () => app.quit(),
+      closeWindow: () => mainWindow?.close(),
+      checkForUpdates: () => void updater?.check("manual"),
+      addToDictionary: (word) =>
+        mainWindow?.webContents.session.addWordToSpellCheckerDictionary(word),
+      replaceMisspelling: (word) => mainWindow?.webContents.replaceMisspelling(word),
+    });
+
+    // macOS shows the application menu in the system menu bar whether or not the window has a
+    // frame, so it is set once. Windows and Linux get NO application menu: the window is frameless,
+    // Electron has nowhere to draw one, and leaving a menu set there only produces stray Alt-key
+    // behaviour for a bar nobody can see.
+    Menu.setApplicationMenu(
+      process.platform === "darwin"
+        ? Menu.buildFromTemplate(appMenuTemplate({ appName: APP_NAME, on: menuHandlers }))
+        : null,
+    );
+
+    ipcMain.handle("menu:popup", async (_event, payload) => {
+      const parsed = PopupMenuRequest.safeParse(payload);
+      if (!parsed.success) return { ok: false, reason: "bad-request" };
+      if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, reason: "no-window" };
+
+      Menu.buildFromTemplate(popupTemplate(parsed.data.menu, { on: menuHandlers })).popup({
+        window: mainWindow,
+        x: parsed.data.x,
+        y: parsed.data.y,
+      });
+      return { ok: true };
+    });
 
     updater = createUpdater({
       app,

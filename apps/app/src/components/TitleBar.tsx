@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { titleBarLayout, windowTitle, type Platform } from "@trypthos/domain";
+import { MENU_NAMES, titleBarLayout, windowTitle, type Platform } from "@trypthos/domain";
 import { APP_NAME, APP_VERSION } from "../lib/appInfo";
 import { windowControls } from "../lib/windowControls";
 
@@ -50,6 +50,32 @@ export default function TitleBar({ platform, fileName, onAbout, onPreferences }:
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <path d="M14 2v6h6" />
       </svg>
+
+      {layout.drawsMenuBar && (
+        // Real native menus, opened under these labels. The window is frameless, so there is no
+        // frame for Electron to draw a menu bar in - but `Menu.popup()` still gives native
+        // rendering, native accelerator text and the native edit roles.
+        //
+        // Nothing here knows what is on a menu: the main process decides that, so a page cannot
+        // invent an item or a click handler.
+        <nav aria-label={t("menu.bar")} className="app-no-drag flex items-center">
+          {MENU_NAMES.map((menu) => (
+            <button
+              key={menu}
+              type="button"
+              onClick={(event) => {
+                // Measured from the label, not from the pointer: a menu bar's menus hang off the
+                // label whether it was clicked at its left edge or its right.
+                const at = event.currentTarget.getBoundingClientRect();
+                void windowControls().popupMenu(menu, Math.round(at.left), Math.round(at.bottom));
+              }}
+              className="rounded px-2 py-0.5 text-sm text-ink-3 hover:bg-hover hover:text-ink"
+            >
+              {t(`menu.${menu}`)}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <span className="min-w-0 truncate text-sm text-ink-3">{windowTitle(APP_NAME, fileName)}</span>
 

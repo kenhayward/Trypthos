@@ -4,6 +4,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { webPreferencesFor } = require("../src/windowOptions");
 
+test("keeps the spellchecker on, because the right-click menu depends on it", () => {
+  const preferences = webPreferencesFor("/preload.js");
+  assert.equal(preferences.spellcheck, true);
+});
+
 test("the renderer is created without Node access", () => {
   const prefs = webPreferencesFor("/app/preload.js");
   assert.equal(prefs.nodeIntegration, false);

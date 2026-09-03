@@ -15,17 +15,28 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
 | Appearance | Light, dark, or follow your system, from Preferences. The window draws its own title bar. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
-| Updates | Checks GitHub for a newer release on startup, or on demand from the tray icon. |
+| Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with spelling suggestions. |
+| Updates | Checks GitHub for a newer release on startup, or on demand from the menu or the tray icon. |
 | Local by default | No server, no account, no telemetry. Chats and settings live on your machine. |
 
 Full prose descriptions: [docs/features.md](docs/features.md).
 
 ## Status
 
-Early, but usable. Open a local folder, browse it, edit files and save them. The editor has Live,
-Source and Preview views over one document. Cloud folders and the chat client are not built yet.
+Usable for real work on local files. Open a folder, browse it, edit and save, with a save refused if
+the file changed underneath you. The editor has Live, Source and Preview views over one document.
 
-Run it in a browser tab and there is no filesystem, so the workspace panel says so - that is a
+**Chat works.** Configure any OpenAI-compatible endpoint - a hosted provider, or a local model
+through Ollama or LM Studio - and ask questions about the document you have open, or about a passage
+you have selected. Replies stream in. Ask for a change rather than an answer and the reply comes back
+as a card showing exactly what would be written and where; nothing reaches your document until you
+press Apply, and one undo takes it back. Your API key is encrypted by the operating system and stored
+outside your settings file.
+
+**Not built yet:** cloud folders (OneDrive, Google Drive, Dropbox, GitHub), chat history that
+survives closing the app, and giving chat access to the wider folder rather than one document.
+
+Run it in a browser tab and there is no filesystem and no chat, so those panels say so - that is a
 supported way to work on the interface, not a broken state.
 
 **Builds are unsigned.** Windows SmartScreen will warn on first install, and macOS needs
@@ -70,7 +81,8 @@ More detail: [docs/Architecture.md](docs/Architecture.md).
    source in Live mode; each gets a decoration in turn.
 2. **Local workspace** - open, browse, edit and save are in. Still to come: a proper tree, file
    watching, and creating or renaming files.
-3. **Chat** - provider calls from the main process, streamed to the panel.
+3. **Chat** - asking, streaming and applying proposed changes are in. Still to come: the wider
+   folder as context, saved conversations, and attachments.
 4. **Cloud providers** - OneDrive, then Google Drive, Dropbox and GitHub.
 5. **Signing** - Developer ID and notarization, so installs stop warning.
 

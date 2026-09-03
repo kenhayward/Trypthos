@@ -202,8 +202,15 @@ test("no IPC channel returns a stored key, whatever it is asked", async () => {
 
 test("every channel the preload bridge names is registered, and vice versa", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    // Window channels are registered separately, by windowHandlers.
-    const windowChannels = ["window:minimize", "window:toggleMaximize", "window:close"];
+    // Registered elsewhere: the window channels by windowHandlers, and menu:popup in main, where
+    // the Menu module and the live BrowserWindow both are. The guard still earns its place - it is
+    // what catches a channel added to the contract and never wired up.
+    const windowChannels = [
+      "window:minimize",
+      "window:toggleMaximize",
+      "window:close",
+      "menu:popup",
+    ];
     const registered = [...ipcMain.handlers.keys()].sort();
     const expected = IPC_CHANNELS.filter((channel) => !windowChannels.includes(channel)).sort();
 

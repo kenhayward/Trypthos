@@ -8,6 +8,15 @@ export type {
 
 export { normaliseEndpoint } from "./endpoints";
 
+export {
+  MENU_ACTIONS,
+  MENU_ACTION_CHANNEL,
+  MENU_NAMES,
+  MenuActionMessage,
+  PopupMenuRequest,
+} from "./menus";
+export type { MenuAction, MenuName } from "./menus";
+
 export { createSseDecoder } from "./sse";
 export type { SseDecoder } from "./sse";
 
