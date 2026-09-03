@@ -59,7 +59,10 @@ async function withHandlers(body, options = {}) {
   try {
     await writeSettings(dir, {
       ...DEFAULT_SETTINGS,
-      chat: { profiles: options.profiles ?? [PROFILE] },
+      chat: {
+        profiles: options.profiles ?? [PROFILE],
+        systemPrompt: options.systemPrompt ?? DEFAULT_SETTINGS.chat.systemPrompt,
+      },
     });
 
     const ipcMain = fakeIpcMain();
@@ -87,10 +90,12 @@ async function withHandlers(body, options = {}) {
 }
 
 const turns = [{ role: "user", content: "Hello" }];
+const NO_CONTEXT = { kind: "none" };
+const send = (extra = {}) => ({ profileId: "one", turns, context: NO_CONTEXT, ...extra });
 
 test("starts a stream and names it, so replies can be told apart", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("chat:send", { profileId: "one", turns });
+    const result = await ipcMain.invoke("chat:send", send());
 
     assert.equal(result.ok, true);
     assert.equal(typeof result.streamId, "string");
@@ -100,7 +105,7 @@ test("starts a stream and names it, so replies can be told apart", async () => {
 
 test("pushes the reply to the renderer, tagged with its stream", async () => {
   await withHandlers(async ({ ipcMain, sent }) => {
-    const { streamId } = await ipcMain.invoke("chat:send", { profileId: "one", turns });
+    const { streamId } = await ipcMain.invoke("chat:send", send());
 
     assert.deepEqual(
       sent.map((entry) => entry.message),
@@ -117,7 +122,7 @@ test("pushes the reply to the renderer, tagged with its stream", async () => {
 // could point Trypthos at any server on the internet and have it send whatever key was stored there.
 test("resolves the profile from settings rather than trusting the renderer", async () => {
   await withHandlers(async ({ ipcMain, runs }) => {
-    await ipcMain.invoke("chat:send", { profileId: "one", turns });
+    await ipcMain.invoke("chat:send", send());
 
     assert.equal(runs[0].profile.endpoint, "https://api.example.com/v1");
     assert.equal(runs[0].profile.model, "some-model");
@@ -126,7 +131,7 @@ test("resolves the profile from settings rather than trusting the renderer", asy
 
 test("refuses a profile id that is not configured", async () => {
   await withHandlers(async ({ ipcMain, runs }) => {
-    const result = await ipcMain.invoke("chat:send", { profileId: "invented", turns });
+    const result = await ipcMain.invoke("chat:send", send({ profileId: "invented" }));
 
     assert.deepEqual(result, { ok: false, reason: "no-such-profile" });
     assert.equal(runs.length, 0, "an unknown profile must never reach the provider");
@@ -135,11 +140,9 @@ test("refuses a profile id that is not configured", async () => {
 
 test("refuses a request that names an endpoint of its own", async () => {
   await withHandlers(async ({ ipcMain, runs }) => {
-    const result = await ipcMain.invoke("chat:send", {
-      profileId: "one",
-      turns,
+    const result = await ipcMain.invoke("chat:send", send({
       endpoint: "https://attacker.example.com/v1",
-    });
+    }));
 
     assert.deepEqual(result, { ok: false, reason: "bad-request" });
     assert.equal(runs.length, 0);
@@ -152,9 +155,17 @@ test("refuses a malformed request before anything is sent", async () => {
       null,
       {},
       { profileId: "one" },
-      { profileId: "one", turns: [] },
-      { profileId: "one", turns: [{ role: "wizard", content: "Hello" }] },
-      { profileId: "one", turns: [{ role: "user" }] },
+      // Context is required, not optional: a missing field would read as "no context" for both a
+      // deliberate choice and a renderer that forgot to send it.
+      { profileId: "one", turns },
+      send({ turns: [] }),
+      send({ turns: [{ role: "wizard", content: "Hello" }] }),
+      send({ turns: [{ role: "user" }] }),
+      send({ context: { kind: "elsewhere", text: "x" } }),
+      // Larger than the cap the renderer applies, so it is a bug or a renderer doing as it pleases.
+      send({
+        context: { kind: "file", path: "big.md", text: "x".repeat(60_001), truncated: false },
+      }),
     ]) {
       const result = await ipcMain.invoke("chat:send", payload);
       assert.deepEqual(result, { ok: false, reason: "bad-request" });
@@ -168,7 +179,7 @@ test("cancelling a stream stops it", async () => {
   let aborted = false;
   await withHandlers(
     async ({ ipcMain, sent }) => {
-      const { streamId } = await ipcMain.invoke("chat:send", { profileId: "one", turns });
+      const { streamId } = await ipcMain.invoke("chat:send", send());
       await ipcMain.invoke("chat:cancel", { streamId });
 
       assert.equal(aborted, true);
@@ -189,7 +200,7 @@ test("cancelling a stream stops it", async () => {
 
 test("cancelling a stream that has already finished is harmless", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    const { streamId } = await ipcMain.invoke("chat:send", { profileId: "one", turns });
+    const { streamId } = await ipcMain.invoke("chat:send", send());
     assert.deepEqual(await ipcMain.invoke("chat:cancel", { streamId }), { ok: true });
   });
 });
@@ -199,7 +210,10 @@ test("cancelling a stream that has already finished is harmless", async () => {
 test("a reply arriving after the window has gone is dropped quietly", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-chat-ipc-"));
   try {
-    await writeSettings(dir, { ...DEFAULT_SETTINGS, chat: { profiles: [PROFILE] } });
+    await writeSettings(dir, {
+      ...DEFAULT_SETTINGS,
+      chat: { profiles: [PROFILE], systemPrompt: "" },
+    });
 
     const ipcMain = fakeIpcMain();
     registerIpcHandlers({
@@ -222,8 +236,82 @@ test("a reply arriving after the window has gone is dropped quietly", async () =
       },
     });
 
-    assert.equal((await ipcMain.invoke("chat:send", { profileId: "one", turns })).ok, true);
+    assert.equal((await ipcMain.invoke("chat:send", send())).ok, true);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+/// What the model is actually sent.
+///
+/// The handler composes the request: the system prompt from settings, then the conversation, then
+/// the document beside the question it belongs to. None of that is visible from the panel, and all
+/// of it decides whether an answer is about the right text.
+test("leads with the system prompt from settings", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      await ipcMain.invoke("chat:send", send());
+      assert.deepEqual(runs[0].turns[0], { role: "system", content: "Be brief." });
+    },
+    { systemPrompt: "Be brief." },
+  );
+});
+
+test("sends no system message when the prompt has been cleared", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      await ipcMain.invoke("chat:send", send());
+      assert.equal(
+        runs[0].turns.some((turn) => turn.role === "system"),
+        false,
+      );
+    },
+    { systemPrompt: "" },
+  );
+});
+
+// The renderer resolved the context; the main process turns it into the message. Keeping the
+// wording in one place means the panel cannot drift from what the model is told.
+test("puts the document before the question, labelled and fenced", async () => {
+  await withHandlers(async ({ ipcMain, runs }) => {
+    await ipcMain.invoke(
+      "chat:send",
+      send({
+        context: { kind: "file", path: "notes/plan.md", text: "# Plan", truncated: false },
+      }),
+    );
+
+    const sent = runs[0].turns;
+    assert.equal(sent.at(-1).content, "Hello", "the question must come last");
+
+    const document = sent.at(-2);
+    assert.equal(document.role, "user");
+    assert.match(document.content, /notes\/plan\.md/);
+    assert.match(document.content, /# Plan/);
+    // The rule a markdown file can attack: it is data, and the model is told so.
+    assert.match(document.content, /not instructions/i);
+  });
+});
+
+test("says when the text was a selection rather than the whole file", async () => {
+  await withHandlers(async ({ ipcMain, runs }) => {
+    await ipcMain.invoke(
+      "chat:send",
+      send({
+        context: { kind: "selection", path: "notes/plan.md", text: "One paragraph", truncated: false },
+      }),
+    );
+
+    assert.match(runs[0].turns.at(-2).content, /selected/i);
+  });
+});
+
+test("sends the conversation alone when there is no context", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      await ipcMain.invoke("chat:send", send());
+      assert.deepEqual(runs[0].turns, turns);
+    },
+    { systemPrompt: "" },
+  );
 });

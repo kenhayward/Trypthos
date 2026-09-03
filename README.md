@@ -11,7 +11,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | Markdown editor | Live, Source and Preview views over one document. A mode is a view, never a transform. |
-| AI chat | Ask a question and watch the reply stream in, from an endpoint and model you configure. |
+| AI chat | Ask about the open document, or just the passage you selected, from a model you configure. |
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
 | Appearance | Light, dark, or follow your system, from Preferences. The window draws its own title bar. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |

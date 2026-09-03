@@ -33,7 +33,8 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// Chat. The renderer names a PROFILE, never an endpoint - the main process looks the endpoint,
   /// model and key up from settings it already holds, for the same reason the renderer cannot name a
   /// workspace root.
-  sendChat: (profileId, turns) => ipcRenderer.invoke("chat:send", { profileId, turns }),
+  sendChat: (profileId, turns, context) =>
+    ipcRenderer.invoke("chat:send", { profileId, turns, context }),
   cancelChat: (streamId) => ipcRenderer.invoke("chat:cancel", { streamId }),
 
   /// Streamed reply tokens. Wrapped like `onWindowState`, so the renderer never receives the

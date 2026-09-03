@@ -22,6 +22,41 @@ export const ChatTurnSchema = z
 
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 
+/// Assembles the messages one request sends.
+///
+/// The order is the point, and it is why this is a function rather than three lines at a call site:
+///
+///   1. **The system prompt**, if there is one. Omitted entirely when blank - an empty system
+///      message is not the same as no system message, and some endpoints reject one.
+///   2. **The conversation so far**, unchanged and in order.
+///   3. **The document**, immediately before the question it belongs to.
+///
+/// The document goes last-but-one rather than at the top because it is re-sent fresh every turn: the
+/// user may have edited the file, or selected something different, between one question and the
+/// next. Putting it beside the question that prompted it also keeps the two together in a long
+/// thread, where a document pinned at the top would be a long way from what was asked about it.
+export function composeMessages({
+  systemPrompt,
+  context,
+  turns,
+}: {
+  systemPrompt: string;
+  context: ChatTurn | null;
+  turns: readonly ChatTurn[];
+}): ChatTurn[] {
+  const messages: ChatTurn[] = [];
+  if (systemPrompt.trim() !== "") messages.push({ role: "system", content: systemPrompt });
+
+  if (context === null) return [...messages, ...turns];
+
+  // Before the final turn, which is the question being asked. A history that does not end in a
+  // question should not happen, but if it does the document still belongs at the end rather than
+  // being dropped.
+  const at = turns.length > 0 ? turns.length - 1 : 0;
+  messages.push(...turns.slice(0, at), context, ...turns.slice(at));
+  return messages;
+}
+
 /// The full URL to POST to, from the configured base URL.
 export function completionsUrl(endpoint: string): string {
   // Trailing slashes stripped first: someone will paste the base URL with one, and a doubled slash

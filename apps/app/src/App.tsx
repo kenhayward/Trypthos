@@ -1,6 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PANEL_BOUNDS, defaultChatProfile, resolvePanelWidths } from "@trypthos/domain";
+import {
+  PANEL_BOUNDS,
+  defaultChatProfile,
+  resolveChatContext,
+  resolvePanelWidths,
+} from "@trypthos/domain";
 import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
@@ -61,17 +66,6 @@ export default function App() {
   );
   const { keyedEndpoints, saveKey, deleteKey } = useApiKeys(keys, configuredEndpoints);
 
-  const chatModels = settings.chat.profiles;
-  /// Which model answers the next turn.
-  ///
-  /// Kept for the session rather than persisted: `isDefault` already records which model a new chat
-  /// starts on, and a second stored answer to the same question would be one more thing that could
-  /// disagree with it. Null falls back to the default, which is also what the shell does.
-  const [chosenModel, setChosenModel] = useState<string | null>(null);
-  const activeModel =
-    chatModels.find((profile) => profile.id === chosenModel) ?? defaultChatProfile(chatModels);
-
-  const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null);
 
   // The width the three panels share. Measured rather than assumed, because a stored width can come
   // from a wider window than the one it is being restored into.
@@ -104,6 +98,39 @@ export default function App() {
     chatCollapsed: panels.chatCollapsed,
   });
   const { state, actions } = useWorkspace(client, SCRATCH);
+
+  const chatModels = settings.chat.profiles;
+  /// Which model answers the next turn.
+  ///
+  /// Kept for the session rather than persisted: `isDefault` already records which model a new chat
+  /// starts on, and a second stored answer to the same question would be one more thing that could
+  /// disagree with it. Null falls back to the default, which is also what the shell does.
+  const [chosenModel, setChosenModel] = useState<string | null>(null);
+  const activeModel =
+    chatModels.find((profile) => profile.id === chosenModel) ?? defaultChatProfile(chatModels);
+
+  /// The editor selection, as reported by CodeMirror. Empty when nothing is selected.
+  ///
+  /// Held in a ref rather than as state: it changes on every caret move, and re-rendering the whole
+  /// three-panel window on each arrow key to store a string nothing displays would be a waste. Chat
+  /// reads it at the moment a question is sent.
+  const selection = useRef("");
+
+  /// What the model is told about the document.
+  ///
+  /// A function, called when a turn is sent, so it sees the selection and the buffer as they are
+  /// then. `state.content` rather than the file on disk: once the user has typed, the file is not
+  /// what they are looking at.
+  const chatContext = useCallback(
+    () =>
+      resolveChatContext({
+        selection: selection.current,
+        file: state.file === null ? null : { path: state.file.path, content: state.content },
+      }),
+    [state.file, state.content],
+  );
+
+  const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, chatContext);
 
   // Reopening the folder the app was last closed with. Only once, and only after settings have been
   // read - before that `lastWorkspace` is the default, which is null.
@@ -196,6 +223,7 @@ export default function App() {
           filePath={state.file?.path ?? null}
           dirty={state.dirty}
           value={state.content}
+          onSelectionChange={(text) => (selection.current = text)}
           onChange={actions.edit}
         />
         {panels.chatCollapsed ? (

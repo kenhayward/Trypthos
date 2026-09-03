@@ -1,18 +1,18 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ChatEvent } from "@trypthos/domain";
+import type { ChatContext, ChatEvent } from "@trypthos/domain";
 import { useChat, type ChatBridge } from "./useChat";
 
 /// A shell that hands back a stream id and lets a test push events into it.
 function fakeBridge({ ok = true }: { ok?: boolean } = {}) {
   let listener: ((message: { streamId: string; event: ChatEvent }) => void) | null = null;
-  const sent: { profileId: string; turns: unknown[] }[] = [];
+  const sent: { profileId: string; turns: unknown[]; context: unknown }[] = [];
   const cancelled: string[] = [];
   let next = 0;
 
   const bridge: ChatBridge = {
-    sendChat: vi.fn(async (profileId: string, turns: never[]) => {
-      sent.push({ profileId, turns });
+    sendChat: vi.fn(async (profileId: string, turns: never[], context: never) => {
+      sent.push({ profileId, turns, context });
       next += 1;
       return ok
         ? { ok: true as const, streamId: `stream-${next}` }
@@ -279,5 +279,72 @@ describe("useChat", () => {
 
     expect(result.current.turns).toEqual([]);
     expect(result.current.streaming).toBe(false);
+  });
+});
+
+/// The document the question is about.
+///
+/// Read at the moment a turn is sent, not when the hook was created: somebody selects a passage,
+/// types a question, and may well change the selection before pressing Enter.
+describe("useChat and the document", () => {
+  const FILE = { kind: "file" as const, path: "notes.md", text: "# Notes", truncated: false };
+
+  it("sends the context alongside the question", async () => {
+    const harness = fakeBridge();
+    const { result } = renderHook(() => useChat(harness.bridge, "one", () => FILE));
+
+    await act(async () => {
+      await result.current.send("Summarise this");
+    });
+
+    expect(harness.sent[0]?.context).toEqual(FILE);
+  });
+
+  it("asks for the context afresh on every turn, not once", async () => {
+    const harness = fakeBridge();
+    let current: ChatContext = FILE;
+    const { result } = renderHook(() => useChat(harness.bridge, "one", () => current));
+
+    await act(async () => {
+      await result.current.send("First");
+    });
+    act(() => harness.push({ type: "end" }));
+
+    current = { kind: "selection", path: "notes.md", text: "One line", truncated: false };
+    await act(async () => {
+      await result.current.send("Second");
+    });
+
+    expect(harness.sent[1]?.context).toEqual(current);
+  });
+
+  // A retry can happen minutes later. The document as it stands now is the one the user means.
+  it("re-reads the context when a question is retried", async () => {
+    const harness = fakeBridge();
+    let current: ChatContext = FILE;
+    const { result } = renderHook(() => useChat(harness.bridge, "one", () => current));
+
+    await act(async () => {
+      await result.current.send("Summarise this");
+    });
+    act(() => harness.push({ type: "end" }));
+
+    current = { ...FILE, text: "# Notes\n\nEdited since." };
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(harness.sent[1]?.context).toEqual(current);
+  });
+
+  it("sends no context when there is nothing to send", async () => {
+    const harness = fakeBridge();
+    const { result } = renderHook(() => useChat(harness.bridge, "one"));
+
+    await act(async () => {
+      await result.current.send("Hello");
+    });
+
+    expect(harness.sent[0]?.context).toEqual({ kind: "none" });
   });
 });

@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_SETTINGS, type Settings } from "@trypthos/domain";
+import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, type Settings } from "@trypthos/domain";
 import PreferencesDialog from "./PreferencesDialog";
 
 function dialog(overrides: Partial<React.ComponentProps<typeof PreferencesDialog>> = {}) {
@@ -31,7 +32,7 @@ const PROFILE = {
 
 const withProfile = (settings: Partial<Settings> = {}): Settings => ({
   ...DEFAULT_SETTINGS,
-  chat: { profiles: [PROFILE] },
+  chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] },
   ...settings,
 });
 
@@ -182,7 +183,9 @@ describe("PreferencesDialog: chat models", () => {
     await user.click(screen.getByRole("button", { name: "Edit Local model" }));
     await user.click(screen.getByRole("button", { name: "Remove" }));
 
-    expect(props.onChange).toHaveBeenCalledWith({ chat: { profiles: [] } });
+    expect(props.onChange).toHaveBeenCalledWith({
+      chat: { ...DEFAULT_SETTINGS.chat, profiles: [] },
+    });
   });
 });
 
@@ -282,5 +285,96 @@ describe("PreferencesDialog: API keys", () => {
     await openEditor(user);
 
     expect(screen.queryByRole("button", { name: "Remove key" })).toBeNull();
+  });
+});
+
+/// The system prompt.
+///
+/// Sent ahead of every conversation, so it is the setting most likely to be edited and the one most
+/// likely to be broken by editing. It ships with a default rather than empty: chat that arrives
+/// unconfigured answers like a general chatbot rather than like a markdown editor.
+describe("PreferencesDialog: the system prompt", () => {
+  it("shows the prompt in full, so it can be read before it is changed", () => {
+    dialog();
+    const box = screen.getByLabelText("System prompt") as HTMLTextAreaElement;
+    expect(box.value).toBe(DEFAULT_SYSTEM_PROMPT);
+  });
+
+  // Driven through a stateful wrapper, the way App drives it. The dialog is controlled, so a test
+  // holding `settings` fixed would feed every keystroke back the same stale text - and would report
+  // a passing edit of one character while claiming to have typed a sentence.
+  it("saves an edited prompt", async () => {
+    const user = userEvent.setup();
+
+    function Harness() {
+      const [settings, setSettings] = useState<Settings>({
+        ...DEFAULT_SETTINGS,
+        chat: { profiles: [], systemPrompt: "Old" },
+      });
+      return (
+        <PreferencesDialog
+          open
+          settings={settings}
+          isDesktop
+          keyedEndpoints={[]}
+          onClose={vi.fn()}
+          onChange={(change) => setSettings((current) => ({ ...current, ...change }))}
+          onSaveKey={vi.fn(async () => ({ ok: true }) as const)}
+          onDeleteKey={vi.fn(async () => {})}
+        />
+      );
+    }
+
+    render(<Harness />);
+    const box = screen.getByLabelText("System prompt") as HTMLTextAreaElement;
+    await user.clear(box);
+    await user.type(box, "Be terse.");
+
+    expect(box.value).toBe("Be terse.");
+  });
+
+  // A prompt is one field, so it applies as it is typed like every other preference here. Profiles
+  // are the exception, and only because they are several fields that are valid only together.
+  it("keeps the configured models when the prompt changes", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    dialog({ settings: withProfile(), onChange });
+
+    await user.type(screen.getByLabelText("System prompt"), "!");
+
+    const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+    expect(last.chat?.profiles).toHaveLength(1);
+  });
+
+  it("puts the default back", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    dialog({
+      settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: "Something else" } },
+      onChange,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Reset to the default" }));
+
+    const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+    expect(last.chat?.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
+  });
+
+  it("offers no reset when the prompt is already the default", () => {
+    dialog();
+    expect(screen.queryByRole("button", { name: "Reset to the default" })).toBeNull();
+  });
+
+  // Clearing it is a legitimate choice - some endpoints are already configured with their own
+  // prompt - so it must be possible without the app putting one back.
+  it("allows an empty prompt", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    dialog({ settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: "Old" } }, onChange });
+
+    await user.clear(screen.getByLabelText("System prompt"));
+
+    const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+    expect(last.chat?.systemPrompt).toBe("");
   });
 });

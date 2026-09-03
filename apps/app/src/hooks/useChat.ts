@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChatEventMessage, type ChatEvent } from "@trypthos/domain";
+import { ChatEventMessage, type ChatContext, type ChatEvent } from "@trypthos/domain";
 import {
   appendToken,
   beginReply,
@@ -17,12 +17,22 @@ export interface ChatBridge {
   sendChat(
     profileId: string,
     turns: Turn[],
+    context: ChatContext,
   ): Promise<{ ok: true; streamId: string } | { ok: false; reason: string }>;
   cancelChat(streamId: string): Promise<unknown>;
   onChatEvent(listener: (message: { streamId: string; event: ChatEvent }) => void): () => void;
 }
 
-export function useChat(bridge: ChatBridge | null, profileId: string | null) {
+export function useChat(
+  bridge: ChatBridge | null,
+  profileId: string | null,
+  /// What the model should be told about the document, asked for at the moment a turn is sent.
+  ///
+  /// A function rather than a value because it must be read late: the user may select a passage,
+  /// type a question, then change the selection before pressing Enter - and a retry minutes later
+  /// should see the document as it is then, not as it was when the question was first asked.
+  getContext: () => ChatContext = () => ({ kind: "none" }),
+) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +43,13 @@ export function useChat(bridge: ChatBridge | null, profileId: string | null) {
   /// closure over state would pin it to the value at subscription time - so every event would be
   /// compared against `null` and dropped.
   const activeStream = useRef<string | null>(null);
+
+  /// Read through a ref so `run` does not change identity every time the selection moves, which
+  /// would rebuild `send` and `retry` on every keystroke in the editor.
+  const latestContext = useRef(getContext);
+  useEffect(() => {
+    latestContext.current = getContext;
+  }, [getContext]);
 
   useEffect(() => {
     if (bridge === null) return;
@@ -76,7 +93,7 @@ export function useChat(bridge: ChatBridge | null, profileId: string | null) {
       setTurns(beginReply(history));
       setStreaming(true);
 
-      const result = await bridge.sendChat(profileId, history);
+      const result = await bridge.sendChat(profileId, history, latestContext.current());
       if (!result.ok) {
         // The shell refused before anything was sent - an unconfigured profile, or a malformed
         // request. Nothing will stream, so the turn has to be ended here.

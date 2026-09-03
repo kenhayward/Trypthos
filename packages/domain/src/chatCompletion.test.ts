@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ChatProfileSchema } from "./chat";
-import { buildChatRequest, completionsUrl, parseStreamPayload } from "./chatCompletion";
+import {
+  buildChatRequest,
+  completionsUrl,
+  composeMessages,
+  parseStreamPayload,
+} from "./chatCompletion";
 
 const profile = ChatProfileSchema.parse({
   id: "one",
@@ -127,5 +132,57 @@ describe("parseStreamPayload", () => {
 
   it("ignores an empty payload", () => {
     expect(parseStreamPayload("")).toEqual({ type: "ignored" });
+  });
+});
+
+describe("composeMessages", () => {
+  const turns = [
+    { role: "user" as const, content: "First" },
+    { role: "assistant" as const, content: "An answer" },
+    { role: "user" as const, content: "Second" },
+  ];
+  const context = { role: "user" as const, content: "Here is the document." };
+
+  it("leads with the system prompt", () => {
+    const messages = composeMessages({ systemPrompt: "Be brief.", context: null, turns });
+    expect(messages[0]).toEqual({ role: "system", content: "Be brief." });
+  });
+
+  // An empty system message is not the same as no system message, and some endpoints reject one.
+  it("omits a blank system prompt entirely", () => {
+    const messages = composeMessages({ systemPrompt: "   ", context: null, turns });
+    expect(messages.some((message) => message.role === "system")).toBe(false);
+  });
+
+  it("keeps the conversation in order", () => {
+    const messages = composeMessages({ systemPrompt: "", context: null, turns });
+    expect(messages).toEqual(turns);
+  });
+
+  // Beside the question it belongs to, not pinned at the top: in a long thread the document would
+  // otherwise be a long way from whatever was asked about it.
+  it("puts the document immediately before the question being asked", () => {
+    const messages = composeMessages({ systemPrompt: "", context, turns });
+    expect(messages.map((message) => message.content)).toEqual([
+      "First",
+      "An answer",
+      "Here is the document.",
+      "Second",
+    ]);
+  });
+
+  it("sends the document even when it is the very first thing asked", () => {
+    const messages = composeMessages({
+      systemPrompt: "Be brief.",
+      context,
+      turns: [{ role: "user", content: "Summarise this" }],
+    });
+    expect(messages.map((message) => message.role)).toEqual(["system", "user", "user"]);
+    expect(messages[1]?.content).toBe("Here is the document.");
+  });
+
+  it("does not lose the document if the history does not end in a question", () => {
+    const messages = composeMessages({ systemPrompt: "", context, turns: [] });
+    expect(messages).toEqual([context]);
   });
 });

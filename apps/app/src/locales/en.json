@@ -122,7 +122,10 @@
       "keyFailed": "That key could not be stored securely on this computer, so it was not saved.",
       "saveModel": "Save model",
       "cancel": "Cancel",
-      "remove": "Remove"
+      "remove": "Remove",
+      "systemPrompt": "System prompt",
+      "systemPromptHint": "Sent ahead of every conversation. It tells the model what Trypthos is and how answers should read.",
+      "resetPrompt": "Reset to the default"
     }
   }
 }

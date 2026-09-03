@@ -25,6 +25,11 @@ interface Props {
   live: boolean;
   /// Reports the caret, one-based on both axes, whenever it moves.
   onCaret?: (line: number, column: number) => void;
+  /// Reports the selected text whenever the selection changes, and "" when nothing is selected.
+  ///
+  /// The empty case is reported too, deliberately: it is what tells the chat panel to fall back to
+  /// the whole file rather than sending the last selection for ever.
+  onSelectionChange?: (text: string) => void;
   /// Labels the editing surface for assistive technology and for tests.
   ariaLabel: string;
 }
@@ -43,6 +48,7 @@ export default function MarkdownEditor({
   onChange,
   live,
   onCaret,
+  onSelectionChange,
   ariaLabel,
 }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
@@ -61,13 +67,15 @@ export default function MarkdownEditor({
   /// the listener could report, so the handler is never stale by the time it matters.
   const latestOnChange = useRef(onChange);
   const latestOnCaret = useRef(onCaret);
+  const latestOnSelection = useRef(onSelectionChange);
   /// The document the editor is currently showing, so a change of file can be told from a change of
   /// text. Written after the transaction that switches it, never during render.
   const shownDocument = useRef(documentId);
   useEffect(() => {
     latestOnChange.current = onChange;
     latestOnCaret.current = onCaret;
-  }, [onChange, onCaret]);
+    latestOnSelection.current = onSelectionChange;
+  }, [onChange, onCaret, onSelectionChange]);
 
   useEffect(() => {
     if (!host.current) return;
@@ -96,6 +104,14 @@ export default function MarkdownEditor({
               const line = update.state.doc.lineAt(head);
               // CodeMirror counts columns from zero; every editor a person has used counts from one.
               latestOnCaret.current?.(line.number, head - line.from + 1);
+
+              const range = update.state.selection.main;
+              // Only sliced when there is something to slice: an empty range is by far the common
+              // case, and select-all on a large document would otherwise copy the whole buffer on
+              // every arrow key.
+              latestOnSelection.current?.(
+                range.empty ? "" : update.state.sliceDoc(range.from, range.to),
+              );
             }
           }),
           EditorView.contentAttributes.of({ "aria-label": ariaLabel }),

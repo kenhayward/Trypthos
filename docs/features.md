@@ -82,8 +82,38 @@ place, so an endpoint that accepts a request and then goes quiet is never a pane
 Replies render as markdown, and are sanitised before they are shown - a model's output is text
 Trypthos did not write, and is treated with the same suspicion as a file from your workspace.
 
-**The panel cannot see your document yet.** It answers from the conversation alone. Sending it the
-open file, your selection and the surrounding folder is the next piece of work.
+### What the model is told
+
+Every question carries the document with it, decided by one small rule:
+
+- **A selection, if you have made one.** Selecting a passage and then asking about it is a clear way
+  of saying which part you mean, so the selection replaces the file rather than being added to it.
+- **Otherwise the whole open file**, as it stands in the editor - including edits you have not saved,
+  because the file on disk is not what you are looking at.
+- **Otherwise nothing.** With no file open and nothing selected, chat answers from the conversation
+  alone.
+
+A very large document is shortened before it is sent, and the model is told that it was, so an answer
+never implies the document ended where the cut fell. The document is fenced and labelled as reference
+material: a markdown file can contain text addressed at an assistant, and the model is told to treat
+it as data rather than as instructions.
+
+Selection is read from the editor, so Preview mode reports none and chat falls back to the whole
+file - which is the right answer for a mode you cannot edit in.
+
+### The system prompt
+
+Preferences carries one system prompt, sent ahead of every conversation. It ships with a default
+written for markdown work: answer in the document's own conventions, keep the document's own words
+for names and figures when summarising, and return a rewrite as the markdown itself rather than
+wrapped in an explanation of what changed.
+
+Edit it however you like. Clearing it entirely is allowed, for an endpoint that already has its own
+prompt, and nothing will put one back. Reset restores the default, and is offered only when the
+prompt has actually been changed.
+
+**Chat still cannot see the wider folder**, and conversations are not saved between sessions. Both
+are still to come.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than
 being stored beside them, so it will tell you when that file has since been renamed, moved or

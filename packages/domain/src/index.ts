@@ -15,8 +15,19 @@ export {
   ChatTurnSchema,
   buildChatRequest,
   completionsUrl,
+  composeMessages,
   parseStreamPayload,
 } from "./chatCompletion";
+
+export {
+  CONTEXT_CHARACTER_LIMIT,
+  ChatContextSchema,
+  contextTurn,
+  resolveChatContext,
+} from "./chatContext";
+export type { ChatContext, ContextSource } from "./chatContext";
+
+export { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
 export type { ChatRequestBody, ChatTurn, StreamEvent } from "./chatCompletion";
 
 export { loadPersisted } from "./persisted";
