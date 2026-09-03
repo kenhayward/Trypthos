@@ -17,6 +17,9 @@ export const RECENT: Release[] = [
     changed: [
       "Models configured before this release keep the previous behaviour until you turn it on.",
     ],
+    fixed: [
+      "The About box shows its feature list as a table, rather than as unrendered markdown.",
+    ],
   },
   {
     version: "0.16.0",

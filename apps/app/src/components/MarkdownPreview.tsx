@@ -27,7 +27,7 @@ export default function MarkdownPreview({ source }: Props) {
   return (
     <div
       aria-label={t("editor.preview")}
-      className="markdown-preview h-full overflow-auto p-4"
+      className="markdown-body h-full overflow-auto p-4"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
