@@ -42,6 +42,15 @@ export {
   effectiveSystemPrompt,
 } from "./systemPrompt";
 
+export {
+  CHAT_SESSION_VERSION,
+  ChatSessionSchema,
+  chatTitleFrom,
+  loadChatSession,
+  summariseSession,
+} from "./chatSession";
+export type { ChatSession, ChatSessionSummary } from "./chatSession";
+
 export { findHeadings, resolveEdit } from "./documentEdit";
 export type { EditOp, EditTarget, Heading, ProposedEdit } from "./documentEdit";
 
@@ -89,6 +98,8 @@ export type { Platform, TitleBarLayout } from "./windowChrome";
 export {
   CHAT_EVENT_CHANNEL,
   CancelChatRequest,
+  ChatIdRequest,
+  SaveChatRequest,
   ChatEventMessage,
   ChatEventSchema,
   DeleteSecretRequest,

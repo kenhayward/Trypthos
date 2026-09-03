@@ -37,6 +37,13 @@ contextBridge.exposeInMainWorld("trypthos", {
     ipcRenderer.invoke("chat:send", { profileId, turns, context }),
   cancelChat: (streamId) => ipcRenderer.invoke("chat:cancel", { streamId }),
 
+  /// Saved conversations. Files in the app-data directory - the renderer names a chat by id and
+  /// never a path, and the id it sends is checked against a UUID before anything touches disk.
+  listChats: () => ipcRenderer.invoke("chats:list"),
+  loadChat: (id) => ipcRenderer.invoke("chats:load", { id }),
+  saveChat: (request) => ipcRenderer.invoke("chats:save", request),
+  deleteChat: (id) => ipcRenderer.invoke("chats:delete", { id }),
+
   /// Streamed reply tokens. Wrapped like `onWindowState`, so the renderer never receives the
   /// IpcRendererEvent - it carries a `sender` that would hand a page a route back into main.
   onChatEvent: (listener) => {

@@ -315,3 +315,143 @@ test("sends the conversation alone when there is no context", async () => {
     { systemPrompt: "" },
   );
 });
+
+/// Saved conversations, over IPC.
+///
+/// The main process fills in what the renderer must not decide: the id, which becomes a file name,
+/// and the workspace root, which the renderer cannot name for the same reason it cannot name one to
+/// open.
+const conversation = [
+  { role: "user", content: "Summarise this document" },
+  { role: "assistant", content: "It is a plan." },
+];
+
+test("saves a conversation and gives back its id", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const result = await ipcMain.invoke("chats:save", {
+      id: null,
+      turns: conversation,
+      profileId: "one",
+      filePath: "plan.md",
+    });
+
+    assert.equal(result.ok, true);
+    assert.match(result.id, /^[0-9a-f-]{36}$/);
+  });
+});
+
+// Derived, not asked for. A dialog demanding a name before a chat can be saved is one people learn
+// to dismiss.
+test("names the chat after the question that started it", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const result = await ipcMain.invoke("chats:save", {
+      id: null,
+      turns: conversation,
+      profileId: null,
+      filePath: null,
+    });
+
+    assert.equal(result.title, "Summarise this document");
+  });
+});
+
+test("saving the same chat again replaces it", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const first = await ipcMain.invoke("chats:save", {
+      id: null,
+      turns: conversation,
+      profileId: null,
+      filePath: null,
+    });
+    await ipcMain.invoke("chats:save", {
+      id: first.id,
+      turns: [...conversation, { role: "user", content: "And again" }],
+      profileId: null,
+      filePath: null,
+    });
+
+    const list = await ipcMain.invoke("chats:list");
+    assert.equal(list.chats.length, 1);
+
+    const loaded = await ipcMain.invoke("chats:load", { id: first.id });
+    assert.equal(loaded.chat.turns.length, 3);
+  });
+});
+
+test("lists saved conversations without their contents", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    await ipcMain.invoke("chats:save", {
+      id: null,
+      turns: conversation,
+      profileId: null,
+      filePath: "plan.md",
+    });
+
+    const list = await ipcMain.invoke("chats:list");
+    assert.equal(list.chats.length, 1);
+    assert.equal(list.chats[0].filePath, "plan.md");
+    assert.ok(!("turns" in list.chats[0]));
+  });
+});
+
+test("deletes a conversation", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const saved = await ipcMain.invoke("chats:save", {
+      id: null,
+      turns: conversation,
+      profileId: null,
+      filePath: null,
+    });
+
+    assert.deepEqual(await ipcMain.invoke("chats:delete", { id: saved.id }), { ok: true });
+    assert.deepEqual((await ipcMain.invoke("chats:list")).chats, []);
+  });
+});
+
+test("a chat that cannot be opened is reported, not replaced with an empty one", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const result = await ipcMain.invoke("chats:load", {
+      id: "3f1a1a2e-0000-4000-8000-000000000000",
+    });
+    assert.deepEqual(result, { ok: false, reason: "not-found" });
+  });
+});
+
+// The id becomes a file name. The store checks its shape too, but a malformed request should not
+// reach it at all.
+test("refuses a malformed save or load", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    for (const payload of [
+      null,
+      {},
+      { id: null, turns: [], profileId: null, filePath: null },
+      { id: null, turns: conversation, profileId: null },
+      { id: null, turns: conversation, profileId: null, filePath: null, root: "/etc" },
+    ]) {
+      assert.deepEqual(await ipcMain.invoke("chats:save", payload), {
+        ok: false,
+        reason: "bad-request",
+      });
+    }
+
+    assert.deepEqual(await ipcMain.invoke("chats:load", { id: "" }), {
+      ok: false,
+      reason: "bad-request",
+    });
+  });
+});
+
+test("an id that could escape the chats directory never reaches the filesystem", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    for (const id of ["../settings", "../../etc/passwd", "C:\\Windows\\System32"]) {
+      assert.deepEqual(await ipcMain.invoke("chats:delete", { id }), {
+        ok: false,
+        reason: "bad-id",
+      });
+      assert.deepEqual(await ipcMain.invoke("chats:load", { id }), {
+        ok: false,
+        reason: "not-found",
+      });
+    }
+  });
+});

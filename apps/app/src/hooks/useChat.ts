@@ -155,6 +155,18 @@ export function useChat(
     // make the panel's state depend on which arrived first.
   }, [bridge]);
 
+  /// Replaces the thread with a conversation loaded from disk.
+  ///
+  /// Whatever is still streaming stops counting first: a reply arriving into a conversation the user
+  /// has just left would append itself to somebody else's words.
+  const replace = useCallback((loaded: Turn[]) => {
+    activeStream.current = null;
+    setTurns(loaded);
+    setError(null);
+    setReasoning("");
+    setStreaming(false);
+  }, []);
+
   const clear = useCallback(() => {
     // Whatever is still arriving stops counting the moment the thread is cleared.
     activeStream.current = null;
@@ -164,5 +176,5 @@ export function useChat(
     setStreaming(false);
   }, []);
 
-  return { turns, streaming, error, reasoning, send, retry, stop, clear };
+  return { turns, streaming, error, reasoning, send, retry, stop, clear, replace };
 }

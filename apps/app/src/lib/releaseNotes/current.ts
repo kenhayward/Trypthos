@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.18.0",
+    date: "2026-09-03",
+    pr: 39,
+    headline: "Conversations you can keep",
+    summary:
+      "Chats no longer disappear when you close Trypthos. Save one from the button at the top of the panel and it is kept, named after the question that started it, so there is no dialog asking you to think of a title. The clock icon beside it lists what you have saved, with the file each conversation was about, and lets you reopen or delete any of them. Saving a conversation you reopened updates it rather than making a second copy; clearing the panel starts a fresh one. Conversations are plain files in Trypthos's own folder, never in the folder you are editing - so nothing appears in a tree you curate, and nothing lands in a synced folder you did not ask to sync.",
+    added: [
+      "Save a conversation, and reopen it later.",
+      "A list of saved conversations, showing the file each was about.",
+      "Delete a saved conversation.",
+    ],
+    changed: [
+      "A conversation that was about a file no longer in the open folder still opens, and says so.",
+    ],
+  },
+  {
     version: "0.17.0",
     date: "2026-09-03",
     pr: 37,

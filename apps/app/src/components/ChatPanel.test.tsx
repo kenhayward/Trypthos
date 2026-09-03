@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ChatProfileSchema } from "@trypthos/domain";
+import { ChatProfileSchema, type ChatSessionSummary } from "@trypthos/domain";
 import ChatPanel from "./ChatPanel";
 
 /// The panel is presentation. The conversation and the stream live in `useChat`, so what is asserted
@@ -32,6 +32,12 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     onConfigure: vi.fn(),
     resolveEdit: () => ({ ok: true as const, from: 0, to: 0, insert: "" }),
     onApplyEdit: vi.fn(() => true),
+    chats: [] as ChatSessionSummary[],
+    openChatId: null,
+    missingFile: null,
+    onSaveChat: vi.fn(),
+    onOpenChat: vi.fn(),
+    onDeleteChat: vi.fn(),
     ...overrides,
   };
   render(<ChatPanel {...props} />);
@@ -471,5 +477,99 @@ describe("ChatPanel: edits while streaming", () => {
   it("offers the card once the turn has finished", () => {
     panel({ turns: partial, streaming: false });
     expect(screen.getByRole("button", { name: "Apply" })).toBeDefined();
+  });
+});
+
+/// Saved conversations.
+describe("ChatPanel: saved conversations", () => {
+  const saved: ChatSessionSummary[] = [
+    { id: "a", title: "About the plan", updatedAt: "2026-09-03T10:00:00.000Z", filePath: "plan.md" },
+    { id: "b", title: "A scratch question", updatedAt: "2026-09-02T10:00:00.000Z", filePath: null },
+  ];
+
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("button", { name: "Saved conversations" }));
+  };
+
+  it("saves the conversation on request", async () => {
+    const user = userEvent.setup();
+    const props = panel({ turns: [{ role: "user", content: "Hello" }] });
+
+    await user.click(screen.getByRole("button", { name: "Save this conversation" }));
+    expect(props.onSaveChat).toHaveBeenCalledOnce();
+  });
+
+  it("has nothing to save in an empty thread", () => {
+    panel();
+    expect(
+      screen.getByRole("button", { name: "Save this conversation" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("lists what has been saved, with the file each was about", async () => {
+    const user = userEvent.setup();
+    panel({ chats: saved });
+    await openMenu(user);
+
+    expect(screen.getByText("About the plan")).toBeDefined();
+    expect(screen.getByText("plan.md")).toBeDefined();
+    // A conversation held with nothing open still needs a second line, or the rows jump about.
+    expect(screen.getByText("No file")).toBeDefined();
+  });
+
+  it("says so when nothing has been saved yet", async () => {
+    const user = userEvent.setup();
+    panel({ chats: [] });
+    await openMenu(user);
+
+    expect(screen.getByText(/No saved conversations yet/)).toBeDefined();
+  });
+
+  it("opens a saved conversation", async () => {
+    const user = userEvent.setup();
+    const props = panel({ chats: saved });
+    await openMenu(user);
+
+    await user.click(screen.getByText("About the plan"));
+    expect(props.onOpenChat).toHaveBeenCalledWith("a");
+  });
+
+  // Named with the title, so a row of buttons all called "Delete" is not what a screen reader hears.
+  it("deletes a saved conversation", async () => {
+    const user = userEvent.setup();
+    const props = panel({ chats: saved });
+    await openMenu(user);
+
+    await user.click(screen.getByRole("button", { name: 'Delete "About the plan"' }));
+    expect(props.onDeleteChat).toHaveBeenCalledWith("a");
+  });
+
+  it("closes the list on Escape", async () => {
+    const user = userEvent.setup();
+    panel({ chats: saved });
+    await openMenu(user);
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByText("About the plan")).toBeNull();
+  });
+
+  // Switching conversations mid-reply would leave a stream writing into somebody else's words.
+  it("cannot be opened while a reply is arriving", () => {
+    panel({ chats: saved, streaming: true });
+    expect(
+      screen.getByRole("button", { name: "Saved conversations" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  // The conversation still opens - it is the user's own words - and this says what it was about, so
+  // a reply referring to "the document" is not a mystery.
+  it("says when the file a conversation was about has gone", () => {
+    panel({ turns: [{ role: "user", content: "Hello" }], missingFile: "plan.md" });
+    expect(screen.getByText(/plan\.md, which is not in the open folder any more/)).toBeDefined();
+  });
+
+  it("says nothing about the file when it is still there", () => {
+    panel({ turns: [{ role: "user", content: "Hello" }], missingFile: null });
+    expect(screen.queryByText(/not in the open folder/)).toBeNull();
   });
 });

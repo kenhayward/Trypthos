@@ -27,6 +27,10 @@ describe("IPC_CHANNELS", () => {
       "chat:send",
       "chat:cancel",
       "menu:popup",
+      "chats:list",
+      "chats:load",
+      "chats:save",
+      "chats:delete",
     ]);
   });
 

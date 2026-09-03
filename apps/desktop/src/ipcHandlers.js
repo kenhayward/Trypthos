@@ -5,6 +5,9 @@ const { randomUUID } = require("node:crypto");
 const {
   CHAT_EVENT_CHANNEL,
   CancelChatRequest,
+  ChatIdRequest,
+  SaveChatRequest,
+  chatTitleFrom,
   composeMessages,
   contextTurn,
   effectiveSystemPrompt,
@@ -19,6 +22,7 @@ const {
 } = require("@trypthos/domain");
 const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
 const { createLocalWorkspace } = require("./localWorkspace");
+const chatStore = require("./chatStore");
 
 /// The main-process side of the IPC surface.
 ///
@@ -189,6 +193,61 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
       .finally(() => streams.delete(streamId));
 
     return { ok: true, streamId };
+  });
+
+  // Saved conversations. Files in the app-data directory, never in the user's workspace.
+  ipcMain.handle("chats:list", async () => ({
+    ok: true,
+    chats: await chatStore.listSessions(userDataDir),
+  }));
+
+  ipcMain.handle("chats:load", async (_event, payload) => {
+    const parsed = ChatIdRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    const chat = await chatStore.loadSession(userDataDir, parsed.data.id);
+    // Missing and unreadable are the same answer: the panel says the chat could not be opened,
+    // rather than showing an empty one that would look like a conversation lost.
+    return chat === null ? { ok: false, reason: "not-found" } : { ok: true, chat };
+  });
+
+  ipcMain.handle("chats:save", async (_event, payload) => {
+    const parsed = SaveChatRequest.safeParse(payload);
+    if (!parsed.success) {
+      // Not echoing the payload: it is the user's own conversation.
+      console.error("Rejected a malformed chat save.");
+      return { ok: false, reason: "bad-request" };
+    }
+
+    const now = new Date().toISOString();
+    const existing =
+      parsed.data.id === null ? null : await chatStore.loadSession(userDataDir, parsed.data.id);
+
+    const session = {
+      schemaVersion: 1,
+      // Generated HERE. An id from the renderer becomes a file name, and the shape check in the
+      // store is the last line rather than the only one.
+      id: existing?.id ?? randomUUID(),
+      // Derived from the conversation rather than asked for: a dialog demanding a name before a
+      // chat can be saved is a dialog people learn to dismiss.
+      title: chatTitleFrom(parsed.data.turns),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      // The renderer never names a workspace root - the main process holds the open one.
+      workspaceRoot: current?.root ?? null,
+      filePath: parsed.data.filePath,
+      profileId: parsed.data.profileId,
+      turns: parsed.data.turns,
+    };
+
+    const result = await chatStore.saveSession(userDataDir, session);
+    return result.ok ? { ok: true, id: session.id, title: session.title } : result;
+  });
+
+  ipcMain.handle("chats:delete", async (_event, payload) => {
+    const parsed = ChatIdRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+    return chatStore.deleteSession(userDataDir, parsed.data.id);
   });
 
   ipcMain.handle("chat:cancel", async (_event, payload) => {
