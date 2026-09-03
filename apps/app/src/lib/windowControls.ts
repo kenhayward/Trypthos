@@ -1,4 +1,10 @@
-import { WindowStateSchema, type WindowState } from "@trypthos/domain";
+import {
+  MenuActionMessage,
+  WindowStateSchema,
+  type MenuAction,
+  type MenuName,
+  type WindowState,
+} from "@trypthos/domain";
 
 /// Window controls, and the state push that keeps the maximise button honest.
 ///
@@ -13,6 +19,10 @@ export interface WindowControls {
   closeWindow(): Promise<unknown>;
   /// Subscribes to maximise/restore. Returns an unsubscribe function.
   onWindowState(listener: (state: WindowState) => void): () => void;
+  /// Opens a native menu under a label the title bar drew.
+  popupMenu(menu: MenuName, x: number, y: number): Promise<unknown>;
+  /// Subscribes to menu items the renderer carries out. Returns an unsubscribe function.
+  onMenuAction(listener: (action: MenuAction) => void): () => void;
 }
 
 interface WindowBridge {
@@ -20,6 +30,8 @@ interface WindowBridge {
   toggleMaximizeWindow?: () => Promise<unknown>;
   closeWindow?: () => Promise<unknown>;
   onWindowState?: (listener: (state: unknown) => void) => () => void;
+  popupMenu?: (menu: MenuName, x: number, y: number) => Promise<unknown>;
+  onMenuAction?: (listener: (message: unknown) => void) => () => void;
 }
 
 const noop = async (): Promise<void> => {};
@@ -29,6 +41,9 @@ export const browserControls: WindowControls = {
   toggleMaximizeWindow: noop,
   closeWindow: noop,
   onWindowState: () => () => {},
+  // No shell, no native menus. The browser tab has its own chrome and its own right-click menu.
+  popupMenu: noop,
+  onMenuAction: () => () => {},
 };
 
 export function windowControls(): WindowControls {
@@ -39,6 +54,14 @@ export function windowControls(): WindowControls {
     minimizeWindow: bridge.minimizeWindow ?? noop,
     toggleMaximizeWindow: bridge.toggleMaximizeWindow ?? noop,
     closeWindow: bridge.closeWindow ?? noop,
+    popupMenu: bridge.popupMenu ?? noop,
+    onMenuAction: (listener) =>
+      bridge.onMenuAction?.((message) => {
+        // Validated on arrival like every other push from main. Main is trusted; the schema is what
+        // stops the two sides drifting silently into a menu item that quietly does nothing.
+        const parsed = MenuActionMessage.safeParse(message);
+        if (parsed.success) listener(parsed.data.action);
+      }) ?? (() => {}),
     onWindowState: (listener) =>
       bridge.onWindowState!((raw) => {
         // Validated even though it came from the main process. Main is trusted, but the schema is

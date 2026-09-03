@@ -52,6 +52,9 @@ const DYNAMIC_PREFIXES = [
   // Built from THEME_PREFERENCES as the preferences dialog renders its options.
   "preferences.theme.",
   "preferences.themeHint.",
+  // Built from MENU_NAMES as the title bar draws the menu bar. The names live in the domain because
+  // the shell reads them too, so the set is iterated rather than written out.
+  "menu.",
 ];
 
 function usedKeys(): Map<string, string[]> {

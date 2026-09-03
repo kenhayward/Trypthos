@@ -164,7 +164,13 @@ export default function MarkdownEditor({
               });
             }
           }),
-          EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
+          EditorView.contentAttributes.of({
+            "aria-label": ariaLabel,
+            // CodeMirror sets spellcheck="false" on its content element by default. Left alone, the
+            // editor - the app's main text surface - would be the one place with no spelling
+            // corrections, while the chat box and the settings fields had them.
+            spellcheck: "true",
+          }),
         ],
       }),
     });

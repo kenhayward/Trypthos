@@ -141,5 +141,12 @@
       "systemPromptHint": "Sent ahead of every conversation. It tells the model what Trypthos is and how answers should read.",
       "resetPrompt": "Reset to the default"
     }
+  },
+  "menu": {
+    "bar": "Main menu",
+    "file": "File",
+    "edit": "Edit",
+    "tools": "Tools",
+    "help": "Help"
   }
 }

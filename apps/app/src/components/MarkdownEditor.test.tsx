@@ -97,3 +97,24 @@ describe("MarkdownEditor", () => {
     if (line !== undefined) expect(line).toBeGreaterThan(1);
   });
 });
+
+/// Spelling in the editor.
+///
+/// CodeMirror sets spellcheck="false" on its content element by default, so this is an override
+/// rather than a default being confirmed. Without it the editor is the one text surface in the app
+/// with no corrections, while the chat box and settings fields have them - and nothing would say so.
+describe("spelling", () => {
+  it("lets the platform spellcheck the document", () => {
+    render(
+      <MarkdownEditor
+        documentId="notes.md"
+        value="Some prose."
+        onChange={() => {}}
+        live={false}
+        ariaLabel="Editor"
+      />,
+    );
+
+    expect(document.querySelector(".cm-content")?.getAttribute("spellcheck")).toBe("true");
+  });
+});

@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.16.0",
+    date: "2026-09-03",
+    pr: 36,
+    headline: "Menus, and a right-click that does what you expect",
+    summary:
+      "Trypthos now has File, Edit, Tools and Help menus. On Windows they sit in the title bar, because the window draws its own; clicking one opens a real system menu, with the platform's own shortcuts and its own cut, copy and paste. On a Mac they appear where they belong, in the menu bar at the top of the screen, with Settings in the application menu as that platform expects. Right-clicking text now opens a proper menu too: cut, copy, paste and select all, greyed out when they would do nothing - and over a misspelled word, a list of corrections and the option to add the word to your dictionary. Spelling now works in the editor as well as in chat.",
+    added: [
+      "File, Edit, Tools and Help menus, native on both platforms.",
+      "A right-click menu on any text, with cut, copy, paste and select all.",
+      "Spelling corrections on right-click, and the option to add a word to your dictionary.",
+      "Check for Updates is now on the Help menu as well as the tray icon.",
+    ],
+    changed: [
+      "The editor is spellchecked, which it was not before.",
+    ],
+  },
+  {
     version: "0.15.1",
     date: "2026-09-03",
     pr: 34,

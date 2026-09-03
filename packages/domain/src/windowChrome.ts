@@ -13,6 +13,16 @@ export interface TitleBarLayout {
   /// False on macOS: the OS draws its traffic lights over the frameless window, and a second set
   /// beside them would be both wrong and confusing.
   drawsWindowControls: boolean;
+  /// Whether the renderer draws the menu bar itself.
+  ///
+  /// True on Windows and Linux: the window is frameless, so there is no frame for Electron to draw
+  /// a menu bar in, and the labels go in our own title bar instead. Clicking one opens a real
+  /// native menu.
+  ///
+  /// False on macOS, where the application menu belongs in the system menu bar at the top of the
+  /// screen. Drawing a second one in the window would be wrong on that platform in a way no user
+  /// would forgive.
+  drawsMenuBar: boolean;
   /// Left padding, in pixels, reserving space for controls the OS draws.
   ///
   /// macOS places its traffic lights at the top left, over our title bar. Without this the app icon
@@ -25,9 +35,9 @@ const TRAFFIC_LIGHT_INSET = 80;
 
 export function titleBarLayout(platform: Platform): TitleBarLayout {
   if (platform === "darwin") {
-    return { drawsWindowControls: false, leadingInset: TRAFFIC_LIGHT_INSET };
+    return { drawsWindowControls: false, drawsMenuBar: false, leadingInset: TRAFFIC_LIGHT_INSET };
   }
-  return { drawsWindowControls: true, leadingInset: 0 };
+  return { drawsWindowControls: true, drawsMenuBar: true, leadingInset: 0 };
 }
 
 /// The window title, as shown in the bar and in the OS task switcher.

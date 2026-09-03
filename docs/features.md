@@ -55,6 +55,29 @@ text, without either being surprised by what the other did to it.
 Preview renders whatever the file contains, and a markdown file is untrusted input like any other,
 so the rendered HTML is sanitised before it is shown.
 
+## Menus and the right-click menu
+
+The window draws its own title bar, so on Windows the File, Edit, Tools and Help labels sit in that
+bar. They open real native menus: native rendering, the platform's own accelerator text, and the
+platform's own cut, copy and paste. On macOS the same commands appear where they belong, in the
+system menu bar at the top of the screen, and the window draws no menu labels of its own.
+
+- **File** opens a folder, saves the current file, closes the window and quits.
+- **Edit** carries undo, redo, cut, copy, paste and select all.
+- **Tools** carries Settings. On macOS this lives in the application menu instead, which is where
+  that platform expects it.
+- **Help** carries About and Check for Updates.
+
+Nothing on a menu is a separate implementation: each item drives the same thing its button or
+shortcut does, so they cannot drift apart.
+
+Right-clicking text opens a menu suited to what you clicked. In an editable field that is cut, copy,
+paste and select all, with anything you cannot currently do greyed out rather than offered. Over a
+misspelled word it also lists corrections, and offers to add the word to your dictionary - the
+spelling suggestions have no other route into the app. Right-clicking ordinary text with a selection
+offers to copy it; right-clicking with nothing to offer opens nothing at all, rather than a menu of
+dead items.
+
 ## AI chat
 
 The right panel answers questions about the open document, your selection, and the wider folder.

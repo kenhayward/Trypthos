@@ -26,6 +26,7 @@ describe("IPC_CHANNELS", () => {
       "secrets:delete",
       "chat:send",
       "chat:cancel",
+      "menu:popup",
     ]);
   });
 

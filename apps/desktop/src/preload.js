@@ -49,6 +49,20 @@ contextBridge.exposeInMainWorld("trypthos", {
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
   reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),
 
+  /// Opens a native menu under the label the renderer drew.
+  ///
+  /// The renderer supplies only WHICH menu and where the label is. What is on each menu is decided
+  /// in the main process, so a page cannot invent an item or a click handler.
+  popupMenu: (menu, x, y) => ipcRenderer.invoke("menu:popup", { menu, x, y }),
+
+  /// Menu items the renderer carries out. Wrapped like `onWindowState`, so no IpcRendererEvent -
+  /// and with it no `sender` - ever reaches the page.
+  onMenuAction: (listener) => {
+    const wrapped = (_event, message) => listener(message);
+    ipcRenderer.on("menu:action", wrapped);
+    return () => ipcRenderer.removeListener("menu:action", wrapped);
+  },
+
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
   closeWindow: () => ipcRenderer.invoke("window:close"),

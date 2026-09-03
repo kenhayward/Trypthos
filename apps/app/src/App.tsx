@@ -29,7 +29,7 @@ import {
   settingsBridge,
   workspaceClient,
 } from "./lib/workspaceClient";
-import { currentPlatform } from "./lib/windowControls";
+import { currentPlatform, windowControls } from "./lib/windowControls";
 
 /// Stand-in document, shown until a real file is opened.
 ///
@@ -194,6 +194,23 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [actions]);
+
+  // Menu items the renderer carries out.
+  //
+  // Each one drives the path the user already has - the same open, save, preferences and about the
+  // buttons and shortcuts use - rather than a second copy of it. That is the whole reason the menu
+  // sends an ACTION rather than doing the work in the main process: there is one implementation of
+  // each, and the menu is another way to reach it.
+  useEffect(
+    () =>
+      windowControls().onMenuAction((action) => {
+        if (action === "open-folder") void actions.open();
+        else if (action === "save") void actions.save();
+        else if (action === "preferences") setPrefsOpen(true);
+        else if (action === "about") setAboutOpen(true);
+      }),
+    [actions],
+  );
 
   return (
     <div className="flex h-full flex-col bg-app text-ink">

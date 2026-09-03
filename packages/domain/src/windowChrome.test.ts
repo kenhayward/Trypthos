@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { titleBarLayout, windowTitle } from "./windowChrome";
 
 describe("titleBarLayout", () => {
+  // The same reasoning as the window controls: both processes read this, and if they disagreed the
+  // window would have two menu bars or none.
+  it("draws its own menu bar on Windows, where a frameless window has no frame to hold one", () => {
+    expect(titleBarLayout("win32").drawsMenuBar).toBe(true);
+    expect(titleBarLayout("linux").drawsMenuBar).toBe(true);
+  });
+
+  it("leaves the menu to the system menu bar on macOS", () => {
+    expect(titleBarLayout("darwin").drawsMenuBar).toBe(false);
+  });
+
   it("draws its own controls on Windows and Linux", () => {
     expect(titleBarLayout("win32").drawsWindowControls).toBe(true);
     expect(titleBarLayout("linux").drawsWindowControls).toBe(true);

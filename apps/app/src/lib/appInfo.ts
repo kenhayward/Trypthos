@@ -17,7 +17,8 @@ export const CAPABILITIES = `
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
-| Updates | Checks for a newer version on startup, or on demand from the notification-area icon. |
+| Menus | File, Edit, Tools and Help, plus a right-click menu with spelling corrections. |
+| Updates | Checks for a newer version on startup, or on demand from the Help menu or the tray icon. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();
 
