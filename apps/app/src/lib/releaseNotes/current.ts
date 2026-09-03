@@ -7,7 +7,7 @@ export const RECENT: Release[] = [
   {
     version: "0.20.0",
     date: "2026-09-03",
-    pr: 42,
+    pr: 41,
     headline: "The model can read the files you offer it",
     summary:
       "With Folder switched on, the model is shown the markdown files in your folder and can now ask to read one, then another, until it has what it needs - and the panel says which file it is reading while it does. It can only read files on that list: anything else is refused and it is told so. The list is the top level of your folder only, and how many files it names is up to you in Preferences, ten by default. Every entry is a file the model might ask for, so a longer list is a more capable chat and a more expensive one. This needs an endpoint that supports tool calling; without one, Folder works as it did and you attach files yourself.",
