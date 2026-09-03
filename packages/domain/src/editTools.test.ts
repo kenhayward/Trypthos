@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { EDIT_TOOL_NAME, editFromToolArguments, editTools } from "./editTools";
+import {
+  EDIT_TOOL_NAME,
+  READ_TOOL_NAME,
+  editFromToolArguments,
+  editTools,
+  pathFromToolArguments,
+  readTools,
+} from "./editTools";
 
 /// The second transport: the same edit, described to the provider as a function it can call.
 ///
@@ -130,5 +137,44 @@ describe("a heading sent as an empty string", () => {
   it("is dropped when sent for an operation that ignores it", () => {
     const json = JSON.stringify({ op: "append", heading: "Objectives", content: "Text." });
     expect(editFromToolArguments(json)?.heading).toBeNull();
+  });
+});
+
+/// The read tool. Different in kind from `propose_edit`: this one is executed.
+describe("readTools", () => {
+  const tool = readTools()[0]!;
+
+  it("describes one function, which takes a path", () => {
+    expect(tool.function.name).toBe(READ_TOOL_NAME);
+    expect(tool.function.parameters.required).toEqual(["path"]);
+  });
+
+  // The allowlist stated to the model as well as enforced in the shell. A model told it can read
+  // anything will try, and every attempt is a wasted turn.
+  it("says that only the listed files can be read", () => {
+    expect(tool.function.description).toMatch(/only the paths in that list|anything else is refused/i);
+  });
+
+  it("says it can be called more than once", () => {
+    expect(tool.function.description).toMatch(/more than once/i);
+  });
+});
+
+describe("pathFromToolArguments", () => {
+  it("reads the path", () => {
+    expect(pathFromToolArguments(JSON.stringify({ path: "plan.md" }))).toBe("plan.md");
+  });
+
+  it("trims it, because a model will sometimes pad it", () => {
+    expect(pathFromToolArguments(JSON.stringify({ path: "  plan.md  " }))).toBe("plan.md");
+  });
+
+  it("refuses arguments that never finished arriving", () => {
+    expect(pathFromToolArguments('{"path": "pla')).toBeNull();
+  });
+
+  it("refuses an empty path", () => {
+    expect(pathFromToolArguments(JSON.stringify({ path: "   " }))).toBeNull();
+    expect(pathFromToolArguments(JSON.stringify({}))).toBeNull();
   });
 });

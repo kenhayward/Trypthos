@@ -226,12 +226,23 @@ A reply that quietly consulted five files, or quietly did not, is one you cannot
 without pasting one into the other. Attachments are read when you attach them, so editing a file
 afterwards does not silently change what an earlier answer was about.
 
-**Folder** sends the *list* of markdown files in your workspace - the paths, never the contents. A
-notes folder can be thousands of files; sending them would bury the document your question was
-actually about, and on a hosted endpoint it would cost real money. The list is enough for the model
-to say "that will be in notes/plan.md", and you can then attach it. Hidden folders, and the ones
-nobody means by their notes - `node_modules`, `dist`, `.git` - are skipped, and a very large folder is
-listed up to a limit and says it stopped.
+**Folder** sends the *list* of markdown files at the top level of your workspace - the names, never
+the contents. A notes folder can hold a great many files; sending them all would bury the document
+your question was actually about, and on a hosted endpoint it would cost real money.
+
+If your endpoint supports tool calling, the model can then **ask to read** one of those files, and
+another, until it has what it needs. The panel says which file it is reading while it does. It can
+only read files on that list - anything else is refused, and the model is told why, so it can pick
+something else or answer without it. Without tool calling, the list still helps: the model says which
+file it would need and you attach it yourself.
+
+How many files the list names is yours to set, in Preferences, and defaults to ten. Every entry is a
+file the model might ask to read, so a longer list is a more capable chat and a more expensive one.
+Only the top level of the folder is listed; files in subfolders are not offered and cannot be read.
+
+There is a limit on how many times the model may read in one turn. Each read sends the conversation
+again, so an unbounded loop would be an unbounded bill; when it is reached the model is told plainly
+to answer with what it has, rather than being cut off mid-thought.
 
 **Your document keeps its place.** Everything shares one budget, and the file you are editing is
 served first: an attachment that would push it out is shortened instead, and one there was no room

@@ -142,6 +142,7 @@ test("saving settings drops keys for endpoints no profile uses any more", async 
     await ipcMain.invoke("settings:write", {
       ...DEFAULT_SETTINGS,
       chat: {
+        ...DEFAULT_SETTINGS.chat,
         systemPrompt: "",
         profiles: [
           {

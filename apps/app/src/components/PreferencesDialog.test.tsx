@@ -304,7 +304,7 @@ describe("PreferencesDialog: the system prompt", () => {
   // Unset means "the current default", so the box shows that text rather than nothing. An empty box
   // would read as "no prompt is being sent", which is a different setting entirely.
   it("shows the default text when no prompt has been set", () => {
-    dialog({ settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: null } } });
+    dialog({ settings: { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [], systemPrompt: null } } });
     expect((screen.getByLabelText("System prompt") as HTMLTextAreaElement).value).toBe(
       DEFAULT_SYSTEM_PROMPT,
     );
@@ -319,7 +319,7 @@ describe("PreferencesDialog: the system prompt", () => {
     function Harness() {
       const [settings, setSettings] = useState<Settings>({
         ...DEFAULT_SETTINGS,
-        chat: { profiles: [], systemPrompt: "Old" },
+        chat: { ...DEFAULT_SETTINGS.chat, profiles: [], systemPrompt: "Old" },
       });
       return (
         <PreferencesDialog
@@ -362,7 +362,7 @@ describe("PreferencesDialog: the system prompt", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     dialog({
-      settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: "Something else" } },
+      settings: { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [], systemPrompt: "Something else" } },
       onChange,
     });
 
@@ -381,7 +381,7 @@ describe("PreferencesDialog: the system prompt", () => {
   // the default any more, so the way back has to be offered.
   it("offers the reset when a stored prompt has gone stale", () => {
     dialog({
-      settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: "An older default" } },
+      settings: { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [], systemPrompt: "An older default" } },
     });
     expect(screen.getByRole("button", { name: "Reset to the default" })).toBeDefined();
   });
@@ -391,7 +391,7 @@ describe("PreferencesDialog: the system prompt", () => {
   it("allows an empty prompt", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    dialog({ settings: { ...DEFAULT_SETTINGS, chat: { profiles: [], systemPrompt: "Old" } }, onChange });
+    dialog({ settings: { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [], systemPrompt: "Old" } }, onChange });
 
     await user.clear(screen.getByLabelText("System prompt"));
 

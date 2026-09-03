@@ -202,6 +202,27 @@ export default function PreferencesDialog({
           )}
 
           <label className="mt-4 block text-xs text-ink-4">
+            {t("preferences.chat.folderFiles")}
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={settings.chat.folderFileLimit}
+              onChange={(event) => {
+                // A nonsense box is ignored rather than stored: the schema refuses a number outside
+                // the range, and a rejected write would lose the rest of the change it travelled
+                // with.
+                const value = Number.parseInt(event.target.value, 10);
+                if (Number.isInteger(value) && value >= 1 && value <= 200) {
+                  updateChat({ folderFileLimit: value });
+                }
+              }}
+              className="mt-1 w-24 rounded border border-rule bg-app px-2 py-1 text-ui text-ink"
+            />
+          </label>
+          <p className="mt-1 text-xs text-ink-4">{t("preferences.chat.folderFilesHint")}</p>
+
+          <label className="mt-4 block text-xs text-ink-4">
             {t("preferences.chat.systemPrompt")}
             <textarea
               // The effective prompt, so an unset one is READ AND EDITED as the default text rather

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChatProfileListSchema } from "./chat";
+import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
 import { loadPersisted, type Migration } from "./persisted";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 
@@ -12,7 +13,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 6;
+export const SETTINGS_VERSION = 7;
 
 export const SettingsSchema = z
   .object({
@@ -60,6 +61,13 @@ export const SettingsSchema = z
         /// An empty string is a third state and deliberate: send no system message at all, for an
         /// endpoint that carries its own prompt. Somebody who clears it means it.
         systemPrompt: z.string().nullable(),
+        /// How many files the folder outline names.
+        ///
+        /// A setting rather than a constant because it is a trade the user owns: every entry is a
+        /// file the model might ask to read, so a larger list is a more capable chat and a more
+        /// expensive one. Bounded at both ends - zero would make the folder option do nothing while
+        /// appearing to work.
+        folderFileLimit: z.number().int().min(1).max(OUTLINE_PATH_LIMIT),
       })
       .strict(),
   })
@@ -78,7 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastWorkspace: null,
   appearance: { theme: "system" },
   window: { closeToTray: false },
-  chat: { profiles: [], systemPrompt: null },
+  chat: { profiles: [], systemPrompt: null, folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
@@ -109,6 +117,15 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
     migrate: (input) => {
       const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
       return { ...input, chat: { ...chat, systemPrompt: DEFAULT_SYSTEM_PROMPT } };
+    },
+  },
+  {
+    to: 7,
+    // Version 7 added the outline size. Seeded with the default rather than left absent, because
+    // this one is a number the user may want to change and an unset number is not a value.
+    migrate: (input) => {
+      const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
+      return { ...input, chat: { ...chat, folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT } };
     },
   },
   {

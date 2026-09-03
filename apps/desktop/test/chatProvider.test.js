@@ -117,8 +117,10 @@ test("reports a refused request as an error the user can act on", async () => {
 
   await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent });
 
-  assert.equal(events.at(-1).type, "error");
-  assert.match(events.at(-1).message, /key/i);
+  // `end` is always last, so the panel stops waiting. Before this it was not emitted on a failed
+  // request at all, which left the stop button up and the panel streaming for ever.
+  assert.deepEqual(events.at(-1), { type: "end" });
+  assert.match(events.find((event) => event.type === "error").message, /key/i);
 });
 
 test("distinguishes a rate limit from a rejected key", async () => {
@@ -127,7 +129,7 @@ test("distinguishes a rate limit from a rejected key", async () => {
 
   await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent });
 
-  assert.match(events.at(-1).message, /too many requests/i);
+  assert.match(events.find((event) => event.type === "error").message, /too many requests/i);
 });
 
 test("reports a model the endpoint does not have", async () => {
@@ -136,8 +138,8 @@ test("reports a model the endpoint does not have", async () => {
 
   await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent });
 
-  assert.equal(events.at(-1).type, "error");
-  assert.match(events.at(-1).message, /some-model/);
+  assert.deepEqual(events.at(-1), { type: "end" });
+  assert.match(events.find((event) => event.type === "error").message, /some-model/);
 });
 
 test("reports a connection that never opened", async () => {
@@ -148,8 +150,8 @@ test("reports a connection that never opened", async () => {
 
   await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent });
 
-  assert.equal(events.at(-1).type, "error");
-  assert.match(events.at(-1).message, /could not be reached/i);
+  assert.deepEqual(events.at(-1), { type: "end" });
+  assert.match(events.find((event) => event.type === "error").message, /could not be reached/i);
 });
 
 // The reason this module is worth testing at all. An error message is shown to the user, written to
@@ -376,4 +378,262 @@ test("drops a tool call that asks for something unrecognised", async () => {
 
   await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent });
   assert.deepEqual(events, [{ type: "end" }]);
+});
+
+/// Reading files the model asks for.
+///
+/// This is the one tool the app CARRIES OUT, so it is a loop rather than a single request - and the
+/// tests that matter are the bounds: what may be read, how many times, and what happens when the
+/// answer is no.
+
+/// A fetch that answers differently on each call, so a loop can be driven.
+function scriptedFetch(responses, { calls = [] } = {}) {
+  return async (url, init) => {
+    const frames = responses[Math.min(calls.length, responses.length - 1)];
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        getReader() {
+          const queue = [...frames];
+          return {
+            read: async () =>
+              queue.length === 0
+                ? { done: true, value: undefined }
+                : { done: false, value: Buffer.from(queue.shift(), "utf8") },
+            cancel: async () => {},
+          };
+        },
+      },
+      text: async () => "",
+    };
+  };
+}
+
+const readCall = (path) =>
+  `data: ${JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              function: { name: "get_file_contents", arguments: JSON.stringify({ path }) },
+            },
+          ],
+        },
+      },
+    ],
+  })}\n\n`;
+
+const says = (text) =>
+  `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+
+/// Serves only the files the outline named. This IS the allowlist.
+const allowlist = (files) => async (path) =>
+  path in files ? { ok: true, content: files[path] } : { ok: false, reason: "not-allowed" };
+
+test("offers the read tool only when there is something to read from", async () => {
+  const calls = [];
+  const fetchImpl = streamingFetch(["data: [DONE]\n\n"], { calls });
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent: () => {} });
+  const names = (calls[0].init ? JSON.parse(calls[0].init.body) : {}).tools.map(
+    (tool) => tool.function.name,
+  );
+
+  assert.deepEqual(names, ["propose_edit"]);
+});
+
+test("offers the read tool when a folder was listed", async () => {
+  const calls = [];
+  const fetchImpl = scriptedFetch([["data: [DONE]\n\n"]], { calls });
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent: () => {},
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  const names = calls[0].body.tools.map((tool) => tool.function.name);
+  assert.deepEqual(names.sort(), ["get_file_contents", "propose_edit"]);
+});
+
+test("reads a file the model asks for and answers with what it said next", async () => {
+  const calls = [];
+  const { events, onEvent } = collect();
+  const fetchImpl = scriptedFetch(
+    [
+      [readCall("plan.md"), "data: [DONE]\n\n"],
+      [says("The plan is short."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": "# Plan\n\nDo the thing." }),
+  });
+
+  // Two requests: the one that asked, and the one that answered.
+  assert.equal(calls.length, 2);
+
+  // The file came back as a tool result, which is what let the model continue.
+  const second = calls[1].body.messages;
+  assert.equal(second.at(-1).role, "tool");
+  assert.match(second.at(-1).content, /Do the thing\./);
+
+  const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
+  assert.match(text, /The plan is short\./);
+  assert.deepEqual(events.at(-1), { type: "end" });
+});
+
+// The reason this is visible at all: a turn that pauses while a file is read should say so rather
+// than look stuck.
+test("says which file it is reading", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = scriptedFetch([
+    [readCall("plan.md"), "data: [DONE]\n\n"],
+    ["data: [DONE]\n\n"],
+  ]);
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  assert.deepEqual(events[0], { type: "tool", name: "get_file_contents", detail: "plan.md" });
+});
+
+/// The allowlist. A path the outline never named must not reach the filesystem.
+test("refuses a file that was never offered, and tells the model why", async () => {
+  const calls = [];
+  const asked = [];
+  const fetchImpl = scriptedFetch(
+    [
+      [readCall("../../../etc/passwd"), "data: [DONE]\n\n"],
+      ["data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent: () => {},
+    readFile: async (path) => {
+      asked.push(path);
+      return { ok: false, reason: "not-allowed" };
+    },
+  });
+
+  // The path reached the allowlist and was refused there - it never became a file read.
+  assert.deepEqual(asked, ["../../../etc/passwd"]);
+
+  const result = calls[1].body.messages.at(-1);
+  assert.equal(result.role, "tool");
+  assert.match(result.content, /cannot be read|only the files listed/i);
+});
+
+// A refusal is not the end of the turn: the model can pick a different file, or answer without one.
+test("carries on after a refusal", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = scriptedFetch([
+    [readCall("secrets.md"), "data: [DONE]\n\n"],
+    [says("I could not read that."), "data: [DONE]\n\n"],
+  ]);
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({}),
+  });
+
+  const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
+  assert.match(text, /I could not read that\./);
+});
+
+/// The bound that keeps a bill finite. A model that decides to read every file it was offered would
+/// otherwise send the whole conversation again for each one, without limit.
+test("stops asking after a fixed number of reads", async () => {
+  const calls = [];
+  // A model that asks for a file every single time.
+  const fetchImpl = scriptedFetch([[readCall("plan.md"), "data: [DONE]\n\n"]], { calls });
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent: () => {},
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  // Ten rounds of reading, plus the one final request that is told to stop.
+  assert.equal(calls.length, 11);
+
+  const last = calls.at(-1).body;
+  assert.match(last.messages.at(-1).content, /No more files can be read/);
+  // The tool is withdrawn on that last request, so the model cannot ask again.
+  assert.equal("tools" in last && last.tools.some((t) => t.function.name === "get_file_contents"), false);
+});
+
+// The loop's own messages are for one request. Letting them into the conversation would put tool
+// plumbing into a saved chat and resend it as history for ever.
+test("keeps the tool messages out of the conversation it was given", async () => {
+  const turns = [{ role: "user", content: "Hello" }];
+  const fetchImpl = scriptedFetch([
+    [readCall("plan.md"), "data: [DONE]\n\n"],
+    ["data: [DONE]\n\n"],
+  ]);
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns,
+    onEvent: () => {},
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  assert.deepEqual(turns, [{ role: "user", content: "Hello" }]);
+});
+
+test("a proposed edit still arrives when a read happened first", async () => {
+  const { events, onEvent } = collect();
+  const editFrame = `data: ${JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              function: {
+                name: "propose_edit",
+                arguments: JSON.stringify({ op: "append", heading: "", content: "## Summary" }),
+              },
+            },
+          ],
+        },
+      },
+    ],
+  })}\n\n`;
+
+  const fetchImpl = scriptedFetch([
+    [readCall("plan.md"), "data: [DONE]\n\n"],
+    [editFrame, "data: [DONE]\n\n"],
+  ]);
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
+  assert.match(text, /trypthos-edit append/);
 });

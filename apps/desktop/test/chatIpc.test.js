@@ -60,6 +60,7 @@ async function withHandlers(body, options = {}) {
     await writeSettings(dir, {
       ...DEFAULT_SETTINGS,
       chat: {
+        ...DEFAULT_SETTINGS.chat,
         profiles: options.profiles ?? [PROFILE],
         systemPrompt: options.systemPrompt ?? DEFAULT_SETTINGS.chat.systemPrompt,
       },
@@ -222,7 +223,7 @@ test("a reply arriving after the window has gone is dropped quietly", async () =
   try {
     await writeSettings(dir, {
       ...DEFAULT_SETTINGS,
-      chat: { profiles: [PROFILE], systemPrompt: "" },
+      chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE], systemPrompt: "" },
     });
 
     const ipcMain = fakeIpcMain();

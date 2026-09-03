@@ -230,9 +230,17 @@ describe("the folder outline", () => {
     expect(outline?.content).toMatch(/paths only|not been shown their contents/i);
   });
 
-  it("tells the model how to get one of them", () => {
+  // The outline is a menu, and this is what says how to order from it.
+  it("tells the model how to read one of them", () => {
     const [outline] = turns({ selection: "", file, folder });
-    expect(outline?.content).toMatch(/attach/i);
+    expect(outline?.content).toMatch(/get_file_contents/);
+  });
+
+  // The allowlist, stated to the model as well as enforced in the shell. Saying it here means a
+  // model that would otherwise guess at a path is told not to bother.
+  it("says that only these paths can be read", () => {
+    const [outline] = turns({ selection: "", file, folder });
+    expect(outline?.content).toMatch(/only these paths/i);
   });
 
   it("comes first, being the map the rest sits inside", () => {
@@ -249,7 +257,7 @@ describe("the folder outline", () => {
 
   it("says when the folder holds more than could be listed", () => {
     const [outline] = turns({ selection: "", file, folder: { ...folder, truncated: true } });
-    expect(outline?.content).toMatch(/more files than could be listed/i);
+    expect(outline?.content).toMatch(/more files than are listed/i);
   });
 
   it("is absent unless it was asked for", () => {

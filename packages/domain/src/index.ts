@@ -30,6 +30,7 @@ export {
 
 export {
   CONTEXT_CHARACTER_LIMIT,
+  DEFAULT_OUTLINE_FILE_LIMIT,
   EMPTY_CONTEXT,
   OUTLINE_PATH_LIMIT,
   ChatContextSchema,
@@ -64,9 +65,17 @@ export type { EditOp, EditTarget, Heading, ProposedEdit } from "./documentEdit";
 
 export { EDIT_FENCE_TAG, formatEditBlock, splitReply } from "./editBlocks";
 
-export { EDIT_TOOL_NAME, editFromToolArguments, editTools } from "./editTools";
+export {
+  EDIT_TOOL_NAME,
+  READ_CHARACTER_LIMIT,
+  READ_TOOL_NAME,
+  editFromToolArguments,
+  editTools,
+  pathFromToolArguments,
+  readTools,
+} from "./editTools";
 export type { ReplyPart } from "./editBlocks";
-export type { ChatRequestBody, ChatTurn, StreamEvent } from "./chatCompletion";
+export type { ChatRequestBody, ChatTurn, RequestMessage, StreamEvent } from "./chatCompletion";
 
 export { loadPersisted } from "./persisted";
 export type { LoadFailure, LoadOptions, LoadResult, Migration } from "./persisted";

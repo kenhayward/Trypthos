@@ -25,6 +25,8 @@ interface Props {
   error: string | null;
   /// What the model thought, when it produced no answer. See the empty-reply branch below.
   reasoning: string;
+  /// A file being read on the model's behalf, if one is.
+  activity: string | null;
   onSend: (text: string) => void;
   onStop: () => void;
   onClear: () => void;
@@ -80,6 +82,7 @@ export default function ChatPanel({
   streaming,
   error,
   reasoning,
+  activity,
   onSend,
   onStop,
   onClear,
@@ -249,7 +252,11 @@ export default function ChatPanel({
                 >
                   {turn.role === "assistant" ? (
                     waiting ? (
-                      <span className="text-ink-4">{t("chat.thinking")}</span>
+                      <span className="text-ink-4">
+                        {activity === null
+                          ? t("chat.thinking")
+                          : t("chat.readingFile", { path: activity })}
+                      </span>
                     ) : turn.content === "" && !streaming ? (
                       // A turn that finished having produced nothing. Reasoning models do this:
                       // they think, and then stop. An empty bubble tells the user nothing at all,

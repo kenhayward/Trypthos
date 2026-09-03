@@ -75,12 +75,13 @@
     },
     "scope": {
       "folder": "Folder",
-      "folderHint": "Send the list of markdown files in this folder, so the model can ask for one. Their contents are not sent.",
+      "folderHint": "Send the list of markdown files in the top level of this folder. The model can then ask to read any of them.",
       "attach": "Attach a file",
       "detach": "Remove {{path}}",
       "filter": "Find a file",
       "noFiles": "No other markdown files to attach."
-    }
+    },
+    "readingFile": "Reading {{path}}..."
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
@@ -157,7 +158,9 @@
       "systemPromptHint": "Sent ahead of every conversation. It tells the model what Trypthos is and how answers should read.",
       "resetPrompt": "Reset to the default",
       "supportsTools": "This endpoint supports tool calling",
-      "supportsToolsHint": "Lets the model propose document changes as a structured call rather than as text, which is more reliable where it works. Leave this off if you are unsure: changes still work without it."
+      "supportsToolsHint": "Lets the model propose document changes as a structured call rather than as text, which is more reliable where it works. Leave this off if you are unsure: changes still work without it.",
+      "folderFiles": "Files offered from the folder",
+      "folderFilesHint": "How many of the folder's markdown files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one."
     }
   },
   "menu": {

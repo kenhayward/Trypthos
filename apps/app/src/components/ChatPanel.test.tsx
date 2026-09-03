@@ -26,6 +26,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     streaming: false,
     error: null,
     reasoning: "",
+    activity: null,
     onSend: vi.fn(),
     onStop: vi.fn(),
     onClear: vi.fn(),
@@ -712,5 +713,43 @@ describe("ChatPanel: scope", () => {
   it("offers no scope at all when no model is configured", () => {
     panel({ models: [], selectedId: null });
     expect(screen.queryByRole("button", { name: "Folder" })).toBeNull();
+  });
+});
+
+/// Reading a file the model asked for.
+///
+/// The only signal that anything is happening: a turn that pauses for several seconds while a file
+/// is read would otherwise look stuck.
+describe("ChatPanel: reading a file", () => {
+  const waiting = [
+    { role: "user" as const, content: "What do my notes say?" },
+    { role: "assistant" as const, content: "" },
+  ];
+
+  it("says which file it is reading, in place of thinking", () => {
+    panel({ turns: waiting, streaming: true, activity: "plan.md" });
+
+    expect(screen.getByText("Reading plan.md...")).toBeDefined();
+    expect(screen.queryByText("Thinking...")).toBeNull();
+  });
+
+  it("goes back to thinking when nothing is being read", () => {
+    panel({ turns: waiting, streaming: true, activity: null });
+    expect(screen.getByText("Thinking...")).toBeDefined();
+  });
+
+  // Once tokens arrive, the answer replaces the progress line.
+  it("stops once the reply starts arriving", () => {
+    panel({
+      turns: [
+        { role: "user", content: "What do my notes say?" },
+        { role: "assistant", content: "They say" },
+      ],
+      streaming: true,
+      activity: "plan.md",
+    });
+
+    expect(screen.queryByText("Reading plan.md...")).toBeNull();
+    expect(screen.getByText("They say")).toBeDefined();
   });
 });
