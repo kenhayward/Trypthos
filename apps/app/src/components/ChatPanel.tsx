@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { splitReply, type ChatProfile, type EditTarget, type ProposedEdit } from "@trypthos/domain";
+import {
+  splitReply,
+  type ChatProfile,
+  type ChatSessionSummary,
+  type EditTarget,
+  type ProposedEdit,
+} from "@trypthos/domain";
 import { renderMarkdown } from "../lib/markdown";
 import type { Turn } from "../lib/conversation";
 import ChatEditCard from "./ChatEditCard";
+import ChatHistoryMenu from "./ChatHistoryMenu";
 import ChatModelPicker from "./ChatModelPicker";
 
 interface Props {
@@ -29,6 +36,16 @@ interface Props {
   resolveEdit: (edit: ProposedEdit) => EditTarget;
   /// Applies an edit the user accepted. Returns true if it landed.
   onApplyEdit: (edit: ProposedEdit) => boolean;
+  /// Saved conversations, newest first.
+  chats: readonly ChatSessionSummary[];
+  /// The saved chat on screen, if this thread came from one.
+  openChatId: string | null;
+  /// Set when the chat that was opened names a file that is not there any more. The conversation
+  /// still opens - it is the user's own words - and this says what it was about.
+  missingFile: string | null;
+  onSaveChat: () => void;
+  onOpenChat: (id: string) => void;
+  onDeleteChat: (id: string) => void;
 }
 
 /// Right panel: AI chat.
@@ -57,6 +74,12 @@ export default function ChatPanel({
   onConfigure,
   resolveEdit,
   onApplyEdit,
+  chats,
+  openChatId,
+  missingFile,
+  onSaveChat,
+  onOpenChat,
+  onDeleteChat,
 }: Props) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
@@ -95,6 +118,38 @@ export default function ChatPanel({
             disabled={streaming}
             onSelect={onSelectModel}
           />
+          <ChatHistoryMenu
+            chats={chats}
+            openId={openChatId}
+            disabled={streaming}
+            onOpen={(id) => {
+              setApplied(new Set());
+              onOpenChat(id);
+            }}
+            onDelete={onDeleteChat}
+          />
+          <button
+            type="button"
+            onClick={onSaveChat}
+            disabled={turns.length === 0 || streaming}
+            aria-label={t("chat.history.save")}
+            title={t("chat.history.save")}
+            className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink disabled:opacity-40"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <path d="M17 21v-8H7v8M7 3v5h8" />
+            </svg>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -239,6 +294,15 @@ export default function ChatPanel({
               </div>
             );
           })
+        )}
+
+        {/* A chat opened against a file that has since gone. The conversation is the user's own
+            words and still opens; this says what it was about, so a reply referring to "the
+            document" is not a mystery. */}
+        {missingFile !== null && (
+          <p className="rounded border border-rule px-2 py-1.5 text-xs text-ink-4">
+            {t("chat.history.fileMissing", { file: missingFile })}
+          </p>
         )}
 
         {error !== null && (

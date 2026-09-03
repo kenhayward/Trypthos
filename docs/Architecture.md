@@ -487,8 +487,37 @@ checks that the format the prompt teaches is the format the parser accepts, and 
 only downstream symptoms: the model does exactly as instructed and the panel renders an inert code
 block.
 
-**What chat does not do yet:** it cannot see the wider folder, conversations are not saved between
-sessions, and tool calling is not yet offered as a second transport for endpoints that support it.
+### Saved conversations
+
+Plain JSON files in the app-data directory, one per chat, pretty-printed - inspectable and greppable
+is the reason this is files rather than a database. Deliberately **not** in the workspace: writing
+into a folder the user curates would put files they did not create into their tree, and into a
+cloud-synced folder would invite sync conflicts on files they never asked to sync.
+
+The cost of that choice is the design's only real complication: **a chat references a workspace and a
+file it does not own.** By the time it is opened again the file may be renamed, deleted, or in a
+folder that is not open. None of that stops the chat opening - it is the user's own words - so the
+panel reports the broken reference instead.
+
+Three rules:
+
+- **A chat's id becomes its file name, and the id arrives from the renderer.** That is the security
+  surface: an id that escaped the chats directory would read or overwrite any file the user can. It
+  is validated as a UUID before anything touches disk - a shape check rather than a hunt for
+  dangerous characters, which is the version that stays correct as new ones are invented. The main
+  process generates the id, so the store's check is the last line rather than the only one.
+- **Reading is NOT total, unlike settings.** There is no default conversation. A file that cannot be
+  read is reported missing rather than replaced with an empty chat, which would look exactly like a
+  conversation that had been lost. One corrupt file is skipped when listing, so it cannot cost the
+  user the rest of their history.
+- **The list carries no conversations.** Summaries only: drawing a menu should not mean reading every
+  word of every saved chat.
+
+The title is derived from the first question rather than asked for. A dialog demanding a name before
+a chat can be saved is a dialog people learn to dismiss.
+
+**What chat does not do yet:** it cannot see the wider folder, and other files cannot be attached to
+a question. Both are the next piece of work.
 
 ## Menus
 

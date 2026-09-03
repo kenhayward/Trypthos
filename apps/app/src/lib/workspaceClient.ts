@@ -1,5 +1,6 @@
 import type { Revision, Settings } from "@trypthos/domain";
 import type { ChatBridge } from "../hooks/useChat";
+import type { ChatHistoryBridge } from "../hooks/useChatHistory";
 import type { KeyBridge } from "../hooks/useApiKeys";
 import type { SettingsBridge } from "../hooks/useSettings";
 
@@ -39,7 +40,7 @@ export interface WorkspaceClient {
   writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
 }
 
-interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge {
+interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge {
   platform: string;
   isDesktop: true;
   readSettings(): Promise<{ ok: true; settings: Settings } | { ok: false; reason: string }>;
@@ -67,6 +68,21 @@ export function chatBridge(): ChatBridge | null {
     sendChat: bridge.sendChat,
     cancelChat: bridge.cancelChat,
     onChatEvent: bridge.onChatEvent,
+  };
+}
+
+/// The saved-conversations half of the bridge, or null outside the desktop shell.
+///
+/// Null rather than a stub: the browser preview has nowhere to save to, and a Save button that
+/// silently discarded a conversation would be worse than one that is absent.
+export function chatHistoryBridge(): ChatHistoryBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.listChats) return null;
+  return {
+    listChats: bridge.listChats,
+    loadChat: bridge.loadChat,
+    saveChat: bridge.saveChat,
+    deleteChat: bridge.deleteChat,
   };
 }
 

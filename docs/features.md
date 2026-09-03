@@ -197,8 +197,28 @@ thinking and written no answer. Trypthos says so, and offers to unfold what the 
 rather than showing you an empty message. Asking again usually works; it is a habit of the model
 rather than a fault in the request.
 
-**Chat still cannot see the wider folder**, and conversations are not saved between sessions. Both
-are still to come.
+### Keeping a conversation
+
+Save a chat from the button at the top of the panel and it is kept between launches. It is named
+after the question that started it, so nothing asks you to invent a title. The clock icon lists what
+you have saved, with the file each conversation was about, and lets you reopen or delete any of them.
+
+Saving a conversation you reopened **updates** it rather than making a second copy. Clearing the
+panel starts a fresh one, so the next save is a new conversation rather than an overwrite of the
+last.
+
+Conversations are plain JSON files in Trypthos's own application-data folder, one per chat. They are
+deliberately **not** in the folder you are editing: that would put files you did not create into a
+tree you curate, and in a synced folder it would invite sync conflicts on files you never asked to
+sync.
+
+The cost of that choice is that a conversation only **references** the file it was about. Rename or
+delete that file, or open the chat against a different folder, and the conversation still opens - it
+is your own words and still worth reading - with a line saying which file it was about. Conversations
+also do not travel when a folder does: they live with Trypthos, not with your notes.
+
+**Chat still cannot see the wider folder.** That is the next piece of work, along with attaching
+other files to a question.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than
 being stored beside them, so it will tell you when that file has since been renamed, moved or

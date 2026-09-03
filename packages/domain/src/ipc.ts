@@ -32,6 +32,10 @@ export const IPC_CHANNELS = [
   "chat:send",
   "chat:cancel",
   "menu:popup",
+  "chats:list",
+  "chats:load",
+  "chats:save",
+  "chats:delete",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -112,6 +116,27 @@ export const SendChatRequest = z
   .strict();
 
 export const CancelChatRequest = z.object({ streamId: z.string().min(1) }).strict();
+
+/// Saving a conversation.
+///
+/// The renderer sends what it holds - the turns, which model answered, which file was open - and the
+/// main process fills in the rest: the id, the timestamps, and the workspace root, which the
+/// renderer cannot name for the same reason it cannot name one to open.
+///
+/// `id` is null for a chat that has never been saved and the id of the chat otherwise, so saving
+/// twice replaces rather than duplicates.
+export const SaveChatRequest = z
+  .object({
+    id: z.string().nullable(),
+    turns: z.array(ChatTurnSchema).min(1),
+    profileId: z.string().nullable(),
+    /// Workspace-relative, as the renderer knows it. Recorded as a reference only: the file may be
+    /// renamed or deleted before the chat is opened again.
+    filePath: z.string().nullable(),
+  })
+  .strict();
+
+export const ChatIdRequest = z.object({ id: z.string().min(1) }).strict();
 
 /// What the main process pushes back while a reply streams.
 ///

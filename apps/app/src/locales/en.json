@@ -64,7 +64,15 @@
       "noSelection": "Nothing is selected any more. Select the text again."
     },
     "noAnswer": "The model finished without writing an answer. Try asking again.",
-    "showThinking": "Show what the model was thinking"
+    "showThinking": "Show what the model was thinking",
+    "history": {
+      "open": "Saved conversations",
+      "save": "Save this conversation",
+      "empty": "No saved conversations yet.",
+      "noFile": "No file",
+      "delete": "Delete \"{{title}}\"",
+      "fileMissing": "This conversation was about {{file}}, which is not in the open folder any more."
+    }
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",

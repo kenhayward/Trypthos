@@ -19,11 +19,13 @@ import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { useApiKeys } from "./hooks/useApiKeys";
 import { useChat } from "./hooks/useChat";
+import { useChatHistory } from "./hooks/useChatHistory";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
 import {
   chatBridge,
+  chatHistoryBridge,
   isDesktop,
   keyBridge,
   settingsBridge,
@@ -167,6 +169,31 @@ export default function App() {
   );
 
   const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, chatContext);
+  const history = useChatHistory(useMemo(() => chatHistoryBridge(), []));
+
+  /// The file a reopened conversation was about, when it is no longer in the open folder.
+  ///
+  /// Kept rather than checked on every render: it is a fact about the chat that was opened, and the
+  /// answer would not change until a different one is.
+  const [missingChatFile, setMissingChatFile] = useState<string | null>(null);
+
+  /// Opens a saved conversation.
+  ///
+  /// The chat opens whatever became of the file it references - it is the user's own words, and
+  /// still worth reading. What it says about a document that has gone is what the panel reports.
+  const openChat = useCallback(
+    async (id: string) => {
+      const session = await history.open(id);
+      if (session === null) return;
+
+      chat.replace(session.turns);
+      if (session.profileId !== null) setChosenModel(session.profileId);
+      setMissingChatFile(
+        session.filePath !== null && session.filePath !== state.file?.path ? session.filePath : null,
+      );
+    },
+    [chat, history, state.file?.path],
+  );
 
   // Reopening the folder the app was last closed with. Only once, and only after settings have been
   // read - before that `lastWorkspace` is the default, which is null.
@@ -308,10 +335,24 @@ export default function App() {
               reasoning={chat.reasoning}
               onSend={(text) => void chat.send(text)}
               onStop={() => void chat.stop()}
-              onClear={chat.clear}
+              onClear={() => {
+                // A cleared thread is a new conversation: the next save must make a new chat rather
+                // than overwrite the one that was open.
+                history.forget();
+                setMissingChatFile(null);
+                chat.clear();
+              }}
               onConfigure={() => setPrefsOpen(true)}
               resolveEdit={resolveAgainstDocument}
               onApplyEdit={applyEdit}
+              chats={history.chats}
+              openChatId={history.openId}
+              missingFile={missingChatFile}
+              onSaveChat={() =>
+                void history.save(chat.turns, activeModel?.id ?? null, state.file?.path ?? null)
+              }
+              onOpenChat={(id) => void openChat(id)}
+              onDeleteChat={(id) => void history.remove(id)}
             />
           </>
         )}
