@@ -31,11 +31,16 @@ import type { ChatTurn } from "./chatCompletion";
 /// conversation.
 export const CONTEXT_CHARACTER_LIMIT = 60_000;
 
-/// How many paths the outline may name.
+/// How many files the outline names by default, and the most it may ever name.
 ///
-/// A separate, smaller budget: an outline is meant to be a map, and a map of two thousand files is
-/// not one. Truncation is reported, so the model is never left implying it saw everything.
-export const OUTLINE_PATH_LIMIT = 400;
+/// The default is small on purpose. The outline is a menu the model reads and then asks to be
+/// served from, so every entry is a file it might request - and a menu of four hundred is not a
+/// menu. Ten is enough to be useful in a notes folder and cheap enough to send on every turn.
+///
+/// The ceiling is what the wire schema enforces. Somebody who wants more can raise the setting; a
+/// renderer sending more than this is a bug or a renderer doing as it pleases.
+export const DEFAULT_OUTLINE_FILE_LIMIT = 10;
+export const OUTLINE_PATH_LIMIT = 200;
 
 /// A fence the document cannot close by accident.
 ///
@@ -203,13 +208,13 @@ export function contextTurns(context: ChatContext): ChatTurn[] {
   // The outline first: it is the map, and the things it names come after it.
   if (context.folder !== null) {
     const note = context.folder.truncated
-      ? "\n\nThe folder holds more files than could be listed here."
+      ? "\n\nThe folder holds more files than are listed here."
       : "";
     turns.push(
       fenced(
-        "Here are the markdown files in the folder the user is working in. This is a list of paths " +
-          "only - you have not been shown their contents. If you need one, say which and the user " +
-          "can attach it.",
+        "Here are the markdown files in the top level of the folder the user is working in. This " +
+          "is a list of paths only - you have not been shown their contents. To read one, call " +
+          "get_file_contents with its path exactly as written here. Only these paths can be read.",
         context.folder.paths.join("\n"),
         note,
       ),

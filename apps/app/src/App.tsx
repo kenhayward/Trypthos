@@ -345,6 +345,7 @@ export default function App() {
               streaming={chat.streaming}
               error={chat.error}
               reasoning={chat.reasoning}
+              activity={chat.activity}
               onSend={(text) => void chat.send(text)}
               onStop={() => void chat.stop()}
               onClear={() => {

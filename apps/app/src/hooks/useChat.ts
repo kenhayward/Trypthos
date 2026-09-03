@@ -43,6 +43,11 @@ export function useChat(
   /// panel has something to show when a turn ends having produced reasoning and no answer, which is
   /// how gpt-oss and DeepSeek-R1 sometimes finish.
   const [reasoning, setReasoning] = useState("");
+  /// The file being read on the model's behalf, if one is.
+  ///
+  /// A turn that pauses for several seconds while a file is read should say what it is doing rather
+  /// than look stuck, and this is the only signal that anything is happening at all.
+  const [activity, setActivity] = useState<string | null>(null);
 
   /// The stream whose events count. Everything from any other stream is dropped.
   ///
@@ -80,6 +85,10 @@ export function useChat(
         setReasoning((current) => current + event.text);
         return;
       }
+      if (event.type === "tool") {
+        setActivity(event.detail);
+        return;
+      }
       if (event.type === "error") {
         // The error goes beside the reply, not over it: tokens already on screen are the model's
         // actual words, and a partial answer is often worth reading.
@@ -88,6 +97,7 @@ export function useChat(
       }
       if (event.type === "end") {
         activeStream.current = null;
+        setActivity(null);
         setStreaming(false);
       }
       // `usage` is accepted and ignored for now - the context dial that will show it comes with the
@@ -102,6 +112,7 @@ export function useChat(
 
       setError(null);
       setReasoning("");
+      setActivity(null);
       setTurns(beginReply(history));
       setStreaming(true);
 
@@ -164,6 +175,7 @@ export function useChat(
     setTurns(loaded);
     setError(null);
     setReasoning("");
+    setActivity(null);
     setStreaming(false);
   }, []);
 
@@ -173,8 +185,9 @@ export function useChat(
     setTurns([]);
     setError(null);
     setReasoning("");
+    setActivity(null);
     setStreaming(false);
   }, []);
 
-  return { turns, streaming, error, reasoning, send, retry, stop, clear, replace };
+  return { turns, streaming, error, reasoning, activity, send, retry, stop, clear, replace };
 }

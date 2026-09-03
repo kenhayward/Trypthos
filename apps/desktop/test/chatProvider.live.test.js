@@ -140,7 +140,8 @@ test("a real 401 becomes an error the user can act on", async () => {
       onEvent: (event) => events.push(event),
     });
 
-    assert.equal(events.at(-1).type, "error");
+    assert.deepEqual(events.at(-1), { type: "end" });
+    assert.ok(events.some((event) => event.type === "error"));
     // The server echoed the key back in its body, which is exactly why the body is never forwarded.
     assert.ok(!JSON.stringify(events).includes("sk-test-do-not-use-90210"));
   } finally {
@@ -183,6 +184,6 @@ test("nothing is sent to a server that is not there", async () => {
     onEvent: (event) => events.push(event),
   });
 
-  assert.equal(events.at(-1).type, "error");
-  assert.match(events.at(-1).message, /could not be reached/i);
+  assert.deepEqual(events.at(-1), { type: "end" });
+  assert.match(events.find((event) => event.type === "error").message, /could not be reached/i);
 });

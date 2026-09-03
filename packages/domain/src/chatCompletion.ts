@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ChatProfile } from "./chat";
 import { normaliseEndpoint } from "./endpoints";
-import { editTools } from "./editTools";
+import { editTools, readTools } from "./editTools";
 
 /// Talking to an OpenAI-compatible chat endpoint.
 ///
@@ -14,12 +14,27 @@ import { editTools } from "./editTools";
 /// an unexpected field means the two sides of a contract we control have drifted.
 
 /// One message in the conversation, as the provider sees it.
+///
+/// Only the three roles a saved conversation can contain. The two extra shapes a tool loop needs -
+/// an assistant turn carrying `tool_calls`, and a `tool` turn carrying a result - are deliberately
+/// NOT here: they exist for the length of one request and are never stored, never resent as history,
+/// and never shown in the panel. Letting them into this schema would let them into a saved chat.
 export const ChatTurnSchema = z
   .object({
     role: z.enum(["system", "user", "assistant"]),
     content: z.string(),
   })
   .strict();
+
+/// A message in a request, which may be a turn or one of the tool-loop shapes above.
+export type RequestMessage =
+  | ChatTurn
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+    }
+  | { role: "tool"; tool_call_id: string; content: string };
 
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 
@@ -68,12 +83,14 @@ export function completionsUrl(endpoint: string): string {
 
 export interface ChatRequestBody {
   model: string;
-  messages: ChatTurn[];
+  messages: RequestMessage[];
   stream: true;
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
-  tools?: ReturnType<typeof editTools>;
+  /// Either the edit tool alone, or that plus the read tool. Typed as the union of both rather than
+  /// one of them, because which is offered depends on whether a folder outline was sent.
+  tools?: (ReturnType<typeof editTools>[number] | ReturnType<typeof readTools>[number])[];
   tool_choice?: "auto";
 }
 
@@ -85,7 +102,10 @@ export interface ChatRequestBody {
 /// does not.
 export function buildChatRequest(
   profile: ChatProfile,
-  turns: readonly ChatTurn[],
+  turns: readonly RequestMessage[],
+  /// Whether the model may read files. True only when a folder outline was sent - there is nothing
+  /// to read from otherwise, and offering the tool would invite calls that can only be refused.
+  { canReadFiles = false } = {},
 ): ChatRequestBody {
   return {
     // The slug, never the label. They are separate fields precisely so this cannot go wrong.
@@ -97,7 +117,12 @@ export function buildChatRequest(
     ...(profile.topP === undefined ? {} : { top_p: profile.topP }),
     // Only when the profile says the endpoint supports it. Sent to one that does not, a `tools`
     // array is at best ignored and at worst a 400 - and the fenced transport would have worked.
-    ...(profile.supportsTools ? { tools: editTools(), tool_choice: "auto" as const } : {}),
+    ...(profile.supportsTools
+      ? {
+          tools: canReadFiles ? [...editTools(), ...readTools()] : editTools(),
+          tool_choice: "auto" as const,
+        }
+      : {}),
   };
 }
 

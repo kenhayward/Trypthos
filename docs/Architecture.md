@@ -545,9 +545,41 @@ document - and `composeMessages` keeps them together immediately before the ques
 Attachments are read once, when attached. Re-reading them silently would change what an earlier
 answer in the same conversation was about.
 
-**What chat does not do yet:** it cannot read a file for itself. The model asks, and the user
-attaches - a deliberate stop short of an agentic loop, which would also only work on tool-capable
-endpoints.
+### The read loop
+
+`get_file_contents` is **executed**, and that makes it different in kind from `propose_edit`. A
+proposal is structured output - the call IS the answer, nothing runs, the user presses a button. A
+read is carried out by the app and the result sent back, so the model can read a file and keep
+going. Chat is a loop from here on, and the bounds are the design:
+
+- **The allowlist is recomputed in the main process, never taken from the request.** The renderer's
+  copy of the outline came from this same function; trusting it back would let a renderer widen what
+  the model may read by sending a longer list. The workspace provider then resolves the path against
+  the open root, so an allowed name still goes through the boundary check every other read does.
+- **A refusal is told to the model, not turned into an error.** It can pick a different file or
+  answer without one, and a turn that ended on the model's first bad guess would be worse than one
+  that continued.
+- **`MAX_READS_PER_TURN` caps the loop.** Each read resends the whole conversation, so an unbounded
+  loop is an unbounded bill on a hosted endpoint and an unbounded wait on a local one. At the cap
+  the model is told plainly to answer with what it has, and the tool is withdrawn from that last
+  request so it cannot ask again - being cut off mid-thought would produce an answer written as
+  though the files had arrived.
+- **The loop's own messages never leave the turn.** `ChatTurnSchema` has three roles and no
+  `tool_calls`, deliberately: the assistant-with-tool-calls and `tool` messages exist for the length
+  of one request, and letting them into that schema would let them into a saved conversation and
+  into the history resent for ever after.
+
+The read tool is offered only when a folder outline was sent. With nothing to read from, offering it
+would invite calls that could only be refused.
+
+**The outline is one level.** Not a recursive walk - measured at 39 seconds across 113,553 folders on
+a home directory, and the result was far too long to be a menu. It is sorted, so the same folder
+produces the same menu twice running: without that, which files the model could read would drift
+between turns with nothing having changed. `settings.chat.folderFileLimit` sets how many it names,
+defaulting to ten, because every entry is a file the model might ask for.
+
+**What chat does not do yet:** it cannot read files in subfolders, and cannot write to any file
+without the user pressing Apply.
 
 ## Menus
 

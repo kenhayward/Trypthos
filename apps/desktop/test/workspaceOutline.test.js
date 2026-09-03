@@ -5,15 +5,14 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { OUTLINE_PATH_LIMIT } = require("@trypthos/domain");
+const { DEFAULT_OUTLINE_FILE_LIMIT } = require("@trypthos/domain");
 const { outlineWorkspace } = require("../src/workspaceOutline");
 
-/// Walking a folder to list its markdown files.
+/// The files chat is offered, and may then ask to read.
 ///
-/// In the main process because it is a real recursive walk, and those are not cheap: measured on a
-/// home directory this took 39 seconds across 113,553 folders. Everything here is about not doing
-/// that - a cap on how much is visited, hidden directories skipped, and node_modules-shaped trees
-/// never descended into.
+/// One level only, and this list is also the allowlist - so a file that does not appear here cannot
+/// be read by the model at all. That makes "what does this return" a security question as much as a
+/// usability one.
 
 async function withTree(files, body) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-outline-"));
@@ -29,19 +28,19 @@ async function withTree(files, body) {
   }
 }
 
-test("lists the markdown files, with paths relative to the folder", async () => {
-  await withTree({ "plan.md": null, "notes/risks.md": null }, async (dir) => {
+test("lists the markdown files at the top level", async () => {
+  await withTree({ "plan.md": null, "risks.md": null }, async (dir) => {
     const outline = await outlineWorkspace(dir);
-    assert.deepEqual(outline.paths.sort(), ["notes/risks.md", "plan.md"]);
+    assert.deepEqual(outline.paths, ["plan.md", "risks.md"]);
     assert.equal(outline.truncated, false);
   });
 });
 
-// Forward slashes on both platforms: the paths go to a model and come back in an answer, and a
-// mixture would be one more thing for the user to reconcile.
-test("uses forward slashes whatever the platform", async () => {
-  await withTree({ "notes/deep/risks.md": null }, async (dir) => {
-    assert.deepEqual((await outlineWorkspace(dir)).paths, ["notes/deep/risks.md"]);
+// Not a recursive walk. A menu the model orders from wants to be short and predictable, and a
+// recursive walk of a large folder is neither - measured at 39 seconds on a home directory.
+test("does not descend into subfolders", async () => {
+  await withTree({ "plan.md": null, "notes/risks.md": null }, async (dir) => {
+    assert.deepEqual((await outlineWorkspace(dir)).paths, ["plan.md"]);
   });
 });
 
@@ -53,33 +52,35 @@ test("lists markdown only, not everything in the folder", async () => {
 
 test("accepts the other markdown extension", async () => {
   await withTree({ "a.md": null, "b.markdown": null }, async (dir) => {
-    assert.deepEqual((await outlineWorkspace(dir)).paths.sort(), ["a.md", "b.markdown"]);
+    assert.deepEqual((await outlineWorkspace(dir)).paths, ["a.md", "b.markdown"]);
   });
 });
 
-// A folder someone has opened will often contain a repository. Descending into it would spend the
-// whole cap on files nobody was asking about.
-test("skips directories nobody means by their notes", async () => {
-  await withTree(
-    {
-      "plan.md": null,
-      "node_modules/pkg/readme.md": null,
-      ".git/notes.md": null,
-      ".obsidian/config.md": null,
-    },
-    async (dir) => {
-      assert.deepEqual((await outlineWorkspace(dir)).paths, ["plan.md"]);
-    },
-  );
+// The same folder must produce the same menu twice running, or which files the model can read would
+// drift between turns with nothing having changed.
+test("is in a stable order", async () => {
+  await withTree({ "c.md": null, "a.md": null, "b.md": null }, async (dir) => {
+    assert.deepEqual((await outlineWorkspace(dir)).paths, ["a.md", "b.md", "c.md"]);
+  });
 });
 
-test("stops at the cap and says it stopped", async () => {
+test("names no more files than it was asked for, and says it stopped", async () => {
+  await withTree({ "a.md": null, "b.md": null, "c.md": null }, async (dir) => {
+    const outline = await outlineWorkspace(dir, 2);
+    assert.deepEqual(outline.paths, ["a.md", "b.md"]);
+    assert.equal(outline.truncated, true);
+  });
+});
+
+test("defaults to a short menu rather than a complete one", async () => {
   const many = {};
-  for (let i = 0; i < OUTLINE_PATH_LIMIT + 20; i += 1) many[`note-${i}.md`] = null;
+  for (let i = 0; i < DEFAULT_OUTLINE_FILE_LIMIT + 5; i += 1) {
+    many[`note-${String(i).padStart(2, "0")}.md`] = null;
+  }
 
   await withTree(many, async (dir) => {
     const outline = await outlineWorkspace(dir);
-    assert.equal(outline.paths.length, OUTLINE_PATH_LIMIT);
+    assert.equal(outline.paths.length, DEFAULT_OUTLINE_FILE_LIMIT);
     assert.equal(outline.truncated, true);
   });
 });
@@ -94,17 +95,5 @@ test("a folder that is not there produces an empty outline", async () => {
   assert.deepEqual(await outlineWorkspace(path.join(os.tmpdir(), "trypthos-not-a-folder")), {
     paths: [],
     truncated: false,
-  });
-});
-
-// One unreadable directory - a permissions problem, a device that went away - must not cost the
-// listing of everything beside it.
-test("an unreadable directory does not stop the rest being listed", async () => {
-  await withTree({ "plan.md": null, "notes/risks.md": null }, async (dir) => {
-    // A file where a directory is expected fails the same way for the walk.
-    await fs.writeFile(path.join(dir, "notadir"), "x", "utf8");
-    const outline = await outlineWorkspace(dir);
-    assert.ok(outline.paths.includes("plan.md"));
-    assert.ok(outline.paths.includes("notes/risks.md"));
   });
 });

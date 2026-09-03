@@ -167,6 +167,30 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
 
     // Deliberately not awaited: the reply arrives over seconds, and the renderer needs the stream id
     // now so it can match the events that follow.
+    /// Serves a file the model asked for, or refuses.
+    ///
+    /// **The allowlist, and the only reason this is safe.** The outline is recomputed here rather
+    /// than taken from the request: the renderer's copy came from this same function, and trusting
+    /// it back would let a renderer widen what the model may read simply by sending a longer list.
+    /// The workspace provider then resolves the path against the open root, so even an allowed name
+    /// goes through the boundary check every other read does.
+    ///
+    /// Offered only when the user asked for the folder. With no outline there is nothing to read
+    /// from, and offering the tool would invite calls that could only be refused.
+    const readForModel =
+      parsed.data.context.folder === null
+        ? null
+        : async (wanted) => {
+            const workspace = getWorkspace();
+            if (!workspace) return { ok: false, reason: "no-workspace" };
+
+            const outline = await outlineWorkspace(workspace.root, settings.chat.folderFileLimit);
+            if (!outline.paths.includes(wanted)) return { ok: false, reason: "not-allowed" };
+
+            const result = await workspace.provider.read(wanted);
+            return result.ok ? { ok: true, content: result.content } : { ok: false, reason: "unreadable" };
+          };
+
     // Composed here, not in the renderer: the system prompt is settings the renderer has no reason
     // to hold, and keeping the document's wording in one place means the panel cannot drift from
     // what the model is actually told.
@@ -182,6 +206,7 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
       .run({
         profile,
         turns: messages,
+        readFile: readForModel,
         signal: controller.signal,
         onEvent: (event) => pushChatEvent(streamId, event),
       })
@@ -203,8 +228,13 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
     const workspace = getWorkspace();
     if (!workspace) return { ok: false, reason: "no-workspace" };
 
-    // The root comes from the workspace the main process holds, never from the renderer.
-    return { ok: true, outline: await outlineWorkspace(workspace.root) };
+    // The root comes from the workspace the main process holds, never from the renderer, and the
+    // size from settings.
+    const settings = await readSettings(userDataDir);
+    return {
+      ok: true,
+      outline: await outlineWorkspace(workspace.root, settings.chat.folderFileLimit),
+    };
   });
 
   ipcMain.handle("chats:list", async () => ({

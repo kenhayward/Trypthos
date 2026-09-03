@@ -18,6 +18,17 @@ import type { ProposedEdit } from "./documentEdit";
 
 export const EDIT_TOOL_NAME = "propose_edit";
 
+/// Reading one of the files the outline offered.
+///
+/// **This one is executed, and that makes it different in kind.** `propose_edit` is structured
+/// output: the call IS the proposal, nothing runs, and the user presses a button. This call is
+/// carried out by the app and the result sent back, so the model can read a file and then keep
+/// going - a real loop, with the bounds that implies.
+///
+/// The bound that matters is the allowlist: only a path the outline named may be read, and the
+/// outline is one level of the open folder. A model asking for anything else is refused and told so.
+export const READ_TOOL_NAME = "get_file_contents";
+
 const OPS = [
   "insert-before",
   "insert-after",
@@ -35,6 +46,61 @@ const ANCHORED: ReadonlySet<string> = new Set(["insert-before", "insert-after", 
 /// produce something correct and unreadable, and this text is read by the model: the descriptions
 /// are the only thing telling it what "replace-section" means or when a heading is required, and
 /// vague ones produce plausible calls aimed at the wrong place.
+/// How much of one file the model may be given, in characters.
+///
+/// Smaller than the whole context budget on purpose: the model can read several files in a turn, and
+/// one enormous note should not be able to spend the entire window before the second is asked for.
+export const READ_CHARACTER_LIMIT = 20_000;
+
+/// The tool that reads a file, offered only alongside a folder outline.
+///
+/// Separate from `editTools` because it is offered under a different condition: proposing an edit
+/// needs nothing but a document, while reading a file needs a list of files to read from.
+export function readTools() {
+  return [
+    {
+      type: "function" as const,
+      function: {
+        name: READ_TOOL_NAME,
+        description:
+          "Read one of the markdown files listed for this folder. Use it when you need what is " +
+          "inside a file rather than only its name. You may call it more than once, one file at a " +
+          "time. Only the paths in that list can be read; anything else is refused.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            path: {
+              type: "string" as const,
+              description:
+                "The file to read, exactly as it appears in the list of files for this folder.",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+  ];
+}
+
+/// The path a read call is asking for, or null if the call cannot be used.
+///
+/// Total, like every other reader of a provider response: a call cut off mid-object is an ordinary
+/// outcome rather than an error.
+export function pathFromToolArguments(json: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+
+  const args = z.looseObject({ path: z.string() }).safeParse(parsed);
+  if (!args.success) return null;
+
+  const path = args.data.path.trim();
+  return path === "" ? null : path;
+}
+
 export function editTools() {
   return [
     {
