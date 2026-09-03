@@ -1,14 +1,14 @@
 {
   "name": "trypthos-desktop",
   "private": true,
-  "version": "0.20.0",
+  "version": "0.21.0",
   "main": "src/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "pretest": "npm run build --workspace @trypthos/domain",
     "test": "node --test \"test/*.test.js\"",
     "dist": "electron-builder --config electron-builder.config.cjs",
-    "icons": "node scripts/make-tray-icon.mjs",
+    "icons": "node scripts/make-tray-icon.mjs && node scripts/make-app-icon.mjs",
     "predist": "npm run icons"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "electron": "44.1.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "sharp": "^0.35.4"
   }
 }

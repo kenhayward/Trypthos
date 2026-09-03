@@ -36,12 +36,14 @@ module.exports = {
   // and "Setup" is Windows wording on a disk image in any case.
   win: {
     target: "nsis",
+    icon: "build/icon.ico",
     artifactName: "${productName}-Setup-${version}.${ext}",
   },
   mac: {
     target: "dmg",
     identity: null,
+    icon: "build/icon.icns",
     artifactName: "${productName}-${version}-${arch}.${ext}",
   },
-  linux: { target: "AppImage" },
+  linux: { target: "AppImage", icon: "build/icon.png" },
 };
