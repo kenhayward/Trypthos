@@ -70,6 +70,11 @@ function createUpdater({
   // real behaviour worth relying on in production, but not something a test should depend on to be
   // fast or predictable.
   autoUpdaterFactory = defaultAutoUpdaterFactory,
+  // Injectable for the same reason autoUpdaterFactory is: a test must not depend on which OS
+  // actually runs the suite. CI's test job runs on Linux, where every platform-branching decision
+  // here - which updater path applies, which asset name to look for - would silently take neither
+  // the Windows nor the macOS branch if this were read from the real process.platform.
+  platform = process.platform,
 }) {
   /// Guards against two checks running at once - the startup check and an impatient tray click.
   let checking = false;
@@ -87,7 +92,7 @@ function createUpdater({
   const currentVersion = app.getVersion();
 
   function autoUpdater() {
-    if (process.platform !== "win32" || !isPackaged) return null;
+    if (platform !== "win32" || !isPackaged) return null;
     return autoUpdaterFactory(logger);
   }
 
@@ -98,7 +103,7 @@ function createUpdater({
   /// the OS having nothing to open the file with - is the caller's cue to fall back to the releases
   /// page, which is why nothing here throws outward.
   async function downloadAndOpen(update) {
-    const asset = downloadAssetFor(update.assets, process.platform, update.version);
+    const asset = downloadAssetFor(update.assets, platform, update.version);
     if (asset === null) return false;
 
     let destination;
@@ -221,7 +226,7 @@ function createUpdater({
       type: "question",
       message: `Trypthos ${update.version} is available.`,
       detail:
-        process.platform === "win32"
+        platform === "win32"
           ? "Download it now? It will install when you restart."
           : "Download it now? Trypthos will open the disk image so you can drag it to Applications.",
       buttons: ["Download", "Not now"],

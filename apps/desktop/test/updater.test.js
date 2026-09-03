@@ -16,6 +16,10 @@ function harness({
   downloadFails = false,
   openPathFails = false,
   dialogResponse = 1,
+  // Fixed rather than the real process.platform, so the suite's outcome does not depend on which OS
+  // actually runs it - CI's test job runs on Linux, which is neither of the two branches this file
+  // knows about.
+  platform = "win32",
 } = {}) {
   const shown = [];
   const notifications = [];
@@ -78,6 +82,7 @@ function harness({
     // failure mode when required outside a packaged app - which is genuine, relied-upon behaviour in
     // production, but not something a test should need for speed or predictability.
     autoUpdaterFactory: () => null,
+    platform,
   });
 
   return { updater, shown, notifications, opened, written, openedPaths };
