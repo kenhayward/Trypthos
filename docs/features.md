@@ -285,8 +285,11 @@ every launch is one people learn to dismiss unread.
 A Trypthos icon sits in the notification area. Right-click it for **Check for Updates**, which answers
 either way and asks before downloading, since you went looking for it deliberately.
 
-On macOS, Trypthos cannot install its own updates yet - that needs a signed build - so it offers to
-open the releases page instead of failing part-way through.
+On macOS, Trypthos cannot install its own updates yet - that needs a signed build - but it still
+downloads the disk image for you and opens it, so the only thing left to do is drag it into
+Applications rather than hunting for the right file on a webpage first. If nothing has been published
+for your platform, or the download does not go through, Trypthos falls back to opening the releases
+page instead of failing part-way through.
 
 Closing the window quits the app, unless you turn on **Keep running when the window is closed** in
 Preferences - then it hides to the notification area and you quit it from the tray icon.

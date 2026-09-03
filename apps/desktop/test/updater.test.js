@@ -2,19 +2,36 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const { createUpdater } = require("../src/updater");
 
 /// Drives the updater against a fake Electron. What matters here is not the download - that is
 /// electron-updater's job - but the DECISIONS: what a check does, and which trigger asks first.
 
-function harness({ version = "0.9.0", releases = [], fetchFails = false, packaged = true } = {}) {
+function harness({
+  version = "0.9.0",
+  releases = [],
+  fetchFails = false,
+  packaged = true,
+  downloadFails = false,
+  openPathFails = false,
+  dialogResponse = 1,
+} = {}) {
   const shown = [];
   const notifications = [];
   const opened = [];
+  /// What was written to "disk" - a hand-written fake rather than touching the real filesystem.
+  const written = [];
+  const openedPaths = [];
 
-  global.fetch = async () => {
+  global.fetch = async (url) => {
     if (fetchFails) throw new Error("offline");
-    return { ok: true, json: async () => releases };
+    // The releases list is JSON; anything else here is a request for an asset's bytes. Distinguished
+    // by URL, the same way the real GitHub API distinguishes the two kinds of endpoint.
+    if (String(url).includes("/releases")) return { ok: true, json: async () => releases };
+
+    if (downloadFails) throw new Error("connection reset");
+    return { ok: true, arrayBuffer: async () => new TextEncoder().encode(`bytes for ${url}`).buffer };
   };
 
   class FakeNotification {
@@ -42,24 +59,46 @@ function harness({ version = "0.9.0", releases = [], fetchFails = false, package
     dialog: {
       showMessageBox: async (_window, options) => {
         shown.push(options);
-        return { response: 1 };
+        return { response: dialogResponse };
       },
     },
-    shell: { openExternal: async (url) => opened.push(url) },
+    shell: {
+      openExternal: async (url) => opened.push(url),
+      openPath: async (path) => {
+        openedPaths.push(path);
+        return openPathFails ? "no application is registered for this file type" : "";
+      },
+    },
     Notification: FakeNotification,
     getWindow: () => null,
     logger: { error: () => {} },
+    fs: { writeFile: async (path, data) => written.push({ path, data }) },
+    downloadsDir: "/fake/downloads",
+    // Deterministic and instant, rather than depending on the real electron-updater module's own
+    // failure mode when required outside a packaged app - which is genuine, relied-upon behaviour in
+    // production, but not something a test should need for speed or predictability.
+    autoUpdaterFactory: () => null,
   });
 
-  return { updater, shown, notifications, opened };
+  return { updater, shown, notifications, opened, written, openedPaths };
 }
 
-const release = (tag) => ({
+const release = (tag, assets = []) => ({
   tag_name: tag,
   draft: false,
   prerelease: false,
   html_url: `https://example.com/${tag}`,
+  assets,
 });
+
+/// The assets a real Trypthos release publishes for one version, named exactly as the build
+/// produces them - matching `electron-builder.config.cjs`'s `artifactName` templates.
+function assetsFor(version) {
+  return [
+    { name: `Trypthos-Setup-${version}.exe`, browser_download_url: `https://dl.example.com/exe-${version}` },
+    { name: `Trypthos-${version}-arm64.dmg`, browser_download_url: `https://dl.example.com/dmg-${version}` },
+  ];
+}
 
 test("a startup check that finds nothing says nothing", async () => {
   const { updater, shown, notifications } = harness({ releases: [release("v0.9.0")] });
@@ -189,4 +228,90 @@ test("a development build never checks on startup", async () => {
   // In development the version is whatever the repo says, so every run would announce an update to
   // the release matching the source already checked out.
   assert.equal(notifications.length, 0);
+});
+
+/// Downloading the matching installer and opening it, instead of sending the user to the releases
+/// page to find and click the right file themselves. This is the path a packaged macOS build takes
+/// (there is no Squirrel.Mac without signing), and the path Windows falls back to if
+/// electron-updater itself is unavailable or fails.
+
+test("downloads the matching asset and opens it", async () => {
+  const { updater, notifications, opened, written, openedPaths } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+  });
+
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  assert.equal(opened.length, 0, "must not fall back to the releases page when a download worked");
+  assert.equal(written.length, 1);
+  assert.match(written[0].path, /downloads/);
+  assert.equal(openedPaths.length, 1);
+  assert.equal(openedPaths[0], written[0].path, "must open the very file it just wrote");
+});
+
+test("names the downloaded file after the asset, not after the update in general", async () => {
+  const { updater, notifications, written } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+  });
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  // Whichever asset this platform's build matched - the test only knows it should be ONE of the
+  // two real names, not an invented one.
+  const name = path.basename(written[0].path);
+  assert.ok(
+    name === "Trypthos-Setup-0.10.0.exe" || name === "Trypthos-0.10.0-arm64.dmg",
+    `unexpected downloaded filename: ${name}`,
+  );
+});
+
+test("falls back to the releases page when no build was published for this platform", async () => {
+  // No assets at all - a release with nothing yet, or a platform nothing is built for.
+  const { updater, notifications, opened, written } = harness({ releases: [release("v0.10.0")] });
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  assert.equal(written.length, 0, "nothing to download, so nothing should be fetched");
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0], "https://example.com/v0.10.0");
+});
+
+test("falls back to the releases page when the download itself fails", async () => {
+  const { updater, notifications, opened, written } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+    downloadFails: true,
+  });
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  assert.equal(written.length, 0);
+  assert.equal(opened.length, 1);
+});
+
+// The file downloaded fine, but the OS has no application to open it with - reported by
+// shell.openPath's own non-empty return value rather than a thrown exception, which is why this is
+// checked separately from a download failure.
+test("falls back to the releases page when the OS cannot open the downloaded file", async () => {
+  const { updater, notifications, opened, written } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+    openPathFails: true,
+  });
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  assert.equal(written.length, 1, "the file is still downloaded even though opening it then failed");
+  assert.equal(opened.length, 1);
+});
+
+test("a manual download also uses the automated path when it can", async () => {
+  const { updater, opened, written } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+    dialogResponse: 0, // "Download"
+  });
+
+  await updater.check("manual");
+
+  assert.equal(written.length, 1);
+  assert.equal(opened.length, 0);
 });

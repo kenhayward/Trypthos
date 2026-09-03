@@ -724,6 +724,40 @@ into the asar - Electron's `Tray` reads its icon from disk and cannot open an ar
 packed inside produces a tray with no icon at all. macOS gets a Template variant so the menu bar can
 recolour it for either appearance.
 
+## Updates: downloading the installer itself
+
+Finding an update used to end at the releases page, leaving the user to find and click the right
+asset themselves. It now ends with the correct file already downloaded and opened - on Windows,
+`electron-updater` still does this end to end (download, then install in place on restart); on
+macOS, where Squirrel.Mac refuses an unsigned build, `updater.js` fetches the matching `.dmg`
+directly from the release and opens it, which mounts the disk image exactly as a manual download and
+double-click would.
+
+`downloadAssetFor` (domain, pure) picks the asset: an **exact name match** against
+`electron-builder.config.cjs`'s own `artifactName` templates
+(`Trypthos-Setup-<version>.exe`, `Trypthos-<version>-arm64.dmg`), never "ends with .exe" - both
+installers ship a same-extension `.blockmap` sidecar beside them, and matching by extension alone
+would happily hand the user that instead of something they can run.
+
+**Every failure falls back to the releases page**, not silence: no asset published yet for this
+platform, a network error fetching it, or the OS having nothing registered to open the downloaded
+file with (`shell.openPath` reports this as an empty-vs-non-empty return string, not a rejected
+promise - there is no exception to catch, only an answer to check). The file is already on disk by
+the time `openPath` runs, so a failure there is "could not open it", never "could not get it" - the
+two are logged and handled as the separate failures they are.
+
+**Windows falls into the same path** if `electron-updater` itself is unavailable or its own download
+fails, rather than being stranded on the fallback webpage the moment the in-place path cannot answer -
+one behaviour serving both "no signed auto-update" (macOS, permanently) and "auto-update broke this
+time" (Windows, occasionally), not two.
+
+Testing this needed one fix to the test double, not just new tests: the startup notification's click
+handler used `void download(update)` to satisfy lint's no-floating-promise rule, and the fake
+`Notification.emit("click")` had no way to hand a test the resulting promise - so `await
+notifications[0].emit("click")` resolved immediately, racing ahead of the download it was meant to
+wait for. The handler now returns the promise instead of discarding it, which changes nothing about
+how Electron treats an event handler's return value but gives the fake something real to await.
+
 ## Packaging
 
 `electron-builder` on a `v*` tag builds the Windows installer and the macOS `.dmg` and publishes them

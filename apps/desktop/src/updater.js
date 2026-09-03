@@ -1,6 +1,7 @@
 "use strict";
 
-const { pickUpdate } = require("@trypthos/domain");
+const path = require("node:path");
+const { downloadAssetFor, pickUpdate } = require("@trypthos/domain");
 
 /// Checking for, and applying, a newer release.
 ///
@@ -8,9 +9,12 @@ const { pickUpdate } = require("@trypthos/domain");
 ///
 ///   - **Windows** uses electron-updater, which downloads and installs in place.
 ///   - **macOS** cannot. Squirrel.Mac refuses to apply an update to an unsigned app, and Trypthos is
-///     unsigned until Developer ID signing exists. So macOS checks GitHub directly and offers to open
-///     the releases page, which is honest about what it can actually do rather than failing silently
-///     part-way through an install.
+///     unsigned until Developer ID signing exists. So macOS checks GitHub directly, downloads the
+///     matching `.dmg` itself, and opens it - which mounts the disk image exactly as a manual
+///     download and double-click would, without making the user find and click the right asset on
+///     the releases page first. Only if no matching asset exists (or the download fails) does it
+///     fall back to that page, which is honest about what it can actually do rather than failing
+///     silently part-way through.
 ///
 /// Two consent models, which is the reason `trigger` exists:
 ///
@@ -18,6 +22,24 @@ const { pickUpdate } = require("@trypthos/domain");
 ///     nothing further asked. A check that finds nothing says nothing at all.
 ///   - **manual**: the user asked, so they get an answer either way - and are asked before ~110 MB is
 ///     spent on their connection.
+
+/// electron-updater is required lazily and only in a packaged Windows build.
+///
+/// In development there is no app-update.yml for it to read, and requiring it eagerly would make
+/// every `npm run app` load an updater that cannot possibly work.
+function defaultAutoUpdaterFactory(logger) {
+  try {
+    const { autoUpdater: updater } = require("electron-updater");
+    // Never without consent: the startup notification and the tray prompt are what start a
+    // download, not the check itself.
+    updater.autoDownload = false;
+    updater.autoInstallOnAppQuit = true;
+    return updater;
+  } catch (error) {
+    logger.error("electron-updater is unavailable:", error.message);
+    return null;
+  }
+}
 
 const RELEASES_API = "https://api.github.com/repos/kenhayward/Trypthos/releases";
 const RELEASES_PAGE = "https://github.com/kenhayward/Trypthos/releases/latest";
@@ -33,7 +55,22 @@ async function fetchAvailableUpdate(currentVersion) {
   return pickUpdate(await response.json(), currentVersion);
 }
 
-function createUpdater({ app, dialog, shell, Notification, getWindow, logger = console }) {
+function createUpdater({
+  app,
+  dialog,
+  shell,
+  Notification,
+  getWindow,
+  logger = console,
+  fs = require("node:fs/promises"),
+  downloadsDir = app.getPath("downloads"),
+  // Lazily requires electron-updater's real autoUpdater, or null outside a packaged Windows build.
+  // Injectable so a test can simulate "not available" deterministically and instantly, rather than
+  // depending on the real module's own failure mode when invoked outside a packaged app - which is
+  // real behaviour worth relying on in production, but not something a test should depend on to be
+  // fast or predictable.
+  autoUpdaterFactory = defaultAutoUpdaterFactory,
+}) {
   /// Guards against two checks running at once - the startup check and an impatient tray click.
   let checking = false;
   /// Set once a download completes, so the tray can offer to restart into it.
@@ -49,39 +86,63 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
   const isPackaged = app.isPackaged;
   const currentVersion = app.getVersion();
 
-  /// electron-updater is required lazily and only in a packaged build.
-  ///
-  /// In development there is no app-update.yml for it to read, and requiring it eagerly would make
-  /// every `npm run app` load an updater that cannot possibly work.
   function autoUpdater() {
     if (process.platform !== "win32" || !isPackaged) return null;
+    return autoUpdaterFactory(logger);
+  }
+
+  /// Fetches one asset and opens it - mounting a `.dmg`, or running a `.exe`'s installer - without
+  /// sending the user to a webpage to find and click it themselves.
+  ///
+  /// Returns whether it worked. Any failure - no matching asset, a network error, a write error, or
+  /// the OS having nothing to open the file with - is the caller's cue to fall back to the releases
+  /// page, which is why nothing here throws outward.
+  async function downloadAndOpen(update) {
+    const asset = downloadAssetFor(update.assets, process.platform, update.version);
+    if (asset === null) return false;
+
+    let destination;
     try {
-      const { autoUpdater: updater } = require("electron-updater");
-      // Never without consent: the startup notification and the tray prompt are what start a
-      // download, not the check itself.
-      updater.autoDownload = false;
-      updater.autoInstallOnAppQuit = true;
-      return updater;
+      const response = await fetch(asset.url);
+      if (!response.ok) throw new Error(`download answered ${response.status}`);
+
+      const bytes = Buffer.from(await response.arrayBuffer());
+      destination = path.join(downloadsDir, asset.name);
+      await fs.writeFile(destination, bytes);
     } catch (error) {
-      logger.error("electron-updater is unavailable:", error.message);
-      return null;
+      logger.error("Downloading the update failed:", error.message);
+      return false;
     }
+
+    // shell.openPath resolves with an error STRING on failure rather than rejecting - there is no
+    // exception to catch, only an answer to check. The file is already on disk at this point, so a
+    // failure here is "could not open it", not "could not get it".
+    const openError = await shell.openPath(destination);
+    if (openError !== "") {
+      logger.error("Opening the downloaded update failed:", openError);
+      return false;
+    }
+
+    return true;
   }
 
   async function download(update) {
     const updater = autoUpdater();
-    if (updater === null) {
-      // macOS, or a development run. Hand it to the browser rather than pretending to install.
-      await shell.openExternal(update?.url ?? RELEASES_PAGE);
-      return;
+    if (updater !== null) {
+      try {
+        await updater.downloadUpdate();
+        return;
+      } catch (error) {
+        logger.error("Downloading the update failed:", error.message);
+        // Falls through to the asset-download path below, same as macOS: electron-updater failing
+        // is not a reason to strand the user on a webpage when the installer can be fetched directly.
+      }
     }
 
-    try {
-      await updater.downloadUpdate();
-    } catch (error) {
-      logger.error("Downloading the update failed:", error.message);
-      await shell.openExternal(RELEASES_PAGE);
-    }
+    if (await downloadAndOpen(update)) return;
+
+    // Nothing else worked: hand it to the browser rather than pretending to install.
+    await shell.openExternal(update?.url ?? RELEASES_PAGE);
   }
 
   /// Runs a check and responds according to how it was triggered.
@@ -142,8 +203,10 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
       title: `Trypthos ${update.version} is available`,
       body: "Click to download and install it.",
     });
-    // Clicking the notification IS the consent - so nothing further is asked.
-    notification.on("click", () => void download(update));
+    // Clicking the notification IS the consent - so nothing further is asked. Returned rather than
+    // void-d: Electron ignores an event handler's return value either way, and returning it is what
+    // lets a test double observe the download actually finishing rather than racing ahead of it.
+    notification.on("click", () => download(update));
     // Delivery can be refused after the fact: Windows answers isSupported() with true and then
     // declines if the user has notifications switched off. Nothing is shown and nothing throws, so
     // this is the only signal - and the tray label is what the user is left with.
@@ -160,7 +223,7 @@ function createUpdater({ app, dialog, shell, Notification, getWindow, logger = c
       detail:
         process.platform === "win32"
           ? "Download it now? It will install when you restart."
-          : "Trypthos cannot update itself on macOS yet. Open the releases page to download it?",
+          : "Download it now? Trypthos will open the disk image so you can drag it to Applications.",
       buttons: ["Download", "Not now"],
       defaultId: 0,
       cancelId: 1,
