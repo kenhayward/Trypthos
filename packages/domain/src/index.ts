@@ -100,8 +100,8 @@ export {
 } from "./settings";
 export type { Settings } from "./settings";
 
-export { isNewerVersion, parseReleaseTag, pickUpdate } from "./updates";
-export type { AvailableUpdate, PublishedRelease } from "./updates";
+export { downloadAssetFor, isNewerVersion, parseReleaseTag, pickUpdate } from "./updates";
+export type { AvailableUpdate, PublishedAsset, PublishedRelease } from "./updates";
 
 export { PANEL_BOUNDS, resolvePanelWidths } from "./panelLayout";
 export type { PanelRequest, PanelWidths } from "./panelLayout";

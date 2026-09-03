@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.22.0",
+    date: "2026-09-03",
+    pr: 43,
+    headline: "Updates download themselves",
+    summary:
+      "Finding a new version used to mean a trip to the releases page to find and click the right file. Trypthos now fetches the correct installer itself and opens it: on Windows that means the installer runs and replaces the app on your next restart, exactly as before. On macOS - which cannot update itself in place without a signed build - it downloads the disk image and mounts it, so the only thing left to do is drag it into Applications rather than hunting for the download first. If nothing has been published for your platform yet, or the download does not go through, Trypthos still falls back to opening the releases page rather than leaving you stuck.",
+    fixed: [
+      "Checking for an update now downloads and opens the right installer automatically.",
+    ],
+  },
+  {
     version: "0.21.0",
     date: "2026-09-03",
     pr: 43,
