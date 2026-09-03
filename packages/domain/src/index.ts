@@ -28,6 +28,12 @@ export {
 export type { ChatContext, ContextSource } from "./chatContext";
 
 export { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
+
+export { findHeadings, resolveEdit } from "./documentEdit";
+export type { EditOp, EditTarget, Heading, ProposedEdit } from "./documentEdit";
+
+export { EDIT_FENCE_TAG, splitReply } from "./editBlocks";
+export type { ReplyPart } from "./editBlocks";
 export type { ChatRequestBody, ChatTurn, StreamEvent } from "./chatCompletion";
 
 export { loadPersisted } from "./persisted";

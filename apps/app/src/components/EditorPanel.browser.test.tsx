@@ -3,10 +3,12 @@ import { render, screen } from "@testing-library/react";
 import { userEvent } from "@vitest/browser/context";
 import { describe, expect, it } from "vitest";
 import EditorPanel from "./EditorPanel";
+import { resolveEdit } from "@trypthos/domain";
+import type { EditorHandle, EditorSelection } from "./MarkdownEditor";
 
 const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) here.\n";
 
-function Harness({ onSelect }: { onSelect?: (text: string) => void } = {}) {
+function Harness({ onSelect }: { onSelect?: (selection: EditorSelection) => void } = {}) {
   const [value, setValue] = useState(DOC);
   return (
     <EditorPanel
@@ -170,45 +172,166 @@ describe("Opening a different file, rendered", () => {
 /// test would report an empty selection for ever and pass anyway.
 describe("Reporting the selection, in a real browser", () => {
   it("reports nothing when the caret is only placed, not dragged", async () => {
-    const seen: string[] = [];
-    render(<Harness onSelect={(text) => seen.push(text)} />);
+    const seen: EditorSelection[] = [];
+    render(<Harness onSelect={(selection) => seen.push(selection)} />);
 
     await putCaretOn("Some");
 
     // A click sets an empty selection. Reported, and reported as empty - which is what makes chat
     // fall back to the whole file rather than sending nothing.
-    expect(seen.at(-1)).toBe("");
+    expect(seen.at(-1)?.text).toBe("");
   });
 
   it("reports the text once a selection is made", async () => {
-    const seen: string[] = [];
-    render(<Harness onSelect={(text) => seen.push(text)} />);
+    const seen: EditorSelection[] = [];
+    render(<Harness onSelect={(selection) => seen.push(selection)} />);
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
 
-    expect(seen.at(-1)?.length).toBe(4);
+    expect(seen.at(-1)?.text.length).toBe(4);
   });
 
   it("reports the selection emptying again when it is collapsed", async () => {
-    const seen: string[] = [];
-    render(<Harness onSelect={(text) => seen.push(text)} />);
+    const seen: EditorSelection[] = [];
+    render(<Harness onSelect={(selection) => seen.push(selection)} />);
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
-    expect(seen.at(-1)).not.toBe("");
+    expect(seen.at(-1)?.text).not.toBe("");
 
     await userEvent.keyboard("{ArrowRight}");
-    expect(seen.at(-1)).toBe("");
+    expect(seen.at(-1)?.text).toBe("");
   });
 
   it("reports the whole document when everything is selected", async () => {
-    const seen: string[] = [];
-    render(<Harness onSelect={(text) => seen.push(text)} />);
+    const seen: EditorSelection[] = [];
+    render(<Harness onSelect={(selection) => seen.push(selection)} />);
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Control>}a{/Control}");
 
-    expect(seen.at(-1)).toBe(DOC);
+    expect(seen.at(-1)?.text).toBe(DOC);
+  });
+
+  // The offsets are what an accepted "replace the selection" edit writes to. A wrong range there
+  // overwrites the wrong span of somebody's document, which no assertion on the text would catch.
+  it("reports offsets that bracket exactly the selected text", async () => {
+    const seen: EditorSelection[] = [];
+    render(<Harness onSelect={(selection) => seen.push(selection)} />);
+
+    await putCaretOn("Some");
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
+
+    const last = seen.at(-1)!;
+    expect(DOC.slice(last.from, last.to)).toBe(last.text);
+  });
+});
+
+/// Applying an edit the user accepted.
+///
+/// The seam between two halves that are each already tested: `resolveEdit` computes offsets against
+/// a string, and CodeMirror holds the real buffer. Nothing else checks that an offset from one lands
+/// where it should in the other - and a mistake there writes into somebody's document at a
+/// plausible-looking place.
+describe("Applying a resolved edit, in a real browser", () => {
+  const ANCHORED = "# Plan\n\nPreamble.\n\n## Objectives\n\nDo the thing.\n";
+
+  function Editable({ handle }: { handle: React.Ref<EditorHandle> }) {
+    const [value, setValue] = useState(ANCHORED);
+    return (
+      <EditorPanel
+        workspaceName="Notes"
+        filePath="notes.md"
+        dirty={false}
+        value={value}
+        onChange={setValue}
+        ref={handle}
+      />
+    );
+  }
+
+  /// The visible text, without touching focus or the mode.
+  const live = () =>
+    [...document.querySelectorAll(".cm-line")].map((line) => line.textContent).join("\n");
+
+  /// Read in Source mode, where every character is visible.
+  ///
+  /// Live mode hides the syntax markers away from the caret, so a heading reads as "Summary" rather
+  /// than "## Summary" - which would make an assertion about the markdown that was written measure
+  /// the decoration instead of the document.
+  const sourceText = async () => {
+    await userEvent.click(modeButton("Source"));
+    return [...document.querySelectorAll(".cm-line")].map((line) => line.textContent).join("\n");
+  };
+
+  const resolved = (edit: Parameters<typeof resolveEdit>[0]) => {
+    const target = resolveEdit(edit, { doc: ANCHORED, selection: null });
+    if (!target.ok) throw new Error(target.reason);
+    return target;
+  };
+
+  it("inserts before the named heading, where the resolver said", async () => {
+    const handle = { current: null as EditorHandle | null };
+    render(<Editable handle={handle} />);
+
+    const target = resolved({
+      op: "insert-before",
+      heading: "Objectives",
+      content: "## Summary\n\nAn overview.",
+    });
+    handle.current!.applyChange(target.from, target.to, target.insert);
+
+    const shown = await sourceText();
+    expect(shown).toContain("## Summary");
+    // The order is the whole point: after the preamble, before the heading it was anchored to.
+    expect(shown.indexOf("Preamble.")).toBeLessThan(shown.indexOf("## Summary"));
+    expect(shown.indexOf("An overview.")).toBeLessThan(shown.indexOf("## Objectives"));
+  });
+
+  it("leaves the rest of the document untouched", async () => {
+    const handle = { current: null as EditorHandle | null };
+    render(<Editable handle={handle} />);
+
+    const target = resolved({ op: "append", heading: null, content: "## Notes\n\nAdded." });
+    handle.current!.applyChange(target.from, target.to, target.insert);
+
+    const shown = await sourceText();
+    expect(shown).toContain("# Plan");
+    expect(shown).toContain("Do the thing.");
+    expect(shown).toContain("## Notes");
+  });
+
+  // One transaction, so one Ctrl+Z gives the document back. A user who dislikes what the model wrote
+  // should not have to undo it a paragraph at a time.
+  it("is a single undo step", async () => {
+    const handle = { current: null as EditorHandle | null };
+    render(<Editable handle={handle} />);
+
+    const target = resolved({
+      op: "insert-before",
+      heading: "Objectives",
+      content: "## Summary\n\nAn overview.",
+    });
+    // Asserted on prose rather than on "## Summary", and without switching mode: clicking the mode
+    // button would take focus off the editor, and the undo keystroke would go to the button. The
+    // heading markers are hidden in Live mode anyway - what matters here is that ONE undo takes the
+    // whole insertion back, not how it was decorated.
+    handle.current!.applyChange(target.from, target.to, target.insert);
+    expect(live()).toContain("An overview.");
+
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(live()).not.toContain("An overview.");
+    expect(live()).toContain("Do the thing.");
+  });
+
+  // The offsets were resolved against a document that may be a keystroke old by the time Apply is
+  // pressed. An out-of-range change throws inside CodeMirror and takes the panel down with it.
+  it("survives offsets that run past the end of the document", async () => {
+    const handle = { current: null as EditorHandle | null };
+    render(<Editable handle={handle} />);
+
+    handle.current!.applyChange(9_000, 10_000, "Appended anyway.");
+    expect(await sourceText()).toContain("Appended anyway.");
   });
 });

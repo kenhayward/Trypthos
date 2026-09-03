@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.15.0",
+    date: "2026-09-03",
+    pr: 32,
+    headline: "Chat can write into your document, once you say so",
+    summary:
+      "Ask for a change rather than an answer - a summary inserted before a heading, a section rewritten, a selected passage replaced - and the reply comes back as a card showing exactly what would be written and where. Nothing reaches your document until you press Apply, and one Ctrl+Z takes it back. If the heading it was aimed at has been renamed or deleted in the meantime, the card says so instead of offering a button, and if two headings share a name it refuses to guess between them. A model that gets the format wrong costs you a copy and paste rather than the answer: the block stays on screen as ordinary markdown.",
+    added: [
+      "Chat can propose changes to the open document, shown as a card you apply or ignore.",
+      "Insert before or under a heading, replace a section, replace the selection, or add to the end.",
+      "An applied change is a single undo step.",
+    ],
+    changed: [
+      "The default system prompt now explains how to propose a change.",
+    ],
+  },
+  {
     version: "0.14.0",
     date: "2026-09-03",
     pr: 31,

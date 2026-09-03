@@ -4,11 +4,14 @@ import {
   PANEL_BOUNDS,
   defaultChatProfile,
   resolveChatContext,
+  resolveEdit,
   resolvePanelWidths,
+  type ProposedEdit,
 } from "@trypthos/domain";
 import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
+import type { EditorHandle, EditorSelection } from "./components/MarkdownEditor";
 import PanelDivider from "./components/PanelDivider";
 import PreferencesDialog from "./components/PreferencesDialog";
 import PanelRail from "./components/PanelRail";
@@ -109,12 +112,15 @@ export default function App() {
   const activeModel =
     chatModels.find((profile) => profile.id === chosenModel) ?? defaultChatProfile(chatModels);
 
-  /// The editor selection, as reported by CodeMirror. Empty when nothing is selected.
+  /// The editor selection, as reported by CodeMirror. Empty text when nothing is selected.
   ///
   /// Held in a ref rather than as state: it changes on every caret move, and re-rendering the whole
-  /// three-panel window on each arrow key to store a string nothing displays would be a waste. Chat
-  /// reads it at the moment a question is sent.
-  const selection = useRef("");
+  /// three-panel window on each arrow key to store something nothing displays would be a waste.
+  /// Chat reads it when a question is sent, and again when an edit is applied.
+  const selection = useRef<EditorSelection>({ text: "", from: 0, to: 0 });
+
+  /// The live editor, for applying an edit the user accepted.
+  const editor = useRef<EditorHandle>(null);
 
   /// What the model is told about the document.
   ///
@@ -124,10 +130,40 @@ export default function App() {
   const chatContext = useCallback(
     () =>
       resolveChatContext({
-        selection: selection.current,
+        selection: selection.current.text,
         file: state.file === null ? null : { path: state.file.path, content: state.content },
       }),
     [state.file, state.content],
+  );
+
+  /// Where a proposed edit would land in the document AS IT IS NOW.
+  ///
+  /// Resolved on every render rather than when the reply arrived, because the document moves under
+  /// it: a heading renamed while the user reads the proposal has to turn Apply off rather than let
+  /// the edit write somewhere nobody chose.
+  const resolveAgainstDocument = useCallback(
+    (edit: ProposedEdit) =>
+      resolveEdit(edit, {
+        doc: state.content,
+        selection:
+          selection.current.text === ""
+            ? null
+            : { from: selection.current.from, to: selection.current.to },
+      }),
+    [state.content],
+  );
+
+  const applyEdit = useCallback(
+    (edit: ProposedEdit) => {
+      const target = resolveAgainstDocument(edit);
+      // Resolved once more at the moment of the click. The render that drew the button may be a
+      // keystroke old, and this is a write to somebody's document.
+      if (!target.ok) return false;
+
+      editor.current?.applyChange(target.from, target.to, target.insert);
+      return true;
+    },
+    [resolveAgainstDocument],
   );
 
   const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, chatContext);
@@ -223,7 +259,8 @@ export default function App() {
           filePath={state.file?.path ?? null}
           dirty={state.dirty}
           value={state.content}
-          onSelectionChange={(text) => (selection.current = text)}
+          onSelectionChange={(next) => (selection.current = next)}
+          ref={editor}
           onChange={actions.edit}
         />
         {panels.chatCollapsed ? (
@@ -255,6 +292,8 @@ export default function App() {
               onStop={() => void chat.stop()}
               onClear={chat.clear}
               onConfigure={() => setPrefsOpen(true)}
+              resolveEdit={resolveAgainstDocument}
+              onApplyEdit={applyEdit}
             />
           </>
         )}

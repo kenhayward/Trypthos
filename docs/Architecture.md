@@ -369,8 +369,54 @@ a real `ReadableStream`, bytes arriving in whatever pieces the socket delivers. 
 the class of bug a fake reader cannot produce, such as a multi-byte character split across two reads
 decoding as two replacement characters.
 
-**What chat does not do yet:** it cannot see the wider folder, and conversations are not saved
-between sessions. Both are still to come.
+### Writing back into the document
+
+A reply can carry a **proposed edit**, and the user applies it. Three questions decided this shape:
+
+**Why not provider tool calling as the primary mechanism?** Trypthos points at any OpenAI-compatible
+endpoint, and tool support across that space is patchy - Ollama varies by model, llama.cpp is
+inconsistent, proxies strip it. The failure is silent: a model without tool support answers in prose,
+so a tools-only design would quietly do nothing on a good share of the endpoints somebody might
+configure. A fenced block works everywhere, streams as ordinary text, and needs no capability.
+
+**Why not commands?** A command cannot express "before the Objectives heading". Enumerating a command
+per edit shape gets the interesting part of the request backwards.
+
+**Why does it never apply itself?** The document is in the model's context, and a markdown file can
+contain text addressed at an assistant. An edit that applied itself would make "treat file contents
+as data" unenforceable - a line in someone's notes becomes a write. The click is the enforcement.
+
+The pieces:
+
+| Module | Holds |
+| --- | --- |
+| `documentEdit.ts` | The edit model, heading discovery, and resolving an edit to a range |
+| `editBlocks.ts` | Reading a proposed edit out of the reply text |
+| `ChatEditCard.tsx` | The card: what would change, where, and the Apply button |
+| `MarkdownEditor` handle | `applyChange(from, to, insert)` - one transaction |
+
+Five rules, each a test:
+
+- **Resolution happens at apply time, against the live document**, and again on the click itself.
+  Between the reply and the button the user may have renamed the heading, so an offset computed from
+  the text the model saw could land anywhere.
+- **Ambiguity refuses.** Two headings with one name means the edit does not apply. Taking the first
+  would write into the wrong section while looking like it worked.
+- **Fenced code is not searched for headings.** A markdown editor's documents are full of shell
+  samples, and `# not a heading` inside one would otherwise be an anchor.
+- **One CodeMirror transaction**, so an unwanted edit is one Ctrl+Z. It also reaches `onChange` and
+  marks the file dirty - it edits the buffer, never the disk.
+- **A block that cannot be parsed stays ordinary text.** The user sees the markdown and can paste it
+  by hand, so a model that gets the format wrong costs a copy and paste rather than the answer. That
+  is the same graceful floor Live mode uses for an undecorated construct.
+
+`systemPrompt.test.ts` parses the prompt's own worked example with the real parser. Nothing else
+checks that the format the prompt teaches is the format the parser accepts, and a drift there has
+only downstream symptoms: the model does exactly as instructed and the panel renders an inert code
+block.
+
+**What chat does not do yet:** it cannot see the wider folder, conversations are not saved between
+sessions, and tool calling is not yet offered as a second transport for endpoints that support it.
 
 ## The IPC surface
 
