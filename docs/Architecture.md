@@ -763,6 +763,36 @@ own publisher normalised that; publishing from a separate job does not, so the n
 at build time. `apps/desktop/test/packaging.test.js` pins it, along with the publish block and the
 renderer being copied into `resources/app` - all three fail silently rather than loudly.
 
+**The app icon is drawn in code, not committed as a binary** - the same convention as the tray
+icons, and for the same reason: it is regenerable when the mark changes, and the source of truth is
+readable code rather than an opaque asset nobody can diff. `apps/desktop/scripts/iconAssets.mjs`
+holds the vector artwork (as SVG template strings) and the two binary packers; `make-app-icon.mjs`
+rasterizes and writes the files; `npm run icons` (wired into `predist`, alongside the existing tray
+icon generator) runs both.
+
+The one respect in which it does NOT follow the tray icon's precedent: the tray glyph is a flat
+silhouette simple enough to scanline-render by hand, but this icon has a diagonal gradient and
+rounded-rect arcs, which are easy to get subtly wrong by hand and hard to notice when wrong. `sharp`
+(a devDependency, used only by this build-time script - never imported by the shipped app) does the
+actual rasterizing; the artwork itself and the container formats stay hand-written and tested, since
+those have an objectively right answer and rendering fidelity does not.
+
+**Windows and macOS use different shape templates for the same mark**, because their platform
+conventions differ: Windows wants an edge-to-edge Fluent squircle, macOS wants the icon inset with
+headroom and its own floating drop shadow - baked into the artwork, since Finder's icon view and Get
+Info panel show exactly the pixels given to them rather than compositing one for you the way the Dock
+does. The smallest sizes drop the gradient and the folded-corner triangle in favour of a flat fill
+and thicker rule lines - both are too small to read as anything but noise at that scale.
+
+**An ICNS `@2x` slot renders the SMALLER size's artwork at the LARGER pixel dimension - not the
+larger size's own artwork.** `ic11` ("16@2x") wants the sixteen-pixel design - no fold, the thickest
+lines - rendered at 32 physical pixels for a crisp Retina display, not the native 32px design shrunk
+into that slot. Getting this backwards produces an icns where several slots silently show the wrong
+design; `iconAssets.mjs` keeps the two axes - which artwork, and what pixel size to render it at - as
+separate parameters for exactly this reason, and it is a caught regression rather than a hoped-for
+property: an earlier version of this code took only the artwork's own size and rendered every ICNS
+slot at that size, which a test now pins against.
+
 **Electron is pinned to an exact version** in `apps/desktop/package.json`, not a range.
 electron-builder downloads platform binaries for one specific release and refuses a range - and in a
 workspace it cannot fall back to reading the installed copy, because electron is hoisted to the root.
