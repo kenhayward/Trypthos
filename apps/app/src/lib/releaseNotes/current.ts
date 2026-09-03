@@ -7,7 +7,7 @@ export const RECENT: Release[] = [
   {
     version: "0.21.0",
     date: "2026-09-03",
-    pr: 43,
+    pr: 42,
     headline: "A real app icon, on both platforms",
     summary:
       "Trypthos has its own icon now, instead of the default one Electron ships. Same page-with-a-folded-corner mark the tray icon and the workspace tree already use, in a rounded-square tile on Windows and Apple's own inset, floating shape on macOS - same diagonal green gradient, same page-fold glyph, drawn to each platform's own conventions rather than one image stretched to fit both. It appears everywhere an icon does: the taskbar, the Start menu, the installer, the desktop shortcut, the Dock and Finder. The smallest sizes use a simplified, flat-coloured version, because the gradient and the folded corner both stop reading as anything but noise once the icon gets that small.",
