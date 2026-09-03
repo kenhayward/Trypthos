@@ -141,21 +141,21 @@ describe("composeMessages", () => {
     { role: "assistant" as const, content: "An answer" },
     { role: "user" as const, content: "Second" },
   ];
-  const context = { role: "user" as const, content: "Here is the document." };
+  const context = [{ role: "user" as const, content: "Here is the document." }];
 
   it("leads with the system prompt", () => {
-    const messages = composeMessages({ systemPrompt: "Be brief.", context: null, turns });
+    const messages = composeMessages({ systemPrompt: "Be brief.", context: [], turns });
     expect(messages[0]).toEqual({ role: "system", content: "Be brief." });
   });
 
   // An empty system message is not the same as no system message, and some endpoints reject one.
   it("omits a blank system prompt entirely", () => {
-    const messages = composeMessages({ systemPrompt: "   ", context: null, turns });
+    const messages = composeMessages({ systemPrompt: "   ", context: [], turns });
     expect(messages.some((message) => message.role === "system")).toBe(false);
   });
 
   it("keeps the conversation in order", () => {
-    const messages = composeMessages({ systemPrompt: "", context: null, turns });
+    const messages = composeMessages({ systemPrompt: "", context: [], turns });
     expect(messages).toEqual(turns);
   });
 
@@ -183,7 +183,7 @@ describe("composeMessages", () => {
 
   it("does not lose the document if the history does not end in a question", () => {
     const messages = composeMessages({ systemPrompt: "", context, turns: [] });
-    expect(messages).toEqual([context]);
+    expect(messages).toEqual(context);
   });
 });
 
@@ -291,5 +291,34 @@ describe("tool calling", () => {
     });
 
     expect(parseStreamPayload(payload)).toMatchObject({ type: "tool-call" });
+  });
+});
+
+describe("composeMessages with several context turns", () => {
+  // The folder outline, an attachment and the document are three messages, and all of them belong
+  // beside the question rather than scattered through the history.
+  it("keeps them together, in order, before the question", () => {
+    const messages = composeMessages({
+      systemPrompt: "",
+      context: [
+        { role: "user", content: "The folder holds..." },
+        { role: "user", content: "Here is risks.md" },
+        { role: "user", content: "Here is the document" },
+      ],
+      turns: [
+        { role: "user", content: "First" },
+        { role: "assistant", content: "An answer" },
+        { role: "user", content: "Second" },
+      ],
+    });
+
+    expect(messages.map((message) => message.content)).toEqual([
+      "First",
+      "An answer",
+      "The folder holds...",
+      "Here is risks.md",
+      "Here is the document",
+      "Second",
+    ]);
   });
 });

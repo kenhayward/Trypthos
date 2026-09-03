@@ -30,7 +30,8 @@ export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 ///   1. **The system prompt**, if there is one. Omitted entirely when blank - an empty system
 ///      message is not the same as no system message, and some endpoints reject one.
 ///   2. **The conversation so far**, unchanged and in order.
-///   3. **The document**, immediately before the question it belongs to.
+///   3. **The context** - the folder outline, then any attachments, then the document -
+///      immediately before the question it belongs to.
 ///
 /// The document goes last-but-one rather than at the top because it is re-sent fresh every turn: the
 /// user may have edited the file, or selected something different, between one question and the
@@ -42,19 +43,19 @@ export function composeMessages({
   turns,
 }: {
   systemPrompt: string;
-  context: ChatTurn | null;
+  context: readonly ChatTurn[];
   turns: readonly ChatTurn[];
 }): ChatTurn[] {
   const messages: ChatTurn[] = [];
   if (systemPrompt.trim() !== "") messages.push({ role: "system", content: systemPrompt });
 
-  if (context === null) return [...messages, ...turns];
+  if (context.length === 0) return [...messages, ...turns];
 
   // Before the final turn, which is the question being asked. A history that does not end in a
-  // question should not happen, but if it does the document still belongs at the end rather than
+  // question should not happen, but if it does the context still belongs at the end rather than
   // being dropped.
   const at = turns.length > 0 ? turns.length - 1 : 0;
-  messages.push(...turns.slice(0, at), context, ...turns.slice(at));
+  messages.push(...turns.slice(0, at), ...context, ...turns.slice(at));
   return messages;
 }
 

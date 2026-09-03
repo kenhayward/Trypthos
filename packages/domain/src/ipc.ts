@@ -36,6 +36,7 @@ export const IPC_CHANNELS = [
   "chats:load",
   "chats:save",
   "chats:delete",
+  "workspace:outline",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.

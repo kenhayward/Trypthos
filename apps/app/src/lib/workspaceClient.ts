@@ -31,6 +31,10 @@ export type WriteResult =
   | Failure;
 
 export interface WorkspaceClient {
+  /// The markdown files in the open folder, for chat to use as a map. Paths only.
+  workspaceOutline(): Promise<
+    { ok: true; outline: { paths: string[]; truncated: boolean } } | Failure
+  >;
   openWorkspace(): Promise<OpenResult>;
   /// Reopens a remembered folder without asking. The shell still checks it exists and is a
   /// directory - a stored path can have been deleted, renamed or moved to another machine.
@@ -119,6 +123,7 @@ export function isDesktop(): boolean {
 const unavailable = (): Failure => ({ ok: false, reason: "not-desktop" });
 
 export const browserClient: WorkspaceClient = {
+  workspaceOutline: async () => unavailable(),
   openWorkspace: async () => unavailable(),
   reopenWorkspace: async () => unavailable(),
   listDirectory: async () => unavailable(),

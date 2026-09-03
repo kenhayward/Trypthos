@@ -516,8 +516,38 @@ Three rules:
 The title is derived from the first question rather than asked for. A dialog demanding a name before
 a chat can be saved is a dialog people learn to dismiss.
 
-**What chat does not do yet:** it cannot see the wider folder, and other files cannot be attached to
-a question. Both are the next piece of work.
+### Beyond the open document
+
+Context has three parts, answering different questions: the **document** (a selection, else the open
+file), **attachments** the user picked, and a **folder outline**.
+
+**The outline carries paths, never contents.** A notes folder can be thousands of files; sending them
+would blow any context window, cost real money on a hosted endpoint, and bury the document the
+question was about. Paths are cheap, and they turn "I don't know what you have" into a conversation
+the user can steer: the model names a file, the user attaches it.
+
+**The walk happens in the main process, and is capped.** Measured on a home directory, a recursive
+walk took 39 seconds across 113,553 folders - which is why `workspaceOutline` is breadth-first,
+stops at `OUTLINE_PATH_LIMIT`, skips hidden directories and never descends into `node_modules` and
+its kin. Truncation is reported, so the model is never left implying it saw everything. The root
+comes from the workspace the main process holds, never from the renderer.
+
+**One budget, and the document is served first.** An attachment that would push the open file out
+would answer about the wrong text entirely, so the document takes what it needs and attachments take
+what is left. An attachment there was no room for is still NAMED with empty contents: the model
+knowing a file exists and that it did not see it beats silence, which reads as "there was nothing
+there".
+
+`contextTurns` returns several messages rather than one - outline, then attachments, then the
+document - and `composeMessages` keeps them together immediately before the question. Each is a
+`user` turn, fenced and labelled as data, for the same reason the document always was.
+
+Attachments are read once, when attached. Re-reading them silently would change what an earlier
+answer in the same conversation was about.
+
+**What chat does not do yet:** it cannot read a file for itself. The model asks, and the user
+attaches - a deliberate stop short of an agentic loop, which would also only work on tool-capable
+endpoints.
 
 ## Menus
 

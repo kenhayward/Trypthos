@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.19.0",
+    date: "2026-09-03",
+    pr: 41,
+    headline: "Chat can look beyond the document you have open",
+    summary:
+      "A row above the message box now shows what chat can see. Attach another file and it is sent in full alongside your document, so you can ask how two notes relate without pasting one into the other. Turn on Folder and Trypthos sends the LIST of markdown files in your folder - the paths, never the contents - so the model can say which one it would need and you can attach it. Your document still comes first: if everything will not fit, the file you are editing keeps its place and an attachment is shortened rather than pushing it out. Nothing is included unless you ask for it, because a reply that quietly read five files, or quietly did not, is one you cannot judge.",
+    added: [
+      "Attach other markdown files to a conversation, sent in full.",
+      "Optionally send the list of files in your folder, so the model can ask for one.",
+      "A row above the message box showing exactly what chat can see.",
+    ],
+    changed: [
+      "Starting a new conversation clears its attachments rather than carrying them over.",
+    ],
+  },
+  {
     version: "0.18.0",
     date: "2026-09-03",
     pr: 39,

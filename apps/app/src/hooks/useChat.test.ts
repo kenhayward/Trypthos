@@ -287,7 +287,11 @@ describe("useChat", () => {
 /// Read at the moment a turn is sent, not when the hook was created: somebody selects a passage,
 /// types a question, and may well change the selection before pressing Enter.
 describe("useChat and the document", () => {
-  const FILE = { kind: "file" as const, path: "notes.md", text: "# Notes", truncated: false };
+  const FILE: ChatContext = {
+    document: { kind: "file", path: "notes.md", text: "# Notes", truncated: false },
+    attachments: [],
+    folder: null,
+  };
 
   it("sends the context alongside the question", async () => {
     const harness = fakeBridge();
@@ -310,7 +314,11 @@ describe("useChat and the document", () => {
     });
     act(() => harness.push({ type: "end" }));
 
-    current = { kind: "selection", path: "notes.md", text: "One line", truncated: false };
+    current = {
+      document: { kind: "selection", path: "notes.md", text: "One line", truncated: false },
+      attachments: [],
+      folder: null,
+    };
     await act(async () => {
       await result.current.send("Second");
     });
@@ -329,7 +337,10 @@ describe("useChat and the document", () => {
     });
     act(() => harness.push({ type: "end" }));
 
-    current = { ...FILE, text: "# Notes\n\nEdited since." };
+    current = {
+      ...FILE,
+      document: { kind: "file", path: "notes.md", text: "# Notes edited since.", truncated: false },
+    };
     await act(async () => {
       await result.current.retry();
     });
@@ -345,6 +356,10 @@ describe("useChat and the document", () => {
       await result.current.send("Hello");
     });
 
-    expect(harness.sent[0]?.context).toEqual({ kind: "none" });
+    expect(harness.sent[0]?.context).toEqual({
+      document: { kind: "none" },
+      attachments: [],
+      folder: null,
+    });
   });
 });

@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
   defaultChatProfile,
-  resolveChatContext,
   resolveEdit,
   resolvePanelWidths,
   type ProposedEdit,
@@ -20,6 +19,7 @@ import WorkspacePanel from "./components/WorkspacePanel";
 import { useApiKeys } from "./hooks/useApiKeys";
 import { useChat } from "./hooks/useChat";
 import { useChatHistory } from "./hooks/useChatHistory";
+import { useChatScope } from "./hooks/useChatScope";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
@@ -124,19 +124,31 @@ export default function App() {
   /// The live editor, for applying an edit the user accepted.
   const editor = useRef<EditorHandle>(null);
 
-  /// What the model is told about the document.
+  /// What chat may see, read when a turn is sent so it reflects the buffer as it is then.
   ///
-  /// A function, called when a turn is sent, so it sees the selection and the buffer as they are
-  /// then. `state.content` rather than the file on disk: once the user has typed, the file is not
-  /// what they are looking at.
-  const chatContext = useCallback(
-    () =>
-      resolveChatContext({
-        selection: selection.current.text,
-        file: state.file === null ? null : { path: state.file.path, content: state.content },
-      }),
+  /// `state.content` rather than the file on disk: once the user has typed, the file is not what
+  /// they are looking at.
+  const scopeSource = useCallback(
+    () => ({
+      selection: selection.current.text,
+      file: state.file === null ? null : { path: state.file.path, content: state.content },
+    }),
     [state.file, state.content],
   );
+
+  /// The shell calls chat needs for scope. Built once: `client` is chosen at module scope and does
+  /// not change, and rebuilding this would re-run the folder walk on every render.
+  const scopeBridge = useMemo(
+    () =>
+      isDesktop()
+        ? { workspaceOutline: client.workspaceOutline, readFile: client.readFile }
+        : null,
+    // `client` is itself memoised once, so this never rebuilds in practice - but naming the
+    // dependency keeps the rule satisfied rather than suppressed, and rebuilding would re-run the
+    // folder walk, which is the expensive thing here.
+    [client],
+  );
+  const scope = useChatScope(scopeBridge, scopeSource);
 
   /// Where a proposed edit would land in the document AS IT IS NOW.
   ///
@@ -168,7 +180,7 @@ export default function App() {
     [resolveAgainstDocument],
   );
 
-  const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, chatContext);
+  const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, scope.context);
   const history = useChatHistory(useMemo(() => chatHistoryBridge(), []));
 
   /// The file a reopened conversation was about, when it is no longer in the open folder.
@@ -340,6 +352,8 @@ export default function App() {
                 // than overwrite the one that was open.
                 history.forget();
                 setMissingChatFile(null);
+                // A new conversation should not silently inherit the last one's attachments.
+                scope.clear();
                 chat.clear();
               }}
               onConfigure={() => setPrefsOpen(true)}
@@ -348,6 +362,16 @@ export default function App() {
               chats={history.chats}
               openChatId={history.openId}
               missingFile={missingChatFile}
+              scope={{
+                attachments: scope.attachments,
+                files: scope.files,
+                includeFolder: scope.includeFolder,
+                canUseFolder: state.workspace !== null,
+                onToggleFolder: scope.setIncludeFolder,
+                onNeedFiles: () => void scope.loadFiles(),
+                onAttach: (path) => void scope.attach(path),
+                onDetach: scope.detach,
+              }}
               onSaveChat={() =>
                 void history.save(chat.turns, activeModel?.id ?? null, state.file?.path ?? null)
               }

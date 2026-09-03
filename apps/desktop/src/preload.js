@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld("trypthos", {
 
   /// Saved conversations. Files in the app-data directory - the renderer names a chat by id and
   /// never a path, and the id it sends is checked against a UUID before anything touches disk.
+  /// The markdown files in the open folder, for chat to use as a map. Paths only - the renderer
+  /// never names the folder, and the walk happens where the workspace is held.
+  workspaceOutline: () => ipcRenderer.invoke("workspace:outline"),
+
   listChats: () => ipcRenderer.invoke("chats:list"),
   loadChat: (id) => ipcRenderer.invoke("chats:load", { id }),
   saveChat: (request) => ipcRenderer.invoke("chats:save", request),

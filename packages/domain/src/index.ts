@@ -30,11 +30,19 @@ export {
 
 export {
   CONTEXT_CHARACTER_LIMIT,
+  EMPTY_CONTEXT,
+  OUTLINE_PATH_LIMIT,
   ChatContextSchema,
-  contextTurn,
+  contextTurns,
   resolveChatContext,
 } from "./chatContext";
-export type { ChatContext, ContextSource } from "./chatContext";
+export type {
+  AttachedFile,
+  ChatContext,
+  ContextSource,
+  DocumentContext,
+  FolderOutline,
+} from "./chatContext";
 
 export {
   DEFAULT_SYSTEM_PROMPT,

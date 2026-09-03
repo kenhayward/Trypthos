@@ -31,6 +31,7 @@ describe("IPC_CHANNELS", () => {
       "chats:load",
       "chats:save",
       "chats:delete",
+      "workspace:outline",
     ]);
   });
 
