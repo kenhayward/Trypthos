@@ -143,6 +143,18 @@ Some deliberate behaviour worth knowing:
 If the model gets the format wrong, the block simply stays on screen as ordinary markdown that you
 can copy by hand. A confused model costs a copy and paste, never the answer.
 
+Trypthos is deliberately forgiving about how a proposal is written: models close a fenced block in
+several ways, and some forget to close it at all. Any of those is accepted once the reply has
+finished. A card only appears at that point, never part-way through a reply, so a change can never
+be applied with half a sentence in it.
+
+### When a model answers with nothing
+
+Some models - the ones that think before replying - occasionally finish a turn having done all their
+thinking and written no answer. Trypthos says so, and offers to unfold what the model was thinking,
+rather than showing you an empty message. Asking again usually works; it is a habit of the model
+rather than a fault in the request.
+
 **Chat still cannot see the wider folder**, and conversations are not saved between sessions. Both
 are still to come.
 

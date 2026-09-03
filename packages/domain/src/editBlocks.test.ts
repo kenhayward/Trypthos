@@ -95,6 +95,76 @@ describe("splitReply", () => {
 
 /// Every one of these keeps the block as text rather than dropping it. A model that gets the format
 /// slightly wrong should cost the user a copy and paste, never the answer.
+/// Shapes taken from what a model actually sent, rather than from what the format says.
+///
+/// Every test above was written with well-formed blocks, which is a fixture bias: it proved the
+/// parser accepts the format I documented, and said nothing about what models emit. These come from
+/// the raw stream of a local model answering the request this feature exists for.
+describe("output a real model produced", () => {
+  // The one that broke it. A model routinely closes a block by appending the backticks to the last
+  // line of content rather than giving them a line of their own.
+  it("accepts a closing fence appended to the last line", () => {
+    const reply = [
+      '```' + EDIT_FENCE_TAG + ' insert-before heading="Objectives"',
+      "## Summary",
+      "",
+      "The brief outlines a task, and notes a risk.```",
+    ].join("\n");
+
+    const parts = splitReply(reply);
+    expect(parts).toEqual([
+      {
+        kind: "edit",
+        edit: {
+          op: "insert-before",
+          heading: "Objectives",
+          content: "## Summary\n\nThe brief outlines a task, and notes a risk.",
+        },
+      },
+    ]);
+  });
+
+  it("keeps the trailing fence out of the content", () => {
+    const reply = ["```" + EDIT_FENCE_TAG + " append", "Just one line.```"].join("\n");
+    const parts = splitReply(reply);
+    expect(parts[0]).toMatchObject({ edit: { content: "Just one line." } });
+  });
+
+  // A proper close is still preferred where both could match, so nothing above regresses.
+  it("prefers a fence on its own line when there is one", () => {
+    const reply = [
+      "```" + EDIT_FENCE_TAG + " append",
+      "Text with a stray ``` inside it.",
+      "```",
+      "",
+      "Prose after the block.",
+    ].join("\n");
+
+    const parts = splitReply(reply);
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toMatchObject({ edit: { content: "Text with a stray ``` inside it." } });
+    expect(parts[1]).toMatchObject({ kind: "text", text: "Prose after the block." });
+  });
+
+  // The lenient close must not swallow an inner code fence: an inner ``` is shorter than the outer
+  // ````, so it can never end the outer block.
+  it("does not let an inner code fence close a longer outer one", () => {
+    const reply = [
+      "````" + EDIT_FENCE_TAG + " append",
+      "## Example",
+      "",
+      "```bash",
+      "npm test```",
+      "````",
+    ].join("\n");
+
+    const parts = splitReply(reply);
+    expect(parts[0]).toMatchObject({
+      edit: { content: "## Example\n\n```bash\nnpm test```" },
+    });
+  });
+});
+
 describe("blocks that cannot be understood stay as text", () => {
   const staysText = (reply: string) => {
     const parts = splitReply(reply);
@@ -122,7 +192,9 @@ describe("blocks that cannot be understood stay as text", () => {
     staysText(edit("   ", "append"));
   });
 
-  it("keeps an unterminated block, which is what a cut-off reply looks like", () => {
+  // While a reply is still arriving, an unterminated block IS a cut-off reply, and must not become
+  // an applicable card carrying half a sentence.
+  it("keeps an unterminated block while the reply is still arriving", () => {
     staysText("```" + EDIT_FENCE_TAG + " append\n## Summary\n\nHalf an ans");
   });
 });
@@ -141,5 +213,53 @@ describe("parsing a reply as it streams in", () => {
 
     expect(applied).toEqual([]);
     expect(splitReply(complete).some((part) => part.kind === "edit")).toBe(true);
+  });
+});
+
+/// Once a turn has finished, an unterminated block is not a cut-off reply - it is a model that
+/// forgot the closing fence, which they do often. Observed from a real local model: opening fence,
+/// content, and then the turn simply ended.
+describe("a block left unclosed by a finished reply", () => {
+  const unclosed = [
+    "```" + EDIT_FENCE_TAG + ' insert-before heading="Objectives"',
+    "## Summary",
+    "",
+    "The brief outlines a task and notes a risk.",
+  ].join("\n");
+
+  it("is accepted once the reply is complete", () => {
+    const parts = splitReply(unclosed, { complete: true });
+    expect(parts).toEqual([
+      {
+        kind: "edit",
+        edit: {
+          op: "insert-before",
+          heading: "Objectives",
+          content: "## Summary\n\nThe brief outlines a task and notes a risk.",
+        },
+      },
+    ]);
+  });
+
+  it("is still text while the reply is arriving", () => {
+    const parts = splitReply(unclosed);
+    expect(parts.every((part) => part.kind === "text")).toBe(true);
+  });
+
+  it("keeps the prose that came before it", () => {
+    const parts = splitReply(`Here is a summary.\n\n${unclosed}`, { complete: true });
+    expect(parts.map((part) => part.kind)).toEqual(["text", "edit"]);
+  });
+
+  // Completeness relaxes how a block ENDS, never what it means. An operation nobody recognises is
+  // still not an edit.
+  it("does not accept a block it could not understand anyway", () => {
+    const parts = splitReply("```" + EDIT_FENCE_TAG + " nonsense\n## Summary", { complete: true });
+    expect(parts.every((part) => part.kind === "text")).toBe(true);
+  });
+
+  it("does not accept an unclosed block with no content", () => {
+    const parts = splitReply("```" + EDIT_FENCE_TAG + " append\n   ", { complete: true });
+    expect(parts.every((part) => part.kind === "text")).toBe(true);
   });
 });

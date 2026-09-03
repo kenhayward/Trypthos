@@ -363,6 +363,14 @@ Four rules hold this together:
 
 - **`end` is always the last event**, error or not, so the panel has one signal that a turn is over
   rather than two shapes of ending to get right. A stream that closes without `[DONE]` still ends.
+- **Reasoning is a separate channel, and a turn can end with only reasoning in it.** gpt-oss,
+  DeepSeek-R1 and Qwen thinking modes stream their chain of thought as `delta.reasoning` or
+  `delta.reasoning_content`, and sometimes finish having sent no `content` at all - measured at
+  roughly half of runs against one local model, at any temperature. That is a habit of the model
+  rather than a fault in the request, so the panel says the model wrote no answer and offers its
+  thinking, instead of rendering an empty bubble. Reasoning is never added to `turns`: those are the
+  wire format and are resent every message, and a model's own thinking is not part of the
+  conversation.
 - **Every event names its stream.** A reply the user stopped, or one belonging to a conversation
   they have since cleared, would otherwise append itself to whatever they typed next.
 - **Tolerant outward, strict inward.** A provider's chunk is parsed loosely and an unrecognised shape
@@ -424,6 +432,19 @@ Five rules, each a test:
 - **A block that cannot be parsed stays ordinary text.** The user sees the markdown and can paste it
   by hand, so a model that gets the format wrong costs a copy and paste rather than the answer. That
   is the same graceful floor Live mode uses for an undecorated construct.
+- **The parser is forgiving about how a block ENDS, and strict about what it means.** Models close a
+  fence by appending the backticks to the last line, or forget to close it at all; both are accepted.
+  An unrecognised operation or empty content is still not an edit.
+
+`splitReply` takes `complete`, which says whether the reply has finished arriving, and it changes
+exactly one thing: mid-stream an unterminated fence is a cut-off reply and stays text, because a card
+built from it could be applied with half a sentence in it. Once the turn has ended it is a model that
+forgot the fence. The panel only builds cards for finished turns for the same reason, and renders a
+streaming reply as plain text until it lands.
+
+**The parser's own tests were written against the format, which is a fixture bias**: they proved it
+accepts what the documentation describes and said nothing about what models emit. The cases that
+matter came from the raw stream of a local model answering the request this feature exists for.
 
 `systemPrompt.test.ts` parses the prompt's own worked example with the real parser. Nothing else
 checks that the format the prompt teaches is the format the parser accepts, and a drift there has

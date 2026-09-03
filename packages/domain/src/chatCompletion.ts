@@ -96,6 +96,11 @@ export function buildChatRequest(
 
 export type StreamEvent =
   | { type: "token"; text: string }
+  /// The model's chain of thought, which reasoning models stream separately from the answer.
+  ///
+  /// Carried because a turn can END with reasoning and no content at all - gpt-oss and DeepSeek-R1
+  /// both do it - and a panel that ignored this would show an empty bubble and no explanation.
+  | { type: "reasoning"; text: string }
   | { type: "usage"; promptTokens: number; replyTokens: number }
   | { type: "error"; message: string }
   | { type: "done" }
@@ -105,7 +110,19 @@ export type StreamEvent =
 /// Loose, not strict: this describes only the fields that are read, and tolerates every other.
 const ChunkSchema = z.looseObject({
   choices: z
-    .array(z.looseObject({ delta: z.looseObject({ content: z.string().optional() }).optional() }))
+    .array(
+      z.looseObject({
+        delta: z
+          .looseObject({
+            content: z.string().optional(),
+            // Two spellings, because providers disagree: `reasoning` in llama.cpp and LM Studio,
+            // `reasoning_content` from DeepSeek and several proxies.
+            reasoning: z.string().optional(),
+            reasoning_content: z.string().optional(),
+          })
+          .optional(),
+      }),
+    )
     .optional(),
   usage: z
     .looseObject({
@@ -144,11 +161,17 @@ export function parseStreamPayload(payload: string): StreamEvent {
     return { type: "error", message: error.message ?? "The provider reported an error." };
   }
 
-  const content = choices?.[0]?.delta?.content;
+  const delta = choices?.[0]?.delta;
+  const content = delta?.content;
   // An empty string is not a token. The first chunk of a reply usually carries the role and no
   // content, and appending it would be harmless but pointless; treating it as an error would end
   // the stream before a word arrived.
   if (typeof content === "string" && content !== "") return { type: "token", text: content };
+
+  // Checked after content, so a chunk carrying both is a token first: the answer is what the user
+  // asked for, and the thinking is only shown when no answer arrives.
+  const thinking = delta?.reasoning ?? delta?.reasoning_content;
+  if (typeof thinking === "string" && thinking !== "") return { type: "reasoning", text: thinking };
 
   if (usage !== undefined) {
     return {
