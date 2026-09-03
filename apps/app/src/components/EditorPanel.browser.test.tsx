@@ -228,6 +228,39 @@ describe("Reporting the selection, in a real browser", () => {
   });
 });
 
+/// Preview's styling comes from a class, and a class is a string in two files.
+///
+/// Rename it in the stylesheet and not in the component - or the reverse - and Preview renders as
+/// unstyled HTML: no heading sizes, no table borders, no code background. Everything still passes,
+/// because every other test asserts on TEXT. Only a real browser has the computed styles to notice.
+describe("Preview mode is actually styled", () => {
+  const preview = async () => {
+    render(<Harness />);
+    await userEvent.click(modeButton("Preview"));
+  };
+
+  it("draws a heading larger than body text", async () => {
+    await preview();
+
+    const heading = document.querySelector(".markdown-body h1");
+    const paragraph = document.querySelector(".markdown-body p");
+    if (heading === null || paragraph === null) throw new Error("nothing rendered");
+
+    const size = (element: Element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize.replace("px", ""));
+    expect(size(heading)).toBeGreaterThan(size(paragraph));
+  });
+
+  it("gives a link the accent colour rather than the browser default", async () => {
+    await preview();
+
+    const link = document.querySelector(".markdown-body a");
+    if (link === null) throw new Error("no link rendered");
+    // The default is a blue nobody chose; the point is only that a rule applied at all.
+    expect(getComputedStyle(link).textDecorationLine).toBe("underline");
+  });
+});
+
 /// Applying an edit the user accepted.
 ///
 /// The seam between two halves that are each already tested: `resolveEdit` computes offsets against

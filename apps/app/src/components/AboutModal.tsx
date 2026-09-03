@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { APP_NAME, APP_VERSION, CAPABILITIES, DISCLAIMERS } from "../lib/appInfo";
+import { renderMarkdown } from "../lib/markdown";
 
 interface Props {
   open: boolean;
@@ -24,9 +25,19 @@ export default function AboutModal({ open, onClose }: Props) {
         <h1 className="text-lg font-semibold text-ink">{APP_NAME}</h1>
         <p className="mt-1 text-sm text-ink-4">{t("about.version", { version: APP_VERSION })}</p>
 
-        <pre className="mt-4 overflow-x-auto whitespace-pre-wrap font-mono text-xs text-ink-3">
-          {CAPABILITIES}
-        </pre>
+        <div
+          className="markdown-body mt-4 text-xs text-ink-3"
+          // The capability summary is authored as a markdown table, and was being shown verbatim -
+          // pipes, separator row and all - because it went into a `<pre>`. Same renderer as Preview
+          // mode and the chat panel, and the same styling, rather than a third way of drawing a
+          // table.
+          //
+          // Sanitised in renderMarkdown like every other rendered surface. This string ships with
+          // the app rather than arriving from anywhere, so it is not untrusted - but a second
+          // pipeline that skipped sanitising would be one somebody could later point at something
+          // that is.
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(CAPABILITIES) }}
+        />
 
         <ul className="mt-4 list-disc space-y-1 pl-5 text-xs text-ink-4">
           {DISCLAIMERS.map((line) => (
