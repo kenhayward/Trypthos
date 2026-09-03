@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ChatProfile } from "@trypthos/domain";
+import { splitReply, type ChatProfile, type EditTarget, type ProposedEdit } from "@trypthos/domain";
 import { renderMarkdown } from "../lib/markdown";
 import type { Turn } from "../lib/conversation";
+import ChatEditCard from "./ChatEditCard";
 import ChatModelPicker from "./ChatModelPicker";
 
 interface Props {
@@ -19,6 +20,13 @@ interface Props {
   onClear: () => void;
   /// Opens Preferences, which is the only way out of having no model configured.
   onConfigure: () => void;
+  /// Where a proposed edit would land in the document as it is NOW, or why it cannot.
+  ///
+  /// Passed in rather than computed here because the panel does not hold the document. Called on
+  /// every render, so a heading renamed while the user reads the proposal turns Apply off.
+  resolveEdit: (edit: ProposedEdit) => EditTarget;
+  /// Applies an edit the user accepted. Returns true if it landed.
+  onApplyEdit: (edit: ProposedEdit) => boolean;
 }
 
 /// Right panel: AI chat.
@@ -44,9 +52,16 @@ export default function ChatPanel({
   onStop,
   onClear,
   onConfigure,
+  resolveEdit,
+  onApplyEdit,
 }: Props) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
+  /// Which proposals have been applied, so a card cannot be clicked twice.
+  ///
+  /// Keyed by turn and position within it. Cleared with the thread, since the keys mean nothing
+  /// once the turns behind them are gone.
+  const [applied, setApplied] = useState<ReadonlySet<string>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
 
   // Keep the thread pinned to the newest message as tokens stream in.
@@ -79,7 +94,10 @@ export default function ChatPanel({
           />
           <button
             type="button"
-            onClick={onClear}
+            onClick={() => {
+              setApplied(new Set());
+              onClear();
+            }}
             disabled={turns.length === 0 || streaming}
             aria-label={t("chat.clear")}
             title={t("chat.clear")}
@@ -155,20 +173,38 @@ export default function ChatPanel({
                   className={
                     turn.role === "user"
                       ? "max-w-[85%] rounded-lg bg-accent-strong px-3 py-2 text-ui text-white"
-                      : "max-w-[92%] rounded-lg border border-rule bg-app px-3 py-2 text-ui text-ink"
+                      : "max-w-full min-w-0 rounded-lg border border-rule bg-app px-3 py-2 text-ui text-ink"
                   }
                 >
                   {turn.role === "assistant" ? (
                     waiting ? (
                       <span className="text-ink-4">{t("chat.thinking")}</span>
                     ) : (
-                      <div
-                        className="chat-md break-words [&_a]:underline [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_pre]:overflow-x-auto"
-                        // Sanitised in renderMarkdown (DOMPurify) before injection. This is a model's
-                        // output: text the app did not write, and treated as data rather than markup
-                        // for the same reason a file from the workspace is.
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.content) }}
-                      />
+                      <div className="space-y-2">
+                        {splitReply(turn.content).map((part, at) =>
+                          part.kind === "edit" ? (
+                            <ChatEditCard
+                              key={at}
+                              edit={part.edit}
+                              target={resolveEdit(part.edit)}
+                              state={applied.has(`${index}:${at}`) ? "applied" : "offered"}
+                              onApply={() => {
+                                if (!onApplyEdit(part.edit)) return;
+                                setApplied((was) => new Set(was).add(`${index}:${at}`));
+                              }}
+                            />
+                          ) : (
+                            <div
+                              key={at}
+                              className="chat-md break-words [&_a]:underline [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_pre]:overflow-x-auto"
+                              // Sanitised in renderMarkdown (DOMPurify) before injection. This is a
+                              // model's output: text the app did not write, and treated as data
+                              // rather than markup for the same reason a workspace file is.
+                              dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }}
+                            />
+                          ),
+                        )}
+                      </div>
                     )
                   ) : (
                     <span className="whitespace-pre-wrap break-words">{turn.content}</span>

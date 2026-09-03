@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 import { countWords, detectLineEnding } from "@trypthos/domain";
 import EditorHeader from "./EditorHeader";
 import EditorStatusBar from "./EditorStatusBar";
-import MarkdownEditor from "./MarkdownEditor";
+import MarkdownEditor, {
+  type EditorHandle,
+  type EditorSelection,
+} from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
 import { breadcrumbSegments, formatCaret } from "../lib/breadcrumb";
 import { DEFAULT_MODE, isEditable, type EditorMode } from "../lib/editorMode";
@@ -20,7 +23,9 @@ interface Props {
   /// Preview mode has no CodeMirror and so reports nothing: text selected in the rendered prose is
   /// a DOM selection, not an editor one. Chat falls back to the whole file there, which is the
   /// right answer for a mode you cannot edit in anyway.
-  onSelectionChange?: (text: string) => void;
+  onSelectionChange?: (selection: EditorSelection) => void;
+  /// Handle for applying a chat edit the user accepted.
+  ref?: React.Ref<EditorHandle>;
 }
 
 /// Centre panel: the editor, its header and its status bar.
@@ -35,6 +40,7 @@ export default function EditorPanel({
   value,
   onChange,
   onSelectionChange,
+  ref,
 }: Props) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
@@ -74,6 +80,7 @@ export default function EditorPanel({
             live={mode === "live"}
             onCaret={(line, column) => setCaret({ line, column })}
             onSelectionChange={onSelectionChange}
+            ref={ref}
             ariaLabel={t("editor.surface")}
           />
         ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useImperativeHandle, useRef } from "react";
 import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -13,6 +13,21 @@ import { liveMode } from "../lib/liveExtension";
 /// every file arrived already marked Unsaved.
 const External = Annotation.define<boolean>();
 
+export interface EditorSelection {
+  text: string;
+  from: number;
+  to: number;
+}
+
+export interface EditorHandle {
+  /// Replaces `from`..`to` with `insert`, as ONE transaction.
+  ///
+  /// One transaction so it is one undo step: a user who dislikes what the model wrote presses Ctrl+Z
+  /// once and has their document back. Dispatched into the live editor rather than routed through
+  /// the `value` prop, which would replace the whole document and move the caret.
+  applyChange(from: number, to: number, insert: string): void;
+}
+
 interface Props {
   /// Identifies the open document. A change means a DIFFERENT file, not new text for the same one.
   ///
@@ -25,11 +40,14 @@ interface Props {
   live: boolean;
   /// Reports the caret, one-based on both axes, whenever it moves.
   onCaret?: (line: number, column: number) => void;
-  /// Reports the selected text whenever the selection changes, and "" when nothing is selected.
+  /// Reports the selection whenever it changes, with `text` empty when nothing is selected.
   ///
   /// The empty case is reported too, deliberately: it is what tells the chat panel to fall back to
-  /// the whole file rather than sending the last selection for ever.
-  onSelectionChange?: (text: string) => void;
+  /// the whole file rather than sending the last selection for ever. The offsets come with it
+  /// because an edit that replaces the selection needs a range, not a copy of the text.
+  onSelectionChange?: (selection: EditorSelection) => void;
+  /// Handle for applying a change from outside - a chat edit the user accepted.
+  ref?: React.Ref<EditorHandle>;
   /// Labels the editing surface for assistive technology and for tests.
   ariaLabel: string;
 }
@@ -49,6 +67,7 @@ export default function MarkdownEditor({
   live,
   onCaret,
   onSelectionChange,
+  ref,
   ariaLabel,
 }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
@@ -76,6 +95,35 @@ export default function MarkdownEditor({
     latestOnCaret.current = onCaret;
     latestOnSelection.current = onSelectionChange;
   }, [onChange, onCaret, onSelectionChange]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      applyChange(from, to, insert) {
+        const editor = view.current;
+        if (editor === null) return;
+
+        // Clamped, because the caller resolved these offsets against a document that may have been
+        // edited a keystroke ago. An out-of-range change throws inside CodeMirror and takes the
+        // panel down with it.
+        const length = editor.state.doc.length;
+        const start = Math.max(0, Math.min(from, length));
+        const end = Math.max(start, Math.min(to, length));
+
+        // No `External` annotation: this IS a document change the user asked for, so it must reach
+        // `onChange` and mark the file dirty. The annotation exists to mark changes that came from
+        // outside the user's intent, like a file being loaded.
+        editor.dispatch({
+          changes: { from: start, to: end, insert },
+          // The caret follows the inserted text, so the user can see what landed.
+          selection: { anchor: start + insert.length },
+          scrollIntoView: true,
+        });
+        editor.focus();
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (!host.current) return;
@@ -109,9 +157,11 @@ export default function MarkdownEditor({
               // Only sliced when there is something to slice: an empty range is by far the common
               // case, and select-all on a large document would otherwise copy the whole buffer on
               // every arrow key.
-              latestOnSelection.current?.(
-                range.empty ? "" : update.state.sliceDoc(range.from, range.to),
-              );
+              latestOnSelection.current?.({
+                text: range.empty ? "" : update.state.sliceDoc(range.from, range.to),
+                from: range.from,
+                to: range.to,
+              });
             }
           }),
           EditorView.contentAttributes.of({ "aria-label": ariaLabel }),

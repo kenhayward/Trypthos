@@ -29,6 +29,8 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     onStop: vi.fn(),
     onClear: vi.fn(),
     onConfigure: vi.fn(),
+    resolveEdit: () => ({ ok: true as const, from: 0, to: 0, insert: "" }),
+    onApplyEdit: vi.fn(() => true),
     ...overrides,
   };
   render(<ChatPanel {...props} />);
@@ -268,5 +270,132 @@ describe("ChatModelPicker", () => {
     expect(screen.getByRole("button", { name: "Choose the model" }).textContent).toContain(
       "Cloud model",
     );
+  });
+});
+
+/// Proposed edits.
+///
+/// The panel never writes to the document itself: it renders the proposal and calls back. What is
+/// asserted here is that a person can see what would happen and has to ask for it.
+describe("ChatPanel: proposed edits", () => {
+  const reply = [
+    "Here is a summary.",
+    "",
+    '```trypthos-edit insert-before heading="Objectives"',
+    "## Summary",
+    "",
+    "An overview.",
+    "```",
+  ].join("\n");
+
+  const withEdit = (overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) =>
+    panel({ turns: [{ role: "assistant", content: reply }], ...overrides });
+
+  it("shows the prose and the proposal separately", () => {
+    withEdit();
+    expect(screen.getByText("Here is a summary.")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDefined();
+  });
+
+  it("says where the change would go", () => {
+    withEdit();
+    expect(screen.getByText(/Insert before "Objectives"/)).toBeDefined();
+  });
+
+  // Source, not rendered: what matters is exactly what would be written into the file, and rendering
+  // it would hide the very markers that are the point.
+  it("shows the proposed markdown as source", () => {
+    withEdit();
+    expect(screen.getByText(/## Summary/)).toBeDefined();
+  });
+
+  // The security property, not a courtesy. The document is in the model's context, so an edit that
+  // applied itself would make "treat file contents as data" unenforceable.
+  it("writes nothing until the button is pressed", () => {
+    const props = withEdit();
+    expect(props.onApplyEdit).not.toHaveBeenCalled();
+  });
+
+  it("applies the edit on request", async () => {
+    const user = userEvent.setup();
+    const props = withEdit();
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(props.onApplyEdit).toHaveBeenCalledWith({
+      op: "insert-before",
+      heading: "Objectives",
+      content: "## Summary\n\nAn overview.",
+    });
+  });
+
+  it("cannot be applied twice", async () => {
+    const user = userEvent.setup();
+    withEdit();
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+    expect(screen.getByText("Applied")).toBeDefined();
+  });
+
+  it("stays offered when the apply did not land", async () => {
+    const user = userEvent.setup();
+    withEdit({ onApplyEdit: vi.fn(() => false) });
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDefined();
+  });
+
+  // Disabled and explained, never disabled and silent: the user has to know whether to rename a
+  // heading back, re-select a passage, or just copy the text by hand.
+  it("explains why an edit cannot be placed, instead of offering it", () => {
+    withEdit({ resolveEdit: () => ({ ok: false, reason: "heading-not-found" }) });
+
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+    expect(screen.getByText(/no longer in the document/)).toBeDefined();
+  });
+
+  it("names the ambiguous case rather than picking one", () => {
+    withEdit({ resolveEdit: () => ({ ok: false, reason: "heading-ambiguous" }) });
+    expect(screen.getByText(/More than one heading/)).toBeDefined();
+  });
+
+  // The block is the model's own output, so it can contain anything. It is shown as text, never
+  // rendered as markup.
+  it("does not execute markup inside a proposal", () => {
+    panel({
+      turns: [
+        {
+          role: "assistant",
+          content: '```trypthos-edit append\n<img src=x onerror="window.pwned = true">\n```',
+        },
+      ],
+    });
+
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  // A model that gets the format wrong costs a copy and paste, never the answer.
+  it("leaves a block it cannot understand as readable text", () => {
+    panel({
+      turns: [{ role: "assistant", content: "```trypthos-edit nonsense\n## Summary\n```" }],
+    });
+
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+    expect(screen.getByText(/## Summary/)).toBeDefined();
+  });
+
+  it("forgets what was applied when the thread is cleared", async () => {
+    const user = userEvent.setup();
+    withEdit();
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(screen.getByText("Applied")).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Clear the conversation" }));
+    // The turns are a prop, so the thread itself does not empty here - but the applied marks must,
+    // or a new conversation would inherit them by position.
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDefined();
   });
 });

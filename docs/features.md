@@ -112,6 +112,32 @@ Edit it however you like. Clearing it entirely is allowed, for an endpoint that 
 prompt, and nothing will put one back. Reset restores the default, and is offered only when the
 prompt has actually been changed.
 
+### Changing the document
+
+Ask for a change rather than an answer - "summarise this in 50 words under a Summary heading, before
+Objectives" - and the reply comes back as a card. The card names where the change would go, shows
+exactly the markdown that would be written, and does nothing until you press **Apply**.
+
+Five kinds of change are possible: insert before a heading, insert directly under one, replace a
+whole section, replace the passage you have selected, and add to the end of the document.
+
+Some deliberate behaviour worth knowing:
+
+- **Nothing is written until you click.** This is not politeness. Your document is sent to the model,
+  and a markdown file can contain text written to look like instructions to an assistant, so a change
+  that applied itself would be a way for a document to edit itself. You are the step that prevents it.
+- **An applied change is one undo step.** If you dislike what arrived, Ctrl+Z once gives your document
+  back.
+- **The target is checked at the moment you click**, against the document as it stands. If the heading
+  has been renamed or deleted since the model saw it, the card says so rather than offering a button.
+- **Two headings with the same name means the change is refused**, not placed under the first one.
+  Guessing would put text in the wrong section while looking like it worked.
+- **A change is never written to disk.** It edits the document in the editor; you still save it
+  yourself, and the conflict check still applies.
+
+If the model gets the format wrong, the block simply stays on screen as ordinary markdown that you
+can copy by hand. A confused model costs a copy and paste, never the answer.
+
 **Chat still cannot see the wider folder**, and conversations are not saved between sessions. Both
 are still to come.
 
