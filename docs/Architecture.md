@@ -220,16 +220,20 @@ in the user's workspace.
 - **Nothing is written before the file has been read.** Until then the state is the DEFAULTS, and
   saving would overwrite a real settings file with defaults on every launch.
 
-Settings are at **version 3**. A migration adds only what its own version introduced and touches
+Settings are at **version 4**. A migration adds only what its own version introduced and touches
 nothing else: a file written by 0.9.0 must arrive intact, because somebody's panel widths and open
 folder are not worth losing over fields that did not exist yet. The chain runs end to end, so a
 version 1 file passes through version 2's migration on its way forward - a file that skipped straight
 to the current version would miss whatever version 2 added, which is the exact failure migrations
-exist to prevent. Version 2 added appearance and window behaviour; version 3 added chat models.
+exist to prevent. Version 2 added appearance and window behaviour, version 3 added chat models, version 4 added the
+system prompt.
 
 **Chat models start empty rather than seeded.** There is no endpoint every user has, and a profile
 pointing somewhere that does not answer is worse than an empty list, which at least says what to do
-next.
+next. **The system prompt is the opposite**: it is seeded with `DEFAULT_SYSTEM_PROMPT`, because chat
+that arrives unconfigured otherwise answers like a general chatbot rather than like a markdown
+editor. A prompt somebody has cleared stays cleared - only a file predating the field is seeded,
+which is the difference between a migration and a default.
 
 **Close-to-tray needs an `isQuitting` flag.** Without it the preference makes the app unquittable:
 every close hides the window, including the one during shutdown.
@@ -296,16 +300,49 @@ call across that boundary to stream more simply.
 
 The path, end to end:
 
-1. The renderer calls `chat:send` with a **profile id** and the conversation so far.
+1. The renderer calls `chat:send` with a **profile id**, the conversation so far, and the
+   **context** - the document, the selection, or `{ kind: "none" }`.
 2. The main process looks the profile up **in the settings it already holds**. The renderer never
    names an endpoint - the same rule that stops it naming a workspace root, and what keeps a stored
    key out of reach, since keys are stored per endpoint.
-3. `chatProvider.js` POSTs to `{endpoint}/chat/completions` with `stream: true`, adding the key as a
+3. `composeMessages` assembles the request: the system prompt from settings, then the
+   conversation, then the document immediately before the question it belongs to.
+4. `chatProvider.js` POSTs to `{endpoint}/chat/completions` with `stream: true`, adding the key as a
    bearer token if one is stored. **No key is not an error**: a local model served by Ollama or
    llama.cpp needs none, and refusing would make the most private way to use Trypthos the one way
    that does not work.
-4. Frames are decoded by `createSseDecoder` (domain, pure) and read by `parseStreamPayload`.
-5. Each event is pushed to the renderer on `chat:event`, tagged with a **stream id**.
+5. Frames are decoded by `createSseDecoder` (domain, pure) and read by `parseStreamPayload`.
+6. Each event is pushed to the renderer on `chat:event`, tagged with a **stream id**.
+
+### What the model is told about the document
+
+`resolveChatContext` decides, and the rule is deliberately small: **a selection if there is one,
+otherwise the whole file, otherwise nothing.** A selection is an explicit act, so it replaces the
+file rather than being added to it - sending both would spend the tokens twice and leave the model
+guessing which the question was about.
+
+Four things about it are load-bearing:
+
+- **The renderer resolves it, because only the renderer has the live buffer.** The file on disk is
+  not what the user is looking at once they have typed into it. The main process re-validates the
+  shape and the size rather than trusting what arrives.
+- **The size cap is in characters, not tokens.** Nothing here can count tokens - that needs the
+  provider's tokeniser, and profiles point at arbitrary endpoints. The beginning is kept, because a
+  document says what it is in its first lines, and the model is told it was cut.
+- **`context` is required, never optional.** A missing field would read as "no context" for both a
+  deliberate choice and a renderer that forgot to send it, and the difference between those is a
+  chat that quietly stops seeing the document.
+- **The document is a `user` turn, fenced and labelled as data.** A markdown file can contain text
+  addressed at an assistant, so the message says so and the system prompt says it again from the
+  other side. The fence is a delimiter no ordinary document produces - ``` is far too common in a
+  notes app, and a document appearing to close the block early would leave the rest reading as
+  conversation.
+
+Selection is reported by CodeMirror through `onSelectionChange`, including when it empties - which is
+what makes chat fall back to the file rather than sending the last selection for ever. Preview mode
+has no CodeMirror and reports none, so chat sends the whole file there. That behaviour is tested in
+the **browser** suite: synthetic events do not move CodeMirror's caret, so the jsdom version of those
+tests would report an empty selection for ever and pass anyway.
 
 Four rules hold this together:
 
@@ -332,8 +369,8 @@ a real `ReadableStream`, bytes arriving in whatever pieces the socket delivers. 
 the class of bug a fake reader cannot produce, such as a multi-byte character split across two reads
 decoding as two replacement characters.
 
-**What chat does not do yet:** it has no access to the document. The open file, the selection and the
-folder scope are the next piece of work, along with saved conversations.
+**What chat does not do yet:** it cannot see the wider folder, and conversations are not saved
+between sessions. Both are still to come.
 
 ## The IPC surface
 

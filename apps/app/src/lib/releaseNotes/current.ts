@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.14.0",
+    date: "2026-09-03",
+    pr: 31,
+    headline: "Chat can see what you are working on",
+    summary:
+      "Ask a question and Trypthos now sends the model your document along with it. If you have selected a passage it sends just that, because selecting text and then asking a question is a clear way of saying which part you mean. Otherwise it sends the whole open file. With nothing open it sends nothing, and chat behaves as it did before. Preferences also gains a system prompt, which ships with a default written for reading and writing markdown: it asks for answers in your document's own conventions, and for a rewrite to come back as the text itself rather than wrapped in an explanation. Edit it freely, clear it if your endpoint has its own, and reset it if you change your mind.",
+    added: [
+      "Chat sends the open document with your question, or just the passage you have selected.",
+      "A system prompt in Preferences, with a default written for markdown work.",
+      "Reset the system prompt to the default, or clear it entirely.",
+    ],
+    changed: [
+      "A very large document is shortened before it is sent, and the model is told it was.",
+    ],
+  },
+  {
     version: "0.13.0",
     date: "2026-09-02",
     pr: 30,

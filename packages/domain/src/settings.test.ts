@@ -6,6 +6,7 @@ import {
   SettingsSchema,
   loadSettings,
 } from "./settings";
+import { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
 
 describe("SettingsSchema", () => {
   it("accepts the defaults it ships with", () => {
@@ -96,6 +97,35 @@ describe("migrating from version 2", () => {
     expect(migrated.panels.workspaceWidth).toBe(300);
     expect(migrated.appearance.theme).toBe("system");
     expect(migrated.chat.profiles).toEqual([]);
+    expect(migrated.chat.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
+  });
+});
+
+describe("migrating from version 3", () => {
+  const v3 = {
+    schemaVersion: 3,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: { profiles: [] },
+  };
+
+  it("seeds the default system prompt, so chat is useful before anyone edits it", () => {
+    expect(loadSettings(v3).chat.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
+  });
+
+  it("keeps everything version 3 stored", () => {
+    const migrated = loadSettings(v3);
+    expect(migrated.window.closeToTray).toBe(true);
+    expect(migrated.appearance.theme).toBe("dark");
+  });
+
+  // A prompt the user cleared on purpose must stay cleared. Only a file that predates the field is
+  // seeded - which is the difference between a migration and a default.
+  it("does not overwrite a prompt the user has already set", () => {
+    const v4 = { ...v3, schemaVersion: 4, chat: { profiles: [], systemPrompt: "" } };
+    expect(loadSettings(v4).chat.systemPrompt).toBe("");
   });
 });
 
@@ -108,7 +138,7 @@ describe("chat profiles in settings", () => {
     supportsImages: false,
     isDefault: true,
   };
-  const stored = { ...DEFAULT_SETTINGS, chat: { profiles: [profile] } };
+  const stored = { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [profile] } };
 
   it("round-trips a configured profile", () => {
     expect(loadSettings(stored).chat.profiles[0]?.label).toBe("Local model");
@@ -119,7 +149,7 @@ describe("chat profiles in settings", () => {
   it("falls back to defaults when a stored list breaks its invariants", () => {
     const twoDefaults = {
       ...DEFAULT_SETTINGS,
-      chat: { profiles: [profile, { ...profile, id: "other" }] },
+      chat: { ...DEFAULT_SETTINGS.chat, profiles: [profile, { ...profile, id: "other" }] },
     };
     expect(loadSettings(twoDefaults).chat.profiles).toEqual([]);
   });
@@ -128,7 +158,7 @@ describe("chat profiles in settings", () => {
   it("refuses a settings file whose profile carries an apiKey", () => {
     const leaked = {
       ...DEFAULT_SETTINGS,
-      chat: { profiles: [{ ...profile, apiKey: "sk-live-1234" }] },
+      chat: { ...DEFAULT_SETTINGS.chat, profiles: [{ ...profile, apiKey: "sk-live-1234" }] },
     };
     expect(loadSettings(leaked).chat.profiles).toEqual([]);
   });

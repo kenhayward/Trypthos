@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChatTurnSchema } from "./chatCompletion";
+import { ChatContextSchema } from "./chatContext";
 import { SettingsSchema } from "./settings";
 
 /// The IPC contract between the renderer and the shell.
@@ -96,6 +97,16 @@ export const SendChatRequest = z
     /// The whole conversation, resent each turn. Chat is stateless per turn, so switching model
     /// mid-conversation needs nothing else - the history reaches the new model with the request.
     turns: z.array(ChatTurnSchema).min(1),
+    /// The document, the selection, or nothing.
+    ///
+    /// Required rather than optional, and explicitly `{ kind: "none" }` for nothing. A missing field
+    /// would read as "no context" for both a deliberate choice and a renderer that forgot to send
+    /// it, and the difference between those is a chat that quietly stops seeing the document.
+    ///
+    /// Resolved by the renderer because only the renderer has the live buffer: the file on disk is
+    /// not what the user is looking at once they have typed into it. The main process re-validates
+    /// the shape and the size.
+    context: ChatContextSchema,
   })
   .strict();
 

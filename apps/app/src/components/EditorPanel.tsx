@@ -14,6 +14,13 @@ interface Props {
   dirty: boolean;
   value: string;
   onChange: (value: string) => void;
+  /// Reports the editor selection, so the chat panel can ask about a passage rather than the whole
+  /// file. Empty when nothing is selected.
+  ///
+  /// Preview mode has no CodeMirror and so reports nothing: text selected in the rendered prose is
+  /// a DOM selection, not an editor one. Chat falls back to the whole file there, which is the
+  /// right answer for a mode you cannot edit in anyway.
+  onSelectionChange?: (text: string) => void;
 }
 
 /// Centre panel: the editor, its header and its status bar.
@@ -21,7 +28,14 @@ interface Props {
 /// The document lives ABOVE this component, which is what makes the mode invariant checkable rather
 /// than merely intended: switching mode is local state here and cannot reach `onChange`, so a mode
 /// switch has no path by which to alter the document.
-export default function EditorPanel({ workspaceName, filePath, dirty, value, onChange }: Props) {
+export default function EditorPanel({
+  workspaceName,
+  filePath,
+  dirty,
+  value,
+  onChange,
+  onSelectionChange,
+}: Props) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
   const [caret, setCaret] = useState({ line: 1, column: 1 });
@@ -59,6 +73,7 @@ export default function EditorPanel({ workspaceName, filePath, dirty, value, onC
             onChange={onChange}
             live={mode === "live"}
             onCaret={(line, column) => setCaret({ line, column })}
+            onSelectionChange={onSelectionChange}
             ariaLabel={t("editor.surface")}
           />
         ) : (

@@ -5,6 +5,8 @@ const { randomUUID } = require("node:crypto");
 const {
   CHAT_EVENT_CHANNEL,
   CancelChatRequest,
+  composeMessages,
+  contextTurn,
   DeleteSecretRequest,
   SendChatRequest,
   SetSecretRequest,
@@ -159,10 +161,19 @@ function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets,
 
     // Deliberately not awaited: the reply arrives over seconds, and the renderer needs the stream id
     // now so it can match the events that follow.
+    // Composed here, not in the renderer: the system prompt is settings the renderer has no reason
+    // to hold, and keeping the document's wording in one place means the panel cannot drift from
+    // what the model is actually told.
+    const messages = composeMessages({
+      systemPrompt: settings.chat.systemPrompt,
+      context: contextTurn(parsed.data.context),
+      turns: parsed.data.turns,
+    });
+
     void chat
       .run({
         profile,
-        turns: parsed.data.turns,
+        turns: messages,
         signal: controller.signal,
         onEvent: (event) => pushChatEvent(streamId, event),
       })

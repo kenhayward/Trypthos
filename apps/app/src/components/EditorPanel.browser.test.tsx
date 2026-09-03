@@ -6,15 +6,16 @@ import EditorPanel from "./EditorPanel";
 
 const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) here.\n";
 
-function Harness() {
+function Harness({ onSelect }: { onSelect?: (text: string) => void } = {}) {
   const [value, setValue] = useState(DOC);
   return (
     <EditorPanel
-      workspaceName="Diariz"
+      workspaceName="Notes"
       filePath="notes.md"
       dirty={false}
       value={value}
       onChange={setValue}
+      onSelectionChange={onSelect}
     />
   );
 }
@@ -159,5 +160,55 @@ describe("Opening a different file, rendered", () => {
     // The same scroller element: the editor is reused, which is exactly why the position had to be
     // reset rather than being discarded along with the old view.
     expect((document.querySelector(".cm-scroller") as HTMLElement).scrollTop).toBe(0);
+  });
+});
+
+/// What the chat panel is given as context.
+///
+/// In this suite because a selection is real input: `@testing-library/user-event` dispatches
+/// synthetic events and CodeMirror does not move its caret for them, so the jsdom version of this
+/// test would report an empty selection for ever and pass anyway.
+describe("Reporting the selection, in a real browser", () => {
+  it("reports nothing when the caret is only placed, not dragged", async () => {
+    const seen: string[] = [];
+    render(<Harness onSelect={(text) => seen.push(text)} />);
+
+    await putCaretOn("Some");
+
+    // A click sets an empty selection. Reported, and reported as empty - which is what makes chat
+    // fall back to the whole file rather than sending nothing.
+    expect(seen.at(-1)).toBe("");
+  });
+
+  it("reports the text once a selection is made", async () => {
+    const seen: string[] = [];
+    render(<Harness onSelect={(text) => seen.push(text)} />);
+
+    await putCaretOn("Some");
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
+
+    expect(seen.at(-1)?.length).toBe(4);
+  });
+
+  it("reports the selection emptying again when it is collapsed", async () => {
+    const seen: string[] = [];
+    render(<Harness onSelect={(text) => seen.push(text)} />);
+
+    await putCaretOn("Some");
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+    expect(seen.at(-1)).not.toBe("");
+
+    await userEvent.keyboard("{ArrowRight}");
+    expect(seen.at(-1)).toBe("");
+  });
+
+  it("reports the whole document when everything is selected", async () => {
+    const seen: string[] = [];
+    render(<Harness onSelect={(text) => seen.push(text)} />);
+
+    await putCaretOn("Some");
+    await userEvent.keyboard("{Control>}a{/Control}");
+
+    expect(seen.at(-1)).toBe(DOC);
   });
 });

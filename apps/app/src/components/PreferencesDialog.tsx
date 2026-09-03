@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { normaliseEndpoint, type ChatProfile, type Settings } from "@trypthos/domain";
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  normaliseEndpoint,
+  type ChatProfile,
+  type Settings,
+} from "@trypthos/domain";
 import { blankDraft, draftFrom, removeProfile, upsertProfile } from "../lib/chatProfiles";
 import { THEME_PREFERENCES, type ThemePreference } from "../lib/theme";
 import ChatProfileForm, { type SaveKeyResult } from "./ChatProfileForm";
@@ -44,16 +49,26 @@ export default function PreferencesDialog({
   const profiles = settings.chat.profiles;
   const keyed = new Set(keyedEndpoints.map(normaliseEndpoint));
 
+  /// Every write to the chat section carries the rest of it forward.
+  ///
+  /// `onChange` takes a partial of the whole settings object, so a change to `chat` replaces `chat`
+  /// entirely - saving a profile with `{ chat: { profiles } }` would silently drop the system
+  /// prompt, and saving a prompt would drop every configured model.
+  const updateChat = (change: Partial<Settings["chat"]>) =>
+    onChange({ chat: { ...settings.chat, ...change } });
+
   const saveProfile = (profile: ChatProfile) => {
     // The first model configured becomes the default without being asked. Otherwise every chat would
     // have to be pointed at a model by hand before it could say anything.
     const isFirst = profiles.length === 0;
-    onChange({ chat: { profiles: upsertProfile(profiles, { ...profile, isDefault: profile.isDefault || isFirst }) } });
+    updateChat({
+      profiles: upsertProfile(profiles, { ...profile, isDefault: profile.isDefault || isFirst }),
+    });
     setEditing(null);
   };
 
   const remove = (id: string) => {
-    onChange({ chat: { profiles: removeProfile(profiles, id) } });
+    updateChat({ profiles: removeProfile(profiles, id) });
     setEditing(null);
   };
 
@@ -183,6 +198,29 @@ export default function PreferencesDialog({
               className="mt-2 rounded border border-rule px-2 py-1 text-ui text-ink"
             >
               {t("preferences.chat.add")}
+            </button>
+          )}
+
+          <label className="mt-4 block text-xs text-ink-4">
+            {t("preferences.chat.systemPrompt")}
+            <textarea
+              value={settings.chat.systemPrompt}
+              onChange={(event) => updateChat({ systemPrompt: event.target.value })}
+              rows={10}
+              className="mt-1 w-full resize-y rounded border border-rule bg-app px-2 py-1 font-mono text-xs text-ink"
+            />
+          </label>
+          <p className="mt-1 text-xs text-ink-4">{t("preferences.chat.systemPromptHint")}</p>
+
+          {/* Offered only when it would do something. A reset button beside an unchanged default is
+              a control that cannot be told apart from a broken one. */}
+          {settings.chat.systemPrompt !== DEFAULT_SYSTEM_PROMPT && (
+            <button
+              type="button"
+              onClick={() => updateChat({ systemPrompt: DEFAULT_SYSTEM_PROMPT })}
+              className="mt-2 rounded border border-rule px-2 py-1 text-ui text-ink"
+            >
+              {t("preferences.chat.resetPrompt")}
             </button>
           )}
         </fieldset>
