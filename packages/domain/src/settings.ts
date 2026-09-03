@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ChatProfileListSchema } from "./chat";
 import { loadPersisted, type Migration } from "./persisted";
-import { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
+import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 
 /// Everything Trypthos remembers between launches, in one file.
 ///
@@ -12,7 +12,7 @@ import { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 
 export const SettingsSchema = z
   .object({
@@ -50,8 +50,16 @@ export const SettingsSchema = z
         /// describes what Trypthos is and how answers should read, and none of that changes with
         /// the endpoint answering.
         ///
-        /// May be empty. Somebody who clears it means it, and a migration must not put it back.
-        systemPrompt: z.string(),
+        /// **Null means "use the built-in default", and is not the same as a copy of it.** Storing
+        /// the text made every later improvement invisible to anyone who already had settings: the
+        /// release that taught the model to propose document edits reached nobody with an existing
+        /// installation, because their file still held the previous version's prompt. Null is
+        /// resolved at send time, so a change to the default reaches everyone who has not written
+        /// their own - no migration, and no stored copy to go stale.
+        ///
+        /// An empty string is a third state and deliberate: send no system message at all, for an
+        /// endpoint that carries its own prompt. Somebody who clears it means it.
+        systemPrompt: z.string().nullable(),
       })
       .strict(),
   })
@@ -70,7 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastWorkspace: null,
   appearance: { theme: "system" },
   window: { closeToTray: false },
-  chat: { profiles: [], systemPrompt: DEFAULT_SYSTEM_PROMPT },
+  chat: { profiles: [], systemPrompt: null },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
@@ -95,12 +103,29 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
   },
   {
     to: 4,
-    // Version 4 added the system prompt, seeded with the default so chat is useful before anyone
-    // opens Preferences. Only a file that predates the field is seeded - a prompt somebody cleared
-    // on purpose is already at version 4 and is never touched again.
+    // Version 4 added the system prompt, seeded with the default text. Storing that text was the
+    // mistake version 5 undoes; the migration is left as written, because a migration is a record
+    // of what a version did and rewriting one changes what old files become.
     migrate: (input) => {
       const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
       return { ...input, chat: { ...chat, systemPrompt: DEFAULT_SYSTEM_PROMPT } };
+    },
+  },
+  {
+    to: 5,
+    // Version 5 makes the prompt nullable, where null means "the current default".
+    //
+    // A stored prompt byte-identical to a default this app has shipped was never written by anyone -
+    // it was seeded - so it becomes null and starts tracking the default again. Anything else is
+    // somebody's own work and is left exactly as it is, including an empty string.
+    migrate: (input) => {
+      const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
+      const stored = chat.systemPrompt;
+      const seeded =
+        typeof stored === "string" &&
+        (stored === DEFAULT_SYSTEM_PROMPT || PREVIOUS_SYSTEM_PROMPTS.includes(stored));
+
+      return { ...input, chat: { ...chat, systemPrompt: seeded ? null : (stored ?? null) } };
     },
   },
 ];

@@ -112,6 +112,11 @@ Edit it however you like. Clearing it entirely is allowed, for an endpoint that 
 prompt, and nothing will put one back. Reset restores the default, and is offered only when the
 prompt has actually been changed.
 
+Until you edit it, Trypthos does not keep a copy of the prompt - it simply remembers that you have
+not written one. That is what lets an improved default reach you in a later version. Once you edit
+it, the text is yours and no update will touch it; Reset is how you go back to following the
+built-in prompt again.
+
 ### Changing the document
 
 Ask for a change rather than an answer - "summarise this in 50 words under a Summary heading, before

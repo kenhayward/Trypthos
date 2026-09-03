@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { EDIT_FENCE_TAG, splitReply } from "./editBlocks";
-import { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  PREVIOUS_SYSTEM_PROMPTS,
+  effectiveSystemPrompt,
+} from "./systemPrompt";
 
 /// The prompt teaches a format, and the parser implements one. Nothing else checks they are the
 /// same format.
@@ -44,5 +48,35 @@ describe("the default system prompt", () => {
 
   it("tells the model an edit is proposed rather than applied", () => {
     expect(DEFAULT_SYSTEM_PROMPT).toMatch(/nothing is written until/i);
+  });
+});
+
+describe("effectiveSystemPrompt", () => {
+  it("uses the built-in default when nothing is set", () => {
+    expect(effectiveSystemPrompt(null)).toBe(DEFAULT_SYSTEM_PROMPT);
+  });
+
+  it("uses the user's own prompt when they have written one", () => {
+    expect(effectiveSystemPrompt("Answer only in haiku.")).toBe("Answer only in haiku.");
+  });
+
+  // Cleared on purpose is not the same as unset, and must not be quietly refilled.
+  it("sends nothing when the prompt has been cleared", () => {
+    expect(effectiveSystemPrompt("")).toBe("");
+  });
+});
+
+describe("PREVIOUS_SYSTEM_PROMPTS", () => {
+  // If a previous entry equalled the current default, the migration would be a no-op and the bug
+  // it exists to fix would still be live.
+  it("holds only prompts that are no longer the default", () => {
+    expect(PREVIOUS_SYSTEM_PROMPTS).not.toContain(DEFAULT_SYSTEM_PROMPT);
+  });
+
+  it("holds the prompt that shipped without the edit format", () => {
+    expect(PREVIOUS_SYSTEM_PROMPTS.length).toBeGreaterThan(0);
+    for (const previous of PREVIOUS_SYSTEM_PROMPTS) {
+      expect(previous).not.toContain("trypthos-edit");
+    }
   });
 });

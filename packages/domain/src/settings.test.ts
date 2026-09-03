@@ -6,7 +6,7 @@ import {
   SettingsSchema,
   loadSettings,
 } from "./settings";
-import { DEFAULT_SYSTEM_PROMPT } from "./systemPrompt";
+import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 
 describe("SettingsSchema", () => {
   it("accepts the defaults it ships with", () => {
@@ -97,7 +97,8 @@ describe("migrating from version 2", () => {
     expect(migrated.panels.workspaceWidth).toBe(300);
     expect(migrated.appearance.theme).toBe("system");
     expect(migrated.chat.profiles).toEqual([]);
-    expect(migrated.chat.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
+    // Null, not a copy: that is what lets a later change to the default reach this user.
+    expect(migrated.chat.systemPrompt).toBeNull();
   });
 });
 
@@ -111,8 +112,8 @@ describe("migrating from version 3", () => {
     chat: { profiles: [] },
   };
 
-  it("seeds the default system prompt, so chat is useful before anyone edits it", () => {
-    expect(loadSettings(v3).chat.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT);
+  it("leaves the system prompt unset, which means the current default", () => {
+    expect(loadSettings(v3).chat.systemPrompt).toBeNull();
   });
 
   it("keeps everything version 3 stored", () => {
@@ -124,8 +125,54 @@ describe("migrating from version 3", () => {
   // A prompt the user cleared on purpose must stay cleared. Only a file that predates the field is
   // seeded - which is the difference between a migration and a default.
   it("does not overwrite a prompt the user has already set", () => {
-    const v4 = { ...v3, schemaVersion: 4, chat: { profiles: [], systemPrompt: "" } };
-    expect(loadSettings(v4).chat.systemPrompt).toBe("");
+    const stored = { ...v3, schemaVersion: 4, chat: { profiles: [], systemPrompt: "" } };
+    expect(loadSettings(stored).chat.systemPrompt).toBe("");
+  });
+});
+
+/// The bug this fixes: a stored prompt goes stale, and every later improvement to the default is
+/// invisible to anyone who already had settings.
+describe("migrating from version 4", () => {
+  const v4 = (systemPrompt: string) => ({
+    schemaVersion: 4,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: { profiles: [], systemPrompt },
+  });
+
+  // The exact shape of the reported problem: an installation upgraded from the version that
+  // introduced the prompt, still carrying that version's text.
+  it("releases a prompt seeded by an earlier version", () => {
+    for (const previous of PREVIOUS_SYSTEM_PROMPTS) {
+      expect(loadSettings(v4(previous)).chat.systemPrompt).toBeNull();
+    }
+  });
+
+  it("releases a prompt matching the current default", () => {
+    expect(loadSettings(v4(DEFAULT_SYSTEM_PROMPT)).chat.systemPrompt).toBeNull();
+  });
+
+  // A prompt somebody wrote is their work, and differs from a default by at least one character.
+  it("leaves a prompt somebody has written alone", () => {
+    expect(loadSettings(v4("Answer only in haiku.")).chat.systemPrompt).toBe("Answer only in haiku.");
+  });
+
+  it("leaves a nearly-default prompt alone, because it was edited", () => {
+    const edited = `${DEFAULT_SYSTEM_PROMPT} Also be cheerful.`;
+    expect(loadSettings(v4(edited)).chat.systemPrompt).toBe(edited);
+  });
+
+  // Cleared on purpose, for an endpoint that carries its own prompt. Not the same as "unset".
+  it("keeps an empty prompt empty rather than restoring the default", () => {
+    expect(loadSettings(v4("")).chat.systemPrompt).toBe("");
+  });
+
+  it("keeps everything else the version 4 file stored", () => {
+    const migrated = loadSettings(v4(DEFAULT_SYSTEM_PROMPT));
+    expect(migrated.window.closeToTray).toBe(true);
+    expect(migrated.appearance.theme).toBe("dark");
   });
 });
 

@@ -220,13 +220,28 @@ in the user's workspace.
 - **Nothing is written before the file has been read.** Until then the state is the DEFAULTS, and
   saving would overwrite a real settings file with defaults on every launch.
 
-Settings are at **version 4**. A migration adds only what its own version introduced and touches
+Settings are at **version 5**. A migration adds only what its own version introduced and touches
 nothing else: a file written by 0.9.0 must arrive intact, because somebody's panel widths and open
 folder are not worth losing over fields that did not exist yet. The chain runs end to end, so a
 version 1 file passes through version 2's migration on its way forward - a file that skipped straight
 to the current version would miss whatever version 2 added, which is the exact failure migrations
 exist to prevent. Version 2 added appearance and window behaviour, version 3 added chat models, version 4 added the
-system prompt.
+system prompt, version 5 made that prompt nullable.
+
+**Version 5 is worth reading as a warning.** Version 4 stored the default prompt's TEXT, which meant
+every later improvement to it was invisible to anyone who already had a settings file - and the
+release that taught the model to propose document edits reached nobody with an existing
+installation, because their file still held the previous version's prompt. `null` now means "use the
+built-in default", resolved at send time, so a change to the default reaches everyone who has not
+written their own. An empty string is a third state: send no system message at all.
+
+The version 5 migration releases a stored prompt only when it is byte-identical to a default this
+app has shipped (`PREVIOUS_SYSTEM_PROMPTS`), because such a prompt was seeded rather than written.
+Anything differing by a single character is somebody's own work and is left alone. That list should
+stop growing: nullability is what removes the need for it.
+
+The general rule the bug illustrates: **do not persist a copy of a value the app owns.** Persist the
+fact that the user has not chosen one.
 
 **Chat models start empty rather than seeded.** There is no endpoint every user has, and a profile
 pointing somewhere that does not answer is worse than an empty list, which at least says what to do

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  DEFAULT_SYSTEM_PROMPT,
+  effectiveSystemPrompt,
   normaliseEndpoint,
   type ChatProfile,
   type Settings,
@@ -204,7 +204,10 @@ export default function PreferencesDialog({
           <label className="mt-4 block text-xs text-ink-4">
             {t("preferences.chat.systemPrompt")}
             <textarea
-              value={settings.chat.systemPrompt}
+              // The effective prompt, so an unset one is READ AND EDITED as the default text rather
+              // than shown as an empty box. Typing into it stores what is typed, which is the moment
+              // it stops tracking the default.
+              value={effectiveSystemPrompt(settings.chat.systemPrompt)}
               onChange={(event) => updateChat({ systemPrompt: event.target.value })}
               rows={10}
               className="mt-1 w-full resize-y rounded border border-rule bg-app px-2 py-1 font-mono text-xs text-ink"
@@ -214,10 +217,13 @@ export default function PreferencesDialog({
 
           {/* Offered only when it would do something. A reset button beside an unchanged default is
               a control that cannot be told apart from a broken one. */}
-          {settings.chat.systemPrompt !== DEFAULT_SYSTEM_PROMPT && (
+          {settings.chat.systemPrompt !== null && (
             <button
               type="button"
-              onClick={() => updateChat({ systemPrompt: DEFAULT_SYSTEM_PROMPT })}
+              // Back to null, not to a copy of the current text: a copy would stop tracking the
+              // default the moment the default next changed, which is the bug this whole change is
+              // about.
+              onClick={() => updateChat({ systemPrompt: null })}
               className="mt-2 rounded border border-rule px-2 py-1 text-ui text-ink"
             >
               {t("preferences.chat.resetPrompt")}
