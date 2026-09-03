@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ChatProfile } from "./chat";
 import { normaliseEndpoint } from "./endpoints";
+import { editTools } from "./editTools";
 
 /// Talking to an OpenAI-compatible chat endpoint.
 ///
@@ -71,6 +72,8 @@ export interface ChatRequestBody {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
+  tools?: ReturnType<typeof editTools>;
+  tool_choice?: "auto";
 }
 
 /// The request body for one turn.
@@ -91,11 +94,20 @@ export function buildChatRequest(
     ...(profile.temperature === undefined ? {} : { temperature: profile.temperature }),
     ...(profile.maxTokens === undefined ? {} : { max_tokens: profile.maxTokens }),
     ...(profile.topP === undefined ? {} : { top_p: profile.topP }),
+    // Only when the profile says the endpoint supports it. Sent to one that does not, a `tools`
+    // array is at best ignored and at worst a 400 - and the fenced transport would have worked.
+    ...(profile.supportsTools ? { tools: editTools(), tool_choice: "auto" as const } : {}),
   };
 }
 
 export type StreamEvent =
   | { type: "token"; text: string }
+  /// A fragment of a tool call.
+  ///
+  /// Streamed the same way text is: the name arrives once and the arguments arrive as a string in
+  /// pieces, which is why this carries a delta and an index rather than a finished call. Assembling
+  /// them is the caller's job, because only the caller knows when the turn ended.
+  | { type: "tool-call"; index: number; name: string | null; argumentsDelta: string }
   /// The model's chain of thought, which reasoning models stream separately from the answer.
   ///
   /// Carried because a turn can END with reasoning and no content at all - gpt-oss and DeepSeek-R1
@@ -119,6 +131,19 @@ const ChunkSchema = z.looseObject({
             // `reasoning_content` from DeepSeek and several proxies.
             reasoning: z.string().optional(),
             reasoning_content: z.string().optional(),
+            tool_calls: z
+              .array(
+                z.looseObject({
+                  index: z.number().optional(),
+                  function: z
+                    .looseObject({
+                      name: z.string().optional(),
+                      arguments: z.string().optional(),
+                    })
+                    .optional(),
+                }),
+              )
+              .optional(),
           })
           .optional(),
       }),
@@ -167,6 +192,21 @@ export function parseStreamPayload(payload: string): StreamEvent {
   // content, and appending it would be harmless but pointless; treating it as an error would end
   // the stream before a word arrived.
   if (typeof content === "string" && content !== "") return { type: "token", text: content };
+
+  // Before reasoning, after content. A chunk carrying a tool call is the model doing the thing that
+  // was asked for, and dropping it in favour of the thinking that accompanied it would lose the
+  // proposal entirely.
+  const call = delta?.tool_calls?.[0];
+  if (call !== undefined) {
+    return {
+      type: "tool-call",
+      // Absent on providers that only ever send one call per chunk. Zero is the right assumption
+      // there: the alternative is treating every fragment as a new call and assembling none of them.
+      index: call.index ?? 0,
+      name: call.function?.name ?? null,
+      argumentsDelta: call.function?.arguments ?? "",
+    };
+  }
 
   // Checked after content, so a chunk carrying both is a token first: the answer is what the user
   // asked for, and the thinking is only shown when no answer arrives.

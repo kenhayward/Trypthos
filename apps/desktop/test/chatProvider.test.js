@@ -245,3 +245,135 @@ test("passes usage through when the provider reports it", async () => {
 
   assert.deepEqual(events[0], { type: "usage", promptTokens: 12, replyTokens: 34 });
 });
+
+/// The tool-calling transport.
+///
+/// A completed call becomes exactly the block the fenced transport produces, so everything
+/// downstream - the card, resolving the anchor, applying it - has one representation rather than
+/// two. These tests are about the assembly: fragments arrive separately and a turn can end
+/// mid-object.
+
+const TOOLS_PROFILE = { ...PROFILE, supportsTools: true };
+
+const toolFrames = (fragments, { index = 0 } = {}) =>
+  fragments.map((fragment, at) =>
+    `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index,
+                function: at === 0 ? { name: "propose_edit", arguments: fragment } : { arguments: fragment },
+              },
+            ],
+          },
+        },
+      ],
+    })}\n\n`,
+  );
+
+test("offers the edit tool when the profile supports it", async () => {
+  const calls = [];
+  const fetchImpl = streamingFetch(["data: [DONE]\n\n"], { calls });
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent: () => {} });
+
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.tools.length, 1);
+  assert.equal(body.tools[0].function.name, "propose_edit");
+});
+
+test("sends no tools for a profile that does not support them", async () => {
+  const calls = [];
+  const fetchImpl = streamingFetch(["data: [DONE]\n\n"], { calls });
+
+  await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent: () => {} });
+  assert.equal("tools" in JSON.parse(calls[0].init.body), false);
+});
+
+test("assembles a tool call split across frames into one proposal", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = streamingFetch([
+    ...toolFrames(['{"op":"insert-before",', '"heading":"Objectives",', '"content":"## Summary"}']),
+    "data: [DONE]\n\n",
+  ]);
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent });
+
+  const text = events
+    .filter((event) => event.type === "token")
+    .map((event) => event.text)
+    .join("");
+  assert.match(text, /trypthos-edit insert-before heading="Objectives"/);
+  assert.match(text, /## Summary/);
+});
+
+// The proposal has to survive to the end of the turn: emitting it early would mean emitting half an
+// argument object.
+test("emits the proposal only once the turn has ended", async () => {
+  const seen = [];
+  const fetchImpl = streamingFetch([
+    ...toolFrames(['{"op":"append","content":"Text."}']),
+    "data: [DONE]\n\n",
+  ]);
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent: (event) => seen.push(event.type),
+  });
+
+  assert.deepEqual(seen, ["token", "end"]);
+});
+
+test("keeps the prose a model wrote alongside its tool call", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = streamingFetch([
+    'data: {"choices":[{"delta":{"content":"Here is a summary."}}]}\n\n',
+    ...toolFrames(['{"op":"append","content":"## Summary"}']),
+    "data: [DONE]\n\n",
+  ]);
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent });
+
+  const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
+  assert.match(text, /Here is a summary\./);
+  assert.match(text, /trypthos-edit/);
+});
+
+test("assembles two separate calls into two proposals", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = streamingFetch([
+    ...toolFrames(['{"op":"append","content":"One."}'], { index: 0 }),
+    ...toolFrames(['{"op":"append","content":"Two."}'], { index: 1 }),
+    "data: [DONE]\n\n",
+  ]);
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent });
+
+  const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
+  assert.equal(text.match(/trypthos-edit/g).length, 2);
+});
+
+// A turn cut off mid-object. The reply already on screen is worth more than the proposal that failed
+// to arrive, so nothing throws and nothing half-formed is offered.
+test("drops a tool call whose arguments never finished", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = streamingFetch(toolFrames(['{"op":"append","cont']));
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent });
+
+  assert.deepEqual(events, [{ type: "end" }]);
+});
+
+test("drops a tool call that asks for something unrecognised", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = streamingFetch([
+    ...toolFrames(['{"op":"delete-everything","content":"Text."}']),
+    "data: [DONE]\n\n",
+  ]);
+
+  await provider(fetchImpl).run({ profile: TOOLS_PROFILE, turns: TURNS, onEvent });
+  assert.deepEqual(events, [{ type: "end" }]);
+});

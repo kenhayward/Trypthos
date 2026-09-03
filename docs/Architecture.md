@@ -436,6 +436,42 @@ Five rules, each a test:
   fence by appending the backticks to the last line, or forget to close it at all; both are accepted.
   An unrecognised operation or empty content is still not an edit.
 
+### The second transport: provider tool calling
+
+Opt in per profile with `supportsTools`. Where an endpoint supports it, the edit is offered as a
+function the model calls, which removes the variance in how reliably a model follows a format
+described in prose. Three things decided the shape:
+
+- **The two transports converge.** A completed tool call is turned into exactly the block the fenced
+  transport produces, by `formatEditBlock`, and emitted as ordinary tokens. Downstream there is ONE
+  representation of a proposed edit - the panel, the card, resolving the anchor and applying it are
+  all untouched by this transport existing. `splitReply(formatEditBlock(edit))` returning the edit
+  unchanged is a test, not a hope.
+- **Structured output, not an agentic loop.** The tool call IS the proposal. No result is sent back,
+  the conversation does not continue on its own, and nothing is applied without the user pressing
+  the button.
+- **Off by default, and never detected.** There is no reliable way to ask an OpenAI-compatible
+  endpoint whether it supports tools: several accept a `tools` array, ignore it, and answer in
+  prose, which is indistinguishable from a model that chose not to call one. The fenced transport
+  works everywhere, so the default is the one that always works.
+
+**`heading` is a required parameter even though three of the five operations ignore it**, with an
+empty string standing in for "none". That is a measurement rather than a preference: listed as
+optional, a local model asked to insert before a named heading omitted it in four runs out of six,
+and every one of those proposals was unusable. Required, with the convention spelled out in its
+description, it was six out of six. Models fill required fields; they skim prose about when a field
+applies.
+
+Arguments arrive as a JSON object streamed as a string, so every prefix of one is invalid JSON and
+only the last is not. The provider accumulates by call index and parses at the end of the turn. A
+call that never finished, or asks for an operation nobody recognises, is dropped in silence: the
+reply already on screen is worth more than the proposal that failed to arrive.
+
+Settings reached **version 6** for the profile flag. The schema defaults it, so an old file would
+load either way - the bump is for the other direction. `ChatProfileSchema` is strict, so a file
+written by this version and read by the previous one would fail to parse and take every configured
+model with it; a version it does not recognise is refused cleanly instead.
+
 `splitReply` takes `complete`, which says whether the reply has finished arriving, and it changes
 exactly one thing: mid-stream an unterminated fence is a cut-off reply and stays text, because a card
 built from it could be applied with half a sentence in it. Once the turn has ended it is a model that

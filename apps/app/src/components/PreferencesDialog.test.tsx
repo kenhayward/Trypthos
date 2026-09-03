@@ -27,6 +27,7 @@ const PROFILE = {
   endpoint: "http://localhost:11434/v1",
   model: "qwen2.5-coder",
   supportsImages: false,
+  supportsTools: false,
   isDefault: true,
 };
 

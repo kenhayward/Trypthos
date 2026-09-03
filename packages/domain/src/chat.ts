@@ -22,6 +22,14 @@ export const ChatProfileSchema = z
     topP: z.number().min(0).max(1).optional(),
     /// Whether this model can be sent images. Gates attachment sending.
     supportsImages: z.boolean().default(false),
+    /// Whether this endpoint supports provider tool calling.
+    ///
+    /// Off by default, and deliberately not detected. There is no reliable way to ask an
+    /// OpenAI-compatible endpoint whether it supports tools: several accept a `tools` array, ignore
+    /// it, and answer in prose - which looks exactly like a model that chose not to call one. The
+    /// fenced transport works everywhere, so the safe default is the one that always works and this
+    /// is opt-in.
+    supportsTools: z.boolean().default(false),
     isDefault: z.boolean().default(false),
   })
   .strict();

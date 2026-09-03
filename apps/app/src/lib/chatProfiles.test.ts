@@ -16,6 +16,7 @@ const draft: ProfileDraft = {
   temperature: "",
   maxTokens: "",
   supportsImages: false,
+  supportsTools: false,
   isDefault: false,
 };
 
@@ -159,3 +160,18 @@ function expectProfile(value: ProfileDraft) {
   if (!result.ok) throw new Error(`fixture is not a valid profile: ${result.issues.join(", ")}`);
   return result.profile;
 }
+
+describe("tool calling", () => {
+  it("is off for a new profile, because it cannot be detected", () => {
+    expect(blankDraft().supportsTools).toBe(false);
+  });
+
+  it("survives a save and a reopen", () => {
+    const result = toProfile({ ...draft, supportsTools: true });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.profile.supportsTools).toBe(true);
+      expect(draftFrom(result.profile).supportsTools).toBe(true);
+    }
+  });
+});

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EDIT_FENCE_TAG, splitReply } from "./editBlocks";
+import { EDIT_FENCE_TAG, formatEditBlock, splitReply } from "./editBlocks";
+import type { ProposedEdit } from "./documentEdit";
 
 /// Reading an edit out of the model's reply.
 ///
@@ -261,5 +262,71 @@ describe("a block left unclosed by a finished reply", () => {
   it("does not accept an unclosed block with no content", () => {
     const parts = splitReply("```" + EDIT_FENCE_TAG + " append\n   ", { complete: true });
     expect(parts.every((part) => part.kind === "text")).toBe(true);
+  });
+});
+
+/// Writing an edit back out as a block.
+///
+/// The join between the two transports. A tool call arrives as structured arguments and is turned
+/// into exactly the block the fenced transport would have produced, so everything downstream - the
+/// card, resolving the anchor, applying it - has one representation to deal with rather than two.
+describe("formatEditBlock", () => {
+  const roundTrip = (edit: ProposedEdit) => {
+    const parts = splitReply(formatEditBlock(edit), { complete: true });
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toMatchObject({ kind: "edit" });
+    const first = parts[0]!;
+    return first.kind === "edit" ? first.edit : null;
+  };
+
+  it("round-trips an edit anchored to a heading", () => {
+    const edit: ProposedEdit = {
+      op: "insert-before",
+      heading: "Objectives",
+      content: "## Summary\n\nAn overview.",
+    };
+    expect(roundTrip(edit)).toEqual(edit);
+  });
+
+  it("round-trips every operation", () => {
+    for (const op of ["insert-before", "insert-after", "replace-section"] as const) {
+      const edit: ProposedEdit = { op, heading: "Objectives", content: "Text." };
+      expect(roundTrip(edit)).toEqual(edit);
+    }
+    for (const op of ["replace-selection", "append"] as const) {
+      const edit: ProposedEdit = { op, heading: null, content: "Text." };
+      expect(roundTrip(edit)).toEqual(edit);
+    }
+  });
+
+  // A heading with a quote in it would close the attribute early and the block would parse as
+  // heading-less, which is refused - so the whole proposal would be lost.
+  it("round-trips a heading containing a quote", () => {
+    const edit: ProposedEdit = {
+      op: "insert-before",
+      heading: `The "Objectives" section`,
+      content: "Text.",
+    };
+    expect(roundTrip(edit)).toEqual(edit);
+  });
+
+  // The fence has to be longer than anything inside, or the content ends the block early and the
+  // rest of it reads as conversation.
+  it("round-trips content containing its own code fence", () => {
+    const edit: ProposedEdit = {
+      op: "append",
+      heading: null,
+      content: "## Example\n\n```bash\nnpm test\n```",
+    };
+    expect(roundTrip(edit)).toEqual(edit);
+  });
+
+  it("round-trips content containing a longer fence still", () => {
+    const edit: ProposedEdit = {
+      op: "append",
+      heading: null,
+      content: "````\nnested\n````",
+    };
+    expect(roundTrip(edit)).toEqual(edit);
   });
 });

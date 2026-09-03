@@ -19,6 +19,29 @@ import type { EditOp, ProposedEdit } from "./documentEdit";
 /// The info string that marks a fenced block as an edit rather than a code sample.
 export const EDIT_FENCE_TAG = "trypthos-edit";
 
+/// Writes an edit back out as the block the fenced transport would have produced.
+///
+/// The join between the two transports. A provider tool call arrives as structured arguments; this
+/// turns it into exactly the same text a model would have written by hand, so the card, resolving
+/// the anchor and applying it all have ONE representation to deal with. The alternative - carrying
+/// tool-call edits alongside parsed ones through every layer - would be two of everything, differing
+/// only in how the model happened to phrase itself.
+///
+/// `splitReply(formatEditBlock(edit))` returns the edit unchanged. That is a test, not a hope.
+export function formatEditBlock(edit: ProposedEdit): string {
+  // Longer than any run of backticks inside the content, or the content would close the block early
+  // and everything after it would read as conversation.
+  const longest = Math.max(0, ...[...edit.content.matchAll(/`+/g)].map((run) => run[0].length));
+  const fence = "`".repeat(Math.max(3, longest + 1));
+
+  // Single quotes when the heading contains a double quote. A heading carrying both is not a real
+  // document, and the parser's unquoted form would not help either.
+  const quote = edit.heading?.includes('"') === true ? "'" : '"';
+  const anchor = edit.heading === null ? "" : ` heading=${quote}${edit.heading}${quote}`;
+
+  return `${fence}${EDIT_FENCE_TAG} ${edit.op}${anchor}\n${edit.content}\n${fence}`;
+}
+
 export type ReplyPart =
   | { kind: "text"; text: string }
   | { kind: "edit"; edit: ProposedEdit };

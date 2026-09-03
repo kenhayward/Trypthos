@@ -171,6 +171,25 @@ several ways, and some forget to close it at all. Any of those is accepted once 
 finished. A card only appears at that point, never part-way through a reply, so a change can never
 be applied with half a sentence in it.
 
+### A more reliable route, where your endpoint supports it
+
+Describing a format in words and hoping the model follows it is the part of this that varies most
+between models. If your endpoint supports **tool calling**, Trypthos can ask for the change as a
+structured call instead, which removes that variance.
+
+Tick **This endpoint supports tool calling** on the model in Preferences. Measured against one local
+model asked for a summary before a named heading: without it, roughly half the attempts produced no
+usable proposal at all; with it, every attempt did.
+
+It is **off by default and stays off** for models you configured earlier, because there is no way to
+ask an endpoint whether it supports tools. Several accept the request, ignore it, and answer in
+prose - which looks exactly like a model that simply chose not to use one. If you turn it on and
+chat stops proposing changes, turn it back off.
+
+Everything after that is the same: the same card, the same Apply, the same single undo. The tool call
+is the proposal and nothing else - Trypthos never sends a result back, and no change is ever made
+without you pressing the button.
+
 ### When a model answers with nothing
 
 Some models - the ones that think before replying - occasionally finish a turn having done all their

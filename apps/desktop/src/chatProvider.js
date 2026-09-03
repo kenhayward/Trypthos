@@ -4,6 +4,8 @@ const {
   buildChatRequest,
   completionsUrl,
   createSseDecoder,
+  editFromToolArguments,
+  formatEditBlock,
   parseStreamPayload,
 } = require("@trypthos/domain");
 
@@ -86,6 +88,33 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     const decoder = createSseDecoder();
     const utf8 = new TextDecoder();
 
+    /// Tool call arguments, assembled by index as the fragments arrive.
+    ///
+    /// Held until the turn ends rather than parsed as they come: the arguments are a JSON object
+    /// streamed as a string, so every prefix of one is invalid JSON and only the last is not.
+    const toolArguments = new Map();
+
+    /// Turns finished tool calls into the same block the fenced transport produces.
+    ///
+    /// Emitted as ordinary tokens, which is the point: downstream there is one representation of a
+    /// proposed edit, not two differing only in how the model happened to phrase itself. The panel,
+    /// the card, resolving the anchor and applying it are all untouched by this transport existing.
+    ///
+    /// A call that never finished, or asks for something unrecognised, is dropped in silence. The
+    /// reply already on screen is worth more than the proposal that failed to arrive, and half an
+    /// argument object is not something to offer anybody.
+    function flushToolCalls() {
+      for (const json of toolArguments.values()) {
+        const edit = editFromToolArguments(json);
+        if (edit === null) {
+          logger.error("A tool call could not be read as an edit, and was dropped.");
+          continue;
+        }
+        onEvent({ type: "token", text: `\n\n${formatEditBlock(edit)}` });
+      }
+      toolArguments.clear();
+    }
+
     try {
       for (;;) {
         const { value, done } = await reader.read();
@@ -98,13 +127,23 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
           const event = parseStreamPayload(payload);
 
           if (event.type === "ignored") continue;
+          if (event.type === "tool-call") {
+            toolArguments.set(
+              event.index,
+              (toolArguments.get(event.index) ?? "") + event.argumentsDelta,
+            );
+            continue;
+          }
           if (event.type === "done") {
+            flushToolCalls();
             onEvent({ type: "end" });
             return;
           }
           if (event.type === "error") {
             // A provider that streams an error has stopped answering. Waiting for more tokens would
-            // hang the panel until the connection dropped.
+            // hang the panel until the connection dropped. Anything already proposed still stands:
+            // a complete call before the failure is a complete call.
+            flushToolCalls();
             onEvent(event);
             onEvent({ type: "end" });
             return;
@@ -125,6 +164,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     // Reached when the stream closed without a [DONE] sentinel - a dropped connection, or simply a
     // provider that does not send one. The panel has to be told the turn ended, or the stop button
     // stays up for ever.
+    flushToolCalls();
     onEvent({ type: "end" });
   }
 
