@@ -176,6 +176,46 @@ describe("migrating from version 4", () => {
   });
 });
 
+describe("migrating from version 5", () => {
+  const v5 = {
+    schemaVersion: 5,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: {
+      systemPrompt: null,
+      profiles: [
+        {
+          id: "one",
+          label: "Local model",
+          endpoint: "http://localhost:11434/v1",
+          model: "qwen2.5-coder",
+          supportsImages: false,
+          isDefault: true,
+        },
+      ],
+    },
+  };
+
+  // Off, not detected: there is no reliable way to ask an endpoint whether it supports tools, and
+  // turning it on for an existing profile could break a chat that was working.
+  it("leaves tool calling off for a profile configured before it existed", () => {
+    expect(loadSettings(v5).chat.profiles[0]?.supportsTools).toBe(false);
+  });
+
+  it("keeps the profile otherwise intact", () => {
+    const migrated = loadSettings(v5).chat.profiles[0];
+    expect(migrated?.label).toBe("Local model");
+    expect(migrated?.isDefault).toBe(true);
+  });
+
+  it("keeps the rest of the settings", () => {
+    expect(loadSettings(v5).window.closeToTray).toBe(true);
+    expect(loadSettings(v5).chat.systemPrompt).toBeNull();
+  });
+});
+
 describe("chat profiles in settings", () => {
   const profile = {
     id: "local",

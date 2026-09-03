@@ -12,7 +12,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 5;
+export const SETTINGS_VERSION = 6;
 
 export const SettingsSchema = z
   .object({
@@ -109,6 +109,24 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
     migrate: (input) => {
       const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
       return { ...input, chat: { ...chat, systemPrompt: DEFAULT_SYSTEM_PROMPT } };
+    },
+  },
+  {
+    to: 6,
+    // Version 6 added `supportsTools` to each profile. The schema defaults it, so an old file would
+    // load either way - the version bump is for the OTHER direction: `ChatProfileSchema` is strict,
+    // so a file written by this version and read by the previous one would fail to parse and take
+    // every configured model with it. A version it does not recognise is refused cleanly instead.
+    migrate: (input) => {
+      const chat = (input as { chat?: { profiles?: unknown[] } }).chat ?? {};
+      const profiles = Array.isArray(chat.profiles) ? chat.profiles : [];
+      return {
+        ...input,
+        chat: {
+          ...chat,
+          profiles: profiles.map((profile) => ({ supportsTools: false, ...(profile as object) })),
+        },
+      };
     },
   },
   {

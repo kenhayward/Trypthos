@@ -215,3 +215,81 @@ describe("the reasoning channel", () => {
     expect(parseStreamPayload(payload)).toEqual({ type: "ignored" });
   });
 });
+
+/// The tool-calling transport.
+///
+/// Opt-in per profile, because there is no reliable way to ask an OpenAI-compatible endpoint whether
+/// it supports tools: several accept a `tools` array, ignore it, and answer in prose.
+describe("tool calling", () => {
+  it("sends no tools unless the profile says the endpoint supports them", () => {
+    const body = buildChatRequest(profile, turns);
+    expect("tools" in body).toBe(false);
+  });
+
+  it("offers the edit tool when the profile says so", () => {
+    const capable = ChatProfileSchema.parse({ ...profile, supportsTools: true });
+    const body = buildChatRequest(capable, turns);
+
+    expect(body.tools).toHaveLength(1);
+    expect(body.tool_choice).toBe("auto");
+  });
+
+  it("reads a tool call fragment", () => {
+    const payload = JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, function: { name: "propose_edit", arguments: '{"op":' } }],
+          },
+        },
+      ],
+    });
+
+    expect(parseStreamPayload(payload)).toEqual({
+      type: "tool-call",
+      index: 0,
+      name: "propose_edit",
+      argumentsDelta: '{"op":',
+    });
+  });
+
+  it("reads a continuation fragment, which carries no name", () => {
+    const payload = JSON.stringify({
+      choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"append"}' } }] } }],
+    });
+
+    expect(parseStreamPayload(payload)).toEqual({
+      type: "tool-call",
+      index: 0,
+      name: null,
+      argumentsDelta: '"append"}',
+    });
+  });
+
+  // Some providers omit the index when there is only ever one call in flight. Treating each fragment
+  // as a new call would assemble none of them.
+  it("assumes the first call when no index is given", () => {
+    const payload = JSON.stringify({
+      choices: [{ delta: { tool_calls: [{ function: { arguments: "{}" } }] } }],
+    });
+
+    expect(parseStreamPayload(payload)).toMatchObject({ type: "tool-call", index: 0 });
+  });
+
+  // A chunk carrying both is the model doing what was asked. Preferring the thinking would lose the
+  // proposal entirely.
+  it("prefers a tool call over the reasoning beside it", () => {
+    const payload = JSON.stringify({
+      choices: [
+        {
+          delta: {
+            reasoning: "Deciding where it goes.",
+            tool_calls: [{ index: 0, function: { arguments: "{}" } }],
+          },
+        },
+      ],
+    });
+
+    expect(parseStreamPayload(payload)).toMatchObject({ type: "tool-call" });
+  });
+});

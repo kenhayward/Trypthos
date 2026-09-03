@@ -45,7 +45,9 @@ export {
 export { findHeadings, resolveEdit } from "./documentEdit";
 export type { EditOp, EditTarget, Heading, ProposedEdit } from "./documentEdit";
 
-export { EDIT_FENCE_TAG, splitReply } from "./editBlocks";
+export { EDIT_FENCE_TAG, formatEditBlock, splitReply } from "./editBlocks";
+
+export { EDIT_TOOL_NAME, editFromToolArguments, editTools } from "./editTools";
 export type { ReplyPart } from "./editBlocks";
 export type { ChatRequestBody, ChatTurn, StreamEvent } from "./chatCompletion";
 

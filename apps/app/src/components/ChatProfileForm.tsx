@@ -153,6 +153,17 @@ export default function ChatProfileForm({
       <label className="mt-1 flex items-center gap-2 text-ui text-ink">
         <input
           type="checkbox"
+          checked={draft.supportsTools}
+          onChange={(event) => set("supportsTools", event.target.checked)}
+        />
+        {t("preferences.chat.supportsTools")}
+      </label>
+      {/* Outside the label so the sentence does not join the checkbox's accessible name. */}
+      <p className="mt-1 text-xs text-ink-4">{t("preferences.chat.supportsToolsHint")}</p>
+
+      <label className="mt-1 flex items-center gap-2 text-ui text-ink">
+        <input
+          type="checkbox"
           checked={draft.isDefault}
           onChange={(event) => set("isDefault", event.target.checked)}
         />

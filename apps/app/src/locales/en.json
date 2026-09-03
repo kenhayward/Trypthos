@@ -139,7 +139,9 @@
       "remove": "Remove",
       "systemPrompt": "System prompt",
       "systemPromptHint": "Sent ahead of every conversation. It tells the model what Trypthos is and how answers should read.",
-      "resetPrompt": "Reset to the default"
+      "resetPrompt": "Reset to the default",
+      "supportsTools": "This endpoint supports tool calling",
+      "supportsToolsHint": "Lets the model propose document changes as a structured call rather than as text, which is more reliable where it works. Leave this off if you are unsure: changes still work without it."
     }
   },
   "menu": {

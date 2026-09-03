@@ -25,6 +25,7 @@ export interface ProfileDraft {
   temperature: string;
   maxTokens: string;
   supportsImages: boolean;
+  supportsTools: boolean;
   isDefault: boolean;
 }
 
@@ -51,6 +52,7 @@ export function blankDraft(): ProfileDraft {
     temperature: "",
     maxTokens: "",
     supportsImages: false,
+    supportsTools: false,
     isDefault: false,
   };
 }
@@ -65,6 +67,7 @@ export function draftFrom(profile: ChatProfile): ProfileDraft {
     temperature: profile.temperature === undefined ? "" : String(profile.temperature),
     maxTokens: profile.maxTokens === undefined ? "" : String(profile.maxTokens),
     supportsImages: profile.supportsImages,
+    supportsTools: profile.supportsTools,
     isDefault: profile.isDefault,
   };
 }
@@ -101,6 +104,7 @@ export function toProfile(draft: ProfileDraft): DraftResult {
     ...(typeof temperature === "number" ? { temperature } : {}),
     ...(typeof maxTokens === "number" ? { maxTokens } : {}),
     supportsImages: draft.supportsImages,
+    supportsTools: draft.supportsTools,
     isDefault: draft.isDefault,
   });
 

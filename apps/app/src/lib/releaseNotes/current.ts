@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.17.0",
+    date: "2026-09-03",
+    pr: 37,
+    headline: "A more reliable way for chat to propose changes",
+    summary:
+      "If your endpoint supports tool calling, Trypthos can now use it to ask for document changes, and it is markedly more dependable than describing the format in words. Tick \"This endpoint supports tool calling\" on the model in Preferences to turn it on. Measured against one local model asking for a summary before a heading: without it, roughly half of attempts produced no usable proposal at all; with it, every attempt did. It is off by default and stays that way, because there is no way to ask an endpoint whether it supports tools - several accept the request, ignore it, and reply in prose, which looks exactly like a model that chose not to use one. Nothing else changes: you get the same card, the same Apply button, and the same single undo.",
+    added: [
+      "Tool calling as a second way for chat to propose document changes, per model.",
+    ],
+    changed: [
+      "Models configured before this release keep the previous behaviour until you turn it on.",
+    ],
+  },
+  {
     version: "0.16.0",
     date: "2026-09-03",
     pr: 36,
