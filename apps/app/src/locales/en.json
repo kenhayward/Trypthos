@@ -130,6 +130,8 @@
     "closeToTrayHint": "Closing hides Trypthos to the notification area. Quit it from the tray icon.",
     "chat": {
       "section": "Chat models",
+    "showPanel": "Show the chat panel",
+    "showPanelHint": "The chat panel appears once you have configured a model. Turn this off for a plain editor and folder browser, or on to keep the panel while you set a model up.",
       "empty": "No models configured yet. Add one to start chatting.",
       "add": "Add a model",
       "edit": "Edit {{label}}",

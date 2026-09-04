@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  chatPanelVisible,
   effectiveSystemPrompt,
   normaliseEndpoint,
   type ChatProfile,
@@ -136,6 +137,24 @@ export default function PreferencesDialog({
           <legend className="text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase">
             {t("preferences.chat.section")}
           </legend>
+
+          {/* Shown as the panel currently is, whether that was chosen or derived. Clicking it stores
+              a choice, which is the point: from then on it is the user's answer rather than one
+              taken from whether a model happens to be configured. */}
+          <label className="mt-2 flex items-start gap-2 text-base text-ink">
+            <input
+              type="checkbox"
+              checked={chatPanelVisible(settings.chat)}
+              onChange={(event) => updateChat({ showPanel: event.target.checked })}
+              className="mt-0.5"
+            />
+            <span>
+              {t("preferences.chat.showPanel")}
+              <span className="mt-0.5 block text-xs text-ink-4">
+                {t("preferences.chat.showPanelHint")}
+              </span>
+            </span>
+          </label>
 
           {profiles.length === 0 && editing === null && (
             <p className="mt-2 text-ui text-ink-4">{t("preferences.chat.empty")}</p>

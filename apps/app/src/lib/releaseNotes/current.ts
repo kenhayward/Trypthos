@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.25.0",
+    date: "2026-09-04",
+    pr: 49,
+    headline: "The chat panel waits until you have a model to chat with",
+    summary:
+      "A fresh installation opened with a chat panel that could not answer anything, because no model had been configured yet - a third of the window given over to an invitation to go and set one up. The panel is now absent until you configure your first model in Preferences, and appears by itself the moment you do; the editor takes the width until then. Preferences has a Show the chat panel switch in its Chat models section for the times that rule gets it wrong: turn it off for a plain editor and folder browser even with models configured, or on to keep the panel while you are still setting one up. Existing settings are untouched - if you have a model configured, the panel is where it has always been.",
+    added: [
+      "A Show the chat panel setting in Preferences, under Chat models.",
+    ],
+    changed: [
+      "The chat panel is hidden until a model is configured, and appears as soon as one is.",
+    ],
+  },
+  {
     version: "0.24.0",
     date: "2026-09-04",
     pr: 48,

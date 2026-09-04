@@ -82,6 +82,14 @@ dead items.
 
 The right panel answers questions about the open document, your selection, and the wider folder.
 
+**It is not in the window until you have a model to chat with.** A panel with nothing behind it can
+only tell you to go and configure one, so on a fresh installation there is no panel and the editor
+has the width; the moment you save your first model in Preferences it appears, without anybody
+having to find a setting. The Chat models section carries a **Show the chat panel** switch for the
+times that rule gets it wrong - turn it off to keep a plain editor and folder browser with models
+configured, or on to have the panel there while you are still setting one up. Once you use the
+switch it is your answer, and Trypthos stops deciding for you.
+
 You configure the endpoint, model and parameters yourself, as a list of named models you choose
 between per message. Preferences has a Chat models section for this: each entry carries a name you
 read, the address of an OpenAI-compatible endpoint, the model slug that endpoint expects, and
