@@ -60,7 +60,7 @@ jobs:
           echo "ok: @trypthos/domain is packaged"
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installers-${{ matrix.os }}
           path: |
@@ -76,8 +76,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # v8 fails the run on a digest mismatch rather than warning, which is the behaviour a release
+      # wants: an installer that arrived corrupted stops the publish instead of being uploaded for
+      # people to download. Both actions are pinned to the majors that default to Node 24 - v5 was
+      # preliminary Node 24 support that still RAN on Node 20, so it would not have moved anything.
       - name: Collect installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: installers
           merge-multiple: true
