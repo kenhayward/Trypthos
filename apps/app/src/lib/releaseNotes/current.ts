@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.27.1",
+    date: "2026-09-04",
+    pr: 55,
+    headline: "Unsaved changes are no longer thrown away in silence",
+    summary:
+      "Editing a file and then opening another one, opening another folder, or closing the window discarded the edits without a word. All three now ask first, offering Save, Don't Save and Cancel - and Cancel leaves everything exactly as it was, the same file, the same text, still unsaved. If you choose Save and the save cannot be made, because the file changed on disk since you opened it, nothing is discarded and nothing closes: the conflict is reported and your text is still in the editor, which is the point of asking. Keeping Trypthos running in the tray still closes nothing, so it does not ask - the window hides and your document is still open behind it.",
+    fixed: [
+      "Opening another file, opening another folder or closing the window now asks before discarding unsaved changes.",
+    ],
+  },
+  {
     version: "0.27.0",
     date: "2026-09-04",
     pr: 53,
