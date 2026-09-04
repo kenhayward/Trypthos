@@ -20,6 +20,12 @@ export const ChatProfileSchema = z
     temperature: z.number().min(0).max(2).optional(),
     maxTokens: z.number().int().positive().optional(),
     topP: z.number().min(0).max(1).optional(),
+    /// How many tokens this model can take in one conversation, or null when nobody has said.
+    ///
+    /// Null rather than a default, and never detected: there is no way to ask an OpenAI-compatible
+    /// endpoint how big its window is, and a number invented here would draw a context dial that is
+    /// confidently wrong - worse than one that admits it does not know the total.
+    contextWindow: z.number().int().positive().nullable().default(null),
     /// Whether this model can be sent images. Gates attachment sending.
     supportsImages: z.boolean().default(false),
     /// Whether this endpoint supports provider tool calling.

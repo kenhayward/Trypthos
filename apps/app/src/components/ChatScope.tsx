@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { ContextUsage } from "@trypthos/domain";
+import ContextDial from "./ContextDial";
 
 interface Props {
   /// Files attached to the conversation, workspace-relative.
@@ -15,6 +17,8 @@ interface Props {
   /// Asked for when the picker opens, so the folder is only walked if somebody wants it.
   onNeedFiles: () => void;
   onAttach: (path: string) => void;
+  /// How full the model's context is with everything on this bar, plus what is typed.
+  usage: ContextUsage;
 }
 
 /// What chat can see, beyond the open document.
@@ -31,6 +35,7 @@ export default function ChatScope({
   files,
   onNeedFiles,
   onAttach,
+  usage,
 }: Props) {
   const { t } = useTranslation();
   const [picking, setPicking] = useState(false);
@@ -105,7 +110,11 @@ export default function ChatScope({
         </span>
       ))}
 
-      <div ref={picker} className="relative">
+      {/* `flex`, not a bare block: a block wrapping an inline-block button is a LINE BOX, and the
+          line box carries the font's descender space below the button. That made this wrapper a
+          couple of pixels taller than the plain button beside it, and `items-center` then centred
+          the two at different heights - the whole reason Folder and Attach a file did not line up. */}
+      <div ref={picker} className="relative flex">
         <button
           type="button"
           disabled={disabled || !canUseFolder}
@@ -152,6 +161,8 @@ export default function ChatScope({
           </div>
         )}
       </div>
+
+      <ContextDial usage={usage} />
     </div>
   );
 }

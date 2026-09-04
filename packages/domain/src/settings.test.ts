@@ -344,6 +344,7 @@ describe("chatPanelVisible", () => {
     label: "Local model",
     endpoint: "http://localhost:11434/v1",
     model: "qwen2.5-coder",
+    contextWindow: null,
     supportsImages: false,
     supportsTools: false,
     isDefault: true,
@@ -418,5 +419,76 @@ describe("the editor section", () => {
   it("falls back to the defaults rather than accepting a mode that does not exist", () => {
     const stored = { ...DEFAULT_SETTINGS, editor: { defaultViewMode: "wysiwyg" } };
     expect(loadSettings(stored)).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe("migrating from version 9", () => {
+  const v9 = {
+    schemaVersion: 9,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: {
+      systemPrompt: null,
+      folderFileLimit: 40,
+      showPanel: null,
+      profiles: [
+        {
+          id: "one",
+          label: "Local model",
+          endpoint: "http://localhost:11434/v1",
+          model: "qwen2.5-coder",
+          supportsImages: false,
+          supportsTools: false,
+          isDefault: true,
+        },
+      ],
+    },
+    editor: { defaultViewMode: "live" as const },
+  };
+
+  // Unknown, not guessed. There is no way to ask an OpenAI-compatible endpoint how big its window
+  // is, and a number invented here would draw a dial that is confidently wrong.
+  it("leaves the context window unset for a profile configured before it existed", () => {
+    expect(loadSettings(v9).chat.profiles[0]?.contextWindow).toBeNull();
+  });
+
+  it("keeps everything version 9 stored", () => {
+    const migrated = loadSettings(v9);
+    expect(migrated.chat.profiles[0]?.label).toBe("Local model");
+    expect(migrated.editor.defaultViewMode).toBe("live");
+    expect(migrated.chat.folderFileLimit).toBe(40);
+  });
+
+  it("arrives at the current version", () => {
+    expect(loadSettings(v9).schemaVersion).toBe(SETTINGS_VERSION);
+  });
+});
+
+describe("the context window on a profile", () => {
+  const profile = {
+    id: "local",
+    label: "Local model",
+    endpoint: "http://localhost:11434/v1",
+    model: "qwen2.5-coder",
+    supportsImages: false,
+    supportsTools: false,
+    isDefault: true,
+  };
+  const withWindow = (contextWindow: unknown) => ({
+    ...DEFAULT_SETTINGS,
+    chat: { ...DEFAULT_SETTINGS.chat, profiles: [{ ...profile, contextWindow }] },
+  });
+
+  it("round-trips a configured window", () => {
+    expect(loadSettings(withWindow(128_000)).chat.profiles[0]?.contextWindow).toBe(128_000);
+  });
+
+  // A window of zero would divide the dial by nothing, and a fractional one is not a token count.
+  it("refuses a window that is not a positive whole number", () => {
+    expect(loadSettings(withWindow(0)).chat.profiles).toEqual([]);
+    expect(loadSettings(withWindow(-1)).chat.profiles).toEqual([]);
+    expect(loadSettings(withWindow(1.5)).chat.profiles).toEqual([]);
   });
 });

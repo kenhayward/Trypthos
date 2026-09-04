@@ -24,6 +24,9 @@ export interface ProfileDraft {
   model: string;
   temperature: string;
   maxTokens: string;
+  /// The model's context window, or "" for "I do not know" - which is a real answer, and the one
+  /// most people have. See `contextWindow` on the schema.
+  contextWindow: string;
   supportsImages: boolean;
   supportsTools: boolean;
   isDefault: boolean;
@@ -51,6 +54,7 @@ export function blankDraft(): ProfileDraft {
     model: "",
     temperature: "",
     maxTokens: "",
+    contextWindow: "",
     supportsImages: false,
     supportsTools: false,
     isDefault: false,
@@ -66,6 +70,8 @@ export function draftFrom(profile: ChatProfile): ProfileDraft {
     // An unset parameter is an empty box. `String(undefined)` would put the word "undefined" in it.
     temperature: profile.temperature === undefined ? "" : String(profile.temperature),
     maxTokens: profile.maxTokens === undefined ? "" : String(profile.maxTokens),
+    // Null is unset here rather than undefined, so it is the same empty box.
+    contextWindow: profile.contextWindow === null ? "" : String(profile.contextWindow),
     supportsImages: profile.supportsImages,
     supportsTools: profile.supportsTools,
     isDefault: profile.isDefault,
@@ -96,6 +102,9 @@ export function toProfile(draft: ProfileDraft): DraftResult {
   const maxTokens = optionalNumber(draft.maxTokens);
   if (maxTokens === "invalid") issues.push("maxTokens");
 
+  const contextWindow = optionalNumber(draft.contextWindow);
+  if (contextWindow === "invalid") issues.push("contextWindow");
+
   const parsed = ChatProfileSchema.safeParse({
     id: draft.id,
     label: draft.label.trim(),
@@ -103,6 +112,10 @@ export function toProfile(draft: ProfileDraft): DraftResult {
     model: draft.model.trim(),
     ...(typeof temperature === "number" ? { temperature } : {}),
     ...(typeof maxTokens === "number" ? { maxTokens } : {}),
+    // Explicitly null when unset, not absent: absent takes the schema default, which is null too -
+    // but saying it here keeps "the user cleared the box" and "the field did not exist" the same
+    // answer rather than two paths that happen to agree.
+    contextWindow: typeof contextWindow === "number" ? contextWindow : null,
     supportsImages: draft.supportsImages,
     supportsTools: draft.supportsTools,
     isDefault: draft.isDefault,

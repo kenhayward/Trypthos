@@ -8,6 +8,7 @@ import {
   type ProposedEdit,
 } from "@trypthos/domain";
 import { renderMarkdown } from "../lib/markdown";
+import { contextUsage } from "@trypthos/domain";
 import type { Turn } from "../lib/conversation";
 import ChatEditCard from "./ChatEditCard";
 import ChatHistoryMenu from "./ChatHistoryMenu";
@@ -27,6 +28,12 @@ interface Props {
   reasoning: string;
   /// A file being read on the model's behalf, if one is.
   activity: string | null;
+  /// What the next request will already carry, and the window it has to fit in.
+  ///
+  /// The count arrives measured rather than measured here: it needs the system prompt and the
+  /// resolved document context, which live above this panel. What is typed is added here, because
+  /// that is the part this component owns.
+  context: { tokens: number; limit: number | null };
   onSend: (text: string) => void;
   onStop: () => void;
   onClear: () => void;
@@ -83,6 +90,7 @@ export default function ChatPanel({
   error,
   reasoning,
   activity,
+  context,
   onSend,
   onStop,
   onClear,
@@ -334,6 +342,7 @@ export default function ChatPanel({
 
       {models.length > 0 && (
         <ChatScope
+          usage={contextUsage({ tokens: context.tokens, draft: input, limit: context.limit })}
           attachments={scope.attachments}
           files={scope.files}
           includeFolder={scope.includeFolder}

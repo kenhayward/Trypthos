@@ -96,6 +96,14 @@ export {
 } from "./editorMode";
 export type { EditorMode } from "./editorMode";
 
+export {
+  CHARACTERS_PER_TOKEN,
+  contextTokens,
+  contextUsage,
+  estimateTokens,
+} from "./contextUsage";
+export type { ContextUsage } from "./contextUsage";
+
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";
 

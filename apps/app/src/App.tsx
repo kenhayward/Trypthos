@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
   chatPanelVisible,
+  contextTokens,
   defaultChatProfile,
+  effectiveSystemPrompt,
   resolveEdit,
   resolvePanelWidths,
   type ProposedEdit,
@@ -194,6 +196,31 @@ export default function App() {
   );
 
   const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, scope.context);
+
+  /// What the next request already carries, before anything is typed.
+  ///
+  /// Memoised because it walks the document and every attachment, and the panel asks for it again on
+  /// each keystroke to add the draft. The system prompt is resolved rather than stored: null means
+  /// the built-in default, and that default is what will be sent.
+  /// Resolved here rather than at send time, which is the one difference from the request itself:
+  /// `scope.context` is a callback so that a turn sees the selection and the buffer AS THEY ARE
+  /// THEN, and the dial has to answer before that. It re-resolves when the document changes, which
+  /// is what makes the ring move as you write - and only while the panel is on screen, since a
+  /// hidden dial is a document walk nobody reads.
+  const carried = useMemo(
+    () =>
+      showChat
+        ? contextTokens({
+            systemPrompt: effectiveSystemPrompt(settings.chat.systemPrompt),
+            context: scope.context(),
+            turns: chat.turns,
+          })
+        : 0,
+    // `scope` rather than `scope.context`: the rule cannot see that the callback is the only part
+    // read, and naming the object satisfies it honestly rather than suppressing it. The callback is
+    // memoised on its own inputs, so this recomputes exactly when the context it would build does.
+    [showChat, settings.chat.systemPrompt, scope, chat.turns],
+  );
   const history = useChatHistory(useMemo(() => chatHistoryBridge(), []));
 
   /// The file a reopened conversation was about, when it is no longer in the open folder.
@@ -361,7 +388,8 @@ export default function App() {
                 error={chat.error}
                 reasoning={chat.reasoning}
                 activity={chat.activity}
-                onSend={(text) => void chat.send(text)}
+                context={{ tokens: carried, limit: activeModel?.contextWindow ?? null }}
+              onSend={(text) => void chat.send(text)}
                 onStop={() => void chat.stop()}
                 onClear={() => {
                   // A cleared thread is a new conversation: the next save must make a new chat rather

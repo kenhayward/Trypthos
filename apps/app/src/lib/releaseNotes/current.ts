@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.27.0",
+    date: "2026-09-04",
+    pr: 53,
+    headline: "A context dial over the chat box",
+    summary:
+      "A small ring at the end of the chat scope bar shows how full the model's context is with everything the next question will carry: the system prompt, the document or your selection, any attached files, the folder outline, the conversation so far, and what you have typed but not yet sent. Hover it for the numbers. Every figure is an estimate and says so - counting tokens exactly needs the provider's own tokeniser, and an endpoint only reports its count after the request, which is too late to be useful. The total comes from a new Context window box on each chat model in Settings; leave it empty if you do not know your endpoint's window and the dial shows the amount without pretending to know how much is left. Also fixed: Folder and Attach a file sat a couple of pixels out of line with each other.",
+    added: [
+      "A context dial on the chat scope bar, with the amount and the total on hover.",
+      "A Context window box on each chat model, used to work out how full the context is.",
+    ],
+    fixed: [
+      "Folder and Attach a file now line up with each other on the chat scope bar.",
+    ],
+  },
+  {
     version: "0.26.1",
     date: "2026-09-04",
     pr: 52,

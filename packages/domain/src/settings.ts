@@ -14,7 +14,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 9;
+export const SETTINGS_VERSION = 10;
 
 export const SettingsSchema = z
   .object({
@@ -172,6 +172,24 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
     // Version 9 added the editor section. Seeded with the mode the app has always opened in, because
     // adding a setting must not change what an existing installation does.
     migrate: (input) => ({ ...input, editor: { defaultViewMode: DEFAULT_EDITOR_MODE } }),
+  },
+  {
+    to: 10,
+    // Version 10 added each profile's context window. The schema defaults it, so an old file would
+    // load either way - the version is for the OTHER direction, as with version 6: a file written
+    // here and read by the previous build would fail its strict profile schema and take every
+    // configured model with it.
+    migrate: (input) => {
+      const chat = (input as { chat?: { profiles?: unknown[] } }).chat ?? {};
+      const profiles = Array.isArray(chat.profiles) ? chat.profiles : [];
+      return {
+        ...input,
+        chat: {
+          ...chat,
+          profiles: profiles.map((profile) => ({ contextWindow: null, ...(profile as object) })),
+        },
+      };
+    },
   },
   {
     to: 6,

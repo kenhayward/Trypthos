@@ -123,6 +123,25 @@ place, so an endpoint that accepts a request and then goes quiet is never a pane
 Replies render as markdown, and are sanitised before they are shown - a model's output is text
 Trypthos did not write, and is treated with the same suspicion as a file from your workspace.
 
+### How full the context is
+
+A ring at the end of the scope bar fills as the conversation grows. It counts everything the next
+question will carry - the system prompt, the document or your selection, any attached files, the
+folder outline, the conversation so far, and what you have typed but not yet sent - so it moves as
+you write, in the document as well as in the chat box. Hover it for the amount and the total.
+
+**Every number it shows is an estimate, and the wording says so.** Counting tokens exactly needs the
+provider's own tokeniser, and an OpenAI-compatible endpoint has none to offer: it reports its own
+count in the reply, which is after the question the dial exists to inform. Trypthos counts roughly
+four characters to a token, which is close on English prose and less so on code.
+
+The total comes from the **Context window** box on each chat model, which you fill in from your
+provider's documentation. There is no way to ask an endpoint how large its window is, so leaving the
+box empty is a real answer: the ring then stays empty and the hover gives the amount without claiming
+to know how much room is left. Past the end, the ring fills and turns red, and the hover says what
+usually happens next - an endpoint typically drops the oldest of the conversation rather than
+refusing outright.
+
 ### What the model is told
 
 Every question carries the document with it, decided by one small rule:
