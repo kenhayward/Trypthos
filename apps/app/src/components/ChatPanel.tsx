@@ -30,7 +30,7 @@ interface Props {
   onSend: (text: string) => void;
   onStop: () => void;
   onClear: () => void;
-  /// Opens Preferences, which is the only way out of having no model configured.
+  /// Opens Settings on the chat models page, which is the only way out of having no model configured.
   onConfigure: () => void;
   /// Where a proposed edit would land in the document as it is NOW, or why it cannot.
   ///
@@ -222,7 +222,7 @@ export default function ChatPanel({
               onClick={onConfigure}
               className="mt-2 rounded border border-rule px-2 py-1 text-ui text-ink"
             >
-              {t("chat.openPreferences")}
+              {t("chat.openSettings")}
             </button>
           </div>
         ) : turns.length === 0 ? (

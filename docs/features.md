@@ -36,7 +36,10 @@ The centre panel edits markdown in one of three views over the same document:
   is stored. Line numbers, undo and redo work as you would expect.
 - **Preview** is read-only rendered prose. No caret, no gutter - it stops being an editing surface.
 - **Live** hides syntax markers until your cursor reaches a line, which then shows its own
-  scaffolding. Reads like a document, edits like text. This is the default view.
+  scaffolding. Reads like a document, edits like text. This is the view documents open in unless you
+  choose another on the Editor page of Settings - so if you work in Source, files open in Source
+  rather than needing a click each time. The header still switches view for the document in front of
+  you, and that choice lasts until you open another document.
 
   Headings, bold, italic, inline code, links, quotes and list bullets render in place, and the line
   you are editing is tinted. Tables, images, footnotes and fenced code blocks still show as source
@@ -84,14 +87,14 @@ The right panel answers questions about the open document, your selection, and t
 
 **It is not in the window until you have a model to chat with.** A panel with nothing behind it can
 only tell you to go and configure one, so on a fresh installation there is no panel and the editor
-has the width; the moment you save your first model in Preferences it appears, without anybody
+has the width; the moment you save your first model in Settings it appears, without anybody
 having to find a setting. The Chat models section carries a **Show the chat panel** switch for the
 times that rule gets it wrong - turn it off to keep a plain editor and folder browser with models
 configured, or on to have the panel there while you are still setting one up. Once you use the
 switch it is your answer, and Trypthos stops deciding for you.
 
 You configure the endpoint, model and parameters yourself, as a list of named models you choose
-between per message. Preferences has a Chat models section for this: each entry carries a name you
+between per message. Settings has a Chat models page for this: each entry carries a name you
 read, the address of an OpenAI-compatible endpoint, the model slug that endpoint expects, and
 optional temperature and token limits. One is marked as the model new chats start on.
 
@@ -134,7 +137,7 @@ file - which is the right answer for a mode you cannot edit in.
 
 ### The system prompt
 
-Preferences carries one system prompt, sent ahead of every conversation. It ships with a default
+Settings carries one system prompt, sent ahead of every conversation. It ships with a default
 written for markdown work: answer in the document's own conventions, keep the document's own words
 for names and figures when summarising, and return a rewrite as the markdown itself rather than
 wrapped in an explanation of what changed.
@@ -185,7 +188,7 @@ Describing a format in words and hoping the model follows it is the part of this
 between models. If your endpoint supports **tool calling**, Trypthos can ask for the change as a
 structured call instead, which removes that variance.
 
-Tick **This endpoint supports tool calling** on the model in Preferences. Measured against one local
+Tick **This endpoint supports tool calling** on the model in Settings. Measured against one local
 model asked for a summary before a named heading: without it, roughly half the attempts produced no
 usable proposal at all; with it, every attempt did.
 
@@ -244,7 +247,7 @@ only read files on that list - anything else is refused, and the model is told w
 something else or answer without it. Without tool calling, the list still helps: the model says which
 file it would need and you attach it yourself.
 
-How many files the list names is yours to set, in Preferences, and defaults to ten. Every entry is a
+How many files the list names is yours to set, on the AI and system prompt page, and defaults to ten. Every entry is a
 file the model might ask to read, so a longer list is a more capable chat and a more expensive one.
 Only the top level of the folder is listed; files in subfolders are not offered and cannot be read.
 
@@ -262,9 +265,27 @@ Chats are saved on your machine. A chat references the file and workspace it was
 being stored beside them, so it will tell you when that file has since been renamed, moved or
 deleted.
 
+## Settings
+
+Settings opens as a window of its own, with a rail down the left and a page per subject: Appearance,
+Window, Chat models, AI and system prompt, Editor, and About. Open it from the cog in the title bar,
+from Tools on Windows or the app menu on macOS, or with Ctrl+comma. Escape closes it.
+
+Every setting takes effect the moment you choose it. There is no Save button, and so nothing to
+forget: pick Dark and the app is dark behind the window while you are still looking at it. A chat
+model is the one exception, because a model is several fields that are only valid together - it has
+its own Save, and abandoning the form or leaving the page discards it.
+
+Chat models have a page to themselves. Configured models are listed as cards, and the rail lists them
+too while you are on that page, so a model is one click away wherever you are in it. Editing one
+opens its form on its own rather than stacking every model's fields on one screen.
+
+About is a page here rather than a box of its own, so what Trypthos says about itself is in one
+place. The title bar's version button and the Help menu both open it.
+
 ## Appearance
 
-Choose Light, Dark, or follow your system, from Preferences - the cog in the title bar. Following the
+Choose Light, Dark, or follow your system, from Settings - the cog in the title bar. Following the
 system means exactly that: Trypthos keeps up if your machine switches at dusk, rather than deciding
 once when it started.
 
@@ -300,7 +321,7 @@ for your platform, or the download does not go through, Trypthos falls back to o
 page instead of failing part-way through.
 
 Closing the window quits the app, unless you turn on **Keep running when the window is closed** in
-Preferences - then it hides to the notification area and you quit it from the tray icon.
+Settings - then it hides to the notification area and you quit it from the tray icon.
 
 ## Local by default
 

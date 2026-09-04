@@ -227,7 +227,8 @@ version 1 file passes through version 2's migration on its way forward - a file 
 to the current version would miss whatever version 2 added, which is the exact failure migrations
 exist to prevent. Version 2 added appearance and window behaviour, version 3 added chat models, version 4 added the
 system prompt, version 5 made that prompt nullable, version 6 added per-profile tool calling,
-version 7 added the folder outline size, and version 8 added the chat panel switch.
+version 7 added the folder outline size, version 8 added the chat panel switch, and version 9 added
+the editor's default view mode.
 
 **Version 5 is worth reading as a warning.** Version 4 stored the default prompt's TEXT, which meant
 every later improvement to it was invisible to anyone who already had a settings file - and the
@@ -255,6 +256,36 @@ inferring a choice nobody made.
 **Hidden is not collapsed.** A collapsed panel leaves a rail to bring it back, which is precisely
 what a panel nobody has a model for must not offer; the layout is told the chat is collapsed so the
 editor takes the width, and the rail is not drawn.
+
+**`editor.defaultViewMode` is why `EditorMode` lives in the domain.** A stored setting names a mode,
+so the schema that reads settings and the switcher that draws them have to agree about which modes
+exist - and two hand-maintained lists are two lists that will drift. `apps/app/src/lib/editorMode.ts`
+keeps only the part that is the renderer's own business: which translation key each mode reads from.
+
+The panel resolves the mode as `chosen?.file === filePath ? chosen.mode : defaultMode` rather than
+copying the setting into state. Settings are read from disk AFTER the panel mounts, so a copy taken
+at mount would be the pre-read default and the stored preference would never arrive; storing the
+document alongside the choice is what makes each document open in the configured view without an
+effect that renders the wrong one first and corrects it after.
+
+## The settings dialog
+
+One dialog, a page per subject, mounted only while open - so `openOn` means "open here" (the title
+bar opens Appearance, the Help menu About, the chat panel's Configure the models) and a half-typed
+model does not survive being closed. `lib/settingsSections.ts` holds the page list and its label
+keys, so the rail, the heading and the routing read one list.
+
+**Settings apply as they are chosen. There is no Save button, deliberately.** Each setting is a
+single value, so a confirm step would only add a way to lose the change you just made - and the
+theme, which you are looking at while you choose it, would either preview and make Cancel a lie
+about what is on screen, or not preview and make the choice blind. A chat profile is the exception
+and `ChatProfileForm` says why: it is several fields that are only valid together, and saving
+settings sweeps API keys for endpoints no profile references, so applying each keystroke would
+delete the user's key partway through typing an endpoint.
+
+**There is one About surface.** The capability table is kept in step with the README and
+`docs/features.md` by hand, so a second rendering of it elsewhere in the app would be a third thing
+to remember and the first one to go stale.
 
 **Chat models start empty rather than seeded.** There is no endpoint every user has, and a profile
 pointing somewhere that does not answer is worse than an empty list, which at least says what to do
@@ -683,7 +714,10 @@ Nothing enforces that but who imports what, so `bundleBoundary.test.ts` asserts 
 directly: an eager `import { ARCHIVE }` type-checks, renders correctly, and passes every other test
 while putting the whole history on every page load.
 
-The About box reads `lib/appInfo.ts` instead, which is why the capability table lives there.
+About - now a page of the settings dialog rather than a box of its own - reads `lib/appInfo.ts`
+instead, which is why the capability table lives there and not beside the release notes. The settings
+dialog is eager, so an `import` of the release notes from any of its pages would put the whole history
+on every page load.
 
 ## Running it
 

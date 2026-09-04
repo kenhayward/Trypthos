@@ -8,13 +8,12 @@ import {
   resolvePanelWidths,
   type ProposedEdit,
 } from "@trypthos/domain";
-import AboutModal from "./components/AboutModal";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
 import type { EditorHandle, EditorSelection } from "./components/MarkdownEditor";
 import PanelDivider from "./components/PanelDivider";
-import PreferencesDialog from "./components/PreferencesDialog";
 import PanelRail from "./components/PanelRail";
+import SettingsDialog from "./components/SettingsDialog";
 import TitleBar from "./components/TitleBar";
 import WorkspacePanel from "./components/WorkspacePanel";
 import { useApiKeys } from "./hooks/useApiKeys";
@@ -24,6 +23,7 @@ import { useChatScope } from "./hooks/useChatScope";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import type { SettingsSection } from "./lib/settingsSections";
 import {
   chatBridge,
   chatHistoryBridge,
@@ -56,8 +56,13 @@ Inline \`code\` and a [link](https://example.com) render too.
 /// The three-panel shell: workspace browser, editor, chat.
 export default function App() {
   const { t } = useTranslation();
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [prefsOpen, setPrefsOpen] = useState(false);
+  /// The settings page on screen, or null when the dialog is closed.
+  ///
+  /// One piece of state rather than a boolean per surface: About is a page of the same dialog now,
+  /// and everything that opens settings opens it somewhere in particular - the title bar on
+  /// Appearance, the Help menu on About, the chat panel's Configure on the models. Mounting only
+  /// while open is what makes `openOn` mean "open here" rather than "opened here once".
+  const [settingsOn, setSettingsOn] = useState<SettingsSection | null>(null);
   const client = useMemo(() => workspaceClient(), []);
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
@@ -253,8 +258,8 @@ export default function App() {
       windowControls().onMenuAction((action) => {
         if (action === "open-folder") void actions.open();
         else if (action === "save") void actions.save();
-        else if (action === "preferences") setPrefsOpen(true);
-        else if (action === "about") setAboutOpen(true);
+        else if (action === "preferences") setSettingsOn("appearance");
+        else if (action === "about") setSettingsOn("about");
       }),
     [actions],
   );
@@ -264,8 +269,8 @@ export default function App() {
       <TitleBar
         platform={platform}
         fileName={state.file?.name ?? null}
-        onAbout={() => setAboutOpen(true)}
-        onPreferences={() => setPrefsOpen(true)}
+        onAbout={() => setSettingsOn("about")}
+        onSettings={() => setSettingsOn("appearance")}
       />
 
       {state.errorKey !== null && (
@@ -323,6 +328,7 @@ export default function App() {
           filePath={state.file?.path ?? null}
           dirty={state.dirty}
           value={state.content}
+          defaultMode={settings.editor.defaultViewMode}
           onSelectionChange={(next) => (selection.current = next)}
           ref={editor}
           onChange={actions.edit}
@@ -366,7 +372,7 @@ export default function App() {
                   scope.clear();
                   chat.clear();
                 }}
-                onConfigure={() => setPrefsOpen(true)}
+                onConfigure={() => setSettingsOn("chatModels")}
                 resolveEdit={resolveAgainstDocument}
                 onApplyEdit={applyEdit}
                 chats={history.chats}
@@ -392,18 +398,18 @@ export default function App() {
           ))}
       </div>
 
-      <PreferencesDialog
-        open={prefsOpen}
-        settings={settings}
-        isDesktop={isDesktop()}
-        keyedEndpoints={keyedEndpoints}
-        onClose={() => setPrefsOpen(false)}
-        onChange={update}
-        onSaveKey={saveKey}
-        onDeleteKey={deleteKey}
-      />
-
-      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      {settingsOn !== null && (
+        <SettingsDialog
+          openOn={settingsOn}
+          settings={settings}
+          isDesktop={isDesktop()}
+          keyedEndpoints={keyedEndpoints}
+          onClose={() => setSettingsOn(null)}
+          onChange={update}
+          onSaveKey={saveKey}
+          onDeleteKey={deleteKey}
+        />
+      )}
     </div>
   );
 }

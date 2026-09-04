@@ -124,7 +124,7 @@ export function useChat(
         setStreaming(false);
         setError(
           result.reason === "no-such-profile"
-            ? "That model is no longer configured. Choose another in Preferences."
+            ? "That model is no longer configured. Choose another in Settings."
             : "The message could not be sent.",
         );
         return;

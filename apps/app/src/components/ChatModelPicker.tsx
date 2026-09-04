@@ -75,7 +75,7 @@ export default function ChatModelPicker({ models, selectedId, disabled = false, 
     };
   }, [open, place]);
 
-  // A model can be removed from Preferences between one turn and the next, so a remembered id may
+  // A model can be removed from Settings between one turn and the next, so a remembered id may
   // name a model that is no longer configured. Falling back to the default is the same rule the
   // shell applies when it resolves the profile, which keeps the two in agreement.
   const selected =

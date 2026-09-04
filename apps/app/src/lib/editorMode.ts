@@ -1,13 +1,16 @@
-/// How the editor is currently drawn.
+/// The editor's view modes, as the renderer needs them.
 ///
-/// A mode is a VIEW, never a transform. The bytes on disk are identical in every mode, and switching
-/// one must never write. That invariant is what lets a reader and a maintainer share a document, and
-/// it is why there is no rich-text serialiser anywhere near a user's files.
-///
-export type EditorMode = "live" | "source" | "preview";
+/// The modes themselves live in the domain, because a stored setting names one and the schema that
+/// reads it must agree with the switcher that draws it. What is here is the part that is the
+/// renderer's own business: which translation key each mode reads from.
+export {
+  DEFAULT_EDITOR_MODE,
+  EDITOR_MODES,
+  isEditable,
+  type EditorMode,
+} from "@trypthos/domain";
 
-/// Live first, because it is the default and the one most people stay in.
-export const EDITOR_MODES: readonly EditorMode[] = ["live", "source", "preview"];
+import type { EditorMode } from "@trypthos/domain";
 
 /// Translation keys, not wording. Keeping the mapping here means the set of modes and the set of
 /// labels cannot drift apart, while the words themselves live in the catalogue with every other
@@ -23,14 +26,3 @@ export const MODE_HINT_KEYS: Record<EditorMode, string> = {
   source: "editor.modeHint.source",
   preview: "editor.modeHint.preview",
 };
-
-export const DEFAULT_MODE: EditorMode = "live";
-
-/// Live and Source are the same editing surface with different decorations, which is why both are
-/// editable and switching between them keeps undo history.
-///
-/// Preview is read-only. It is not an editor with editing switched off - there is no caret and no
-/// gutter, because it stopped being an editing surface.
-export function isEditable(mode: EditorMode): boolean {
-  return mode !== "preview";
-}

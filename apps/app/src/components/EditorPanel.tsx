@@ -9,7 +9,7 @@ import MarkdownEditor, {
 } from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
 import { breadcrumbSegments, formatCaret } from "../lib/breadcrumb";
-import { DEFAULT_MODE, isEditable, type EditorMode } from "../lib/editorMode";
+import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 
 interface Props {
   workspaceName: string | null;
@@ -24,6 +24,12 @@ interface Props {
   /// a DOM selection, not an editor one. Chat falls back to the whole file there, which is the
   /// right answer for a mode you cannot edit in anyway.
   onSelectionChange?: (selection: EditorSelection) => void;
+  /// The view a document opens in, from settings.
+  ///
+  /// A default, not a mode: the header still decides what THIS document shows. Optional because a
+  /// caller with no settings to hand - a test, the browser preview before its first render - should
+  /// get the same Live the app has always opened in.
+  defaultMode?: EditorMode;
   /// Handle for applying a chat edit the user accepted.
   ref?: React.Ref<EditorHandle>;
 }
@@ -40,10 +46,22 @@ export default function EditorPanel({
   value,
   onChange,
   onSelectionChange,
+  defaultMode = DEFAULT_EDITOR_MODE,
   ref,
 }: Props) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<EditorMode>(DEFAULT_MODE);
+  /// The view the reader picked, and the document they picked it for.
+  ///
+  /// Null until they pick one, rather than a copy of the setting: settings are read from disk AFTER
+  /// this mounts, so a copy taken at mount would be whatever the default was before the file had
+  /// been read, and the stored preference would never arrive.
+  ///
+  /// The document is stored WITH the choice so that opening another one falls back to the
+  /// configured view, which is what a default for documents means. Derived rather than reset in an
+  /// effect: an effect would render the new document in the old view first and correct it after.
+  const [chosen, setChosen] = useState<{ file: string | null; mode: EditorMode } | null>(null);
+  const mode = chosen !== null && chosen.file === filePath ? chosen.mode : defaultMode;
+  const setMode = (next: EditorMode) => setChosen({ file: filePath, mode: next });
   const [caret, setCaret] = useState({ line: 1, column: 1 });
 
   const segments = useMemo(

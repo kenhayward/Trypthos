@@ -38,10 +38,10 @@ const MAX_READS_PER_TURN = 10;
 /// that can contain anything - including the key that was just rejected.
 function statusMessage(status, profile) {
   if (status === 401 || status === 403) {
-    return `The endpoint rejected the API key for ${profile.label}. Check the key in Preferences.`;
+    return `The endpoint rejected the API key for ${profile.label}. Check the key in Settings.`;
   }
   if (status === 404) {
-    return `The endpoint has no model called ${profile.model}. Check the model in Preferences.`;
+    return `The endpoint has no model called ${profile.model}. Check the model in Settings.`;
   }
   if (status === 429) {
     return "The provider replied with too many requests. Wait a moment and try again.";
@@ -126,7 +126,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       logger.error("The chat endpoint could not be reached.");
       onEvent({
         type: "error",
-        message: `${profile.label} could not be reached. Check the endpoint in Preferences.`,
+        message: `${profile.label} could not be reached. Check the endpoint in Settings.`,
       });
       onEvent({ type: "end" });
       return null;

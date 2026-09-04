@@ -31,7 +31,7 @@ const FIELD =
 
 /// Editing one chat model.
 ///
-/// A form with a Save, unlike the rest of Preferences, which applies each choice immediately. Two
+/// A form with a Save, unlike the rest of Settings, which applies each choice immediately. Two
 /// reasons, and both are about the fields being meaningful only together: an endpoint typed one
 /// character at a time is invalid for most of its life, and saving settings sweeps stored keys for
 /// endpoints no profile references - so applying keystrokes would delete the user's key somewhere
@@ -79,13 +79,13 @@ export default function ChatProfileForm({
     // Cleared either way. A key left in the box after a failure is a key sitting on screen, and the
     // user can paste it again.
     setKey("");
-    setKeyError(result.ok ? null : t("preferences.chat.keyFailed"));
+    setKeyError(result.ok ? null : t("settings.chat.keyFailed"));
   };
 
   return (
     <div className="mt-2 rounded-md border border-rule bg-sunken p-3">
       <label className="block text-xs text-ink-4">
-        {t("preferences.chat.name")}
+        {t("settings.chat.name")}
         <input
           value={draft.label}
           aria-invalid={invalid("label")}
@@ -95,7 +95,7 @@ export default function ChatProfileForm({
       </label>
 
       <label className="mt-2 block text-xs text-ink-4">
-        {t("preferences.chat.endpoint")}
+        {t("settings.chat.endpoint")}
         <input
           value={draft.endpoint}
           aria-invalid={invalid("endpoint")}
@@ -106,7 +106,7 @@ export default function ChatProfileForm({
       </label>
 
       <label className="mt-2 block text-xs text-ink-4">
-        {t("preferences.chat.model")}
+        {t("settings.chat.model")}
         <input
           value={draft.model}
           aria-invalid={invalid("model")}
@@ -116,11 +116,11 @@ export default function ChatProfileForm({
       </label>
       {/* Outside the label on purpose: text inside one joins the field's accessible name, so a
           screen reader would announce the whole sentence every time the box took focus. */}
-      <p className="mt-1 text-xs text-ink-4">{t("preferences.chat.modelHint")}</p>
+      <p className="mt-1 text-xs text-ink-4">{t("settings.chat.modelHint")}</p>
 
       <div className="mt-2 flex gap-2">
         <label className="flex-1 text-xs text-ink-4">
-          {t("preferences.chat.temperature")}
+          {t("settings.chat.temperature")}
           <input
             value={draft.temperature}
             aria-invalid={invalid("temperature")}
@@ -130,7 +130,7 @@ export default function ChatProfileForm({
           />
         </label>
         <label className="flex-1 text-xs text-ink-4">
-          {t("preferences.chat.maxTokens")}
+          {t("settings.chat.maxTokens")}
           <input
             value={draft.maxTokens}
             aria-invalid={invalid("maxTokens")}
@@ -147,7 +147,7 @@ export default function ChatProfileForm({
           checked={draft.supportsImages}
           onChange={(event) => set("supportsImages", event.target.checked)}
         />
-        {t("preferences.chat.supportsImages")}
+        {t("settings.chat.supportsImages")}
       </label>
 
       <label className="mt-1 flex items-center gap-2 text-ui text-ink">
@@ -156,10 +156,10 @@ export default function ChatProfileForm({
           checked={draft.supportsTools}
           onChange={(event) => set("supportsTools", event.target.checked)}
         />
-        {t("preferences.chat.supportsTools")}
+        {t("settings.chat.supportsTools")}
       </label>
       {/* Outside the label so the sentence does not join the checkbox's accessible name. */}
-      <p className="mt-1 text-xs text-ink-4">{t("preferences.chat.supportsToolsHint")}</p>
+      <p className="mt-1 text-xs text-ink-4">{t("settings.chat.supportsToolsHint")}</p>
 
       <label className="mt-1 flex items-center gap-2 text-ui text-ink">
         <input
@@ -167,19 +167,19 @@ export default function ChatProfileForm({
           checked={draft.isDefault}
           onChange={(event) => set("isDefault", event.target.checked)}
         />
-        {t("preferences.chat.makeDefault")}
+        {t("settings.chat.makeDefault")}
       </label>
 
       <div className="mt-3 border-t border-rule pt-3">
         <label className="block text-xs text-ink-4">
-          {t("preferences.chat.apiKey")}
+          {t("settings.chat.apiKey")}
           <input
             // A password field keeps the key out of a screen share and out of a screenshot, which is
             // how most people would first show someone else their settings.
             type="password"
             value={key}
             autoComplete="off"
-            placeholder={hasKey ? t("preferences.chat.replaceKey") : t("preferences.chat.pasteKey")}
+            placeholder={hasKey ? t("settings.chat.replaceKey") : t("settings.chat.pasteKey")}
             onChange={(event) => setKey(event.target.value)}
             className={FIELD}
           />
@@ -187,7 +187,7 @@ export default function ChatProfileForm({
 
         <div className="mt-2 flex items-center gap-2">
           <span className={hasKey ? "text-xs text-leaf" : "text-xs text-ink-4"}>
-            {hasKey ? t("preferences.chat.keyStored") : t("preferences.chat.noKey")}
+            {hasKey ? t("settings.chat.keyStored") : t("settings.chat.noKey")}
           </span>
           <span className="flex-1" />
           {hasKey && (
@@ -196,7 +196,7 @@ export default function ChatProfileForm({
               onClick={() => void onDeleteKey(draft.endpoint.trim())}
               className="rounded px-2 py-1 text-ui text-ink-4 hover:text-ink"
             >
-              {t("preferences.chat.removeKey")}
+              {t("settings.chat.removeKey")}
             </button>
           )}
           <button
@@ -204,12 +204,12 @@ export default function ChatProfileForm({
             onClick={() => void saveKey()}
             className="rounded border border-rule px-2 py-1 text-ui text-ink"
           >
-            {t("preferences.chat.saveKey")}
+            {t("settings.chat.saveKey")}
           </button>
         </div>
 
         {keyError !== null && <p className="mt-1 text-xs text-danger">{keyError}</p>}
-        <p className="mt-1 text-xs text-ink-4">{t("preferences.chat.keyHint")}</p>
+        <p className="mt-1 text-xs text-ink-4">{t("settings.chat.keyHint")}</p>
       </div>
 
       <div className="mt-3 flex items-center gap-2">
@@ -218,14 +218,14 @@ export default function ChatProfileForm({
           onClick={save}
           className="rounded bg-accent-strong px-3 py-1.5 text-ui text-white"
         >
-          {t("preferences.chat.saveModel")}
+          {t("settings.chat.saveModel")}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="rounded px-3 py-1.5 text-ui text-ink-4 hover:text-ink"
         >
-          {t("preferences.chat.cancel")}
+          {t("settings.chat.cancel")}
         </button>
         <span className="flex-1" />
         {canRemove && (
@@ -234,7 +234,7 @@ export default function ChatProfileForm({
             onClick={onRemove}
             className="rounded px-3 py-1.5 text-ui text-danger"
           >
-            {t("preferences.chat.remove")}
+            {t("settings.chat.remove")}
           </button>
         )}
       </div>

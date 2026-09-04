@@ -35,7 +35,7 @@ afterEach(() => {
 
 describe("App", () => {
   // The chat panel is not among them until a model is configured: with none, it could only tell the
-  // user to go and configure one, and the way to do that is Preferences.
+  // user to go and configure one, and the way to do that is Settings.
   it("renders the workspace and the editor", () => {
     render(<App />);
     expect(screen.getByRole("complementary", { name: "Workspace" })).toBeDefined();
@@ -79,7 +79,9 @@ describe("App", () => {
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it("opens and closes the About box", async () => {
+  // About is a page of the settings dialog rather than a modal of its own, so the title bar opens
+  // settings there. One About surface, and nothing that can drift from it.
+  it("opens settings on About, and closes it", async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -88,9 +90,19 @@ describe("App", () => {
     // Resolve the element first, then act on it. Awaiting a query inside an act scope is what
     // provokes React's "not configured to support act" warning, which test-setup turns into a failure.
     await user.click(screen.getByRole("button", { name: `About ${APP_VERSION}` }));
-    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "About" })).toBeDefined();
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // Two entry points, one dialog: the gear opens the settings themselves rather than About.
+  it("opens settings on Appearance from the title bar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeDefined();
   });
 });

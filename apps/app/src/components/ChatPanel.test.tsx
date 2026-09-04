@@ -222,7 +222,7 @@ describe("ChatPanel with no model configured", () => {
     const user = userEvent.setup();
     const props = panel({ models: [], selectedId: null });
 
-    await user.click(screen.getByRole("button", { name: "Open Preferences" }));
+    await user.click(screen.getByRole("button", { name: "Open Settings" }));
     expect(props.onConfigure).toHaveBeenCalledOnce();
   });
 });
@@ -281,7 +281,7 @@ describe("ChatModelPicker", () => {
     );
   });
 
-  // A model can be removed from Preferences between one turn and the next, so a remembered id may
+  // A model can be removed from Settings between one turn and the next, so a remembered id may
   // name a model that is no longer configured.
   it("falls back to the default when the remembered model has gone", () => {
     panel({ models: [second], selectedId: "deleted-model" });
