@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.23.0",
+    date: "2026-09-04",
+    pr: 45,
+    headline: "The tray icon matches the new design",
+    summary:
+      "The notification-area icon was left out of the app-icon redesign and still showed the old thin, unfilled outline next to the new bold taskbar icon. It now uses the same flat, solid-fill treatment the app icon itself uses at its smallest sizes - a filled page shape with the rule lines cut through as notches - so the tray reads as the same design rather than a different, older one.",
+    changed: [
+      "The tray icon is now a bold, filled glyph matching the new app icon's style.",
+    ],
+  },
+  {
     version: "0.22.0",
     date: "2026-09-03",
     pr: 43,
