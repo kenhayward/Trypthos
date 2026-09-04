@@ -1,10 +1,12 @@
-/// The path shown in the editor header, as segments.
+/// What the editor header calls the document: its own name, not the path to it.
 ///
-/// Returned as segments rather than a joined string so the header can render its own separators - and
-/// so it can ellipsise the middle of a deep path without cutting a name in half.
-export function breadcrumbSegments(workspaceName: string | null, filePath: string | null): string[] {
+/// The header used to draw the whole path as segments. A long workspace or folder name then had
+/// nowhere to go - the leading segments could not shrink, so they overflowed their spans and printed
+/// over the next one, and the result was unreadable rather than merely long. The name is what
+/// identifies a document; where it lives is in the tree beside it, and in the header's tooltip.
+export function documentName(filePath: string | null): string | null {
   const parts = (filePath ?? "").split("/").filter((segment) => segment !== "");
-  return workspaceName === null ? parts : [workspaceName, ...parts];
+  return parts.at(-1) ?? null;
 }
 
 /// Caret position, one-based on both axes.

@@ -7,7 +7,10 @@ import {
 } from "../lib/editorMode";
 
 interface Props {
-  segments: string[];
+  /// The document's own name, or null when none is open.
+  name: string | null;
+  /// The whole path, shown on hover. Null when no document is open.
+  path: string | null;
   dirty: boolean;
   /// Right-hand status: caret position and word count, already formatted.
   stats: string;
@@ -16,30 +19,21 @@ interface Props {
 }
 
 /// The editor's header: where you are, whether it is saved, and how you are looking at it.
-export default function EditorHeader({ segments, dirty, stats, mode, onModeChange }: Props) {
+export default function EditorHeader({ name, path, dirty, stats, mode, onModeChange }: Props) {
   const { t } = useTranslation();
 
   return (
     <div className="flex items-center gap-3 border-b border-rule px-3 py-1.5">
-      <nav
-        aria-label={t("editor.breadcrumb")}
-        className="flex min-w-0 items-center gap-1.5 text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase"
+      {/* The name alone, and it truncates. This used to draw the whole path as segments, where every
+          segment but the last refused to shrink - so a long workspace or folder name overflowed its
+          own span and printed over the next one, which is unreadable rather than merely long. The
+          path is one hover away instead, which loses nothing and fits. */}
+      <span
+        title={path ?? undefined}
+        className="min-w-0 truncate text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase"
       >
-        {segments.length === 0 ? (
-          <span>{t("editor.title")}</span>
-        ) : (
-          segments.map((segment, index) => (
-            <span key={`${index}-${segment}`} className="flex min-w-0 items-center gap-1.5">
-              {index > 0 && <span className="text-faint">/</span>}
-              {/* Only the last segment truncates. Shortening a folder name to keep the file name
-                  whole is the wrong trade: the file name is what identifies the document. */}
-              <span className={index === segments.length - 1 ? "truncate" : "shrink-0"}>
-                {segment}
-              </span>
-            </span>
-          ))
-        )}
-      </nav>
+        {name ?? t("editor.title")}
+      </span>
 
       {dirty && (
         <span className="shrink-0 rounded-full bg-selected px-1.5 py-px text-2xs font-semibold text-selected-ink">

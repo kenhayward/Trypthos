@@ -8,7 +8,7 @@ import MarkdownEditor, {
   type EditorSelection,
 } from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
-import { breadcrumbSegments, formatCaret } from "../lib/breadcrumb";
+import { documentName, formatCaret } from "../lib/breadcrumb";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 
 interface Props {
@@ -64,10 +64,13 @@ export default function EditorPanel({
   const setMode = (next: EditorMode) => setChosen({ file: filePath, mode: next });
   const [caret, setCaret] = useState({ line: 1, column: 1 });
 
-  const segments = useMemo(
-    () => breadcrumbSegments(workspaceName, filePath),
-    [workspaceName, filePath],
-  );
+  const name = useMemo(() => documentName(filePath), [filePath]);
+  /// The whole path, for the header's tooltip. Qualified with the workspace, because
+  /// "docs/notes.md" alone does not say which folder it is in.
+  const path = useMemo(() => {
+    if (filePath === null) return null;
+    return workspaceName === null ? filePath : `${workspaceName}/${filePath}`;
+  }, [workspaceName, filePath]);
 
   // Both walk the whole document, so they are memoised on the text rather than recomputed on every
   // keystroke-driven render. A word count is cheap on a page and not on a book.
@@ -82,7 +85,8 @@ export default function EditorPanel({
   return (
     <main aria-label={t("editor.title")} className="flex min-w-0 grow flex-col bg-app">
       <EditorHeader
-        segments={segments}
+        name={name}
+        path={path}
         dirty={dirty}
         stats={stats}
         mode={mode}

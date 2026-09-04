@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.27.2",
+    date: "2026-09-04",
+    pr: 57,
+    headline: "The editor header names the file, and stops drawing over itself",
+    summary:
+      "With a long folder name, the path in the editor header printed on top of itself - the parts ran together into unreadable text and spilled over the view buttons beside them. The header now shows the file's own name, cut short with an ellipsis when even that does not fit, so it is clear the name goes on. The whole path is still there on hover, and the tree beside it still shows where the file lives.",
+    fixed: [
+      "The editor header no longer draws the path over itself when the folder names are long.",
+    ],
+    changed: [
+      "The editor header shows the file name rather than the whole path, with the path on hover.",
+    ],
+  },
+  {
     version: "0.27.1",
     date: "2026-09-04",
     pr: 55,

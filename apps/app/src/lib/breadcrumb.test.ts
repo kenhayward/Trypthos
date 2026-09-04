@@ -1,36 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { breadcrumbSegments, formatCaret } from "./breadcrumb";
+import { documentName, formatCaret } from "./breadcrumb";
 
-describe("breadcrumbSegments", () => {
-  it("is the workspace alone when no file is open", () => {
-    expect(breadcrumbSegments("Diariz", null)).toEqual(["Diariz"]);
-  });
-
-  it("puts the workspace first, then each folder, then the file", () => {
-    expect(breadcrumbSegments("Diariz", "docs/specs/plan.md")).toEqual([
-      "Diariz",
-      "docs",
-      "specs",
-      "plan.md",
-    ]);
+/// The header names the document, and nothing else.
+///
+/// It used to draw the whole path as segments, and a long workspace or folder name overflowed its
+/// own span and printed over the next one - see the header's own note. The name is what identifies
+/// the document; where the file lives is in the tree beside it.
+describe("documentName", () => {
+  it("is the file's own name, not the path to it", () => {
+    expect(documentName("docs/specs/plan.md")).toBe("plan.md");
   });
 
   it("handles a file at the workspace root", () => {
-    expect(breadcrumbSegments("Diariz", "README.md")).toEqual(["Diariz", "README.md"]);
+    expect(documentName("README.md")).toBe("README.md");
   });
 
-  it("is just the file when no workspace is open", () => {
-    expect(breadcrumbSegments(null, "scratch.md")).toEqual(["scratch.md"]);
+  it("is null when no file is open", () => {
+    expect(documentName(null)).toBeNull();
   });
 
-  it("is empty when there is neither", () => {
-    expect(breadcrumbSegments(null, null)).toEqual([]);
-  });
-
-  // Paths arrive workspace-relative and slash-separated, but a leading or doubled slash would
-  // otherwise produce empty segments that render as stray separators.
-  it("drops empty segments rather than rendering stray separators", () => {
-    expect(breadcrumbSegments("Diariz", "/docs//plan.md")).toEqual(["Diariz", "docs", "plan.md"]);
+  // Paths arrive workspace-relative and slash-separated, but a trailing or doubled slash would
+  // otherwise produce an empty name and a header with nothing in it.
+  it("ignores empty segments rather than answering with nothing", () => {
+    expect(documentName("/docs//plan.md")).toBe("plan.md");
+    expect(documentName("docs/plan.md/")).toBe("plan.md");
+    expect(documentName("")).toBeNull();
   });
 });
 
