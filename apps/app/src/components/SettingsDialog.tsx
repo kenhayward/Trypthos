@@ -222,9 +222,12 @@ export default function SettingsDialog({
               />
             )}
 
+            {/* The page is a column so the prompt can have what is left of it. The prompt is the
+                longest thing anybody edits in this app, and a ten-row box in the middle of an
+                800px-tall dialog wasted the rest of the height on nothing. */}
             {section === "ai" && (
-              <div className="max-w-2xl">
-                <label className="block text-xs text-ink-4">
+              <div className="flex h-full flex-col">
+                <label className="block max-w-2xl text-xs text-ink-4">
                   {t("settings.chat.folderFiles")}
                   <input
                     type="number"
@@ -243,35 +246,50 @@ export default function SettingsDialog({
                     className="mt-1 block w-[90px] rounded border border-rule bg-app px-2 py-1 text-ui text-ink"
                   />
                 </label>
-                <p className="mt-1 text-xs text-ink-4">{t("settings.chat.folderFilesHint")}</p>
+                <p className="mt-1 max-w-2xl text-xs text-ink-4">
+                  {t("settings.chat.folderFilesHint")}
+                </p>
 
-                <label className="mt-6 block text-xs text-ink-4">
-                  {t("settings.chat.systemPrompt")}
+                <div className="mt-6 flex min-h-0 flex-1 flex-col">
+                  {/* The explanation reads beside the heading rather than under the box: below a
+                      box this tall it would be off the bottom of the page, describing something the
+                      reader has already scrolled past. The label is `htmlFor` rather than wrapping,
+                      so the field is named "System prompt" and not the whole paragraph. */}
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                    <label htmlFor="system-prompt" className="text-xs text-ink-4">
+                      {t("settings.chat.systemPrompt")}
+                    </label>
+                    <p className="min-w-0 flex-1 text-xs text-ink-4">
+                      {t("settings.chat.systemPromptHint")}
+                    </p>
+                  </div>
+
                   <textarea
+                    id="system-prompt"
                     // The effective prompt, so an unset one is READ AND EDITED as the default text
                     // rather than shown as an empty box. Typing into it stores what is typed, which
                     // is the moment it stops tracking the default.
                     value={effectiveSystemPrompt(settings.chat.systemPrompt)}
                     onChange={(event) => updateChat({ systemPrompt: event.target.value })}
-                    rows={10}
-                    className="mt-1 w-full resize-y rounded border border-rule bg-app px-2 py-1 font-mono text-xs text-ink"
+                    // No `rows`: the box takes the height the page has left. `min-h-0` is what lets
+                    // it shrink inside the column rather than forcing the page to scroll.
+                    className="mt-1.5 min-h-0 w-full flex-1 resize-none rounded border border-rule bg-app px-2 py-1.5 font-mono text-xs text-ink"
                   />
-                </label>
-                <p className="mt-1 text-xs text-ink-4">{t("settings.chat.systemPromptHint")}</p>
 
-                {/* Offered only when it would do something. A reset button beside an unchanged
-                    default is a control that cannot be told apart from a broken one. */}
-                {settings.chat.systemPrompt !== null && (
-                  <button
-                    type="button"
-                    // Back to null, not to a copy of the current text: a copy would stop tracking
-                    // the default the moment the default next changed.
-                    onClick={() => updateChat({ systemPrompt: null })}
-                    className="mt-2 rounded-md border border-rule px-3 py-1.5 text-ui text-ink hover:bg-hover"
-                  >
-                    {t("settings.chat.resetPrompt")}
-                  </button>
-                )}
+                  {/* Offered only when it would do something. A reset button beside an unchanged
+                      default is a control that cannot be told apart from a broken one. */}
+                  {settings.chat.systemPrompt !== null && (
+                    <button
+                      type="button"
+                      // Back to null, not to a copy of the current text: a copy would stop tracking
+                      // the default the moment the default next changed.
+                      onClick={() => updateChat({ systemPrompt: null })}
+                      className="mt-2 self-start rounded-md border border-rule px-3 py-1.5 text-ui text-ink hover:bg-hover"
+                    >
+                      {t("settings.chat.resetPrompt")}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

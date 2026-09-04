@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.26.1",
+    date: "2026-09-04",
+    pr: 52,
+    headline: "The system prompt gets the whole page",
+    summary:
+      "The system prompt is the longest thing anyone edits in Trypthos, and it was being edited through a ten-row window in the middle of a page with empty space below it. The box now takes the full width of the page and all the height that is left, so you can see what you are changing. Its explanation moved up beside the System prompt heading, where it reads before the box rather than off the bottom of a page you have already scrolled.",
+    changed: [
+      "The system prompt box fills the AI & system prompt page instead of being a small box in the middle of it.",
+    ],
+  },
+  {
     version: "0.26.0",
     date: "2026-09-04",
     pr: 51,

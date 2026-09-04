@@ -551,6 +551,17 @@ describe("SettingsDialog: AI and the system prompt", () => {
     expect(last.chat?.systemPrompt).toBeNull();
   });
 
+  // The box is the page, so its explanation goes beside the heading: under the box it would sit
+  // below the fold on a short window, describing something already scrolled past.
+  it("puts the explanation beside the heading rather than under the box", () => {
+    ai();
+
+    const hint = screen.getByText(/Sent ahead of every conversation/);
+    const box = screen.getByLabelText("System prompt");
+
+    expect(hint.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("offers no reset when the prompt is unset", () => {
     ai();
     expect(screen.queryByRole("button", { name: "Reset to the default" })).toBeNull();
