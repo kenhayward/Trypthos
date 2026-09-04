@@ -719,10 +719,14 @@ otherwise the startup check is silent and dead for anyone in that state, which i
 A development build never checks. Its version is whatever the repo says, so every run would announce
 an update to the release matching the source already checked out.
 
-The tray icons are **generated** by `scripts/make-tray-icon.mjs` and packed as `extraResources`, not
-into the asar - Electron's `Tray` reads its icon from disk and cannot open an archive, and an icon
-packed inside produces a tray with no icon at all. macOS gets a Template variant so the menu bar can
-recolour it for either appearance.
+The tray icons are **generated**: `scripts/trayIconAssets.mjs` holds the pixel artwork and the PNG
+encoder (pure, tested without touching disk - the same split as the app icon's `iconAssets.mjs` vs
+`make-app-icon.mjs`), and `make-tray-icon.mjs` just writes the two files. They are packed as
+`extraResources`, not into the asar - Electron's `Tray` reads its icon from disk and cannot open an
+archive, and an icon packed inside produces a tray with no icon at all. macOS gets a Template variant
+so the menu bar can recolour it for either appearance. The glyph is a solid fill with the rule lines
+cut out as transparent notches, not an outline - the same flat, no-gradient treatment the app icon
+uses at its own smallest size, so the tray reads as the same design rather than a separate, older one.
 
 ## Updates: downloading the installer itself
 
@@ -804,8 +808,8 @@ holds the vector artwork (as SVG template strings) and the two binary packers; `
 rasterizes and writes the files; `npm run icons` (wired into `predist`, alongside the existing tray
 icon generator) runs both.
 
-The one respect in which it does NOT follow the tray icon's precedent: the tray glyph is a flat
-silhouette simple enough to scanline-render by hand, but this icon has a diagonal gradient and
+The one respect in which it does NOT follow the tray icon's precedent: the tray glyph is a flat,
+solid-fill shape simple enough to scanline-render by hand, but this icon has a diagonal gradient and
 rounded-rect arcs, which are easy to get subtly wrong by hand and hard to notice when wrong. `sharp`
 (a devDependency, used only by this build-time script - never imported by the shipped app) does the
 actual rasterizing; the artwork itself and the container formats stay hand-written and tested, since
