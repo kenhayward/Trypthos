@@ -109,11 +109,35 @@ describe("EditorPanel", () => {
     expect(screen.getByLabelText("Markdown source")).toBe(before);
   });
 
-  it("shows where the document is, as a breadcrumb", () => {
+  // The name identifies the document; the path is what could not fit. A long workspace or folder
+  // name used to overflow its own span and print over the next one.
+  it("names the document, and leaves the path to the tooltip", () => {
     render(<Harness />);
-    expect(screen.getByText("Diariz")).toBeDefined();
-    expect(screen.getByText("docs")).toBeDefined();
+
     expect(screen.getByText("notes.md")).toBeDefined();
+    expect(screen.queryByText("docs")).toBeNull();
+    expect(screen.queryByText("Diariz")).toBeNull();
+  });
+
+  // The full path is still one hover away, so nothing is lost - only moved out of a space it did not
+  // fit in. Named with the workspace, because "docs/notes.md" alone is ambiguous across folders.
+  it("puts the whole path in the tooltip", () => {
+    render(<Harness />);
+    expect(screen.getByText("notes.md").getAttribute("title")).toBe("Diariz/docs/notes.md");
+  });
+
+  it("says it is the editor when no document is open", () => {
+    render(
+      <EditorPanel
+        workspaceName={null}
+        filePath={null}
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Editor")).toBeDefined();
   });
 
   it("renders the document as prose in Preview mode", async () => {

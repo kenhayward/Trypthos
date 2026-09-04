@@ -46,8 +46,10 @@ The centre panel edits markdown in one of three views over the same document:
   for now - a construct without a decoration renders as
   itself rather than disappearing, so nothing is ever hidden that Trypthos cannot draw.
 
-The header above the editor shows where the document lives, marks it when there is something unsaved,
-and reports your cursor position and word count. The strip below names the format, the encoding and
+The header above the editor names the document, marks it when there is something unsaved, and
+reports your cursor position and word count. A name too long for the space ends in an ellipsis rather
+than being cut off silently, and the whole path is on hover - where the file lives is also the tree
+beside it. The strip below names the format, the encoding and
 the line endings the file actually uses - measured rather than assumed, so a file that mixes Windows
 and Unix line endings is reported as mixed rather than as one or the other.
 

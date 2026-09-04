@@ -368,3 +368,54 @@ describe("Applying a resolved edit, in a real browser", () => {
     expect(await sourceText()).toContain("Appended anyway.");
   });
 });
+
+/// The header, with a name too long for the space it has.
+///
+/// A layout question, so it can only be answered here: jsdom has no layout engine, and the bug it
+/// exists to catch was one element drawing on top of another. The old header drew the whole path as
+/// segments, and every segment but the last refused to shrink - so a long workspace or folder name
+/// overflowed its span and printed over the next one.
+describe("EditorPanel: a document whose name does not fit", () => {
+  const LONG = "clinicaleligibility-deploy-quickstart-with-a-very-long-name-indeed.md";
+
+  function narrow(children: React.ReactNode) {
+    // Narrow enough that the name cannot fit, which is the whole case under test.
+    return <div style={{ width: "420px" }}>{children}</div>;
+  }
+
+  it("keeps the header inside the panel rather than overflowing it", () => {
+    render(
+      narrow(
+        <EditorPanel
+          workspaceName="CLINICALELIGIBILITY"
+          filePath={`deploy-quickstart-documentation/${LONG}`}
+          dirty
+          value={DOC}
+          onChange={() => {}}
+        />,
+      ),
+    );
+
+    const name = screen.getByTitle(`CLINICALELIGIBILITY/deploy-quickstart-documentation/${LONG}`);
+    const modes = screen.getByRole("group", { name: "View mode" });
+
+    // Measured against the controls beside it, because that is where the bug showed: with the old
+    // markup and these exact names in a 420px panel, a segment's box ran to x=271 while the mode
+    // buttons began at x=258 - it was drawn over them, and over the segment before it. The row's own
+    // scrollWidth does NOT catch this, which is why it is not what is asserted.
+    expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+      modes.getBoundingClientRect().left,
+    );
+  });
+
+  it("cuts the name short rather than drawing all of it", () => {
+    render(narrow(<EditorPanel workspaceName="Notes" filePath={LONG} dirty={false} value={DOC} onChange={() => {}} />));
+
+    const name = screen.getByTitle(`Notes/${LONG}`);
+
+    // Ellipsised: the text is wider than the box it is drawn in, which is what `truncate` does - and
+    // is how the reader can tell the name goes on.
+    expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+    expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+  });
+});
