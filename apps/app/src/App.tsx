@@ -117,7 +117,13 @@ export default function App() {
     // already means to the layout. One answer rather than two ways of saying nothing is there.
     chatCollapsed: panels.chatCollapsed || !showChat,
   });
-  const { state, actions } = useWorkspace(client, SCRATCH);
+  /// The prompt every path shares, or null in the browser preview - where there is nowhere to save
+  /// to, so a question about saving would have only one honest answer and no way to act on it.
+  const confirmDiscard = useMemo(
+    () => (isDesktop() ? () => windowControls().confirmDiscard() : null),
+    [],
+  );
+  const { state, actions } = useWorkspace(client, SCRATCH, confirmDiscard);
 
   const chatModels = settings.chat.profiles;
   /// Which model answers the next turn.
@@ -260,6 +266,24 @@ export default function App() {
     const root = state.workspace?.root ?? null;
     if (loaded && root !== null && root !== settings.lastWorkspace) update({ lastWorkspace: root });
   }, [loaded, state.workspace, settings.lastWorkspace, update]);
+
+  // The shell keeps its own copy of the dirty flag, so that a window with nothing to lose closes
+  // without asking the renderer anything at all.
+  useEffect(() => {
+    void windowControls().setDocumentDirty(state.dirty);
+  }, [state.dirty]);
+
+  // The shell asking whether the window may close. It is a question, not an order: this side owns
+  // the document and is the only one that can save it, so it answers by closing the window itself.
+  useEffect(
+    () =>
+      windowControls().onCloseRequested(() => {
+        void (async () => {
+          if (await actions.mayDiscard()) await windowControls().closeWindow(true);
+        })();
+      }),
+    [actions],
+  );
 
   // Ctrl+S / Cmd+S. Bound on the window rather than inside the editor so it works wherever focus is,
   // and preventDefault matters: the browser's own save dialog would otherwise open over the app.

@@ -14,7 +14,7 @@ export const CAPABILITIES = `
 | Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. |
 | AI chat | Appears once you configure a model, and can be switched off. Ask about your document, a selection, attached files or the folder, apply proposed changes, and watch how full the context is. |
-| Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk. |
+| Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk, and unsaved changes are never discarded without asking. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
 | Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt and the editor. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |

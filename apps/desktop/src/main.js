@@ -26,12 +26,20 @@ const { enableSpellChecker } = require("./spellcheck");
 const { APP_NAME } = require("./appName");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
+const { closeDecision, createCloseGuard } = require("./closeGuard");
 const { createUpdater } = require("./updater");
 const { createTray } = require("./tray");
 const { revealWindow } = require("./revealWindow");
 const { readCloseToTray, onSettingsWritten } = require("./settingsStore");
 
 let mainWindow = null;
+
+/// Unsaved work, and whether the window may close on it. Built once and shared: the close listener
+/// reads it, and the document channels write to it. See `closeGuard.js` for the split.
+const closeGuard = createCloseGuard({
+  dialog,
+  send: (channel, payload) => mainWindow?.webContents.send(channel, payload),
+});
 /// Held for the lifetime of the app. A Tray that is garbage collected disappears from the
 /// notification area, which looks exactly like the feature never having worked - so the reference
 /// exists to be kept, not to be read.
@@ -147,11 +155,33 @@ function createWindow() {
   mainWindow.on("unmaximize", pushWindowState);
   mainWindow.webContents.on("did-finish-load", pushWindowState);
 
+  // Closing the window: close-to-tray and unsaved work meet on the same event, and `closeDecision`
+  // states the order between them once rather than leaving it to the order of the `if`s here.
   mainWindow.on("close", (event) => {
-    if (!closeToTray || quitting) return;
-    // Hidden rather than closed, so reopening from the tray is instant and the document survives.
+    const decision = closeDecision({
+      forced: closeGuard.forced(),
+      hiding: closeToTray && !quitting,
+      dirty: closeGuard.isDirty(),
+    });
+
+    if (decision === "close") return;
+
     event.preventDefault();
-    mainWindow.hide();
+
+    if (decision === "hide") {
+      // Hidden rather than closed, so reopening from the tray is instant and the document survives.
+      mainWindow.hide();
+      return;
+    }
+
+    // Asking. The renderer owns the document, so it puts the question and closes the window itself -
+    // `closeGuard.js` says why that cannot be decided here.
+    closeGuard.requestClose();
+    // A quit the user is about to be asked about is not a quit yet: leaving this set would make the
+    // next ordinary close skip the tray and close for real.
+    quitting = false;
+    // The prompt is about a document nobody can see while the window is hidden in the tray.
+    revealWindow(mainWindow);
   });
 
   mainWindow.on("closed", () => {
@@ -205,7 +235,7 @@ if (!gotLock) {
       // and never holds the key.
       chat: createChatProvider({ secrets }),
     });
-    registerWindowHandlers({ ipcMain, getWindow: () => mainWindow });
+    registerWindowHandlers({ ipcMain, getWindow: () => mainWindow, guard: closeGuard });
 
     /// What a menu item does.
     ///

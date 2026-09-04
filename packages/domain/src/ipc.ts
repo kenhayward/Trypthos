@@ -37,6 +37,8 @@ export const IPC_CHANNELS = [
   "chats:save",
   "chats:delete",
   "workspace:outline",
+  "document:dirty",
+  "document:confirmDiscard",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -53,6 +55,34 @@ export const IPC_CHANNELS = [
 /// sides drifting silently: a shape change here would otherwise surface as a button that stops
 /// updating rather than as an error.
 export const WINDOW_STATE_CHANNEL = "window:state";
+
+/// The shell asking the renderer whether the window may close.
+///
+/// Main to renderer, and it is a QUESTION rather than an order: the renderer owns the document and
+/// the unsaved flag, so it is the only side that can decide - and having decided, it closes the
+/// window itself with `force`. The shell keeps its own copy of the dirty flag only so that a window
+/// with nothing to lose closes without a round trip at all.
+export const CLOSE_REQUESTED_CHANNEL = "window:closeRequested";
+
+/// What the renderer reports about the document it holds. Nothing about the document itself: the
+/// shell needs to know whether there is unsaved work, never what it says.
+export const DocumentDirtyRequest = z.object({ dirty: z.boolean() }).strict();
+
+/// What the person answering the prompt meant.
+///
+/// Three, not two. "Cancel" is the one that makes it a question rather than a demand, and it is the
+/// answer somebody gives when they clicked the wrong file.
+export const DiscardChoiceSchema = z.enum(["save", "discard", "cancel"]);
+
+export type DiscardChoice = z.infer<typeof DiscardChoiceSchema>;
+
+/// Closing the window. `force` says the renderer has already asked about unsaved work and been told
+/// to go ahead - without it the shell would ask again and the window could never close.
+export const CloseWindowRequest = z
+  .object({ force: z.boolean().default(false) })
+  .strict();
+
+export type DocumentDirtyRequest = z.infer<typeof DocumentDirtyRequest>;
 
 /// Streamed reply tokens, pushed from the main process. The second channel flowing main to renderer.
 ///

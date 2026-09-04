@@ -291,6 +291,21 @@ Chats are saved on your machine. A chat references the file and workspace it was
 being stored beside them, so it will tell you when that file has since been renamed, moved or
 deleted.
 
+## Unsaved changes
+
+Anything that would throw away unsaved edits asks first: opening another file, opening another
+folder, and closing the window. The prompt offers **Save**, **Don't Save** and **Cancel**, and
+cancelling leaves everything exactly as it was - the same file, the same text, still unsaved.
+
+If you choose Save and the save cannot be made - the file changed on disk since you opened it, say -
+nothing is discarded and nothing closes. The conflict is reported and your text is still in the
+editor, which is the whole point of asking.
+
+Two cases deliberately do not ask. **Keeping Trypthos running in the tray** closes nothing: the
+window hides and your document is still open behind it, so there is nothing in danger. And the
+**scratch buffer** you see before opening a file has never been on disk - it says so - so it is not
+treated as unsaved work.
+
 ## Settings
 
 Settings opens as a window of its own, with a rail down the left and a page per subject: Appearance,

@@ -56,6 +56,21 @@ contextBridge.exposeInMainWorld("trypthos", {
     return () => ipcRenderer.removeListener("chat:event", wrapped);
   },
 
+  /// What the renderer reports about its document: whether there is unsaved work, never what it
+  /// says. The shell needs it to know whether a close is worth interrupting.
+  setDocumentDirty: (dirty) => ipcRenderer.invoke("document:dirty", { dirty }),
+
+  /// The shared native prompt, for anything about to discard the open document.
+  confirmDiscard: () => ipcRenderer.invoke("document:confirmDiscard"),
+
+  /// The shell asking whether the window may close. Wrapped like `onWindowState`, so the renderer
+  /// never receives the IpcRendererEvent and the `sender` on it.
+  onCloseRequested: (listener) => {
+    const wrapped = () => listener();
+    ipcRenderer.on("window:closeRequested", wrapped);
+    return () => ipcRenderer.removeListener("window:closeRequested", wrapped);
+  },
+
   readSettings: () => ipcRenderer.invoke("settings:read"),
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
   reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),

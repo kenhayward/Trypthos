@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  CloseWindowRequest,
+  DiscardChoiceSchema,
+  DocumentDirtyRequest,
   IPC_CHANNELS,
   ListRequest,
   ReadRequest,
@@ -32,6 +35,8 @@ describe("IPC_CHANNELS", () => {
       "chats:save",
       "chats:delete",
       "workspace:outline",
+      "document:dirty",
+      "document:confirmDiscard",
     ]);
   });
 
@@ -145,5 +150,40 @@ describe("SetSecretRequest", () => {
         profileId: "one",
       }),
     ).toThrow();
+  });
+});
+
+/// Unsaved work, and the two sides that have to agree about it.
+///
+/// The dirty flag lives in the renderer, and the decision to close lives in the main process. That
+/// split is the whole reason these channels exist: without them the window closes on a document
+/// nobody saved, which is the one bug in this app that destroys the user's own writing.
+describe("the unsaved-changes channels", () => {
+  it("carries the dirty flag, and nothing else", () => {
+    expect(() => DocumentDirtyRequest.parse({ dirty: true })).not.toThrow();
+    expect(() => DocumentDirtyRequest.parse({ dirty: "yes" })).toThrow();
+    expect(() => DocumentDirtyRequest.parse({ dirty: true, path: "notes.md" })).toThrow();
+  });
+
+  // Three answers, because there are three things a person can mean. "Not now" has to be one of
+  // them, or the prompt is a demand rather than a question.
+  it("offers save, discard and cancel, and nothing else", () => {
+    for (const choice of ["save", "discard", "cancel"]) {
+      expect(() => DiscardChoiceSchema.parse(choice)).not.toThrow();
+    }
+    expect(() => DiscardChoiceSchema.parse("ignore")).toThrow();
+  });
+
+  // Forcing it is what the renderer does AFTER it has asked; without the flag the main process would
+  // ask again and the window would never close.
+  it("lets a close say it has already been decided", () => {
+    expect(() => CloseWindowRequest.parse({ force: true })).not.toThrow();
+    expect(CloseWindowRequest.parse({}).force).toBe(false);
+    expect(() => CloseWindowRequest.parse({ force: "yes" })).toThrow();
+  });
+
+  it("registers both channels on the enumerated surface", () => {
+    expect(IPC_CHANNELS).toContain("document:dirty");
+    expect(IPC_CHANNELS).toContain("document:confirmDiscard");
   });
 });
