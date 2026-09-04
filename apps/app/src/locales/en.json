@@ -81,7 +81,12 @@
       "filter": "Find a file",
       "noFiles": "No other markdown files to attach."
     },
-    "readingFile": "Reading {{path}}..."
+    "readingFile": "Reading {{path}}...",
+    "context": {
+      "used": "About {{tokens}} of {{limit}} tokens used",
+      "unknown": "About {{tokens}} tokens. Set this model's context window in Settings to see how much is left.",
+      "over": "About {{tokens}} tokens, past this model's {{limit}}. The oldest of the conversation may be dropped."
+    }
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
@@ -148,6 +153,8 @@
       "modelHint": "The slug the endpoint expects, such as gpt-4o-mini or qwen2.5-coder.",
       "temperature": "Temperature",
       "maxTokens": "Max tokens",
+      "contextWindow": "Context window",
+      "contextWindowHint": "How many tokens this model can hold in one conversation, from the provider you are using. It is only used to show how full the context is - leave it empty if you do not know.",
       "supportsImages": "This model accepts images",
       "makeDefault": "Start new chats with this model",
       "apiKey": "API key",

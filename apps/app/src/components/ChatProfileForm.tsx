@@ -139,7 +139,18 @@ export default function ChatProfileForm({
             className={FIELD}
           />
         </label>
+        <label className="flex-1 text-xs text-ink-4">
+          {t("settings.chat.contextWindow")}
+          <input
+            value={draft.contextWindow}
+            aria-invalid={invalid("contextWindow")}
+            inputMode="numeric"
+            onChange={(event) => set("contextWindow", event.target.value)}
+            className={FIELD}
+          />
+        </label>
       </div>
+      <p className="mt-1 text-xs text-ink-4">{t("settings.chat.contextWindowHint")}</p>
 
       <label className="mt-2 flex items-center gap-2 text-ui text-ink">
         <input

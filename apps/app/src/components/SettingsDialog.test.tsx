@@ -30,6 +30,7 @@ const PROFILE = {
   label: "Local model",
   endpoint: "http://localhost:11434/v1",
   model: "qwen2.5-coder",
+  contextWindow: null,
   supportsImages: false,
   supportsTools: false,
   isDefault: true,

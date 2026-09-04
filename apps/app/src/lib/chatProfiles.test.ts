@@ -15,10 +15,59 @@ const draft: ProfileDraft = {
   model: "qwen2.5-coder",
   temperature: "",
   maxTokens: "",
+  contextWindow: "",
   supportsImages: false,
   supportsTools: false,
   isDefault: false,
 };
+
+describe("the context window", () => {
+  // An empty box is "I do not know", which is a real answer: the dial then shows what is being sent
+  // without claiming to know how much room is left.
+  it("is null when the box is empty, not zero", () => {
+    const result = toProfile(draft);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.contextWindow).toBeNull();
+  });
+
+  it("carries a number through", () => {
+    const result = toProfile({ ...draft, contextWindow: "128000" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.contextWindow).toBe(128_000);
+  });
+
+  it("reports a nonsense window as that field's problem", () => {
+    const result = toProfile({ ...draft, contextWindow: "lots" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.issues).toContain("contextWindow");
+  });
+
+  // Zero would divide the dial by nothing; a fraction is not a token count. Both are the schema's
+  // rules, reported against the field the user typed in rather than as a form-wide failure.
+  it("reports zero and a fraction as that field's problem", () => {
+    for (const value of ["0", "1.5"]) {
+      const result = toProfile({ ...draft, contextWindow: value });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.issues).toContain("contextWindow");
+    }
+  });
+
+  it("shows a stored window in the form, and an unset one as an empty box", () => {
+    const profile = {
+      id: "one",
+      label: "Local model",
+      endpoint: "http://localhost:11434/v1",
+      model: "qwen2.5-coder",
+      contextWindow: 8192,
+      supportsImages: false,
+      supportsTools: false,
+      isDefault: false,
+    };
+
+    expect(draftFrom(profile).contextWindow).toBe("8192");
+    expect(draftFrom({ ...profile, contextWindow: null }).contextWindow).toBe("");
+  });
+});
 
 describe("toProfile", () => {
   it("accepts a filled-in draft", () => {

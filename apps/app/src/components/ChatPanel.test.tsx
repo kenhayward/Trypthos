@@ -39,6 +39,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     onSaveChat: vi.fn(),
     onOpenChat: vi.fn(),
     onDeleteChat: vi.fn(),
+    context: { tokens: 0, limit: null as number | null },
     scope: {
       attachments: [] as string[],
       files: [] as string[],
@@ -59,6 +60,28 @@ describe("ChatPanel", () => {
   it("invites a first question when the thread is empty", () => {
     panel();
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDefined();
+  });
+
+  // The dial belongs with the rest of what is being sent, and it counts what is typed as well as
+  // what is already there - the question you are about to ask is part of the request.
+  it("shows how full the context is, including what is typed but not sent", async () => {
+    const user = userEvent.setup();
+    panel({ context: { tokens: 1000, limit: 8000 } });
+
+    expect(screen.getByRole("img", { name: /About 1,000 of 8,000/ })).toBeDefined();
+
+    // Forty characters, not four hundred: userEvent types one key at a time and re-renders the
+    // panel on each, and the assertion is about the count moving, not about how far.
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "a".repeat(40));
+    expect(screen.getByRole("img", { name: /About 1,010 of 8,000/ })).toBeDefined();
+  });
+
+  // Nothing to be a fraction of, so the ring stays empty and the hover says what is missing rather
+  // than inventing a window.
+  it("shows the count alone when the model's window is unknown", () => {
+    panel({ context: { tokens: 1000, limit: null } });
+
+    expect(screen.getByRole("img", { name: /About 1,000 tokens/ })).toBeDefined();
   });
 
   // A question is prose, and the shell's right-click menu can only offer a correction for a word

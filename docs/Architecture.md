@@ -436,6 +436,29 @@ a real `ReadableStream`, bytes arriving in whatever pieces the socket delivers. 
 the class of bug a fake reader cannot produce, such as a multi-byte character split across two reads
 decoding as two replacement characters.
 
+### How full the context is, and why it can only be an estimate
+
+`contextUsage.ts` answers "how much of the window will this request use", and every surface that
+shows the answer says "about". **There is no tokeniser to ask.** A profile points at an arbitrary
+OpenAI-compatible endpoint; the endpoint reports its own count in the reply, which is after the
+question the dial exists to inform. Four characters to a token is the same rule of thumb
+`CONTEXT_CHARACTER_LIMIT` is set from - close on English prose, worse on code.
+
+It counts `contextTurns(context)` rather than the raw document, deliberately: the fences and the
+explanations wrapped around a file are real tokens the user pays for, and a dial counting different
+text from the request would be worse than no dial.
+
+The work is split in two because of where the inputs live. `contextTokens` is the expensive half -
+it builds that framing over a document that can be sixty thousand characters - and `App` memoises it
+on the document, the conversation and the prompt. `contextUsage` is the cheap half, and `ChatPanel`
+calls it on every keystroke to add the draft, which is the part it owns. `App` resolves
+`scope.context()` for the dial even though the request resolves it again at send time: the callback
+exists so a turn sees the buffer AS IT IS THEN, and the dial has to answer before that.
+
+**The total is a per-profile setting, not a detection.** `contextWindow` is nullable and never
+guessed, because no endpoint will say how large its window is; null means the ring cannot be filled,
+which the hover states rather than papering over with an invented total.
+
 ### Writing back into the document
 
 A reply can carry a **proposed edit**, and the user applies it. Three questions decided this shape:
