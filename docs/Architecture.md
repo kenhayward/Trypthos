@@ -648,6 +648,32 @@ defaulting to ten, because every entry is a file the model might ask for.
 **What chat does not do yet:** it cannot read files in subfolders, and cannot write to any file
 without the user pressing Apply.
 
+## Unsaved changes, across the process boundary
+
+The one thing this app can destroy is somebody's own writing, and the paths that could are the ones
+that replace the open document: opening another file, opening another folder, and closing the window.
+
+**`mayDiscard` is the single implementation.** `useWorkspace` owns it, every renderer path calls it,
+and the shell asks the renderer for it before closing - three prompts would be three chances to get
+it subtly different, and the one that was wrong would be the one that lost a file. It returns false
+on cancel, and **false on a failed save**: `save()` now answers a boolean for exactly this reason, so
+a conflict cannot read as a save and let the document be thrown away.
+
+**The split across the boundary is forced by where the facts live.** The renderer owns the document
+and the dirty flag; the main process owns the window and its `close` event. So the renderer reports
+the flag (`document:dirty`), the shell keeps a copy only to know whether a close is worth
+interrupting, and when it is, the shell asks (`window:closeRequested`) rather than deciding. The
+renderer answers by closing the window itself with `force`, which is what stops the shell asking
+again and the window never closing.
+
+The prompt itself is native and lives in the shell (`closeGuard.js`), shared by every path through
+`document:confirmDiscard` - including the two renderer-only ones, so there is one wording.
+
+**Three policies meet on the `close` event**, and `closeDecision` states the order once rather than
+leaving it to the order of the `if`s in `main.js`: a forced close wins outright; close-to-tray hides
+and so never asks, because nothing is being discarded; otherwise unsaved work is asked about. A quit
+that is then cancelled clears `quitting`, or the next ordinary close would skip the tray.
+
 ## Menus
 
 **A frameless window on Windows has nowhere for a menu bar to go.** The menu bar belongs to the frame

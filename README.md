@@ -12,7 +12,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. A mode is a view, never a transform. |
 | AI chat | Appears once you configure a model, and can be switched off in Settings. Ask about your document, a selection, attached files or the whole folder, apply proposed changes, and watch how full the model's context is. |
-| Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
+| Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. Unsaved changes are never discarded without asking. |
 | Appearance | Light, dark, or follow your system, from Settings. The window draws its own title bar. |
 | Settings | One window with a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and About. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |

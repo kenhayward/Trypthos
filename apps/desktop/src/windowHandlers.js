@@ -1,11 +1,17 @@
 "use strict";
 
-/// Minimise, maximise and close, for the frameless window.
+const { CloseWindowRequest, DocumentDirtyRequest } = require("@trypthos/domain");
+
+/// Minimise, maximise and close, for the frameless window - and the two channels that keep a close
+/// from throwing away unsaved work.
 ///
-/// These exist only because the window has no OS chrome to provide them. Each does exactly one named
-/// thing to the app's own window - none takes an argument, and none can name a different window, so
-/// there is nothing here for a renderer to point somewhere it should not.
-function registerWindowHandlers({ ipcMain, getWindow }) {
+/// The window controls exist only because the window has no OS chrome to provide them. Each does
+/// exactly one named thing to the app's own window - none can name a different window, so there is
+/// nothing here for a renderer to point somewhere it should not.
+///
+/// The document channels are the other half of `closeGuard`: the renderer reports whether there is
+/// unsaved work, and asks for the shared native prompt when something is about to discard it.
+function registerWindowHandlers({ ipcMain, getWindow, guard }) {
   const withWindow = (action) => () => {
     const window = getWindow();
     // The window can be gone between a click and its handler - during shutdown, or after a crash.
@@ -26,7 +32,28 @@ function registerWindowHandlers({ ipcMain, getWindow }) {
     }),
   );
 
-  ipcMain.handle("window:close", withWindow((window) => window.close()));
+  ipcMain.handle("window:close", (_event, payload) => {
+    // Validated here, in the main process. The renderer having already checked is not a check.
+    const parsed = CloseWindowRequest.safeParse(payload ?? {});
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    return withWindow((window) => {
+      // The renderer forces a close only once it has asked about unsaved work and been told to go
+      // ahead. Telling the guard first is what stops it asking again and the window never closing.
+      if (parsed.data.force) guard.allow();
+      window.close();
+    })();
+  });
+
+  ipcMain.handle("document:dirty", (_event, payload) => {
+    const parsed = DocumentDirtyRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    guard.setDirty(parsed.data.dirty);
+    return { ok: true };
+  });
+
+  ipcMain.handle("document:confirmDiscard", async () => ({ ok: true, choice: await guard.ask() }));
 }
 
 module.exports = { registerWindowHandlers };

@@ -1,6 +1,8 @@
 import {
+  DiscardChoiceSchema,
   MenuActionMessage,
   WindowStateSchema,
+  type DiscardChoice,
   type MenuAction,
   type MenuName,
   type WindowState,
@@ -16,7 +18,16 @@ import {
 export interface WindowControls {
   minimizeWindow(): Promise<unknown>;
   toggleMaximizeWindow(): Promise<unknown>;
-  closeWindow(): Promise<unknown>;
+  /// `force` says the unsaved-changes question has already been asked and answered. Without it the
+  /// shell asks again, and the window never closes.
+  closeWindow(force?: boolean): Promise<unknown>;
+  /// Tells the shell whether the document has unsaved changes, so it knows whether a close is worth
+  /// interrupting. The flag only - never what the document says.
+  setDocumentDirty(dirty: boolean): Promise<unknown>;
+  /// The shared native prompt for anything about to discard the document.
+  confirmDiscard(): Promise<DiscardChoice>;
+  /// Subscribes to the shell asking whether the window may close. Returns an unsubscribe function.
+  onCloseRequested(listener: () => void): () => void;
   /// Subscribes to maximise/restore. Returns an unsubscribe function.
   onWindowState(listener: (state: WindowState) => void): () => void;
   /// Opens a native menu under a label the title bar drew.
@@ -28,7 +39,10 @@ export interface WindowControls {
 interface WindowBridge {
   minimizeWindow?: () => Promise<unknown>;
   toggleMaximizeWindow?: () => Promise<unknown>;
-  closeWindow?: () => Promise<unknown>;
+  closeWindow?: (force: boolean) => Promise<unknown>;
+  setDocumentDirty?: (dirty: boolean) => Promise<unknown>;
+  confirmDiscard?: () => Promise<unknown>;
+  onCloseRequested?: (listener: () => void) => () => void;
   onWindowState?: (listener: (state: unknown) => void) => () => void;
   popupMenu?: (menu: MenuName, x: number, y: number) => Promise<unknown>;
   onMenuAction?: (listener: (message: unknown) => void) => () => void;
@@ -40,6 +54,11 @@ export const browserControls: WindowControls = {
   minimizeWindow: noop,
   toggleMaximizeWindow: noop,
   closeWindow: noop,
+  setDocumentDirty: noop,
+  // Nothing to close and nowhere to save, so there is no question to put. Cancel is the answer that
+  // changes nothing, which is the right one when the prompt cannot be shown.
+  confirmDiscard: async () => "cancel",
+  onCloseRequested: () => () => {},
   onWindowState: () => () => {},
   // No shell, no native menus. The browser tab has its own chrome and its own right-click menu.
   popupMenu: noop,
@@ -53,7 +72,19 @@ export function windowControls(): WindowControls {
   return {
     minimizeWindow: bridge.minimizeWindow ?? noop,
     toggleMaximizeWindow: bridge.toggleMaximizeWindow ?? noop,
-    closeWindow: bridge.closeWindow ?? noop,
+    closeWindow: (force = false) => bridge.closeWindow?.(force) ?? noop(),
+    setDocumentDirty: (dirty) => bridge.setDocumentDirty?.(dirty) ?? noop(),
+    confirmDiscard: async () => {
+      const answer = await bridge.confirmDiscard?.();
+      // Validated on arrival, and anything unrecognised reads as cancel. This is the call that
+      // decides whether somebody's document survives: proceeding on an answer nobody gave is how the
+      // guard would destroy exactly the work it exists to protect.
+      const parsed = DiscardChoiceSchema.safeParse(
+        (answer as { choice?: unknown } | undefined)?.choice,
+      );
+      return parsed.success ? parsed.data : "cancel";
+    },
+    onCloseRequested: (listener) => bridge.onCloseRequested?.(listener) ?? (() => {}),
     popupMenu: bridge.popupMenu ?? noop,
     onMenuAction: (listener) =>
       bridge.onMenuAction?.((message) => {

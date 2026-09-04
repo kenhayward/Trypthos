@@ -337,3 +337,155 @@ describe("useWorkspace", () => {
     expect(result.current.state.errorKey).toBeNull();
   });
 });
+
+/// Unsaved work, and everything that would throw it away.
+///
+/// The dirty flag already existed - it draws the marker in the header and the dot in the tree -
+/// but nothing consulted it before replacing the document. These are the paths that did.
+describe("guarding unsaved changes", () => {
+  const NODE = { id: "b.md", name: "b.md", kind: "file" as const };
+  const OTHER = { id: "a.md", name: "a.md", kind: "file" as const };
+
+  /// Records what it was asked, and answers what the test tells it to.
+  function asker(answer: "save" | "discard" | "cancel") {
+    const asked: number[] = [];
+    return {
+      asked,
+      confirm: async () => {
+        asked.push(1);
+        return answer;
+      },
+    };
+  }
+
+  async function dirtyEditor(answer: "save" | "discard" | "cancel") {
+    const { client, writes } = fakeClient();
+    const ask = asker(answer);
+    const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
+
+    await act(async () => {
+      await result.current.actions.openFile(NODE);
+    });
+    act(() => result.current.actions.edit("# Edited\n"));
+    expect(result.current.state.dirty).toBe(true);
+
+    return { result, writes, ask };
+  }
+
+  // Nothing to lose, so nothing to ask about. A prompt on every file click would be worse than the
+  // bug it exists to prevent.
+  it("asks nothing when the document is unchanged", async () => {
+    const { client } = fakeClient();
+    const ask = asker("cancel");
+    const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
+
+    await act(async () => {
+      await result.current.actions.openFile(NODE);
+    });
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+
+    expect(ask.asked).toHaveLength(0);
+    expect(result.current.state.file?.path).toBe("a.md");
+  });
+
+  it("saves first when asked to, then opens the other file", async () => {
+    const { result, writes, ask } = await dirtyEditor("save");
+
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+
+    expect(ask.asked).toHaveLength(1);
+    expect(writes).toEqual([{ path: "b.md", content: "# Edited\n", revision: "r1" }]);
+    expect(result.current.state.file?.path).toBe("a.md");
+    expect(result.current.state.dirty).toBe(false);
+  });
+
+  it("opens without saving when the edits are discarded", async () => {
+    const { result, writes } = await dirtyEditor("discard");
+
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+
+    expect(writes).toEqual([]);
+    expect(result.current.state.file?.path).toBe("a.md");
+  });
+
+  // Cancel has to leave everything exactly as it was - the same file, the same text, still unsaved.
+  // A cancel that half-happened would be worse than no prompt.
+  it("leaves the document alone on cancel", async () => {
+    const { result, writes } = await dirtyEditor("cancel");
+
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+
+    expect(writes).toEqual([]);
+    expect(result.current.state.file?.path).toBe("b.md");
+    expect(result.current.state.content).toBe("# Edited\n");
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  it("guards opening another folder too", async () => {
+    const { result, ask } = await dirtyEditor("cancel");
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(ask.asked).toHaveLength(1);
+    expect(result.current.state.file?.path).toBe("b.md");
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  // The same question the shell asks before closing the window, so there is one implementation of
+  // "may I throw this away" rather than one per caller.
+  it("answers whether the document may be discarded, for the shell to close on", async () => {
+    const { result, writes } = await dirtyEditor("save");
+
+    let mayClose = false;
+    await act(async () => {
+      mayClose = await result.current.actions.mayDiscard();
+    });
+
+    expect(mayClose).toBe(true);
+    expect(writes).toHaveLength(1);
+  });
+
+  it("refuses the close when the prompt is cancelled", async () => {
+    const { result } = await dirtyEditor("cancel");
+
+    let mayClose = true;
+    await act(async () => {
+      mayClose = await result.current.actions.mayDiscard();
+    });
+
+    expect(mayClose).toBe(false);
+  });
+
+  // A save that failed - a conflict, a file gone read-only - must not be treated as a save that
+  // worked. Closing then would destroy exactly the work the prompt was protecting.
+  it("does not proceed when the save it was asked for failed", async () => {
+    const { client } = fakeClient({
+      writeFile: async () => ({ ok: false, reason: "conflict", theirs: { id: "r9" } }),
+    });
+    const ask = asker("save");
+    const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
+
+    await act(async () => {
+      await result.current.actions.openFile(NODE);
+    });
+    act(() => result.current.actions.edit("# Edited\n"));
+
+    let mayClose = true;
+    await act(async () => {
+      mayClose = await result.current.actions.mayDiscard();
+    });
+
+    expect(mayClose).toBe(false);
+    expect(result.current.state.dirty).toBe(true);
+  });
+});

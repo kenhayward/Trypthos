@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DiscardChoice } from "@trypthos/domain";
 import type { Revision } from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
 import type { FolderState } from "../lib/treeRows";
@@ -47,7 +48,12 @@ export interface WorkspaceActions {
   setFilter(filter: string): void;
   openFile(node: RemoteNode): Promise<void>;
   edit(content: string): void;
-  save(): Promise<void>;
+  /// True when the file is on disk as the editor shows it. False on a failed save, and on no file
+  /// open at all - the caller may be about to discard the document on the strength of the answer.
+  save(): Promise<boolean>;
+  /// Whether the open document may be thrown away, asking the user when it is unsaved. Used by the
+  /// shell before closing the window; the other paths call it themselves.
+  mayDiscard(): Promise<boolean>;
   dismissError(): void;
 }
 
@@ -108,7 +114,15 @@ export function withoutSubtree(
   );
 }
 
-export function useWorkspace(client: WorkspaceClient, initialContent = "") {
+/// Asks the user what to do about unsaved work. Null outside the desktop shell, where there is
+/// nowhere to save to and so nothing to protect.
+export type ConfirmDiscard = (() => Promise<DiscardChoice>) | null;
+
+export function useWorkspace(
+  client: WorkspaceClient,
+  initialContent = "",
+  confirmDiscard: ConfirmDiscard = null,
+) {
   const [state, setState] = useState<WorkspaceState>({ ...INITIAL, content: initialContent });
 
   /// The latest state, readable from an async callback.
@@ -150,17 +164,67 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     [client],
   );
 
+  const save = useCallback(async () => {
+    const open = stateRef.current.file;
+    if (!open) return false;
+
+    setState((prev) => ({ ...prev, busy: true, errorKey: null }));
+
+    const result = await client.writeFile(open.path, stateRef.current.content, open.revision);
+    if (!result.ok) {
+      fail(result.reason);
+      // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
+      // document away on the strength of it. A conflict that read as a save is how the prompt would
+      // destroy the work it exists to protect.
+      return false;
+    }
+
+    // The editor keeps the user's text either way. On success the revision advances so the next save
+    // compares against what was just written; on a conflict nothing here changes, which is precisely
+    // what leaves their work intact for them to decide about.
+    setState((prev) => ({
+      ...prev,
+      file: prev.file ? { ...prev.file, revision: result.revision } : null,
+      dirty: false,
+      busy: false,
+    }));
+    return true;
+  }, [client, fail]);
+
+  /// May the open document be thrown away?
+  ///
+  /// One implementation for every path that would discard it - opening another file, opening another
+  /// folder, and the shell asking whether the window may close - because three prompts would be
+  /// three chances to get it subtly different, and the one that was wrong would be the one that lost
+  /// somebody's writing.
+  ///
+  /// A clean document is always discardable and asks nothing: a prompt on every file click would be
+  /// worse than the bug this prevents.
+  const mayDiscard = useCallback(async (): Promise<boolean> => {
+    if (!stateRef.current.dirty || confirmDiscard === null) return true;
+
+    const choice = await confirmDiscard();
+    if (choice === "cancel") return false;
+    if (choice === "discard") return true;
+    // Save, and only proceed if it actually landed.
+    return await save();
+  }, [confirmDiscard, save]);
+
   const open = useCallback(async () => {
+    if (!(await mayDiscard())) return;
+
     setState((prev) => ({ ...prev, busy: true, errorKey: null }));
     const result = await client.openWorkspace();
     if (!result.ok) return fail(result.reason);
 
     setState((prev) => ({ ...prev, workspace: result.workspace, folders: {}, busy: false }));
     await loadFolder("");
-  }, [client, fail, loadFolder]);
+  }, [client, fail, loadFolder, mayDiscard]);
 
   const openFile = useCallback(
     async (node: RemoteNode) => {
+      if (!(await mayDiscard())) return;
+
       setState((prev) => ({ ...prev, busy: true, errorKey: null }));
       const result = await client.readFile(node.id);
       if (!result.ok) return fail(result.reason);
@@ -173,28 +237,8 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
         busy: false,
       }));
     },
-    [client, fail],
+    [client, fail, mayDiscard],
   );
-
-  const save = useCallback(async () => {
-    const open = stateRef.current.file;
-    if (!open) return;
-
-    setState((prev) => ({ ...prev, busy: true, errorKey: null }));
-
-    const result = await client.writeFile(open.path, stateRef.current.content, open.revision);
-    if (!result.ok) return fail(result.reason);
-
-    // The editor keeps the user's text either way. On success the revision advances so the next save
-    // compares against what was just written; on a conflict nothing here changes, which is precisely
-    // what leaves their work intact for them to decide about.
-    setState((prev) => ({
-      ...prev,
-      file: prev.file ? { ...prev.file, revision: result.revision } : null,
-      dirty: false,
-      busy: false,
-    }));
-  }, [client, fail]);
 
   const reopen = useCallback(
     async (root: string) => {
@@ -232,6 +276,7 @@ export function useWorkspace(client: WorkspaceClient, initialContent = "") {
     edit: (content: string) =>
       setState((prev) => ({ ...prev, content, dirty: prev.file !== null })),
     save,
+    mayDiscard,
     dismissError: () => setState((prev) => ({ ...prev, error: null })),
   };
 

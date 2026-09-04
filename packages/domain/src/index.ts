@@ -135,8 +135,12 @@ export {
   ChatIdRequest,
   SaveChatRequest,
   ChatEventMessage,
+  CLOSE_REQUESTED_CHANNEL,
   ChatEventSchema,
+  CloseWindowRequest,
   DeleteSecretRequest,
+  DiscardChoiceSchema,
+  DocumentDirtyRequest,
   IPC_CHANNELS,
   ListRequest,
   SendChatRequest,
@@ -148,7 +152,7 @@ export {
   WindowStateSchema,
   WriteRequest,
 } from "./ipc";
-export type { ChatEvent, IpcChannel, WindowState } from "./ipc";
+export type { ChatEvent, DiscardChoice, IpcChannel, WindowState } from "./ipc";
 
 export type {
   ListPage,
