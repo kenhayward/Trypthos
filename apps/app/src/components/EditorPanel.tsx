@@ -24,6 +24,12 @@ interface Props {
   /// a DOM selection, not an editor one. Chat falls back to the whole file there, which is the
   /// right answer for a mode you cannot edit in anyway.
   onSelectionChange?: (selection: EditorSelection) => void;
+  /// The user held the platform's modifier and clicked a link in Live mode.
+  ///
+  /// Preview needs no equivalent: its links are real anchors, handled once for every rendered-markdown
+  /// surface in the window. This exists because CodeMirror draws link text as a decorated span, which
+  /// no anchor handler can see.
+  onFollowLink?: (href: string) => void;
   /// The view a document opens in, from settings.
   ///
   /// A default, not a mode: the header still decides what THIS document shows. Optional because a
@@ -46,6 +52,7 @@ export default function EditorPanel({
   value,
   onChange,
   onSelectionChange,
+  onFollowLink,
   defaultMode = DEFAULT_EDITOR_MODE,
   ref,
 }: Props) {
@@ -102,6 +109,7 @@ export default function EditorPanel({
             live={mode === "live"}
             onCaret={(line, column) => setCaret({ line, column })}
             onSelectionChange={onSelectionChange}
+            onFollowLink={onFollowLink}
             ref={ref}
             ariaLabel={t("editor.surface")}
           />

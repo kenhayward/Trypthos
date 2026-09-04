@@ -8,7 +8,13 @@ import type { EditorHandle, EditorSelection } from "./MarkdownEditor";
 
 const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) here.\n";
 
-function Harness({ onSelect }: { onSelect?: (selection: EditorSelection) => void } = {}) {
+function Harness({
+  onSelect,
+  onFollowLink,
+}: {
+  onSelect?: (selection: EditorSelection) => void;
+  onFollowLink?: (href: string) => void;
+} = {}) {
   const [value, setValue] = useState(DOC);
   return (
     <EditorPanel
@@ -18,6 +24,7 @@ function Harness({ onSelect }: { onSelect?: (selection: EditorSelection) => void
       value={value}
       onChange={setValue}
       onSelectionChange={onSelect}
+      onFollowLink={onFollowLink}
     />
   );
 }
@@ -110,6 +117,44 @@ describe("Live mode, rendered", () => {
     const line = lineWith("link");
     expect(line.textContent).toContain("link");
     expect(line.textContent).not.toContain("https://example.com");
+  });
+
+  /// Live mode hides the target, so hover is the only way to see where a link goes without moving
+  /// the caret onto its line. In this suite because the decoration only exists once rendered.
+  describe("following a link", () => {
+    it("shows the target on hover", async () => {
+      render(<Harness />);
+      await putCaretOn("Title");
+
+      const link = lineWith("link").querySelector(".cm-live-link") as HTMLElement;
+      expect(link).not.toBeNull();
+      expect(link.getAttribute("title")).toBe("https://example.com");
+    });
+
+    // A plain click has to place the caret: this is an editing surface, and link text is text a
+    // reader edits. The modifier is what distinguishes editing the link from following it.
+    it("places the caret on a plain click without following anything", async () => {
+      const followed: string[] = [];
+      render(<Harness onFollowLink={(href) => followed.push(href)} />);
+      await putCaretOn("Title");
+
+      await userEvent.click(lineWith("link").querySelector(".cm-live-link") as HTMLElement);
+
+      expect(followed).toEqual([]);
+      // The caret landed on the link's own line, which reveals its markers.
+      expect(lineWith("link").textContent).toContain("https://example.com");
+    });
+
+    it("follows the link on a modified click", async () => {
+      const followed: string[] = [];
+      render(<Harness onFollowLink={(href) => followed.push(href)} />);
+      await putCaretOn("Title");
+
+      const link = lineWith("link").querySelector(".cm-live-link") as HTMLElement;
+      await userEvent.click(link, { modifiers: ["ControlOrMeta"] });
+
+      expect(followed).toEqual(["https://example.com"]);
+    });
   });
 });
 

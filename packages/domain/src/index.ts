@@ -6,6 +6,9 @@ export type {
   PathResolution,
 } from "./workspacePath";
 
+export { isExternalUrl, linkAction } from "./markdownLink";
+export type { LinkAction, LinkRejection } from "./markdownLink";
+
 export { normaliseEndpoint } from "./endpoints";
 
 export {
@@ -143,6 +146,7 @@ export {
   DocumentDirtyRequest,
   IPC_CHANNELS,
   ListRequest,
+  OpenExternalRequest,
   SendChatRequest,
   ReadRequest,
   RevisionSchema,

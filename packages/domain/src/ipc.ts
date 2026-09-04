@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ChatTurnSchema } from "./chatCompletion";
 import { ChatContextSchema } from "./chatContext";
 import { SettingsSchema } from "./settings";
+import { isExternalUrl } from "./markdownLink";
 
 /// The IPC contract between the renderer and the shell.
 ///
@@ -39,6 +40,7 @@ export const IPC_CHANNELS = [
   "workspace:outline",
   "document:dirty",
   "document:confirmDiscard",
+  "shell:openExternal",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -67,6 +69,19 @@ export const CLOSE_REQUESTED_CHANNEL = "window:closeRequested";
 /// What the renderer reports about the document it holds. Nothing about the document itself: the
 /// shell needs to know whether there is unsaved work, never what it says.
 export const DocumentDirtyRequest = z.object({ dirty: z.boolean() }).strict();
+
+/// A link the user clicked, on its way to their browser.
+///
+/// The scheme is checked HERE rather than trusted, and it is the same check the renderer made -
+/// `isExternalUrl`, one function, so the two answers cannot drift apart. What is on the other side of
+/// this handler is `shell.openExternal`, which hands a string to the operating system: `file:` reads
+/// anything on the machine, and Windows registers handlers (`ms-msdt:`, `search-ms:`) that do rather
+/// more than open a page. An allow-list is the only shape this check can safely take.
+export const OpenExternalRequest = z
+  .object({ url: z.string().min(1).refine(isExternalUrl) })
+  .strict();
+
+export type OpenExternalRequest = z.infer<typeof OpenExternalRequest>;
 
 /// What the person answering the prompt meant.
 ///

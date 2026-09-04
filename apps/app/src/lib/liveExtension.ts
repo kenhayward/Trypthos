@@ -1,4 +1,5 @@
 import { syntaxTree } from "@codemirror/language";
+import type { SyntaxNode } from "@lezer/common";
 import type { Range as CmRange } from "@codemirror/state";
 import {
   Decoration,
@@ -13,6 +14,7 @@ import {
   consumesTrailingSpace,
   substituteFor,
   formatClassFor,
+  isFollowClick,
   isHiddenMarker,
   revealedLines,
   type SyntaxRange,
@@ -67,6 +69,50 @@ function hideTo(view: EditorView, range: SyntaxRange): number {
   return to;
 }
 
+/// Where a link's target is written on the rendered element.
+const LINK_TARGET = "data-link-target";
+
+/// A link's target, read out of the document.
+///
+/// Null for a reference link (`[text][ref]`), which has no URL of its own to read - the definition it
+/// points at lives elsewhere in the document, and resolving that is a different job. Until then such
+/// a link is text, which is the same graceful floor a construct with no decoration gets.
+function linkTargetOf(view: EditorView, node: SyntaxNode): string | null {
+  const url = node.getChild("URL");
+  if (url === null) return null;
+
+  // `<https://example.com>` is the angle-bracket form of the same target. The brackets are the
+  // syntax, not part of the address.
+  const text = view.state.doc.sliceString(url.from, url.to).trim().replace(/^<|>$/g, "");
+  return text === "" ? null : text;
+}
+
+/// Following a link from the editing surface.
+///
+/// `mousedown` rather than `click`, because CodeMirror places the caret on mousedown: by the time a
+/// click event arrives the selection has already moved, so the modified click would follow the link
+/// AND scatter the caret into the middle of its text.
+export function followLinks(options: {
+  platform: "darwin" | "win32" | "linux";
+  onFollow: (href: string) => void;
+}) {
+  return EditorView.domEventHandlers({
+    mousedown(event) {
+      if (!isFollowClick(event, options.platform)) return false;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return false;
+
+      const href = target.closest(`[${LINK_TARGET}]`)?.getAttribute(LINK_TARGET);
+      if (!href) return false;
+
+      event.preventDefault();
+      options.onFollow(href);
+      return true;
+    },
+  });
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   // Collected then sorted, rather than appended to a RangeSetBuilder as the tree is walked. The walk
   // is in document order but nesting is not: a heading node starts at the same offset as its own
@@ -104,7 +150,15 @@ function buildDecorations(view: EditorView): DecorationSet {
 
         const formatClass = formatClassFor(node.name);
         if (formatClass) {
-          collected.push(Decoration.mark({ class: formatClass }).range(node.from, node.to));
+          // A link's target is hidden in this mode, so it is put on the element instead: `title` is
+          // the hover readout, which is the only way to see where a link goes without moving the
+          // caret onto its line, and the data attribute is what a modified click reads.
+          const target = node.name === "Link" ? linkTargetOf(view, node.node) : null;
+          const spec =
+            target === null
+              ? { class: formatClass }
+              : { class: formatClass, attributes: { title: target, [LINK_TARGET]: target } };
+          collected.push(Decoration.mark(spec).range(node.from, node.to));
           // Deliberately no early return: the heading still has a hash inside it to hide.
         }
 

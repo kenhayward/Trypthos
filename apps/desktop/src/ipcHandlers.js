@@ -12,6 +12,7 @@ const {
   contextTurns,
   effectiveSystemPrompt,
   DeleteSecretRequest,
+  OpenExternalRequest,
   SendChatRequest,
   SetSecretRequest,
   createPathGuard,
@@ -81,7 +82,34 @@ function guarded(getWorkspace, schema, handler) {
   };
 }
 
-function registerIpcHandlers({ ipcMain, dialog, getWindow, userDataDir, secrets, chat }) {
+function registerIpcHandlers({
+  ipcMain,
+  dialog,
+  getWindow,
+  userDataDir,
+  secrets,
+  chat,
+  openExternal = async () => {},
+}) {
+  // A link the user clicked, on its way out of the app.
+  //
+  // Not workspace-scoped: the About box and the chat panel render links before anybody has chosen a
+  // folder. `OpenExternalRequest` is where the scheme is checked, and it is checked HERE rather than
+  // trusted from the renderer - what is on the other side of this call is the operating system's own
+  // protocol handlers, and on Windows several of them do considerably more than open a page.
+  ipcMain.handle("shell:openExternal", async (_event, payload) => {
+    const parsed = OpenExternalRequest.safeParse(payload);
+    if (!parsed.success) {
+      // Deliberately not echoing the URL: it came from the renderer, and repeating untrusted content
+      // into a log is how it ends up somewhere that reads it as trusted.
+      console.error("Refused to open a URL the shell does not hand to the operating system.");
+      return { ok: false, reason: "bad-request" };
+    }
+
+    await openExternal(parsed.data.url);
+    return { ok: true };
+  });
+
   // Settings are not workspace-scoped, so they do not go through `guarded` - there is no workspace
   // to require, and the app needs to read them before one is open.
   ipcMain.handle("settings:read", async () => ({ ok: true, settings: await readSettings(userDataDir) }));

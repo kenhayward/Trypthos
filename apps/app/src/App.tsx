@@ -25,6 +25,8 @@ import { useChatScope } from "./hooks/useChatScope";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { openExternal } from "./lib/externalLinks";
+import { followLink, markdownLinkHandler } from "./lib/markdownLinks";
 import type { SettingsSection } from "./lib/settingsSections";
 import {
   chatBridge,
@@ -315,8 +317,26 @@ export default function App() {
     [actions],
   );
 
+  /// Clicking a link in rendered markdown - Preview mode, a chat reply, the About box.
+  ///
+  /// One handler for the whole window rather than a callback threaded into each surface that renders
+  /// markdown. Delegated because the HTML is injected wholesale and there are no React elements to
+  /// bind to, and placed here because this is the level that has both halves of the answer: which
+  /// document is open, so a relative link resolves the way its author meant, and how to open
+  /// another one. It matches on the mark `renderMarkdown` puts on its own anchors, so an anchor the
+  /// app draws itself is left entirely alone.
+  const linkHandlers = useMemo(
+    () => ({
+      fromPath: state.file?.path ?? null,
+      openDocument: (path: string) => void actions.openPath(path),
+      openExternal,
+    }),
+    [state.file?.path, actions],
+  );
+  const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
+
   return (
-    <div className="flex h-full flex-col bg-app text-ink">
+    <div className="flex h-full flex-col bg-app text-ink" onClick={onMarkdownLink}>
       <TitleBar
         platform={platform}
         fileName={state.file?.name ?? null}
@@ -381,6 +401,10 @@ export default function App() {
           value={state.content}
           defaultMode={settings.editor.defaultViewMode}
           onSelectionChange={(next) => (selection.current = next)}
+          // The same rule the rendered surfaces get, reached the other way: CodeMirror draws link
+          // text as a decorated span rather than an anchor, so the delegated handler above cannot
+          // see it and the editor reports the click instead.
+          onFollowLink={(href) => followLink(href, linkHandlers)}
           ref={editor}
           onChange={actions.edit}
         />

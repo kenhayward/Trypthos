@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   consumesTrailingSpace,
+  isFollowClick,
   substituteFor,
   formatClassFor,
   isHiddenMarker,
@@ -154,5 +155,34 @@ describe("markersToHide", () => {
       { from: 0, to: 1 },
       { from: 30, to: 31 },
     ]);
+  });
+});
+
+describe("isFollowClick", () => {
+  const plain = { ctrlKey: false, metaKey: false };
+  const ctrl = { ctrlKey: true, metaKey: false };
+  const meta = { ctrlKey: false, metaKey: true };
+
+  // A plain click has to place the caret. Live mode is an editing surface, and link text is text
+  // somebody edits - a link that swallowed clicks would be a dead zone in the middle of a sentence.
+  it("is never a plain click", () => {
+    expect(isFollowClick(plain, "win32")).toBe(false);
+    expect(isFollowClick(plain, "darwin")).toBe(false);
+  });
+
+  it("is Ctrl away from macOS", () => {
+    expect(isFollowClick(ctrl, "win32")).toBe(true);
+    expect(isFollowClick(ctrl, "linux")).toBe(true);
+  });
+
+  // Ctrl+click on macOS IS a right click - the system opens a context menu for it. Following a link
+  // as well would do two things for one gesture, and the platform's modifier is Cmd anyway.
+  it("is Cmd on macOS, and Ctrl there is left to the context menu", () => {
+    expect(isFollowClick(meta, "darwin")).toBe(true);
+    expect(isFollowClick(ctrl, "darwin")).toBe(false);
+  });
+
+  it("ignores Cmd away from macOS, where it is the Windows key", () => {
+    expect(isFollowClick(meta, "win32")).toBe(false);
   });
 });

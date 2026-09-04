@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.28.0",
+    date: "2026-09-04",
+    pr: 59,
+    headline: "Links go where they point, and say where that is",
+    summary:
+      "Clicking a link in Preview used to load the page over the top of Trypthos, with no address bar and no back button to get out of it again. Links now do what you would expect. A web address opens in your own browser and leaves Trypthos exactly where it was. A link to another markdown file in the open folder opens that file in the editor, just as clicking it in the folder browser would - and if the file has been renamed, moved or deleted since the link was written, you are told rather than left wondering. Hovering any link shows where it goes before you click it, which is how you can tell a file in your folder from a page on the internet. This works in the rendered prose of Preview, in the chat panel's replies and in the About box; in Live mode, where link text is still text you can edit, hold Ctrl (Cmd on macOS) and click to follow one. Links Trypthos will not follow - a picture, a PDF, anything pointing outside your folder - now do nothing at all rather than taking the app somewhere it cannot come back from.",
+    added: [
+      "Links to markdown files in the open folder open that file in the editor.",
+      "Hovering a link shows its target.",
+      "Ctrl+click (Cmd+click on macOS) follows a link in Live mode.",
+    ],
+    fixed: [
+      "Clicking a link no longer loads the page over the app. Web addresses open in your browser.",
+    ],
+  },
+  {
     version: "0.27.2",
     date: "2026-09-04",
     pr: 57,

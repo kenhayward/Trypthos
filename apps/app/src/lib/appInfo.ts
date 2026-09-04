@@ -13,6 +13,7 @@ export const CAPABILITIES = `
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. |
+| Links | A link to a markdown file in your folder opens it here; a web address opens in your browser. Hover to see where a link goes. |
 | AI chat | Appears once you configure a model, and can be switched off. Ask about your document, a selection, attached files or the folder, apply proposed changes, and watch how full the context is. |
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk, and unsaved changes are never discarded without asking. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |

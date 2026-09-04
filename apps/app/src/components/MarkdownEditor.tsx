@@ -4,7 +4,8 @@ import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { editorTheme } from "../lib/editorTheme";
-import { liveMode } from "../lib/liveExtension";
+import { followLinks, liveMode } from "../lib/liveExtension";
+import { currentPlatform } from "../lib/windowControls";
 
 /// Marks a transaction as replacing the document from outside rather than editing it.
 ///
@@ -46,6 +47,12 @@ interface Props {
   /// the whole file rather than sending the last selection for ever. The offsets come with it
   /// because an edit that replaces the selection needs a range, not a copy of the text.
   onSelectionChange?: (selection: EditorSelection) => void;
+  /// The user asked to follow a link, by holding the platform's modifier and clicking it.
+  ///
+  /// Reports the target as the document spells it - a web address, or a path relative to this file.
+  /// What that means is decided above, where the workspace and the open document are: the editor
+  /// knows what was clicked and nothing about where it leads.
+  onFollowLink?: (href: string) => void;
   /// Handle for applying a change from outside - a chat edit the user accepted.
   ref?: React.Ref<EditorHandle>;
   /// Labels the editing surface for assistive technology and for tests.
@@ -67,6 +74,7 @@ export default function MarkdownEditor({
   live,
   onCaret,
   onSelectionChange,
+  onFollowLink,
   ref,
   ariaLabel,
 }: Props) {
@@ -87,6 +95,7 @@ export default function MarkdownEditor({
   const latestOnChange = useRef(onChange);
   const latestOnCaret = useRef(onCaret);
   const latestOnSelection = useRef(onSelectionChange);
+  const latestOnFollowLink = useRef(onFollowLink);
   /// The document the editor is currently showing, so a change of file can be told from a change of
   /// text. Written after the transaction that switches it, never during render.
   const shownDocument = useRef(documentId);
@@ -94,7 +103,8 @@ export default function MarkdownEditor({
     latestOnChange.current = onChange;
     latestOnCaret.current = onCaret;
     latestOnSelection.current = onSelectionChange;
-  }, [onChange, onCaret, onSelectionChange]);
+    latestOnFollowLink.current = onFollowLink;
+  }, [onChange, onCaret, onSelectionChange, onFollowLink]);
 
   useImperativeHandle(
     ref,
@@ -139,6 +149,13 @@ export default function MarkdownEditor({
           markdown(),
           editorTheme,
           liveCompartment.current.of(initialLive.current ? liveMode : []),
+          // Outside the compartment on purpose. Only Live mode writes a target onto a link, so in
+          // the other modes this handler finds nothing and returns - which is one extension created
+          // once, rather than one more thing reconfigured on every mode switch.
+          followLinks({
+            platform: currentPlatform(),
+            onFollow: (href) => latestOnFollowLink.current?.(href),
+          }),
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
             const external = update.transactions.some((tr) => tr.annotation(External) === true);
