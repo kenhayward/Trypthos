@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.23.1",
+    date: "2026-09-04",
+    pr: 46,
+    headline: "Windows updates actually download now",
+    summary:
+      "Checking for an update on Windows and choosing to download it did not download anything - it always fell back to opening the releases page in your browser, every time, regardless of your connection. The in-app updater never told electron-updater to check for an update before asking it to download one, which it refuses to do, so the download always failed silently and fell back to the same fallback macOS uses. Downloading now works the way it was meant to: electron-updater fetches and applies the update in place, ready on your next restart.",
+    fixed: [
+      "Downloading an update on Windows now actually downloads it, instead of always opening the releases page.",
+    ],
+  },
+  {
     version: "0.23.0",
     date: "2026-09-04",
     pr: 44,

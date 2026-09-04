@@ -135,6 +135,12 @@ function createUpdater({
     const updater = autoUpdater();
     if (updater !== null) {
       try {
+        // downloadUpdate() rejects immediately with "Please check update first" unless
+        // checkForUpdates() has populated its internal update info on this same instance - our own
+        // check above answers "is there an update" from the GitHub API directly and never touches
+        // electron-updater at all, so without this call the Windows path always failed and silently
+        // fell through to the asset-download fallback below on every single download.
+        await updater.checkForUpdates();
         await updater.downloadUpdate();
         return;
       } catch (error) {
