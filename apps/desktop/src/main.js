@@ -22,6 +22,7 @@ const { registerIpcHandlers } = require("./ipcHandlers");
 const { createSecretStore } = require("./secretStore");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
+const { enableSpellChecker } = require("./spellcheck");
 const { APP_NAME } = require("./appName");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
@@ -82,9 +83,17 @@ function createWindow() {
     webPreferences: webPreferencesFor(path.join(__dirname, "preload.js")),
   });
 
-  // In development the shell and the Vite server start together, so the shell routinely wins the
-  // race. Retrying turns "blank window, no explanation" into "appears a moment later", and also
-  // covers restarting the dev server while the shell stays open.
+  // Nothing is underlined and no suggestion is ever offered when the spellchecker resolves to no
+  // languages at all - a state that looks exactly like a document with nothing wrong in it. See
+  // `spellcheck.js`; this only steps in when Electron resolved nothing itself.
+  const spelling = enableSpellChecker(mainWindow.webContents.session, {
+    platform: process.platform,
+    locale: app.getLocale(),
+  });
+  if (!spelling.checking) {
+    console.warn("Spellchecking is off: no dictionary is available for this system.");
+  }
+
   /// The right-click menu, for any text the user can select or edit.
   ///
   /// Registered on the window's own web contents rather than through a preload bridge, because the
@@ -99,6 +108,9 @@ function createWindow() {
     Menu.buildFromTemplate(template).popup({ window: mainWindow });
   });
 
+  // In development the shell and the Vite server start together, so the shell routinely wins the
+  // race. Retrying turns "blank window, no explanation" into "appears a moment later", and also
+  // covers restarting the dev server while the shell stays open.
   mainWindow.webContents.on("did-fail-load", () => {
     if (!mainWindow) return;
 

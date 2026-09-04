@@ -551,6 +551,24 @@ describe("SettingsDialog: AI and the system prompt", () => {
     expect(last.chat?.systemPrompt).toBeNull();
   });
 
+  // The box is the page, so its explanation goes beside the heading: under the box it would sit
+  // below the fold on a short window, describing something already scrolled past.
+  it("puts the explanation beside the heading rather than under the box", () => {
+    ai();
+
+    const hint = screen.getByText(/Sent ahead of every conversation/);
+    const box = screen.getByLabelText("System prompt");
+
+    expect(hint.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // Prose, and the longest anyone writes here. Said out loud rather than left to the browser's
+  // default, so a later `spellcheck="false"` copied in from a form field is a visible change.
+  it("spellchecks the prompt", () => {
+    ai();
+    expect(screen.getByLabelText("System prompt").getAttribute("spellcheck")).toBe("true");
+  });
+
   it("offers no reset when the prompt is unset", () => {
     ai();
     expect(screen.queryByRole("button", { name: "Reset to the default" })).toBeNull();

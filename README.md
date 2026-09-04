@@ -16,7 +16,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Appearance | Light, dark, or follow your system, from Settings. The window draws its own title bar. |
 | Settings | One window with a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and About. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
-| Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with spelling suggestions. |
+| Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with editing and spelling suggestions in every text field. |
 | Updates | Checks GitHub for a newer release on startup, or on demand from the menu or the tray icon. |
 | Local by default | No server, no account, no telemetry. Chats and settings live on your machine. |
 
