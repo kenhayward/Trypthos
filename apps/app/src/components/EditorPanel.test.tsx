@@ -36,6 +36,67 @@ describe("EditorPanel", () => {
     expect(screen.getByLabelText("Markdown source")).toBeDefined();
   });
 
+  // The configured default, not a hard-coded one: the setting decides which view a document opens
+  // in, and it arrives after the panel has mounted because settings are read from disk.
+  it("opens a document in the configured view mode", () => {
+    render(
+      <EditorPanel
+        workspaceName="Diariz"
+        filePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        defaultMode="source"
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(modeButton("Source").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  // A choice made in the header is about the document in front of you, and outlasts a setting
+  // arriving late from disk.
+  it("keeps a chosen mode when the configured default changes underneath it", async () => {
+    const user = userEvent.setup();
+    const panel = (mode: "live" | "source" | "preview") => (
+      <EditorPanel
+        workspaceName="Diariz"
+        filePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        defaultMode={mode}
+        onChange={vi.fn()}
+      />
+    );
+    const view = render(panel("live"));
+
+    await user.click(modeButton("Preview"));
+    view.rerender(panel("source"));
+
+    expect(modeButton("Preview").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  // Each document opens in the configured view, which is what a default for documents means - the
+  // last document's choice is not carried into the next one.
+  it("returns to the configured view when another document is opened", async () => {
+    const user = userEvent.setup();
+    const panel = (filePath: string) => (
+      <EditorPanel
+        workspaceName="Diariz"
+        filePath={filePath}
+        dirty={false}
+        value={DOC}
+        defaultMode="live"
+        onChange={vi.fn()}
+      />
+    );
+    const view = render(panel("docs/notes.md"));
+
+    await user.click(modeButton("Source"));
+    view.rerender(panel("docs/other.md"));
+
+    expect(modeButton("Live").getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("keeps the same editing surface across Live and Source", async () => {
     const user = userEvent.setup();
     render(<Harness />);

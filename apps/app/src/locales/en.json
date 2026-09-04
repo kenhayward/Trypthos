@@ -50,7 +50,7 @@
     "thinking": "Thinking...",
     "chooseModel": "Choose the model",
     "noModel": "No model",
-    "openPreferences": "Open Preferences",
+    "openSettings": "Open Settings",
     "edit": {
       "insertBefore": "Insert before \"{{heading}}\"",
       "insertAfter": "Insert under \"{{heading}}\"",
@@ -92,8 +92,7 @@
     "unknown": "Something went wrong."
   },
   "about": {
-    "version": "Version {{version}}",
-    "close": "Close"
+    "version": "Version {{version}}"
   },
   "window": {
     "minimize": "Minimise window",
@@ -110,12 +109,19 @@
     "collapseChat": "Hide the chat panel",
     "expandChat": "Show the chat panel"
   },
-  "preferences": {
-    "title": "Preferences",
-    "open": "Preferences",
-    "done": "Done",
-    "appearance": "Appearance",
-    "window": "Window",
+  "settings": {
+    "title": "Settings",
+    "open": "Settings",
+    "close": "Close settings",
+    "nav": "Settings sections",
+    "section": {
+      "appearance": "Appearance",
+      "window": "Window",
+      "chatModels": "Chat models",
+      "ai": "AI & system prompt",
+      "editor": "Editor",
+      "about": "About"
+    },
     "theme": {
       "system": "System",
       "light": "Light",
@@ -129,11 +135,11 @@
     "closeToTray": "Keep running when the window is closed",
     "closeToTrayHint": "Closing hides Trypthos to the notification area. Quit it from the tray icon.",
     "chat": {
-      "section": "Chat models",
-    "showPanel": "Show the chat panel",
-    "showPanelHint": "The chat panel appears once you have configured a model. Turn this off for a plain editor and folder browser, or on to keep the panel while you set a model up.",
+      "showPanel": "Show the chat panel",
+      "showPanelHint": "The chat panel appears once you have configured a model. Turn this off for a plain editor and folder browser, or on to keep the panel while you set a model up.",
       "empty": "No models configured yet. Add one to start chatting.",
       "add": "Add a model",
+      "addShort": "+ Add a model",
       "edit": "Edit {{label}}",
       "default": "Default",
       "name": "Name",
@@ -162,7 +168,15 @@
       "supportsTools": "This endpoint supports tool calling",
       "supportsToolsHint": "Lets the model propose document changes as a structured call rather than as text, which is more reliable where it works. Leave this off if you are unsure: changes still work without it.",
       "folderFiles": "Files offered from the folder",
-      "folderFilesHint": "How many of the folder's markdown files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one."
+      "folderFilesHint": "How many of the folder's markdown files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one.",
+      "intro": "Models Trypthos can chat with. Add as many as you like, and mark the one new chats should start on."
+    },
+    "editor": {
+      "defaultView": "The view documents open in",
+      "defaultViewHint": "Every document opens in this view. The header still switches view for the document you are reading, and switching never changes the file."
+    },
+    "about": {
+      "tagline": "A desktop markdown editor for Windows and macOS, with a folder browser and an AI chat panel."
     }
   },
   "menu": {

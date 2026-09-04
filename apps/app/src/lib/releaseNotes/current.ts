@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.26.0",
+    date: "2026-09-04",
+    pr: 51,
+    headline: "Settings is a proper window now, with a page per subject",
+    summary:
+      "Preferences was one small scrolling box with everything in it: themes, tray behaviour, every chat model, the folder file limit and the whole system prompt, stacked in a column. It is now a near-fullscreen Settings window with a rail down the left and a page per subject - Appearance, Window, Chat models, AI & system prompt, Editor and About. Chat models get a page of their own: the models are listed as cards, the rail lists them too while you are there, and editing one opens its form on its own rather than several forms at once. About moved in as a page, so there is one About in the app instead of a separate box. Settings still apply the moment you choose them, with no Save button to forget - a chat model is still the exception, because its fields are only valid together. New with the Editor page: choose the view documents open in, so if you work in Source you no longer switch to it on every file.",
+    added: [
+      "A Settings window with a navigation rail and a page per subject, replacing the single scrolling Preferences box.",
+      "An Editor page, where you choose whether documents open in Live, Source or Preview.",
+      "Escape closes Settings.",
+    ],
+    changed: [
+      "About is a page in Settings rather than a box of its own. The title bar and the Help menu open it there.",
+      "The system prompt and the folder file limit moved to their own AI & system prompt page, away from the model list.",
+    ],
+  },
+  {
     version: "0.25.0",
     date: "2026-09-04",
     pr: 49,

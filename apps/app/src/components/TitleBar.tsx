@@ -8,7 +8,7 @@ interface Props {
   platform: Platform;
   fileName: string | null;
   onAbout: () => void;
-  onPreferences: () => void;
+  onSettings: () => void;
 }
 
 /// The window's own title bar.
@@ -19,7 +19,7 @@ interface Props {
 /// Whether it draws window controls comes from the shared layout function the SHELL also calls. If
 /// the two disagreed the window would have either two sets of controls or none, and none is
 /// unrecoverable: a frameless window with no close button cannot be closed from inside the app.
-export default function TitleBar({ platform, fileName, onAbout, onPreferences }: Props) {
+export default function TitleBar({ platform, fileName, onAbout, onSettings }: Props) {
   const { t } = useTranslation();
   const layout = titleBarLayout(platform);
   const [maximized, setMaximized] = useState(false);
@@ -82,9 +82,9 @@ export default function TitleBar({ platform, fileName, onAbout, onPreferences }:
       <div className="app-no-drag ml-auto flex items-center">
         <button
           type="button"
-          onClick={onPreferences}
-          aria-label={t("preferences.open")}
-          title={t("preferences.open")}
+          onClick={onSettings}
+          aria-label={t("settings.open")}
+          title={t("settings.open")}
           className="rounded p-1 text-ink-5 hover:bg-hover hover:text-ink"
         >
           <svg

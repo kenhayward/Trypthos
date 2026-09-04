@@ -88,6 +88,14 @@ export {
 } from "./chat";
 export type { ChatProfile } from "./chat";
 
+export {
+  DEFAULT_EDITOR_MODE,
+  EDITOR_MODES,
+  EditorModeSchema,
+  isEditable,
+} from "./editorMode";
+export type { EditorMode } from "./editorMode";
+
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";
 

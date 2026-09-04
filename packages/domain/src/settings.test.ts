@@ -369,3 +369,54 @@ describe("chatPanelVisible", () => {
     expect(chatPanelVisible({ ...chat, profiles: [profile], showPanel: false })).toBe(false);
   });
 });
+
+describe("migrating from version 8", () => {
+  const v8 = {
+    schemaVersion: 8,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: {
+      systemPrompt: null,
+      folderFileLimit: 40,
+      showPanel: null,
+      profiles: [],
+    },
+  };
+
+  // Live, which is the mode the app has always opened in. A migration that picked anything else
+  // would change what every existing installation opens in, which is not what adding a setting means.
+  it("opens documents in the mode the app already used", () => {
+    expect(loadSettings(v8).editor.defaultViewMode).toBe("live");
+  });
+
+  it("keeps everything version 8 stored", () => {
+    const migrated = loadSettings(v8);
+    expect(migrated.chat.folderFileLimit).toBe(40);
+    expect(migrated.chat.showPanel).toBeNull();
+    expect(migrated.window.closeToTray).toBe(true);
+    expect(migrated.lastWorkspace).toBe("D:/Notes");
+  });
+
+  it("arrives at the current version", () => {
+    expect(loadSettings(v8).schemaVersion).toBe(SETTINGS_VERSION);
+  });
+});
+
+describe("the editor section", () => {
+  it("ships opening documents in Live", () => {
+    expect(DEFAULT_SETTINGS.editor.defaultViewMode).toBe("live");
+  });
+
+  it("round-trips a stored view mode", () => {
+    const stored = { ...DEFAULT_SETTINGS, editor: { defaultViewMode: "source" as const } };
+    expect(loadSettings(stored).editor.defaultViewMode).toBe("source");
+  });
+
+  // A settings file naming a mode the editor cannot draw would leave the centre panel blank.
+  it("falls back to the defaults rather than accepting a mode that does not exist", () => {
+    const stored = { ...DEFAULT_SETTINGS, editor: { defaultViewMode: "wysiwyg" } };
+    expect(loadSettings(stored)).toEqual(DEFAULT_SETTINGS);
+  });
+});

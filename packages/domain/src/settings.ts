@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChatProfileListSchema } from "./chat";
+import { DEFAULT_EDITOR_MODE, EditorModeSchema } from "./editorMode";
 import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
 import { loadPersisted, type Migration } from "./persisted";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
@@ -13,7 +14,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 8;
+export const SETTINGS_VERSION = 9;
 
 export const SettingsSchema = z
   .object({
@@ -81,6 +82,17 @@ export const SettingsSchema = z
         showPanel: z.boolean().nullable(),
       })
       .strict(),
+    editor: z
+      .object({
+        /// The view a document opens in.
+        ///
+        /// A default rather than a mode: switching view in the header is still a per-document
+        /// choice, and this is only where each one starts. Stored as the mode's own name so a
+        /// settings file says what it means, and refused when it names a mode the editor cannot
+        /// draw - an unknown one would leave the centre panel blank.
+        defaultViewMode: EditorModeSchema,
+      })
+      .strict(),
   })
   .strict();
 
@@ -103,6 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
     folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT,
     showPanel: null,
   },
+  editor: { defaultViewMode: DEFAULT_EDITOR_MODE },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
@@ -153,6 +166,12 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
       const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
       return { ...input, chat: { ...chat, showPanel: null } };
     },
+  },
+  {
+    to: 9,
+    // Version 9 added the editor section. Seeded with the mode the app has always opened in, because
+    // adding a setting must not change what an existing installation does.
+    migrate: (input) => ({ ...input, editor: { defaultViewMode: DEFAULT_EDITOR_MODE } }),
   },
   {
     to: 6,
