@@ -20,6 +20,10 @@ function harness({
   // actually runs it - CI's test job runs on Linux, which is neither of the two branches this file
   // knows about.
   platform = "win32",
+  // null, matching every existing test: electron-updater is "unavailable", so `download` falls
+  // straight through to the asset-download path below. A test that needs the real Windows path -
+  // electron-updater actually downloading - passes a fake shaped like the real one instead.
+  autoUpdaterFactory = () => null,
 } = {}) {
   const shown = [];
   const notifications = [];
@@ -78,10 +82,7 @@ function harness({
     logger: { error: () => {} },
     fs: { writeFile: async (path, data) => written.push({ path, data }) },
     downloadsDir: "/fake/downloads",
-    // Deterministic and instant, rather than depending on the real electron-updater module's own
-    // failure mode when required outside a packaged app - which is genuine, relied-upon behaviour in
-    // production, but not something a test should need for speed or predictability.
-    autoUpdaterFactory: () => null,
+    autoUpdaterFactory,
     platform,
   });
 
@@ -103,6 +104,28 @@ function assetsFor(version) {
     { name: `Trypthos-Setup-${version}.exe`, browser_download_url: `https://dl.example.com/exe-${version}` },
     { name: `Trypthos-${version}-arm64.dmg`, browser_download_url: `https://dl.example.com/dmg-${version}` },
   ];
+}
+
+/// Shaped like the real electron-updater singleton, closely enough to catch the mistake that sent
+/// every Windows download to the asset-download fallback: `downloadUpdate()` genuinely rejects with
+/// "Please check update first" unless `checkForUpdates()` was called first on the same instance -
+/// this fake enforces that same precondition rather than always succeeding, which is what the
+/// harness's default `() => null` cannot exercise at all.
+function fakeElectronUpdater({ downloadFails = false } = {}) {
+  let checked = false;
+  return {
+    on: () => {},
+    checkForUpdates: async () => {
+      checked = true;
+      return {};
+    },
+    downloadUpdate: async () => {
+      if (!checked) throw new Error("Please check update first");
+      if (downloadFails) throw new Error("download failed");
+      return ["fake/path/to/installer.exe"];
+    },
+    quitAndInstall: () => {},
+  };
 }
 
 test("a startup check that finds nothing says nothing", async () => {
@@ -307,6 +330,34 @@ test("falls back to the releases page when the OS cannot open the downloaded fil
 
   assert.equal(written.length, 1, "the file is still downloaded even though opening it then failed");
   assert.equal(opened.length, 1);
+});
+
+test("on Windows, electron-updater checks for updates before downloading, and needs no fallback", async () => {
+  const { updater, notifications, opened, written } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+    autoUpdaterFactory: () => fakeElectronUpdater(),
+  });
+
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  // Succeeding via electron-updater itself, not the raw-fetch fallback this repo also has for
+  // macOS and for when electron-updater is unavailable.
+  assert.equal(written.length, 0, "the real updater downloaded it, not the asset-download fallback");
+  assert.equal(opened.length, 0);
+});
+
+test("falls back to the asset download when electron-updater's own download fails", async () => {
+  const { updater, notifications, opened, written } = harness({
+    releases: [release("v0.10.0", assetsFor("0.10.0"))],
+    autoUpdaterFactory: () => fakeElectronUpdater({ downloadFails: true }),
+  });
+
+  await updater.check("startup");
+  await notifications[0].emit("click");
+
+  assert.equal(written.length, 1, "still lands the update even though electron-updater's own path failed");
+  assert.equal(opened.length, 0);
 });
 
 test("a manual download also uses the automated path when it can", async () => {

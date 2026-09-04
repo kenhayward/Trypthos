@@ -691,8 +691,9 @@ inlined at the call site.
 
 Two paths, because they are different problems. **Windows** uses `electron-updater`, which installs in
 place. **macOS cannot**: Squirrel.Mac refuses to update an unsigned app, so it checks the GitHub
-releases API directly and offers to open the releases page - honest about what it can do, rather than
-failing part-way through an install.
+releases API directly and downloads and opens the matching `.dmg` itself instead (see "downloading
+the installer itself" below) - honest about what it can do, rather than failing part-way through an
+install.
 
 Two consent models, which is why `check` takes a trigger:
 
@@ -754,6 +755,16 @@ two are logged and handled as the separate failures they are.
 fails, rather than being stranded on the fallback webpage the moment the in-place path cannot answer -
 one behaviour serving both "no signed auto-update" (macOS, permanently) and "auto-update broke this
 time" (Windows, occasionally), not two.
+
+**`downloadUpdate()` needs `checkForUpdates()` called first, on the same `autoUpdater` instance** -
+without it, electron-updater rejects immediately with "Please check update first", every single time,
+regardless of network or platform. The app's own update check never touches electron-updater at all
+(it reads the GitHub API directly, so the same code answers "is there an update" on both platforms) -
+which meant nothing ever called `checkForUpdates()`, so the Windows path silently failed on every
+download and fell through to the asset-download fallback above unconditionally. No test caught it
+because every existing test's fake `autoUpdaterFactory` returned `null`, so none of them exercised
+electron-updater's own download path at all - only a fake shaped like the real precondition, not just
+present-or-absent, could catch this.
 
 Testing this needed one fix to the test double, not just new tests: the startup notification's click
 handler used `void download(update)` to satisfy lint's no-floating-promise rule, and the fake
