@@ -271,6 +271,9 @@ export default function SettingsDialog({
                     // is the moment it stops tracking the default.
                     value={effectiveSystemPrompt(settings.chat.systemPrompt)}
                     onChange={(event) => updateChat({ systemPrompt: event.target.value })}
+                    // Prose, and the longest anyone writes here - so it is spellchecked, which is
+                    // also what lets the right-click menu offer a correction in it.
+                    spellCheck
                     // No `rows`: the box takes the height the page has left. `min-h-0` is what lets
                     // it shrink inside the column rather than forcing the page to scroll.
                     className="mt-1.5 min-h-0 w-full flex-1 resize-none rounded border border-rule bg-app px-2 py-1.5 font-mono text-xs text-ink"

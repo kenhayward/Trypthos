@@ -61,6 +61,16 @@ describe("ChatPanel", () => {
     expect(screen.getByRole("textbox", { name: "Message" })).toBeDefined();
   });
 
+  // A question is prose, and the shell's right-click menu can only offer a correction for a word
+  // the spellchecker flagged. Said out loud rather than left to the browser's default, so a later
+  // `spellcheck="false"` copied in from a form field is a visible change.
+  it("spellchecks what you are typing", () => {
+    panel();
+    expect(
+      screen.getByRole("textbox", { name: "Message" }).getAttribute("spellcheck"),
+    ).toBe("true");
+  });
+
   it("shows both sides of the conversation", () => {
     panel({
       turns: [

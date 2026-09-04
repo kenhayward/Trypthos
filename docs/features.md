@@ -74,12 +74,19 @@ system menu bar at the top of the screen, and the window draws no menu labels of
 Nothing on a menu is a separate implementation: each item drives the same thing its button or
 shortcut does, so they cannot drift apart.
 
-Right-clicking text opens a menu suited to what you clicked. In an editable field that is cut, copy,
-paste and select all, with anything you cannot currently do greyed out rather than offered. Over a
-misspelled word it also lists corrections, and offers to add the word to your dictionary - the
-spelling suggestions have no other route into the app. Right-clicking ordinary text with a selection
-offers to copy it; right-clicking with nothing to offer opens nothing at all, rather than a menu of
-dead items.
+Right-clicking text opens a menu suited to what you clicked, in every field you can type in - the
+document, the chat box, the system prompt, a settings field. In an editable field that is undo, redo,
+cut, copy, paste and select all, with anything you cannot currently do greyed out rather than
+offered. Over a misspelled word it also lists corrections, and offers to add the word to your
+dictionary - the spelling suggestions have no other route into the app. Right-clicking ordinary text
+with a selection offers to copy it; right-clicking with nothing to offer opens nothing at all, rather
+than a menu of dead items.
+
+Spelling is checked as you type, and misspelled words are underlined, in the document and in the
+prose you write elsewhere - your questions to chat, and the system prompt. Trypthos checks in your
+system's language where a dictionary exists for it, another dialect of that language where one does
+not, and English otherwise. Fields that hold an address, a model name or a key are left alone: a URL
+is not prose, and underlining one would only be noise.
 
 ## AI chat
 

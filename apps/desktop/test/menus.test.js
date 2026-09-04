@@ -156,6 +156,39 @@ const editable = (over = {}) => ({
   ...over,
 });
 
+// The usual menu everywhere else starts with undo and redo, and a text field in Trypthos is a text
+// field like any other. They come first, before the clipboard block, as they do in the Edit menu.
+test("a text field offers undo and redo, ahead of the clipboard operations", () => {
+  const template = contextMenuTemplate(editable(), { on: handlers() });
+  const roles = template.map((item) => item.role).filter(Boolean);
+
+  assert.deepEqual(roles.slice(0, 2), ["undo", "redo"]);
+  assert.ok(roles.indexOf("undo") < roles.indexOf("cut"));
+});
+
+// Enabled from what the click reported, like the clipboard items: a live Undo on a field with
+// nothing to undo is a menu item that does nothing when chosen.
+test("undo and redo are offered disabled when there is nothing to undo", () => {
+  const template = contextMenuTemplate(
+    editable({ editFlags: { canUndo: false, canRedo: false, canPaste: true } }),
+    { on: handlers() },
+  );
+  const item = (role) => template.find((entry) => entry.role === role);
+
+  assert.equal(item("undo").enabled, false);
+  assert.equal(item("redo").enabled, false);
+});
+
+// Nothing to undo in a paragraph you cannot edit, so the menu that offers a copy offers only that.
+test("a selection outside a text field is still offered only a copy", () => {
+  const template = contextMenuTemplate(
+    editable({ isEditable: false, selectionText: "some prose", editFlags: { canCopy: true } }),
+    { on: handlers() },
+  );
+
+  assert.deepEqual(template.map((item) => item.role), ["copy"]);
+});
+
 test("a text field gets the clipboard operations, as roles", () => {
   const template = contextMenuTemplate(editable(), { on: handlers() });
   const roles = template.map((item) => item.role).filter(Boolean);

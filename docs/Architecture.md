@@ -659,6 +659,24 @@ The templates are plain arrays until Electron builds them, which is what makes t
 a window - `menus.test.js` asserts what is on each menu, which items use a role, and which are
 enabled, with no Electron in the process at all.
 
+### Spellchecking, and the way it fails silently
+
+`spellcheck: true` on the window turns the machinery on, but what is actually checked is a **list of
+languages**, and an empty list is not an error: nothing is underlined, no suggestion is ever offered,
+and the right-click menu has no spelling section - which on screen is indistinguishable from prose
+with nothing wrong in it. `src/spellcheck.js` guards exactly that, and only that. It steps in when
+Electron resolved no languages at all, falling back from the app locale to another dialect of the
+same language to English, and it never throws: a window that cannot spellcheck must still open.
+
+It does nothing on macOS, where spellchecking goes through the OS, which owns its own language list -
+setting one there is an error rather than a preference.
+
+CodeMirror sets `spellcheck="false"` on its content element, so the editor overrides it back
+(`MarkdownEditor.tsx`). The chat box and the system prompt say `spellCheck` out loud for the opposite
+reason: they inherit the right answer from the browser, and saying so is what makes a later
+`spellcheck="false"`, copied in from a form field, a visible change rather than a silent one. Fields
+holding an endpoint, a model slug or a key are deliberately left alone - a URL is not prose.
+
 ### The right-click menu
 
 Registered on the window's own web contents rather than through the preload bridge, because **the

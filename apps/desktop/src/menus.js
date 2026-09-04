@@ -149,6 +149,14 @@ function contextMenuTemplate(params, { on }) {
   }
 
   if (params.isEditable) {
+    // Undo and redo first, as they are in the Edit menu and in every other app's right-click menu.
+    // Enabled from what the click reported, like the clipboard block: an Undo that does nothing when
+    // chosen is worse than one that is visibly unavailable.
+    template.push(
+      { role: "undo", enabled: params.editFlags?.canUndo === true },
+      { role: "redo", enabled: params.editFlags?.canRedo === true },
+      separator,
+    );
     template.push(...clipboardRoles(params.editFlags));
     template.push(separator, { role: "selectAll", enabled: params.editFlags?.canSelectAll === true });
   } else if (params.selectionText !== "") {

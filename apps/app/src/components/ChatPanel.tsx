@@ -359,6 +359,9 @@ export default function ChatPanel({
             }
           }}
           rows={2}
+          // A question is prose. The shell's right-click menu can only offer a correction for a word
+          // the spellchecker flagged, so this is what puts spelling on that menu here.
+          spellCheck
           disabled={models.length === 0}
           placeholder={t("chat.askPlaceholder")}
           aria-label={t("chat.message")}

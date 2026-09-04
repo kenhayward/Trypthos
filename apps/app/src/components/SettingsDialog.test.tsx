@@ -562,6 +562,13 @@ describe("SettingsDialog: AI and the system prompt", () => {
     expect(hint.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  // Prose, and the longest anyone writes here. Said out loud rather than left to the browser's
+  // default, so a later `spellcheck="false"` copied in from a form field is a visible change.
+  it("spellchecks the prompt", () => {
+    ai();
+    expect(screen.getByLabelText("System prompt").getAttribute("spellcheck")).toBe("true");
+  });
+
   it("offers no reset when the prompt is unset", () => {
     ai();
     expect(screen.queryByRole("button", { name: "Reset to the default" })).toBeNull();

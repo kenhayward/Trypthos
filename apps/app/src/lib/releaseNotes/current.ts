@@ -8,9 +8,13 @@ export const RECENT: Release[] = [
     version: "0.26.1",
     date: "2026-09-04",
     pr: 52,
-    headline: "The system prompt gets the whole page",
+    headline: "The system prompt gets the whole page, and every text field gets its menu",
     summary:
-      "The system prompt is the longest thing anyone edits in Trypthos, and it was being edited through a ten-row window in the middle of a page with empty space below it. The box now takes the full width of the page and all the height that is left, so you can see what you are changing. Its explanation moved up beside the System prompt heading, where it reads before the box rather than off the bottom of a page you have already scrolled.",
+      "The system prompt is the longest thing anyone edits in Trypthos, and it was being edited through a ten-row window in the middle of a page with empty space below it. The box now takes the full width of the page and all the height that is left, so you can see what you are changing. Its explanation moved up beside the System prompt heading, where it reads before the box rather than off the bottom of a page you have already scrolled. Separately, the right-click menu now offers undo and redo alongside cut, copy, paste and select all, in every field you can type in - and the prose you write outside the document is spellchecked too, so your questions to chat and the system prompt get the same underlines and the same corrections the editor has. Where your system's language has no dictionary, Trypthos falls back to another dialect of it, then to English, rather than quietly checking nothing at all.",
+    added: [
+      "Undo and redo on the right-click menu, in every text field.",
+      "Spellchecking in the chat box and the system prompt, not only in the document.",
+    ],
     changed: [
       "The system prompt box fills the AI & system prompt page instead of being a small box in the middle of it.",
     ],
