@@ -4,6 +4,7 @@ import {
   SETTINGS_VERSION,
   SETTINGS_MIGRATIONS,
   SettingsSchema,
+  chatPanelVisible,
   loadSettings,
 } from "./settings";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
@@ -290,5 +291,81 @@ describe("loadSettings", () => {
   it("is the version the migrations chain up to", () => {
     const highest = SETTINGS_MIGRATIONS.reduce((max, m) => Math.max(max, m.to), 1);
     expect(highest).toBeLessThanOrEqual(SETTINGS_VERSION);
+  });
+});
+
+describe("migrating from version 7", () => {
+  const v7 = {
+    schemaVersion: 7,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: {
+      systemPrompt: null,
+      folderFileLimit: 40,
+      profiles: [
+        {
+          id: "one",
+          label: "Local model",
+          endpoint: "http://localhost:11434/v1",
+          model: "qwen2.5-coder",
+          supportsImages: false,
+          supportsTools: false,
+          isDefault: true,
+        },
+      ],
+    },
+  };
+
+  // Automatic, not "on". An existing user with a model configured has been looking at the panel all
+  // along and keeps it; one who never configured a model was looking at a panel that could not
+  // answer, and stops.
+  it("leaves the choice automatic", () => {
+    expect(loadSettings(v7).chat.showPanel).toBeNull();
+  });
+
+  it("keeps everything version 7 stored", () => {
+    const migrated = loadSettings(v7);
+    expect(migrated.chat.folderFileLimit).toBe(40);
+    expect(migrated.chat.profiles[0]?.label).toBe("Local model");
+    expect(migrated.window.closeToTray).toBe(true);
+    expect(migrated.panels.workspaceWidth).toBe(326);
+  });
+
+  it("arrives at the current version", () => {
+    expect(loadSettings(v7).schemaVersion).toBe(SETTINGS_VERSION);
+  });
+});
+
+describe("chatPanelVisible", () => {
+  const profile = {
+    id: "local",
+    label: "Local model",
+    endpoint: "http://localhost:11434/v1",
+    model: "qwen2.5-coder",
+    supportsImages: false,
+    supportsTools: false,
+    isDefault: true,
+  };
+  const chat = DEFAULT_SETTINGS.chat;
+
+  // Null means "decide from what is configured", and is not the same as false - a stored false would
+  // keep the panel hidden through the moment the user's first model made it useful.
+  it("ships unset, so the answer is derived", () => {
+    expect(DEFAULT_SETTINGS.chat.showPanel).toBeNull();
+  });
+
+  it("hides the panel while no model is configured", () => {
+    expect(chatPanelVisible(chat)).toBe(false);
+  });
+
+  it("shows the panel as soon as a model is configured", () => {
+    expect(chatPanelVisible({ ...chat, profiles: [profile] })).toBe(true);
+  });
+
+  it("obeys an explicit choice in both directions", () => {
+    expect(chatPanelVisible({ ...chat, showPanel: true })).toBe(true);
+    expect(chatPanelVisible({ ...chat, profiles: [profile], showPanel: false })).toBe(false);
   });
 });

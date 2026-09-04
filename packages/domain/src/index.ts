@@ -96,6 +96,7 @@ export {
   SETTINGS_MIGRATIONS,
   SETTINGS_VERSION,
   SettingsSchema,
+  chatPanelVisible,
   loadSettings,
 } from "./settings";
 export type { Settings } from "./settings";

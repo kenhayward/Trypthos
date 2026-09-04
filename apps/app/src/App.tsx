@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
+  chatPanelVisible,
   defaultChatProfile,
   resolveEdit,
   resolvePanelWidths,
@@ -95,12 +96,19 @@ export default function App() {
   useTheme(settings.appearance.theme);
 
   const panels = settings.panels;
+  /// Whether the chat panel is part of this window at all - see `showPanel` in settings.
+  ///
+  /// Distinct from collapsed, and it has to be: a collapsed panel leaves a rail to bring it back,
+  /// which is exactly what a panel nobody has a model for should not offer.
+  const showChat = chatPanelVisible(settings.chat);
   const widths = resolvePanelWidths({
     available,
     workspace: panels.workspaceWidth,
     chat: panels.chatWidth,
     workspaceCollapsed: panels.workspaceCollapsed,
-    chatCollapsed: panels.chatCollapsed,
+    // The editor takes the whole width when there is no chat panel, which is what collapsing it
+    // already means to the layout. One answer rather than two ways of saying nothing is there.
+    chatCollapsed: panels.chatCollapsed || !showChat,
   });
   const { state, actions } = useWorkspace(client, SCRATCH);
 
@@ -319,68 +327,69 @@ export default function App() {
           ref={editor}
           onChange={actions.edit}
         />
-        {panels.chatCollapsed ? (
-          <PanelRail
-            side="right"
-            label={t("panels.expandChat")}
-            onExpand={() => updatePanels({ chatCollapsed: false })}
-          />
-        ) : (
-          <>
-            <PanelDivider
-              grows="left"
-              width={widths.chat}
-              min={PANEL_BOUNDS.chat.min}
-              max={PANEL_BOUNDS.chat.max}
-              label={t("panels.chatDivider")}
-              onResize={(chatWidth) => updatePanels({ chatWidth })}
+        {showChat &&
+          (panels.chatCollapsed ? (
+            <PanelRail
+              side="right"
+              label={t("panels.expandChat")}
+              onExpand={() => updatePanels({ chatCollapsed: false })}
             />
-            <ChatPanel
-              width={widths.chat}
-              onCollapse={() => updatePanels({ chatCollapsed: true })}
-              models={chatModels}
-              selectedId={activeModel?.id ?? null}
-              onSelectModel={setChosenModel}
-              turns={chat.turns}
-              streaming={chat.streaming}
-              error={chat.error}
-              reasoning={chat.reasoning}
-              activity={chat.activity}
-              onSend={(text) => void chat.send(text)}
-              onStop={() => void chat.stop()}
-              onClear={() => {
-                // A cleared thread is a new conversation: the next save must make a new chat rather
-                // than overwrite the one that was open.
-                history.forget();
-                setMissingChatFile(null);
-                // A new conversation should not silently inherit the last one's attachments.
-                scope.clear();
-                chat.clear();
-              }}
-              onConfigure={() => setPrefsOpen(true)}
-              resolveEdit={resolveAgainstDocument}
-              onApplyEdit={applyEdit}
-              chats={history.chats}
-              openChatId={history.openId}
-              missingFile={missingChatFile}
-              scope={{
-                attachments: scope.attachments,
-                files: scope.files,
-                includeFolder: scope.includeFolder,
-                canUseFolder: state.workspace !== null,
-                onToggleFolder: scope.setIncludeFolder,
-                onNeedFiles: () => void scope.loadFiles(),
-                onAttach: (path) => void scope.attach(path),
-                onDetach: scope.detach,
-              }}
-              onSaveChat={() =>
-                void history.save(chat.turns, activeModel?.id ?? null, state.file?.path ?? null)
-              }
-              onOpenChat={(id) => void openChat(id)}
-              onDeleteChat={(id) => void history.remove(id)}
-            />
-          </>
-        )}
+          ) : (
+            <>
+              <PanelDivider
+                grows="left"
+                width={widths.chat}
+                min={PANEL_BOUNDS.chat.min}
+                max={PANEL_BOUNDS.chat.max}
+                label={t("panels.chatDivider")}
+                onResize={(chatWidth) => updatePanels({ chatWidth })}
+              />
+              <ChatPanel
+                width={widths.chat}
+                onCollapse={() => updatePanels({ chatCollapsed: true })}
+                models={chatModels}
+                selectedId={activeModel?.id ?? null}
+                onSelectModel={setChosenModel}
+                turns={chat.turns}
+                streaming={chat.streaming}
+                error={chat.error}
+                reasoning={chat.reasoning}
+                activity={chat.activity}
+                onSend={(text) => void chat.send(text)}
+                onStop={() => void chat.stop()}
+                onClear={() => {
+                  // A cleared thread is a new conversation: the next save must make a new chat rather
+                  // than overwrite the one that was open.
+                  history.forget();
+                  setMissingChatFile(null);
+                  // A new conversation should not silently inherit the last one's attachments.
+                  scope.clear();
+                  chat.clear();
+                }}
+                onConfigure={() => setPrefsOpen(true)}
+                resolveEdit={resolveAgainstDocument}
+                onApplyEdit={applyEdit}
+                chats={history.chats}
+                openChatId={history.openId}
+                missingFile={missingChatFile}
+                scope={{
+                  attachments: scope.attachments,
+                  files: scope.files,
+                  includeFolder: scope.includeFolder,
+                  canUseFolder: state.workspace !== null,
+                  onToggleFolder: scope.setIncludeFolder,
+                  onNeedFiles: () => void scope.loadFiles(),
+                  onAttach: (path) => void scope.attach(path),
+                  onDetach: scope.detach,
+                }}
+                onSaveChat={() =>
+                  void history.save(chat.turns, activeModel?.id ?? null, state.file?.path ?? null)
+                }
+                onOpenChat={(id) => void openChat(id)}
+                onDeleteChat={(id) => void history.remove(id)}
+              />
+            </>
+          ))}
       </div>
 
       <PreferencesDialog

@@ -13,7 +13,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 7;
+export const SETTINGS_VERSION = 8;
 
 export const SettingsSchema = z
   .object({
@@ -68,6 +68,17 @@ export const SettingsSchema = z
         /// expensive one. Bounded at both ends - zero would make the folder option do nothing while
         /// appearing to work.
         folderFileLimit: z.number().int().min(1).max(OUTLINE_PATH_LIMIT),
+        /// Whether the chat panel is part of the window at all.
+        ///
+        /// **Null means "decide from what is configured", and is not the same as false.** A panel
+        /// with no model behind it can only tell the user to go and configure one, so until they
+        /// have, it is not there - and the moment they add their first model it appears without
+        /// anybody having to find this setting. Storing false instead would keep it hidden through
+        /// exactly the moment it became useful.
+        ///
+        /// An explicit true or false wins in both directions: somebody who wants a plain editor
+        /// with models configured, or an empty panel to configure them from, means it.
+        showPanel: z.boolean().nullable(),
       })
       .strict(),
   })
@@ -86,7 +97,12 @@ export const DEFAULT_SETTINGS: Settings = {
   lastWorkspace: null,
   appearance: { theme: "system" },
   window: { closeToTray: false },
-  chat: { profiles: [], systemPrompt: null, folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT },
+  chat: {
+    profiles: [],
+    systemPrompt: null,
+    folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT,
+    showPanel: null,
+  },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
@@ -126,6 +142,16 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
     migrate: (input) => {
       const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
       return { ...input, chat: { ...chat, folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT } };
+    },
+  },
+  {
+    to: 8,
+    // Version 8 added the chat panel switch. Null rather than a value, so an existing settings file
+    // gets the same answer a new one does: the panel is there if a model is configured. Writing
+    // true for everyone who had one would freeze the choice for people who never made it.
+    migrate: (input) => {
+      const chat = (input as { chat?: Record<string, unknown> }).chat ?? {};
+      return { ...input, chat: { ...chat, showPanel: null } };
     },
   },
   {
@@ -180,4 +206,13 @@ export function loadSettings(raw: unknown): Settings {
   });
 
   return result.ok ? result.value : DEFAULT_SETTINGS;
+}
+
+/// Whether the chat panel belongs in the window.
+///
+/// Pure, and shared, because both the layout and the preference control have to agree: the panel is
+/// drawn from this, and the checkbox that sets it shows this as its state. See `showPanel` for why
+/// unset is derived rather than stored.
+export function chatPanelVisible(chat: Settings["chat"]): boolean {
+  return chat.showPanel ?? chat.profiles.length > 0;
 }

@@ -11,7 +11,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | Markdown editor | Live, Source and Preview views over one document. A mode is a view, never a transform. |
-| AI chat | Ask about your document, a selection, attached files or the whole folder. Apply proposed changes, and keep the conversation. |
+| AI chat | Appears once you configure a model, and can be switched off in Preferences. Ask about your document, a selection, attached files or the whole folder, and apply proposed changes. |
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. |
 | Appearance | Light, dark, or follow your system, from Preferences. The window draws its own title bar. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
@@ -26,7 +26,8 @@ Full prose descriptions: [docs/features.md](docs/features.md).
 Usable for real work on local files. Open a folder, browse it, edit and save, with a save refused if
 the file changed underneath you. The editor has Live, Source and Preview views over one document.
 
-**Chat works.** Configure any OpenAI-compatible endpoint - a hosted provider, or a local model
+**Chat works**, once you have set it up: the panel is not in the window until you configure your
+first model, and appears as soon as you do. Configure any OpenAI-compatible endpoint - a hosted provider, or a local model
 through Ollama or LM Studio - and ask questions about the document you have open, or about a passage
 you have selected. Replies stream in. Ask for a change rather than an answer and the reply comes back
 as a card showing exactly what would be written and where; nothing reaches your document until you
@@ -36,8 +37,9 @@ outside your settings file.
 **Not built yet:** cloud folders (OneDrive, Google Drive, Dropbox, GitHub), chat history that
 survives closing the app, and giving chat access to the wider folder rather than one document.
 
-Run it in a browser tab and there is no filesystem and no chat, so those panels say so - that is a
-supported way to work on the interface, not a broken state.
+Run it in a browser tab and there is no filesystem and nowhere to keep an API key, so the workspace
+panel says so and the chat panel is not drawn at all - that is a supported way to work on the
+interface, not a broken state.
 
 **Builds are unsigned.** Windows SmartScreen will warn on first install, and macOS needs
 right-click then Open. Developer ID signing and notarization are outstanding work.

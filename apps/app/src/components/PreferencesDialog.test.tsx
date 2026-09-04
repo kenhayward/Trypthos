@@ -398,4 +398,55 @@ describe("PreferencesDialog: the system prompt", () => {
     const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
     expect(last.chat?.systemPrompt).toBe("");
   });
+  // The panel switch is a chat setting, so it sits with the models rather than under Appearance.
+  describe("showing the chat panel", () => {
+    it("reads as on once a model is configured", () => {
+      dialog({ settings: withProfile() });
+      const box = screen.getByRole("checkbox", { name: /Show the chat panel/ });
+      expect((box as HTMLInputElement).checked).toBe(true);
+    });
+
+    // The state a new installation is in. The panel could only tell the user to configure a model,
+    // which is what the screen they are already looking at is for.
+    it("reads as off while no model is configured", () => {
+      dialog();
+      const box = screen.getByRole("checkbox", { name: /Show the chat panel/ });
+      expect((box as HTMLInputElement).checked).toBe(false);
+    });
+
+    it("stores an explicit no when it is turned off", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      dialog({ settings: withProfile(), onChange });
+
+      await user.click(screen.getByRole("checkbox", { name: /Show the chat panel/ }));
+
+      const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+      expect(last.chat?.showPanel).toBe(false);
+    });
+
+    it("stores an explicit yes when it is turned on with no model configured", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      dialog({ onChange });
+
+      await user.click(screen.getByRole("checkbox", { name: /Show the chat panel/ }));
+
+      const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+      expect(last.chat?.showPanel).toBe(true);
+    });
+
+    // Every write to the chat section carries the rest of it forward, or turning the panel off would
+    // take the configured models with it.
+    it("keeps the configured models when it is toggled", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      dialog({ settings: withProfile(), onChange });
+
+      await user.click(screen.getByRole("checkbox", { name: /Show the chat panel/ }));
+
+      const last = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+      expect(last.chat?.profiles).toHaveLength(1);
+    });
+  });
 });

@@ -226,7 +226,8 @@ folder are not worth losing over fields that did not exist yet. The chain runs e
 version 1 file passes through version 2's migration on its way forward - a file that skipped straight
 to the current version would miss whatever version 2 added, which is the exact failure migrations
 exist to prevent. Version 2 added appearance and window behaviour, version 3 added chat models, version 4 added the
-system prompt, version 5 made that prompt nullable.
+system prompt, version 5 made that prompt nullable, version 6 added per-profile tool calling,
+version 7 added the folder outline size, and version 8 added the chat panel switch.
 
 **Version 5 is worth reading as a warning.** Version 4 stored the default prompt's TEXT, which meant
 every later improvement to it was invisible to anyone who already had a settings file - and the
@@ -242,6 +243,18 @@ stop growing: nullability is what removes the need for it.
 
 The general rule the bug illustrates: **do not persist a copy of a value the app owns.** Persist the
 fact that the user has not chosen one.
+
+**`chat.showPanel` is the same shape, and exists for the same reason.** Whether the chat panel is in
+the window is a nullable boolean, where null means "derive it from whether a model is configured" -
+resolved by `chatPanelVisible`, which both the layout and the preference checkbox read so they cannot
+disagree. A stored `false` for a new installation would have been the bug in miniature: the panel
+would stay hidden through exactly the moment the user's first model made it useful. An explicit true
+or false wins in both directions, and version 8's migration therefore writes null rather than
+inferring a choice nobody made.
+
+**Hidden is not collapsed.** A collapsed panel leaves a rail to bring it back, which is precisely
+what a panel nobody has a model for must not offer; the layout is told the chat is collapsed so the
+editor takes the width, and the rail is not drawn.
 
 **Chat models start empty rather than seeded.** There is no endpoint every user has, and a profile
 pointing somewhere that does not answer is worse than an empty list, which at least says what to do
