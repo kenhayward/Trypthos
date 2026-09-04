@@ -64,7 +64,7 @@ async function buildLinuxPng() {
   // Windows geometry, not the macOS float: Linux desktop environments follow Fluent/GNOME-style
   // square tiles more often than Apple's inset placement. 512px is large enough for every context
   // AppImage integration actually uses (application menus, .desktop file previews).
-  return rasterize(windowsIconSvg(256), 512);
+  return rasterize(windowsIconSvg(256, 512));
 }
 
 async function main() {

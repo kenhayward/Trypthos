@@ -20,36 +20,70 @@ const FOLD = "#C9E6DC";
 
 export const WINDOWS_ICO_SIZES = [16, 32, 48, 256];
 
-/// Windows: which hand-drawn variant applies at a given ICO size.
+/// The notification-area sizes Windows asks for as display scaling changes: 16 at 100%, 20 at
+/// 125%, 24 at 150%, 32 at 200%, 48 at 300%. Packed into one .ico so the shell picks the entry
+/// itself rather than scaling a single PNG - a 32px PNG scaled down to 20 looks exactly like that.
+export const TRAY_ICO_SIZES = [16, 20, 24, 32, 48];
+
+/// Windows: which hand-drawn variant applies at a given size.
 ///
-/// Only the smallest size differs. At 16px the fold-corner triangle is too small to read as
-/// anything but a smudge, and a two-stop gradient banding is invisible anyway - so it is dropped in
-/// favour of a flat fill that reads more cleanly at that size.
+/// Only the small sizes differ. Up to 24px the fold-corner triangle is a pixel or two - a smudge,
+/// not a fold - and a two-stop gradient's banding is invisible anyway, so both are dropped in favour
+/// of a flat fill and thicker rules that read more cleanly. That covers the 16px ICO entry and every
+/// tray size below 32.
 export function windowsVariantFor(size) {
-  return size <= 16 ? "small" : "full";
+  return size <= 24 ? "small" : "full";
+}
+
+/// The page glyph and its two rule lines, shared by the tile and the tray template so the two can
+/// never drift. `page`, `fold` and `rule` are the paint for each part; `full` decides whether the
+/// fold triangle is drawn and how thick the rules are.
+function pageGlyph({ full, page, fold, rule }) {
+  const strokeWidth = full ? 6 : 10;
+  const foldPath = full ? `<path d="M164 60 V76 H180 Z" fill="${fold}"/>` : "";
+  return `<path d="M76 60 H164 L180 76 V196 A8 8 0 0 1 172 204 H84 A8 8 0 0 1 76 196 Z" fill="${page}"/>
+  ${foldPath}
+  <line x1="92" y1="128" x2="164" y2="128" stroke="${rule}" stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
+  <line x1="92" y1="152" x2="150" y2="152" stroke="${rule}" stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>`;
 }
 
 /// The Windows tile: a Fluent-style rounded square, the page-with-folded-corner glyph, two rule
 /// lines. Same 256-unit coordinate space regardless of the pixel size it will be rendered at -
 /// stroke widths and every other measurement scale with the canvas because they are specified in
 /// SVG user-space units, not fixed pixels.
-export function windowsIconSvg(size) {
-  const full = windowsVariantFor(size) === "full";
-  const strokeWidth = full ? 6 : 10;
+///
+/// `base` decides WHICH artwork, `px` how many pixels it is rasterized at; they differ for a
+/// high-DPI rendering of a small icon, which wants the small artwork drawn large - the same rule
+/// `macIconSvg` follows for the ICNS "@2x" slots.
+export function windowsIconSvg(base, px = base) {
+  const full = windowsVariantFor(base) === "full";
   const container = full
     ? `<rect x="4" y="4" width="248" height="248" rx="56" fill="url(#g)"/>`
     : `<rect x="4" y="4" width="248" height="248" rx="56" fill="${LEAF}"/>`;
-  const fold = full ? `<path d="M164 60 V76 H180 Z" fill="${FOLD}"/>` : "";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 256 256">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 256 256">
   <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
     <stop offset="0%" stop-color="${GRADIENT_FROM}"/><stop offset="100%" stop-color="${GRADIENT_TO}"/>
   </linearGradient></defs>
   ${container}
-  <path d="M76 60 H164 L180 76 V196 A8 8 0 0 1 172 204 H84 A8 8 0 0 1 76 196 Z" fill="${PAGE}"/>
-  ${fold}
-  <line x1="92" y1="128" x2="164" y2="128" stroke="${LEAF}" stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
-  <line x1="92" y1="152" x2="150" y2="152" stroke="${LEAF}" stroke-width="${strokeWidth}" stroke-linecap="round" opacity="0.55"/>
+  ${pageGlyph({ full, page: PAGE, fold: FOLD, rule: LEAF })}
+</svg>`;
+}
+
+/// The macOS menu-bar icon: the Windows tile in silhouette. A Template image is recoloured by macOS
+/// from its alpha channel alone, so the tile is opaque white, the page is CUT OUT of it (a mask, so
+/// the hole is real transparency rather than a painted-on colour macOS would ignore), and the rule
+/// lines are put back inside the hole. Same coordinates as `windowsIconSvg`, so it is the same icon
+/// in every respect but colour. Edge-to-edge like the Windows tile, not the inset macOS Dock float:
+/// at menu-bar size the float's margin would leave a mark too small to read.
+export function trayTemplateSvg(base, px = base) {
+  const full = windowsVariantFor(base) === "full";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 256 256">
+  <defs><mask id="page">
+    <rect x="0" y="0" width="256" height="256" fill="white"/>
+    ${pageGlyph({ full, page: "black", fold: "white", rule: "white" })}
+  </mask></defs>
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="white" mask="url(#page)"/>
 </svg>`;
 }
 

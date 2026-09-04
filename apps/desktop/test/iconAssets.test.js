@@ -18,13 +18,55 @@ test.before(async () => {
   iconAssets = await import("../scripts/iconAssets.mjs");
 });
 
-test("Windows: the small size is a distinct variant from the rest", () => {
+test("Windows: the small sizes are a distinct variant from the rest", () => {
   const { windowsVariantFor } = iconAssets;
   assert.equal(windowsVariantFor(256), "full");
   assert.equal(windowsVariantFor(48), "full");
   assert.equal(windowsVariantFor(32), "full");
+  // The tray sizes between 16 and 32: the fold triangle is one or two pixels there, a smudge.
+  assert.equal(windowsVariantFor(24), "small");
+  assert.equal(windowsVariantFor(20), "small");
   assert.equal(windowsVariantFor(16), "small");
 });
+
+// The same lesson the ICNS "@2x" slots taught: a high-DPI rendering of the 16px tray icon wants the
+// SIXTEEN-pixel artwork drawn at 32 physical pixels, not the native 32px artwork.
+test("Windows: the artwork variant follows the base size, the pixel size follows px", () => {
+  const svg = iconAssets.windowsIconSvg(16, 32);
+  assert.match(svg, /width="32" height="32"/);
+  assert.doesNotMatch(svg, /url\(#/, "16px artwork: flat fill, even when rendered at 32px");
+  assert.doesNotMatch(svg, /M164 60 V76 H180 Z/, "16px artwork: no fold triangle");
+});
+
+test("Windows: px defaults to the base size", () => {
+  assert.match(iconAssets.windowsIconSvg(48), /width="48" height="48"/);
+});
+
+// The tray on Windows is an .ico so the shell picks a size itself: 16 at 100%, 20 at 125%, 24 at
+// 150%, 32 at 200%. A single PNG gets scaled by Windows, and a 32px PNG scaled to 20 looks it.
+test("the tray .ico carries every notification-area size Windows scaling asks for", () => {
+  assert.deepEqual(iconAssets.TRAY_ICO_SIZES, [16, 20, 24, 32, 48]);
+});
+
+// macOS recolours a Template image from its alpha channel alone, so the artwork must be the same
+// tile as the app icon in silhouette: an opaque tile with the page cut out of it, and the rule lines
+// put back. Any colour other than white would not be wrong so much as ignored.
+test("the tray template is the app icon's tile in white-on-transparent", () => {
+  const svg = iconAssets.trayTemplateSvg(16, 32);
+  assert.match(svg, /width="32" height="32"/);
+  assert.match(svg, /<mask/, "the page is cut out of the tile with a mask, not painted over it");
+  assert.match(svg, /rx="56"/, "the same rounded square as the Windows tile");
+  const fills = [...svg.matchAll(/(?:fill|stroke)="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(fills.length > 0);
+  for (const fill of fills) {
+    assert.ok(
+      ["white", "black", "none"].includes(fill),
+      `a template image is white and alpha only, found ${fill}`,
+    );
+  }
+  assert.doesNotMatch(svg, /url\(#g\)/, "no gradient: the template has no colour to grade");
+});
+
 
 test("Windows: the full variant carries the gradient and the folded corner", () => {
   const svg = iconAssets.windowsIconSvg(256);

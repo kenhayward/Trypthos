@@ -59,6 +59,26 @@ test("macOS builds are explicitly unsigned rather than accidentally so", () => {
   assert.equal(config.mac.identity, null);
 });
 
+// The resource filter must name the tray files, not a whole extension: "*.png" also swept build/
+// icon.png into resources, and "*.ico" would sweep the 9 KB app icon in with the tray's.
+test("only the tray icons are packed as resources, by name", () => {
+  const entry = (config.extraResources ?? []).find((item) => item.to === "build");
+  assert.ok(entry, "the tray resource entry must exist");
+  assert.ok(Array.isArray(entry.filter) && entry.filter.length > 0, "the entry must filter");
+  for (const pattern of entry.filter) {
+    assert.match(pattern, /^tray/, `resource filter "${pattern}" must be tray-only`);
+  }
+});
+
+test("each platform reads the tray icon in the format its shell wants", () => {
+  const { trayIconFileFor } = require("../src/tray");
+  // An .ico so Windows picks the size for the DPI itself; a Template PNG pair so macOS can recolour
+  // it; a plain PNG everywhere else.
+  assert.equal(trayIconFileFor("win32"), "tray.ico");
+  assert.equal(trayIconFileFor("darwin"), "trayTemplate.png");
+  assert.equal(trayIconFileFor("linux"), "tray.png");
+});
+
 test("the tray icons are packed outside the asar", () => {
   // Electron's Tray reads its icon from disk and cannot open an archive, so an icon packed inside
   // app.asar produces a tray with no icon - which looks like the feature not working at all.

@@ -27,6 +27,7 @@ const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
 const { createUpdater } = require("./updater");
 const { createTray } = require("./tray");
+const { revealWindow } = require("./revealWindow");
 const { readCloseToTray, onSettingsWritten } = require("./settingsStore");
 
 let mainWindow = null;
@@ -168,10 +169,10 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  // A second launch hands over to the running instance, which has to come back into view whether
+  // it was minimised or hidden to the tray - a hidden window that is merely focused stays hidden.
   app.on("second-instance", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+    revealWindow(mainWindow);
   });
 
   void app.whenReady().then(async () => {
