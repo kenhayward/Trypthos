@@ -7,7 +7,7 @@ export const RECENT: Release[] = [
   {
     version: "0.23.0",
     date: "2026-09-04",
-    pr: 45,
+    pr: 44,
     headline: "The tray icon matches the new design",
     summary:
       "The notification-area icon was left out of the app-icon redesign and still showed the old thin, unfilled outline next to the new bold taskbar icon. It now uses the same flat, solid-fill treatment the app icon itself uses at its smallest sizes - a filled page shape with the rule lines cut through as notches - so the tray reads as the same design rather than a different, older one.",
