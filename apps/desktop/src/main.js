@@ -11,10 +11,11 @@ const {
   safeStorage,
   shell,
 } = require("electron");
-const { MENU_ACTION_CHANNEL, PopupMenuRequest } = require("@trypthos/domain");
+const { MENU_ACTION_CHANNEL, PopupMenuRequest, isExternalUrl } = require("@trypthos/domain");
 const path = require("node:path");
 const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
+const { navigationDecision } = require("./navigationGuard");
 const { builtIndexPath } = require("./builtIndex");
 const { nextRetryDelayMs } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
@@ -193,8 +194,20 @@ function createWindow() {
   // A link to the wider internet opens in the user's browser, never inside the app window - an
   // in-app navigation would hand a remote page the app's own origin.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isExternalUrl(url)) void shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // The same rule for a navigation the page starts itself. The renderer intercepts links in rendered
+  // markdown and is where the behaviour a user sees is decided; this is the line underneath it, and
+  // it is what makes "the window never navigates" a property of the shell rather than a habit of the
+  // renderer. See `navigationGuard.js` for why a frameless window makes this worse than a lost tab.
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const decision = navigationDecision(mainWindow.webContents.getURL(), url);
+    if (decision === "allow") return;
+
+    event.preventDefault();
+    if (decision === "external") void shell.openExternal(url);
   });
 }
 
@@ -234,6 +247,9 @@ if (!gotLock) {
       // The provider call lives here and only here. The renderer never opens a socket to a provider
       // and never holds the key.
       chat: createChatProvider({ secrets }),
+      // The only path from the renderer to the operating system's protocol handlers, and the reason
+      // the schema behind it is an allow-list rather than a deny-list.
+      openExternal: (url) => shell.openExternal(url),
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow, guard: closeGuard });
 

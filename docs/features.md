@@ -60,6 +60,21 @@ text, without either being surprised by what the other did to it.
 Preview renders whatever the file contains, and a markdown file is untrusted input like any other,
 so the rendered HTML is sanitised before it is shown.
 
+### Following a link
+
+A link goes where it points, and never over the top of Trypthos. A web address opens in your own
+browser and leaves the app exactly where it was - a page loaded inside a window with no address bar
+and no back button is a place with no way out of it. A link to another markdown file in the open
+folder opens that file in the editor, resolved relative to the document you are reading, exactly as
+clicking it in the folder browser would; a link to a file that has since been renamed, moved or
+deleted reports that rather than doing nothing. Anything else - a picture, a PDF, a path that leads
+outside your folder - does nothing at all.
+
+Hovering a link shows where it goes, which is how you tell a file in your folder from a page on the
+internet before you click. This holds in Preview, in the chat panel's replies and in the About box.
+Live mode is the one difference: link text there is still text you are editing, so a plain click
+places the cursor and Ctrl+click (Cmd+click on macOS) follows the link.
+
 ## Menus and the right-click menu
 
 The window draws its own title bar, so on Windows the File, Edit, Tools and Help labels sit in that

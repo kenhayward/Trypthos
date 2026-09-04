@@ -225,6 +225,70 @@ describe("useWorkspace", () => {
     expect(result.current.state.dirty).toBe(false);
   });
 
+  // Opening a file the user clicked in the folder browser and opening one they clicked a LINK to are
+  // the same act, and share one implementation - the unsaved-changes prompt, the error banner and the
+  // revision all have to behave identically, and two implementations would be two chances to differ.
+  describe("openPath", () => {
+    it("opens a file named by its workspace-relative path", async () => {
+      const { client } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client));
+
+      await act(async () => {
+        await result.current.actions.openPath("book/two.md");
+      });
+
+      expect(result.current.state.file).toEqual({
+        path: "book/two.md",
+        name: "two.md",
+        revision: { id: "r1" },
+      });
+      expect(result.current.state.content).toBe("# On disk\n");
+    });
+
+    it("names a file at the root by its own name", async () => {
+      const { client } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client));
+
+      await act(async () => {
+        await result.current.actions.openPath("a.md");
+      });
+
+      expect(result.current.state.file?.name).toBe("a.md");
+    });
+
+    it("reports a link to a file that is not there", async () => {
+      const { client } = fakeClient({
+        readFile: async () => ({ ok: false, reason: "not-found" }),
+      });
+      const { result } = renderHook(() => useWorkspace(client));
+
+      await act(async () => {
+        await result.current.actions.openPath("gone.md");
+      });
+
+      expect(result.current.state.errorKey).toBe("errors.notFound");
+      expect(result.current.state.file).toBeNull();
+    });
+
+    it("asks before discarding unsaved changes, and opens nothing when cancelled", async () => {
+      const { client } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client, "", async () => "cancel"));
+
+      await act(async () => {
+        await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
+      });
+      act(() => {
+        result.current.actions.edit("# Edited\n");
+      });
+      await act(async () => {
+        await result.current.actions.openPath("book/two.md");
+      });
+
+      expect(result.current.state.file?.path).toBe("a.md");
+      expect(result.current.state.content).toBe("# Edited\n");
+    });
+  });
+
   it("marks the document dirty once edited", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));

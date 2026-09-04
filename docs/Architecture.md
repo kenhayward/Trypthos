@@ -77,7 +77,7 @@ round-trip and nothing that can reformat a user's file behind their back.
   rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
   of the bytes.
 - `lib/markdown.ts` renders Preview through marked, sanitised with DOMPurify. One renderer for the
-  whole app: Preview now, chat replies later. Both display text the app did not write.
+  whole app: Preview, chat replies and the About box. All three display text the app did not write.
 
 **Live mode** (`lib/liveDecorations.ts` + `lib/liveExtension.ts`) hides markdown punctuation except
 on the line the caret is on. The split is deliberate: every decision - which nodes are markers, which
@@ -105,6 +105,37 @@ zone on every list item.
 
 Fenced code, tables, images and footnotes have no decoration yet and therefore render as source -
 a deliberate floor, and one no two-engine design can offer.
+
+## Links
+
+**A link is never followed by navigating the window.** The window is frameless: no address bar, no
+back button. A page loaded over the app has replaced the application with no way back to it, and has
+been handed the app's own origin - which is the origin the preload bridge is exposed on. So the same
+decision is made in three places, deliberately, because each is the last line for the one before it:
+
+1. `packages/domain/src/markdownLink.ts` decides what a link MEANS. `linkAction(href, fromPath)`
+   answers `external` (a web address), `document` (a markdown file in the workspace, resolved against
+   the open document and returned as a workspace-relative path), `anchor`, or `none` with a reason.
+   Pure, shared with the main process, and the only place the rules live.
+2. The renderer intercepts the click. `lib/markdown.ts` marks every anchor it emits with
+   `data-md-link` and a `title` carrying the target; `lib/markdownLinks.ts` is one delegated handler
+   on the app root that matches that mark. Delegated rather than per-surface because the HTML is
+   injected wholesale and there are no React elements to bind to - and matching on the mark rather
+   than on a container's class means a surface that starts rendering markdown is covered without
+   being told to be. A `document` result goes to `useWorkspace`'s `openPath`, which is the same code
+   path as clicking a row in the folder browser, so the unsaved-changes prompt and the error banner
+   behave identically either way.
+3. The shell refuses anything that gets past both. `setWindowOpenHandler` denies every popup, and
+   `navigationGuard.js` decides `will-navigate`: the app's own document may reload, a web address is
+   handed to the browser, everything else does nothing.
+
+Live mode is the exception that proves the shape. CodeMirror draws link text as a decorated span, not
+an anchor, so the delegated handler cannot see it: `liveExtension.ts` writes the target onto the
+decoration (`title` for hover, `data-link-target` for the click) and reports a modified click through
+`onFollowLink`, which App feeds into the same `followLink`. The modifier is not optional there - Live
+is an editing surface, and a plain click has to place the caret rather than leaving a dead zone in the
+middle of a sentence. It is Ctrl away from macOS and Cmd on it, because Ctrl+click on macOS is a right
+click.
 
 The status bar's facts are **measured, not assumed**. `detectLineEnding` reports `Mixed` when a file
 genuinely mixes them, because the strip presents these as claims about the user's document - and the
@@ -742,13 +773,15 @@ no corrections while the chat box and settings fields had them, and nothing woul
 
 ## The IPC surface
 
-Sixteen channels, listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
+Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
-(`workspace:open`, `workspace:reopen`, `workspace:list`), files (`file:read`, `file:write`), window
-(`window:minimize`, `window:toggleMaximize`, `window:close`), settings (`settings:read`,
-`settings:write`), keys (`secrets:list`, `secrets:set`, `secrets:delete`) and chat (`chat:send`,
-`chat:cancel`) and menus (`menu:popup`). Three channels flow the other way, all validated on arrival
-like everything else: `window:state`, `chat:event` for streamed reply tokens, and `menu:action`.
+(`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`), files (`file:read`,
+`file:write`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
+(`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
+(`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
+conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and
+links (`shell:openExternal`). Three channels flow the other way, all validated on arrival like
+everything else: `window:state`, `chat:event` for streamed reply tokens, and `menu:action`.
 
 Three properties do the work:
 
@@ -760,6 +793,13 @@ Three properties do the work:
 - **The renderer cannot name a workspace root.** It can only ask the user to choose one; the main
   process holds the result. A renderer that could name its own root could name any directory on the
   machine.
+- **`shell:openExternal` is an allow-list, checked in the main process.** `OpenExternalRequest`
+  accepts `http:`, `https:` and `mailto:` and refuses everything else, using the same `isExternalUrl`
+  the renderer used - one function, so the two answers cannot drift. What is on the other side of that
+  handler is the operating system's protocol handlers: `file:` reads anything on the machine, and
+  Windows registers several (`ms-msdt:`, `search-ms:`) that do considerably more than open a page. A
+  deny-list would be wrong here in the way deny-lists usually are - the dangerous schemes are the ones
+  nobody thought of.
 
 The renderer's own state machine is `apps/app/src/hooks/useWorkspace.ts`, deliberately separate from
 the panel so the interface can be redesigned without touching behaviour, and so the awkward cases -

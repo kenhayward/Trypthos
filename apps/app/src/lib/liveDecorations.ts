@@ -86,6 +86,22 @@ export function formatClassFor(name: string): string | null {
   return FORMAT_CLASSES[name] ?? null;
 }
 
+/// Whether a click on a link means "follow it" rather than "put the caret here".
+///
+/// A plain click can never mean follow. Live mode is an editing surface and link text is text
+/// somebody edits, so a link that swallowed clicks would be a dead zone in the middle of a sentence -
+/// which is the difference between this and Preview, where a plain click is the only gesture there
+/// is.
+///
+/// The modifier is the platform's, not a shared one. Ctrl+click on macOS IS a right click: the system
+/// opens a context menu for it, and following a link as well would do two things for one gesture.
+export function isFollowClick(
+  modifiers: { ctrlKey: boolean; metaKey: boolean },
+  platform: "darwin" | "win32" | "linux",
+): boolean {
+  return platform === "darwin" ? modifiers.metaKey : modifiers.ctrlKey;
+}
+
 /// Every line touched by the selection.
 ///
 /// Whole lines, not just the ends: a selection spanning three lines reveals all three, because the

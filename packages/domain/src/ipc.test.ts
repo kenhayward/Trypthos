@@ -4,6 +4,7 @@ import {
   DiscardChoiceSchema,
   DocumentDirtyRequest,
   IPC_CHANNELS,
+  OpenExternalRequest,
   ListRequest,
   ReadRequest,
   SetSecretRequest,
@@ -37,6 +38,7 @@ describe("IPC_CHANNELS", () => {
       "workspace:outline",
       "document:dirty",
       "document:confirmDiscard",
+      "shell:openExternal",
     ]);
   });
 
@@ -48,6 +50,28 @@ describe("IPC_CHANNELS", () => {
       /^secrets:(get|read|reveal|export)/.test(channel),
     );
     expect(readsSecrets).toEqual([]);
+  });
+});
+
+describe("OpenExternalRequest", () => {
+  it("accepts a web address", () => {
+    expect(OpenExternalRequest.parse({ url: "https://example.com/a" })).toEqual({
+      url: "https://example.com/a",
+    });
+  });
+
+  // The renderer decided this was external before sending it. That is not a decision: the renderer
+  // is untrusted, and the main process is the side holding a handle to the operating system.
+  it("refuses a scheme the shell must never hand to the operating system", () => {
+    for (const url of ["file:///etc/passwd", "javascript:alert(1)", "ms-msdt:/id", "notes.md"]) {
+      expect(OpenExternalRequest.safeParse({ url }).success).toBe(false);
+    }
+  });
+
+  it("refuses anything but a url field", () => {
+    expect(OpenExternalRequest.safeParse({ url: "https://example.com", open: true }).success).toBe(
+      false,
+    );
   });
 });
 

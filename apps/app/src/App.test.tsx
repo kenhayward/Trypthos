@@ -74,6 +74,34 @@ describe("App", () => {
     expect(screen.queryByRole("complementary", { name: "Chat" })).toBeNull();
   });
 
+  // The wiring, end to end: rendered markdown, a real click, and the shell asked to open the link
+  // rather than the window loading it. The rule itself is proved in `markdownLinks.test.ts`; what
+  // this catches is the handler being off the tree, which no unit test can see.
+  describe("links in rendered markdown", () => {
+    it("asks the shell to open a web address rather than navigating the window", async () => {
+      const opened: string[] = [];
+      window.trypthos = {
+        ...browserClient,
+        readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+        writeSettings: async () => {},
+        openExternal: async (url: string) => {
+          opened.push(url);
+        },
+      } as unknown as typeof window.trypthos;
+
+      render(<App />);
+      await userEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+      const link = screen.getByRole("link", { name: "link" });
+      // The hover readout, which is how a file in the folder is told from a web address before it is
+      // clicked.
+      expect(link.getAttribute("title")).toBe("https://example.com");
+
+      await userEvent.click(link);
+      expect(opened).toEqual(["https://example.com"]);
+    });
+  });
+
   it("shows the build version, which comes from /version.json", () => {
     render(<App />);
     expect(screen.getByRole("button", { name: `About ${APP_VERSION}` })).toBeDefined();

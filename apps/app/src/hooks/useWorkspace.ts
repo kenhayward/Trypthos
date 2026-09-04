@@ -47,6 +47,11 @@ export interface WorkspaceActions {
   retryFolder(path: string): Promise<void>;
   setFilter(filter: string): void;
   openFile(node: RemoteNode): Promise<void>;
+  /// Opens a file named only by its workspace-relative path - a link in a document, rather than a
+  /// row in the tree. The same act as `openFile` and the same implementation, so the prompt about
+  /// unsaved work, the error banner and the revision cannot behave differently depending on which
+  /// way the file was reached.
+  openPath(path: string): Promise<void>;
   edit(content: string): void;
   /// True when the file is on disk as the editor shows it. False on a failed save, and on no file
   /// open at all - the caller may be about to discard the document on the strength of the answer.
@@ -98,6 +103,12 @@ export function failureKey(reason: string): string | null {
 export function parentOf(directory: string): string {
   const cut = directory.lastIndexOf("/");
   return cut === -1 ? "" : directory.slice(0, cut);
+}
+
+/// The display name of a workspace-relative file path: its last segment.
+export function nameOf(filePath: string): string {
+  const cut = filePath.lastIndexOf("/");
+  return cut === -1 ? filePath : filePath.slice(cut + 1);
 }
 
 /// Removes a folder and everything beneath it from the map.
@@ -221,17 +232,20 @@ export function useWorkspace(
     await loadFolder("");
   }, [client, fail, loadFolder, mayDiscard]);
 
-  const openFile = useCallback(
-    async (node: RemoteNode) => {
+  const openPath = useCallback(
+    async (path: string) => {
       if (!(await mayDiscard())) return;
 
       setState((prev) => ({ ...prev, busy: true, errorKey: null }));
-      const result = await client.readFile(node.id);
+      const result = await client.readFile(path);
+      // A link can point at a file that has been renamed, moved or deleted since it was written, and
+      // that is ordinary rather than exceptional - it reports through the same banner as any other
+      // failed read, which already says "not found" in the user's language.
       if (!result.ok) return fail(result.reason);
 
       setState((prev) => ({
         ...prev,
-        file: { path: node.id, name: node.name, revision: result.revision },
+        file: { path, name: nameOf(path), revision: result.revision },
         content: result.content,
         dirty: false,
         busy: false,
@@ -239,6 +253,10 @@ export function useWorkspace(
     },
     [client, fail, mayDiscard],
   );
+
+  /// Clicking a row in the tree. The node's id IS its workspace-relative path, and its name is the
+  /// last segment of that path, so there is nothing here the path does not already say.
+  const openFile = useCallback(async (node: RemoteNode) => await openPath(node.id), [openPath]);
 
   const reopen = useCallback(
     async (root: string) => {
@@ -273,6 +291,7 @@ export function useWorkspace(
     retryFolder: loadFolder,
     setFilter: (filter: string) => setState((prev) => ({ ...prev, filter })),
     openFile,
+    openPath,
     edit: (content: string) =>
       setState((prev) => ({ ...prev, content, dirty: prev.file !== null })),
     save,

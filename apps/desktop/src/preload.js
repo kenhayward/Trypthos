@@ -71,6 +71,12 @@ contextBridge.exposeInMainWorld("trypthos", {
     return () => ipcRenderer.removeListener("window:closeRequested", wrapped);
   },
 
+  /// A link the user clicked in rendered markdown, on its way to their browser.
+  ///
+  /// The scheme is checked again in the main process. The renderer having decided a link was
+  /// external is not a decision - on the other side of this call is the operating system.
+  openExternal: (url) => ipcRenderer.invoke("shell:openExternal", { url }),
+
   readSettings: () => ipcRenderer.invoke("settings:read"),
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
   reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),
