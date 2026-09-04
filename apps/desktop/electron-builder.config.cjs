@@ -18,7 +18,9 @@ module.exports = {
   extraResources: [
     { from: "../app/dist", to: "app" },
     // Outside the asar: Electron's Tray reads its icon from disk and cannot open an archive.
-    { from: "build", to: "build", filter: ["*.png"] },
+    // By name, not "*.png": the app icon files sit in the same directory and are consumed at build
+    // time - shipping them too is dead weight in every install.
+    { from: "build", to: "build", filter: ["tray*"] },
   ],
   // Declared so electron-builder writes the updater feed files (latest.yml, latest-mac.yml) that an
   // in-app updater will read. It does NOT publish: the workflow packages with --publish never and a

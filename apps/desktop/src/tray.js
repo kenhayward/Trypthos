@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("node:path");
+const { revealWindow } = require("./revealWindow");
 
 /// The notification-area icon and its menu.
 ///
@@ -19,13 +20,7 @@ function createTray({ Tray, Menu, app, updater, getWindow, iconDir }) {
     return Menu.buildFromTemplate([
       {
         label: "Show Trypthos",
-        click: () => {
-          const window = getWindow();
-          if (!window) return;
-          if (window.isMinimized()) window.restore();
-          window.show();
-          window.focus();
-        },
+        click: () => revealWindow(getWindow()),
       },
       { type: "separator" },
       update === null
@@ -45,23 +40,28 @@ function createTray({ Tray, Menu, app, updater, getWindow, iconDir }) {
     ]);
   };
 
-  const icon =
-    process.platform === "darwin"
-      ? // A Template image is recoloured by macOS to suit the menu bar in either appearance. A
-        // coloured icon there looks wrong in one of the two and cannot adapt.
-        path.join(iconDir, "trayTemplate.png")
-      : path.join(iconDir, "tray.png");
-
-  const tray = new Tray(icon);
+  const tray = new Tray(path.join(iconDir, trayIconFileFor(process.platform)));
   tray.setToolTip(`Trypthos ${app.getVersion()}`);
 
   tray.setContextMenu(build());
   updater.onChange(() => tray.setContextMenu(build()));
   // Left-click raises the window, which is what people expect of a tray icon even when its menu is
   // on the right button.
-  tray.on("click", () => getWindow()?.show());
+  tray.on("click", () => revealWindow(getWindow()));
 
   return tray;
 }
 
-module.exports = { createTray };
+/// Which generated file the tray reads, per platform - all drawn from the same app-icon artwork.
+///
+/// Windows: an .ico carrying every notification-area size, so the shell picks the entry for the
+/// display's scaling rather than resampling one PNG. macOS: a Template image, recoloured by the menu
+/// bar to suit either appearance (a coloured icon looks wrong in one of the two and cannot adapt);
+/// Electron finds the "@2x" sibling by itself. Elsewhere: a plain PNG.
+function trayIconFileFor(platform) {
+  if (platform === "win32") return "tray.ico";
+  if (platform === "darwin") return "trayTemplate.png";
+  return "tray.png";
+}
+
+module.exports = { createTray, trayIconFileFor };

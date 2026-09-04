@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.24.0",
+    date: "2026-09-04",
+    pr: 48,
+    headline: "The tray icon is the app icon, and a second launch brings the window back",
+    summary:
+      "The notification-area icon is now the same green tile as the taskbar, Start menu and Dock, drawn from the same artwork rather than a separate glyph made to resemble it. On Windows it ships as a multi-size icon so the notification area picks a crisp size for your display scaling instead of shrinking one image; on macOS it is a menu-bar template that adapts to light and dark. Separately, launching Trypthos while it was already running hidden in the tray did nothing visible - the window stayed hidden with no taskbar button. A second launch now brings the window back whether it was minimised or hidden.",
+    changed: [
+      "The tray icon is the app icon itself, in every size Windows scaling asks for, and a matching menu-bar template on macOS.",
+    ],
+    fixed: [
+      "Launching Trypthos while it is hidden in the tray now shows the window instead of doing nothing.",
+    ],
+  },
+  {
     version: "0.23.1",
     date: "2026-09-04",
     pr: 46,
