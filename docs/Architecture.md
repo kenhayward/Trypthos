@@ -359,13 +359,33 @@ is the expensive version of this.
 
 `lib/languageLoaders.ts` maps each `FileTypeId` to a loader, and **every import in it is dynamic**.
 Vite code-splits an `import()` into its own chunk, so a grammar reaches a user only when they open a
-file that needs it. Measured: moving markdown onto this footing took the initial chunk from **1,019
-KB to 825 KB** while adding six languages, which now sit in eight lazy chunks totalling ~238 KB.
+file that needs it. Measured across the phases that built this, all figures uncompressed:
+
+| | Initial chunk | Lazy chunks |
+| --- | --- | --- |
+| Before any of it | 1,019 KB | none |
+| Six languages (phase 3) | 825 KB | 8, ~238 KB |
+| Thirty-one types (phase 4) | 839 KB | 17, ~682 KB |
+
+So twenty-two more languages cost **~14 KB at startup** and ~444 KB that is never fetched unless a
+file needs it - and the app still starts with 180 KB less than before any of this, because markdown
+moved onto the same footing. The Windows installer is 112.5 MB, of which this is noise: Electron
+dominates it, and that is the number to remember before optimising anything here.
 
 `null` is a real answer - plain text needs no highlighting, and CodeMirror's default is already that.
-The loader takes the file's NAME, because a type can have dialects: TypeScript and JSX are the same
-package as JavaScript, configured differently. That is dialect selection within one type, not a
-second type, which is why Settings has one row for all four.
+Makefile is the other one: no grammar for it exists, and the row earns its place anyway because the
+first thing a file type does is make the file appear and open at all.
+
+The loader takes the file's NAME, because a row can carry more than one grammar. TypeScript and JSX
+are the same package as JavaScript configured differently; CSS, SCSS, Sass and LESS are four
+grammars in three packages; Java and Kotlin, and C and C++, are each one row. The rule is what a
+user would want to tick a box about, not what npm happens to package separately - and `.h` settles
+the C question on its own, since a catalogue cannot let two rows claim the same extension.
+
+Where a real Lezer grammar exists this file uses it; the long tail comes from
+`@codemirror/legacy-modes`, wrapped by `legacy()`. A `StreamParser` is a tokeniser rather than a
+grammar, so it produces no syntax tree and colours by token name alone - the accepted floor, since
+the alternative for those languages is nothing at all.
 
 **No eagerly-imported module may statically import a `lang-*` package.** `languageLoaders.test.ts`
 asserts it over the module graph, comments stripped first (the module documents the rule it

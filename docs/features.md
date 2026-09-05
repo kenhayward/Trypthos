@@ -35,13 +35,20 @@ turn it on:
 
 | Group | Types |
 | --- | --- |
-| Documents | Markdown (always on), Plain text (`.txt` `.text` `.nfo`) |
-| Markup and data | JSON, YAML, XML and SVG, HTML, CSS |
-| Programming languages | JavaScript and TypeScript (`.js` `.mjs` `.cjs` `.jsx` `.ts` `.mts` `.cts` `.tsx`) |
+| Documents | Markdown (always on), Plain text |
+| Markup and data | JSON, YAML, TOML, INI and properties, XML and SVG, HTML, CSS and preprocessors |
+| Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
+| Utility | Diff and patch, Dockerfile, Makefile, LaTeX, R, Lua, Perl, Swift, Scala, Dart |
 
-JavaScript and TypeScript are one choice rather than four. They are the same language wearing
-different hats, and Trypthos works out from a file's name whether to read it as TypeScript, as JSX,
-or as both.
+Some rows carry more than one language, where the difference is not one you would want to tick a box
+about. **JavaScript and TypeScript** is one choice covering `.js`, `.ts`, `.jsx` and `.tsx`;
+**CSS and preprocessors** covers SCSS, Sass and LESS; **Java and Kotlin** and **C and C++** each
+cover both. Trypthos works out which from the file's name.
+
+**Dockerfile and Makefile are matched by name**, not by extension, because neither has one. Makefile
+is the only type Trypthos does not colour: no grammar for it exists. It has a row anyway, because
+the first thing a file type does is make the file appear and open at all - the same reason Plain
+text has one.
 
 Every type is **coloured by role** - keywords, strings, comments, numbers, types and names - using
 the same palette as the rest of the app, so the editor follows your light or dark theme instead of

@@ -1,7 +1,7 @@
 {
   "name": "@trypthos/domain",
   "private": true,
-  "version": "0.34.0",
+  "version": "0.35.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

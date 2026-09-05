@@ -122,8 +122,31 @@
     "yaml": "YAML",
     "xml": "XML and SVG",
     "html": "HTML",
-    "css": "CSS",
-    "javascript": "JavaScript and TypeScript"
+    "css": "CSS and preprocessors",
+    "javascript": "JavaScript and TypeScript",
+    "toml": "TOML",
+    "ini": "INI and properties",
+    "python": "Python",
+    "shell": "Shell",
+    "powershell": "PowerShell",
+    "sql": "SQL",
+    "rust": "Rust",
+    "go": "Go",
+    "cpp": "C and C++",
+    "csharp": "C#",
+    "java": "Java and Kotlin",
+    "php": "PHP",
+    "ruby": "Ruby",
+    "diff": "Diff and patch",
+    "dockerfile": "Dockerfile",
+    "makefile": "Makefile",
+    "latex": "LaTeX",
+    "r": "R",
+    "lua": "Lua",
+    "perl": "Perl",
+    "swift": "Swift",
+    "scala": "Scala",
+    "dart": "Dart"
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
@@ -228,7 +251,8 @@
       "group": {
         "documents": "Documents",
         "data": "Markup and data",
-        "languages": "Programming languages"
+        "languages": "Programming languages",
+        "utility": "Utility"
       }
     },
     "editor": {
