@@ -412,6 +412,52 @@ describe("useWorkspace", () => {
 
     expect(result.current.state.errorKey).toBeNull();
   });
+
+  // The banner's Dismiss button. It wrote to a field this state does not have, so it did nothing at
+  // all and the only way to clear a message about a failure was to do something else that succeeded.
+  // Nothing caught it: an object literal with a spread in it turns off TypeScript's excess property
+  // check, so the wrong name type-checked.
+  it("clears the failure when it is dismissed", async () => {
+    const { client } = fakeClient({
+      readFile: async () => ({ ok: false, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openPath("gone.md");
+    });
+    expect(result.current.state.errorKey).toBe("errors.notFound");
+
+    act(() => result.current.actions.dismissError());
+
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  it("leaves everything else alone when a failure is dismissed", async () => {
+    const { client } = fakeClient({
+      readFile: async (path) =>
+        path === "gone.md"
+          ? { ok: false, reason: "not-found" }
+          : { ok: true, content: "# On disk\n", revision: { id: "r1" } },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.openPath("gone.md");
+    });
+
+    act(() => result.current.actions.dismissError());
+
+    // Dismissing a message is not an undo: the document, its text and its unsaved state are the
+    // user's, and none of them are what the banner was about.
+    expect(result.current.state.file?.path).toBe("a.md");
+    expect(result.current.state.content).toBe("# Mine\n");
+    expect(result.current.state.dirty).toBe(true);
+  });
 });
 
 /// Several documents open at once.

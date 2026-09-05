@@ -416,7 +416,10 @@ export function useWorkspace(
       }),
     save,
     mayDiscard,
-    dismissError: () => setInternal((prev) => ({ ...prev, error: null })),
+    // `errorKey`, and named that everywhere. It used to write `error`, a field this state does not
+    // have, so the banner's Dismiss button did nothing - and nothing caught it, because an object
+    // literal with a spread in it is exempt from TypeScript's excess property check.
+    dismissError: () => setInternal((prev) => ({ ...prev, errorKey: null })),
   };
 
   return { state, actions };
