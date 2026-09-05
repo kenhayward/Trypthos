@@ -1,10 +1,12 @@
 import {
   DiscardChoiceSchema,
   MenuActionMessage,
+  OpenTargetSchema,
   WindowStateSchema,
   type DiscardChoice,
   type MenuAction,
   type MenuName,
+  type OpenTarget,
   type WindowState,
 } from "@trypthos/domain";
 
@@ -35,6 +37,9 @@ export interface WindowControls {
   popupMenu(menu: MenuName, x: number, y: number): Promise<unknown>;
   /// Subscribes to menu items the renderer carries out. Returns an unsubscribe function.
   onMenuAction(listener: (action: MenuAction) => void): () => void;
+  /// Subscribes to what the app was launched with from File Explorer - a folder, or a markdown file
+  /// in one. Returns an unsubscribe function.
+  onOpenTarget(listener: (target: OpenTarget) => void): () => void;
 }
 
 interface WindowBridge {
@@ -47,6 +52,7 @@ interface WindowBridge {
   onWindowState?: (listener: (state: unknown) => void) => () => void;
   popupMenu?: (menu: MenuName, x: number, y: number) => Promise<unknown>;
   onMenuAction?: (listener: (message: unknown) => void) => () => void;
+  onOpenTarget?: (listener: (target: unknown) => void) => () => void;
 }
 
 const noop = async (): Promise<void> => {};
@@ -64,6 +70,8 @@ export const browserControls: WindowControls = {
   // No shell, no native menus. The browser tab has its own chrome and its own right-click menu.
   popupMenu: noop,
   onMenuAction: () => () => {},
+  // A browser tab is never launched with a file. Nothing to subscribe to, and nothing to say.
+  onOpenTarget: () => () => {},
 };
 
 export function windowControls(): WindowControls {
@@ -93,6 +101,13 @@ export function windowControls(): WindowControls {
         // stops the two sides drifting silently into a menu item that quietly does nothing.
         const parsed = MenuActionMessage.safeParse(message);
         if (parsed.success) listener(parsed.data.action);
+      }) ?? (() => {}),
+    onOpenTarget: (listener) =>
+      bridge.onOpenTarget?.((raw) => {
+        // Validated like every other push from main: a shape change would otherwise surface as a
+        // launch from Explorer that quietly opens nothing at all.
+        const parsed = OpenTargetSchema.safeParse(raw);
+        if (parsed.success) listener(parsed.data);
       }) ?? (() => {}),
     onWindowState: (listener) =>
       bridge.onWindowState!((raw) => {

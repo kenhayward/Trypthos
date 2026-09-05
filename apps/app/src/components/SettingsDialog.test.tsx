@@ -19,6 +19,7 @@ function dialog(overrides: Partial<React.ComponentProps<typeof SettingsDialog>> 
     onChange: vi.fn(),
     onSaveKey: vi.fn(async () => ({ ok: true }) as const),
     onDeleteKey: vi.fn(async () => {}),
+    explorer: { checked: true, supported: true, registered: false, set: vi.fn(async () => {}) },
     ...overrides,
   };
   render(<SettingsDialog {...props} />);
@@ -169,6 +170,62 @@ describe("SettingsDialog: window", () => {
 
     await user.click(screen.getByRole("checkbox", { name: /Keep running/ }));
     expect(props.onChange).toHaveBeenCalledWith({ window: { closeToTray: true } });
+  });
+});
+
+describe("SettingsDialog: the File Explorer switch", () => {
+  it("offers to add Trypthos to the right-click menu", async () => {
+    const user = userEvent.setup();
+    const set = vi.fn(async () => {});
+    dialog({
+      openOn: "window",
+      explorer: { checked: true, supported: true, registered: false, set },
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: /right-click menu/ }));
+
+    expect(set).toHaveBeenCalledWith(true);
+  });
+
+  it("takes them away again", async () => {
+    const user = userEvent.setup();
+    const set = vi.fn(async () => {});
+    dialog({
+      openOn: "window",
+      explorer: { checked: true, supported: true, registered: true, set },
+    });
+
+    const box = screen.getByRole("checkbox", { name: /right-click menu/ });
+    expect((box as HTMLInputElement).checked).toBe(true);
+    await user.click(box);
+
+    expect(set).toHaveBeenCalledWith(false);
+  });
+
+  // Everywhere but a packaged Windows build there is nothing to register, so there is no switch -
+  // rather than one that is on screen and does nothing.
+  it("is absent where there is nothing to register", () => {
+    dialog({
+      openOn: "window",
+      explorer: { checked: true, supported: false, registered: false, set: vi.fn(async () => {}) },
+    });
+
+    expect(screen.queryByRole("checkbox", { name: /right-click menu/ })).toBeNull();
+    // The rest of the page is still there.
+    expect(screen.getByRole("checkbox", { name: /Keep running/ })).toBeDefined();
+  });
+
+  // Windows 11 puts third-party entries behind "Show more options", and somebody who does not know
+  // that will conclude the switch did not work.
+  // Said before the switch is touched, not after: somebody who turns it on, right-clicks, sees
+  // nothing on the first menu and concludes it did not work has already been let down.
+  it("says where the entries appear on Windows 11", () => {
+    dialog({
+      openOn: "window",
+      explorer: { checked: true, supported: true, registered: false, set: vi.fn(async () => {}) },
+    });
+
+    expect(screen.getByText(/Show more options/)).toBeDefined();
   });
 });
 
@@ -504,6 +561,7 @@ describe("SettingsDialog: AI and the system prompt", () => {
           settings={settings}
           isDesktop
           keyedEndpoints={[]}
+          explorer={{ checked: true, supported: false, registered: false, set: vi.fn(async () => {}) }}
           onClose={vi.fn()}
           onChange={(change) => setSettings((current) => ({ ...current, ...change }))}
           onSaveKey={vi.fn(async () => ({ ok: true }) as const)}

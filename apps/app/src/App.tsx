@@ -22,6 +22,7 @@ import { useApiKeys } from "./hooks/useApiKeys";
 import { useChat } from "./hooks/useChat";
 import { useChatHistory } from "./hooks/useChatHistory";
 import { useChatScope } from "./hooks/useChatScope";
+import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
@@ -31,6 +32,7 @@ import type { SettingsSection } from "./lib/settingsSections";
 import {
   chatBridge,
   chatHistoryBridge,
+  integrationBridge,
   isDesktop,
   keyBridge,
   settingsBridge,
@@ -80,6 +82,10 @@ export default function App() {
     [settings.chat.profiles],
   );
   const { keyedEndpoints, saveKey, deleteKey } = useApiKeys(keys, configuredEndpoints);
+
+  /// Whether Trypthos is in File Explorer's right-click menu. Asked of the shell rather than stored,
+  /// because the registry is the record - see the hook.
+  const explorer = useExplorerIntegration(useMemo(() => integrationBridge(), []));
 
 
   // The width the three panels share. Measured rather than assumed, because a stored width can come
@@ -322,6 +328,14 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [actions, state.activePath]);
 
+  // A folder or a file the app was launched with, from File Explorer's right-click menu. It arrives
+  // here rather than being acted on in the shell because this side owns the open documents, and is
+  // the only one that can ask about unsaved work before another folder replaces them.
+  useEffect(
+    () => windowControls().onOpenTarget((target) => void actions.openTarget(target)),
+    [actions],
+  );
+
   // Menu items the renderer carries out.
   //
   // Each one drives the path the user already has - the same open, save, preferences and about the
@@ -511,6 +525,7 @@ export default function App() {
           onChange={update}
           onSaveKey={saveKey}
           onDeleteKey={deleteKey}
+          explorer={explorer}
         />
       )}
     </div>

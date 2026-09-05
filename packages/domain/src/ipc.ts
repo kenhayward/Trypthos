@@ -41,6 +41,8 @@ export const IPC_CHANNELS = [
   "document:dirty",
   "document:confirmDiscard",
   "shell:openExternal",
+  "shell:integration",
+  "shell:setIntegration",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -100,6 +102,28 @@ export type DiscardChoice = z.infer<typeof DiscardChoiceSchema>;
 export const ConfirmDiscardRequest = z
   .object({ name: z.string().nullable().default(null) })
   .strict();
+
+/// Turning the File Explorer entries on or off.
+///
+/// The registry is the only record of whether they are there: a copy in settings would be a second
+/// answer that could disagree with what Explorer actually shows, and the user can remove the keys
+/// without telling us.
+export const SetIntegrationRequest = z.object({ enabled: z.boolean() }).strict();
+
+/// What the app was launched with from Explorer: a folder, and optionally a document inside it.
+///
+/// A file names both, because every path this app handles is relative to one open folder. Pushed
+/// from the main process, which is the side that sees the command line - and validated on arrival
+/// like every other message, so a shape change surfaces as an error rather than as a launch that
+/// quietly opens nothing.
+export const OpenTargetSchema = z
+  .object({ root: z.string().min(1), file: z.string().min(1).nullable() })
+  .strict();
+
+export type OpenTarget = z.infer<typeof OpenTargetSchema>;
+
+/// The channel that carries it. Main to renderer, like `window:state`.
+export const OPEN_TARGET_CHANNEL = "shell:openTarget";
 
 /// Closing the window. `force` says the renderer has already asked about unsaved work and been told
 /// to go ahead - without it the shell would ask again and the window could never close.

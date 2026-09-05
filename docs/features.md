@@ -104,6 +104,30 @@ internet before you click. This holds in Preview, in the chat panel's replies an
 Live mode is the one difference: link text there is still text you are editing, so a plain click
 places the cursor and Ctrl+click (Cmd+click on macOS) follows the link.
 
+## File Explorer, on Windows
+
+Trypthos can put itself in File Explorer's right-click menu: **Open folder in Trypthos** on a folder,
+or on the empty space inside one, and **Open in Trypthos** on a markdown file. It also appears in
+Explorer's **Open with** list, so you can make it the default for markdown if you want to.
+
+It is off until you ask for it, on the Window page of Settings, and the same switch takes it away
+again. Nothing is written outside your own user account, so it needs no administrator rights and
+changes nothing for anybody else who uses the machine.
+
+**On Windows 11 the entries appear under "Show more options"**, not on the first menu that opens.
+That menu is reserved for apps that ship a signed handler of a particular kind, which Trypthos does
+not yet - the same signing work that makes SmartScreen stop warning. Settings says so beside the
+switch, so a right-click that seems to show nothing is not a mystery.
+
+Opening a folder this way opens it as your workspace. Opening a **file** opens the folder it lives in
+and the file itself, because every document Trypthos edits lives inside one open folder. If Trypthos
+is already running, whatever you opened arrives in the window you already have - a file in the folder
+you are already in simply becomes another tab, and one from somewhere else opens that folder instead,
+asking about unsaved work first exactly as opening a folder from the button does.
+
+macOS has no equivalent for folders, and Trypthos does not yet register itself for markdown files
+there. That is outstanding work rather than a decision.
+
 ## Menus and the right-click menu
 
 The window draws its own title bar, so on Windows the File, Edit, Tools and Help labels sit in that

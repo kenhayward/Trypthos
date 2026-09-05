@@ -6,6 +6,7 @@ import {
   type ChatProfile,
   type Settings,
 } from "@trypthos/domain";
+import type { ExplorerIntegration } from "../hooks/useExplorerIntegration";
 import { blankDraft, draftFrom, removeProfile, upsertProfile } from "../lib/chatProfiles";
 import { MODE_HINT_KEYS, MODE_LABEL_KEYS } from "../lib/editorMode";
 import { SECTION_LABEL_KEYS, type SettingsSection } from "../lib/settingsSections";
@@ -30,6 +31,9 @@ interface Props {
   onChange: (change: Partial<Settings>) => void;
   onSaveKey: (endpoint: string, key: string) => Promise<SaveKeyResult>;
   onDeleteKey: (endpoint: string) => Promise<void>;
+  /// Trypthos's entries in File Explorer's right-click menu. The registry is the record, so this is
+  /// what the shell reports rather than anything stored in settings.
+  explorer: ExplorerIntegration;
 }
 
 /// A segmented control: one row of choices where exactly one is on.
@@ -84,6 +88,7 @@ export default function SettingsDialog({
   onChange,
   onSaveKey,
   onDeleteKey,
+  explorer,
 }: Props) {
   const { t } = useTranslation();
   const [section, setSection] = useState<SettingsSection>(openOn);
@@ -192,20 +197,47 @@ export default function SettingsDialog({
             )}
 
             {section === "window" && isDesktop && (
-              <label className="flex max-w-2xl items-start gap-2 text-base text-ink">
-                <input
-                  type="checkbox"
-                  checked={settings.window.closeToTray}
-                  onChange={(event) => onChange({ window: { closeToTray: event.target.checked } })}
-                  className="mt-0.5"
-                />
-                <span>
-                  {t("settings.closeToTray")}
-                  <span className="mt-0.5 block text-xs text-ink-4">
-                    {t("settings.closeToTrayHint")}
+              <div className="flex max-w-2xl flex-col gap-4">
+                <label className="flex items-start gap-2 text-base text-ink">
+                  <input
+                    type="checkbox"
+                    checked={settings.window.closeToTray}
+                    onChange={(event) => onChange({ window: { closeToTray: event.target.checked } })}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    {t("settings.closeToTray")}
+                    <span className="mt-0.5 block text-xs text-ink-4">
+                      {t("settings.closeToTrayHint")}
+                    </span>
                   </span>
-                </span>
-              </label>
+                </label>
+
+                {/* Only where there is something to register - a packaged Windows build. Elsewhere
+                    the switch would be a control that does nothing, which is worse than none. */}
+                {explorer.supported && (
+                  <label className="flex items-start gap-2 text-base text-ink">
+                    <input
+                      type="checkbox"
+                      checked={explorer.registered}
+                      onChange={(event) => void explorer.set(event.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      {t("settings.explorerMenu")}
+                      <span className="mt-0.5 block text-xs text-ink-4">
+                        {t("settings.explorerMenuHint")}
+                      </span>
+                      {/* Said whether or not the switch is on. Windows 11 puts entries like these
+                          behind "Show more options", and somebody who does not know that turns the
+                          switch on, right-clicks, sees nothing and concludes it did not work. */}
+                      <span className="mt-0.5 block text-xs text-ink-4">
+                        {t("settings.explorerMenuWhere")}
+                      </span>
+                    </span>
+                  </label>
+                )}
+              </div>
             )}
 
             {section === "chatModels" && (

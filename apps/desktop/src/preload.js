@@ -100,6 +100,20 @@ contextBridge.exposeInMainWorld("trypthos", {
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
 
+  /// Trypthos's entries in File Explorer's right-click menu: whether they can be there, whether they
+  /// are, and turning them on or off. The registry itself is the record, so the renderer asks rather
+  /// than remembering.
+  explorerIntegration: () => ipcRenderer.invoke("shell:integration"),
+  setExplorerIntegration: (enabled) => ipcRenderer.invoke("shell:setIntegration", { enabled }),
+
+  /// What the app was launched with from Explorer - a folder, or a markdown file in one. Wrapped
+  /// like `onWindowState`, so no IpcRendererEvent, and with it no `sender`, reaches the page.
+  onOpenTarget: (listener) => {
+    const wrapped = (_event, target) => listener(target);
+    ipcRenderer.on("shell:openTarget", wrapped);
+    return () => ipcRenderer.removeListener("shell:openTarget", wrapped);
+  },
+
   /// The one channel flowing the other way. The listener is wrapped rather than passed through, so
   /// the renderer never receives the IpcRendererEvent - it carries a `sender` that would hand a page
   /// a route back into the main process.

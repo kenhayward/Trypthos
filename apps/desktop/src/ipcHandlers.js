@@ -14,6 +14,7 @@ const {
   DeleteSecretRequest,
   OpenExternalRequest,
   SendChatRequest,
+  SetIntegrationRequest,
   SetSecretRequest,
   createPathGuard,
   ListRequest,
@@ -90,7 +91,39 @@ function registerIpcHandlers({
   secrets,
   chat,
   openExternal = async () => {},
+  /// Trypthos's entries in File Explorer's right-click menu. Optional, because everywhere but a
+  /// packaged Windows build there is nothing to write - the handlers still exist there, and answer
+  /// that it is unsupported, so the renderer has one place to ask rather than a platform check of
+  /// its own.
+  explorerIntegration = null,
 }) {
+  // The registry is the only record of whether the entries are there: the user can remove them
+  // without telling us, so a copy in settings would be a second answer that could disagree with what
+  // Explorer actually shows.
+  const integrationStatus = async () => {
+    const supported = explorerIntegration?.supported() === true;
+    return {
+      ok: true,
+      supported,
+      registered: supported ? await explorerIntegration.isRegistered() : false,
+    };
+  };
+
+  ipcMain.handle("shell:integration", integrationStatus);
+
+  ipcMain.handle("shell:setIntegration", async (_event, payload) => {
+    const parsed = SetIntegrationRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+    if (explorerIntegration?.supported() !== true) return await integrationStatus();
+
+    if (parsed.data.enabled) await explorerIntegration.register();
+    else await explorerIntegration.unregister();
+
+    // Answers with the state that FOLLOWS, read back rather than assumed, so the switch reflects
+    // what happened rather than what was asked for.
+    return await integrationStatus();
+  });
+
   // A link the user clicked, on its way out of the app.
   //
   // Not workspace-scoped: the About box and the chat panel render links before anybody has chosen a

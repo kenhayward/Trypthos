@@ -163,6 +163,9 @@ export {
   DiscardChoiceSchema,
   DocumentDirtyRequest,
   IPC_CHANNELS,
+  OPEN_TARGET_CHANNEL,
+  OpenTargetSchema,
+  SetIntegrationRequest,
   ListRequest,
   OpenExternalRequest,
   SendChatRequest,
@@ -174,7 +177,7 @@ export {
   WindowStateSchema,
   WriteRequest,
 } from "./ipc";
-export type { ChatEvent, DiscardChoice, IpcChannel, WindowState } from "./ipc";
+export type { ChatEvent, DiscardChoice, IpcChannel, OpenTarget, WindowState } from "./ipc";
 
 export type {
   ListPage,

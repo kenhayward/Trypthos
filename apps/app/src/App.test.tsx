@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, type Settings } from "@trypthos/domain";
@@ -225,6 +225,30 @@ describe("App", () => {
       await user.keyboard("{Control>}w{/Control}");
 
       expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["one.md"]);
+    });
+
+    // The whole point of the Explorer entries: the shell pushes what it was launched with, and the
+    // window opens it. Everything either side of this is tested on its own; this is the wiring.
+    it("opens a folder and file it is handed from the shell", async () => {
+      let push: ((target: { root: string; file: string | null }) => void) | null = null;
+      shellWithFiles();
+      window.trypthos = {
+        ...window.trypthos,
+        onOpenTarget: (listener: (target: { root: string; file: string | null }) => void) => {
+          push = listener;
+          return () => {};
+        },
+      } as unknown as typeof window.trypthos;
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await act(async () => {
+        push!({ root: "D:/Elsewhere", file: "two.md" });
+      });
+
+      await waitFor(() =>
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["two.md"]),
+      );
     });
 
     // Invisible when broken: the prompt still appears, and still asks about "this document" - which
