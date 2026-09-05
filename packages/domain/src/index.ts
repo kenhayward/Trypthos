@@ -132,6 +132,16 @@ export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";
 
 export {
+  BINARY_SNIFF_BYTES,
+  MAX_TEXT_FILE_BYTES,
+  decodeTextFile,
+  encodeTextFile,
+  formatBytes,
+  hasUtf8Bom,
+} from "./textFile";
+export type { DecodedText, TextRefusal } from "./textFile";
+
+export {
   DEFAULT_SETTINGS,
   SETTINGS_MIGRATIONS,
   SETTINGS_VERSION,

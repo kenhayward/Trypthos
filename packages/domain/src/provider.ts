@@ -1,3 +1,5 @@
+import type { TextRefusal } from "./textFile";
+
 /// The storage provider contract: one interface over local directories and cloud accounts.
 ///
 /// Shaped now for a backend that does not exist yet. Phase 1 ships local only, then OneDrive,
@@ -43,6 +45,14 @@ export type ProviderError =
 
 export type ReadResult =
   | { ok: true; content: string; revision: Revision }
+  /// Too big to take on at all. A variant of its own rather than a bare `ProviderError`, for the
+  /// same reason `conflict` is one below: the refusal is only useful if it carries the numbers, and
+  /// a message that named neither would leave the user guessing at what "too large" means.
+  | { ok: false; reason: "too-large"; sizeBytes: number; limitBytes: number }
+  /// The bytes are not text this app can represent exactly - see `textFile.ts`. Not a
+  /// `ProviderError`: the provider handed them over perfectly well, and every backend will meet the
+  /// same file.
+  | { ok: false; reason: TextRefusal }
   | { ok: false; reason: ProviderError };
 
 export type ListResult =
