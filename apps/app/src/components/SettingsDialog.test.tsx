@@ -34,6 +34,8 @@ const PROFILE = {
   contextWindow: null,
   supportsImages: false,
   supportsTools: false,
+  thinking: false,
+  reasoningEffort: "medium" as const,
   isDefault: true,
 };
 
@@ -731,5 +733,45 @@ describe("SettingsDialog: about", () => {
 
     expect(shown).not.toContain("| ---");
     expect(shown).not.toContain("| Feature |");
+  });
+});
+
+/// Thinking, and how much of it.
+///
+/// gpt-oss reasons at low, medium or high, and OpenAI-compatible servers take that as
+/// `reasoning_effort`. Off by default, because a field a server has never heard of is at best
+/// ignored and at worst a 400 - the same reasoning that keeps tool calling behind a switch.
+describe("thinking on a model", () => {
+  async function openForm() {
+    dialog({ openOn: "chatModels" });
+    await userEvent.click(screen.getByRole("button", { name: "Add a model" }));
+  }
+
+  it("is off, with a level already chosen for when it is turned on", async () => {
+    await openForm();
+
+    expect((screen.getByRole("checkbox", { name: "Thinking" }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect((screen.getByRole("radio", { name: "Medium" }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  // Disabled rather than hidden: a control that vanishes takes with it the answer to "what would
+  // this do if I turned it on".
+  it("shows the level while thinking is off, but will not let it be changed", async () => {
+    await openForm();
+
+    for (const level of ["Low", "Medium", "High"]) {
+      expect((screen.getByRole("radio", { name: level }) as HTMLInputElement).disabled).toBe(true);
+    }
+  });
+
+  it("lets the level be chosen once thinking is on", async () => {
+    await openForm();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Thinking" }));
+    await userEvent.click(screen.getByRole("radio", { name: "High" }));
+
+    expect((screen.getByRole("radio", { name: "High" }) as HTMLInputElement).checked).toBe(true);
   });
 });

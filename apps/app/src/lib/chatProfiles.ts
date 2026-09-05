@@ -1,5 +1,8 @@
 import { ChatProfileSchema, type ChatProfile } from "@trypthos/domain";
 
+/// The levels the schema allows, named here so the form and the draft agree with it.
+export type ReasoningEffort = ChatProfile["reasoningEffort"];
+
 /// Editing the configured chat models.
 ///
 /// Separate from the dialog because none of it is presentation: it is the rules about what a valid
@@ -29,6 +32,13 @@ export interface ProfileDraft {
   contextWindow: string;
   supportsImages: boolean;
   supportsTools: boolean;
+  /// Whether to ask this model to reason before answering, and how much.
+  ///
+  /// Two fields, not one four-valued one, so turning thinking off and on again does not lose the
+  /// level. Both are booleans and enums rather than text, so unlike the numbers above they need no
+  /// parsing and can never be invalid.
+  thinking: boolean;
+  reasoningEffort: ReasoningEffort;
   isDefault: boolean;
 }
 
@@ -57,6 +67,8 @@ export function blankDraft(): ProfileDraft {
     contextWindow: "",
     supportsImages: false,
     supportsTools: false,
+    thinking: false,
+    reasoningEffort: "medium",
     isDefault: false,
   };
 }
@@ -74,6 +86,8 @@ export function draftFrom(profile: ChatProfile): ProfileDraft {
     contextWindow: profile.contextWindow === null ? "" : String(profile.contextWindow),
     supportsImages: profile.supportsImages,
     supportsTools: profile.supportsTools,
+    thinking: profile.thinking,
+    reasoningEffort: profile.reasoningEffort,
     isDefault: profile.isDefault,
   };
 }
@@ -118,6 +132,8 @@ export function toProfile(draft: ProfileDraft): DraftResult {
     contextWindow: typeof contextWindow === "number" ? contextWindow : null,
     supportsImages: draft.supportsImages,
     supportsTools: draft.supportsTools,
+    thinking: draft.thinking,
+    reasoningEffort: draft.reasoningEffort,
     isDefault: draft.isDefault,
   });
 

@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+
+/// The three levels gpt-oss names, in the order they read.
+const REASONING_LEVELS = ["low", "medium", "high"] as const;
 import type { ChatProfile } from "@trypthos/domain";
 import {
   toProfile,
@@ -171,6 +174,39 @@ export default function ChatProfileForm({
       </label>
       {/* Outside the label so the sentence does not join the checkbox's accessible name. */}
       <p className="mt-1 text-xs text-ink-4">{t("settings.chat.supportsToolsHint")}</p>
+
+      <label className="mt-1 flex items-center gap-2 text-ui text-ink">
+        <input
+          type="checkbox"
+          checked={draft.thinking}
+          onChange={(event) => set("thinking", event.target.checked)}
+        />
+        {t("settings.chat.thinking")}
+      </label>
+      {/* The level stays visible while thinking is off, and disabled rather than hidden: a control
+          that vanishes takes with it the answer to "what would this do if I turned it on". */}
+      <div className="mt-1 flex items-center gap-2">
+        <span className={draft.thinking ? "text-xs text-ink-4" : "text-xs text-faint"}>
+          {t("settings.chat.reasoningEffort")}
+        </span>
+        {REASONING_LEVELS.map((level) => (
+          <label
+            key={level}
+            className={draft.thinking ? "flex items-center gap-1 text-xs text-ink" : "flex items-center gap-1 text-xs text-faint"}
+          >
+            <input
+              type="radio"
+              name="reasoning-effort"
+              value={level}
+              disabled={!draft.thinking}
+              checked={draft.reasoningEffort === level}
+              onChange={() => set("reasoningEffort", level)}
+            />
+            {t(`settings.chat.reasoning.${level}`)}
+          </label>
+        ))}
+      </div>
+      <p className="mt-1 text-xs text-ink-4">{t("settings.chat.thinkingHint")}</p>
 
       <label className="mt-1 flex items-center gap-2 text-ui text-ink">
         <input
