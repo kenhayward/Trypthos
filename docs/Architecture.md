@@ -60,6 +60,10 @@ both processes and testable without booting either.
 - `provider.ts` - the storage contract. A write **returns a revision, never void**, and a conflict is
   a **result, not an exception** - both shaped for GitHub, where a save is a commit, before any cloud
   backend exists.
+- `markdownToolbar.ts` - what each formatting button does to the document, as a pure function of the
+  text and the selection. It answers with one replacement and where the selection lands, so the
+  editor applies it as a single transaction. Nothing here parses markdown: the rules are textual,
+  which is why the pair of asterisks shared by bold and italic is handled explicitly.
 
 ## The editor
 
@@ -89,6 +93,24 @@ round-trip and nothing that can reformat a user's file behind their back.
   header** rather than drawn inside the strip - the strip scrolls, so an affordance for reaching a
   tab that has scrolled away must not scroll away with it. It follows `ChatHistoryMenu`'s popover
   shape (outside click and Escape to close) rather than inventing a second one.
+- `components/EditorToolbar.tsx` draws the formatting buttons, in **Source only**. It knows the order
+  of the buttons, their glyphs and their names, and nothing about markdown: it names an action, and
+  `MarkdownEditor` turns the current document and selection into one change through `toolbarEdit`.
+  The action is named rather than the edit computed because the toolbar renders from props, and a
+  render can be a keystroke behind the buffer - the editor is the only place that knows the document
+  and the selection as they are at the moment of the press. `EditorPanel` attaches the editor handle
+  with a callback ref, since two callers need it: the toolbar, and the window applying a chat edit.
+- **A document can be read-only.** `OpenDocument.readOnly` marks a document with no file behind it -
+  today, the built-in markdown guide at the reserved path `GUIDE_PATH` (`trypthos:markdown-guide`,
+  which no workspace-relative path can collide with). The flag is enforced in three places, and all
+  three are needed: `updateContent` refuses to record an edit, so it can never become dirty;
+  `useWorkspace.save` refuses to write, rather than leaving the path guard in the main process to
+  refuse it as a failed save the user was never offered; and `MarkdownEditor` reconfigures both
+  `EditorState.readOnly` and `EditorView.editable`, so the surface itself declines keystrokes rather
+  than accepting and dropping them. `lib/markdownGuide.md` is the text, imported with Vite's `?raw`
+  so the one document in the app whose purpose is to show markdown is not a template literal full of
+  escaped backticks. `lib/builtInDocuments.ts` maps its path to a catalogue key, because a built-in
+  document is the one document whose name cannot come from its path.
 - `lib/editorTheme.ts` holds the Source palette. In Source mode colour **stands in for** formatting
   rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
   of the bytes.
@@ -780,7 +802,9 @@ Three rules:
 - **No item is a second implementation.** A menu item the renderer carries out sends an ACTION over
   `menu:action`, and the renderer drives the same open, save, preferences or about that its buttons
   and shortcuts already use. The main process keeps only what the renderer has no business
-  arranging: quitting, closing the window, and the update check.
+  arranging: quitting, closing the window, and the update check. Help's Markdown Syntax Guide is an
+  action for the same reason: the guide is a read-only document in the editor, which is the
+  renderer's business - the shell knows only that the item was chosen.
 - **The renderer never says what is on a menu.** `menu:popup` carries a menu NAME and a coordinate;
   the items and their click handlers are built in main, so a page cannot invent either.
 

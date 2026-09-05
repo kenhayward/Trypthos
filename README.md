@@ -11,6 +11,8 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. A mode is a view, never a transform. |
+| Formatting toolbar | Source view has a button for every markdown construct Trypthos renders. Headings toggle on the line you are on; bold, italic and the rest wrap what you have selected, and press again to remove. |
+| Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct with an example, and the flavour of markdown named. |
 | Tabs | Several files open at once, each with its own tab, its own unsaved changes and its own place in the document. Clicking a file already open goes to it rather than reloading it, and a list at the end of the strip reaches any tab that has scrolled out of sight. |
 | Links | A link to a markdown file in the open folder opens it in the editor; a web address opens in your browser, never over the app. Hover shows the target. |
 | AI chat | Appears once you configure a model, and can be switched off in Settings. Ask about your document, a selection, attached files or the whole folder, apply proposed changes, and watch how full the model's context is. |

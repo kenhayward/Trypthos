@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { GUIDE_PATH } from "@trypthos/domain";
 import { failureKey, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
@@ -963,5 +964,88 @@ describe("guarding unsaved changes", () => {
 
     expect(mayClose).toBe(false);
     expect(ask.asked).toEqual(["b.md"]);
+  });
+});
+
+describe("the built-in guide", () => {
+  const GUIDE = "# Guide\n\nAn example.\n";
+  const NODE = { id: "b.md", name: "b.md", kind: "file" as const };
+
+  /// Records what it was asked about. Nothing here should ever ask it anything.
+  function neverAsked() {
+    const asked: (string | null | undefined)[] = [];
+    return {
+      asked,
+      confirm: async (name?: string | null) => {
+        asked.push(name);
+        return "cancel" as const;
+      },
+    };
+  }
+
+  it("opens in a tab of its own, without reading anything from disk", async () => {
+    const { client, reads } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openGuide(GUIDE));
+
+    expect(result.current.state.activePath).toBe(GUIDE_PATH);
+    expect(result.current.state.content).toBe(GUIDE);
+    expect(reads).toEqual([]);
+  });
+
+  it("goes back to the tab it already has rather than opening a second", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openGuide(GUIDE));
+    await act(async () => {
+      await result.current.actions.openFile(NODE);
+    });
+    act(() => result.current.actions.openGuide(GUIDE));
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      GUIDE_PATH,
+      "b.md",
+    ]);
+    expect(result.current.state.activePath).toBe(GUIDE_PATH);
+  });
+
+  // "Never saved" has to hold at the one place a save is actually attempted. A write here would be
+  // a write to a path no workspace contains, and the guard in the main process would refuse it -
+  // which is the right answer arrived at far too late to be a design.
+  it("is never written, even when a save is asked for", async () => {
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openGuide(GUIDE));
+    act(() => result.current.actions.edit("# Rewritten\n"));
+
+    let saved = true;
+    await act(async () => {
+      saved = await result.current.actions.save();
+    });
+
+    expect(saved).toBe(false);
+    expect(writes).toEqual([]);
+    // Nothing was typed into it either: the editor refuses edits, and the document refuses to
+    // record one if anything else tries.
+    expect(result.current.state.content).toBe(GUIDE);
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  it("closes without asking about unsaved work", async () => {
+    const { client } = fakeClient();
+    const ask = neverAsked();
+    const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
+
+    act(() => result.current.actions.openGuide(GUIDE));
+    await act(async () => {
+      await result.current.actions.closeFile(GUIDE_PATH);
+    });
+
+    expect(result.current.state.documents).toEqual([]);
+    expect(ask.asked).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ export const CAPABILITIES = `
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. |
+| Formatting toolbar | In Source view, a button for every markdown construct. Headings act on the current line, character formatting wraps your selection, and a second press removes what the first added. |
 | Tabs | Open as many files as you like. Each has its own tab, keeps its own unsaved changes, and comes back where you left it. A list at the end of the strip reaches any of them. |
 | Links | A link to a markdown file in your folder opens it here; a web address opens in your browser. Hover to see where a link goes. |
 | AI chat | Appears once you configure a model, and can be switched off. Ask about your document, a selection, attached files or the folder, apply proposed changes, and watch how full the context is. |
@@ -22,6 +23,7 @@ export const CAPABILITIES = `
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it here. Switched on from Settings. |
 | Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. |
+| Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct Trypthos renders, with examples, and the flavour of markdown named. |
 | Updates | Checks for a newer version on startup, or on demand from the Help menu or the tray icon. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();

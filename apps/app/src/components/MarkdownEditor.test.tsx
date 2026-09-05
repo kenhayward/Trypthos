@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import MarkdownEditor from "./MarkdownEditor";
+import MarkdownEditor, { type EditorHandle } from "./MarkdownEditor";
 
 function Harness({
   onChange,
@@ -116,5 +116,57 @@ describe("spelling", () => {
     );
 
     expect(document.querySelector(".cm-content")?.getAttribute("spellcheck")).toBe("true");
+  });
+});
+
+/// Formatting, driven from outside the editor.
+///
+/// The toolbar has no CodeMirror of its own: it names an action, and the editor turns the current
+/// document and selection into one change. What each action produces is the domain's own test - what
+/// matters here is that the change reaches the document and is reported as an edit.
+describe("formatting", () => {
+  function Formatting({ onChange, readOnly = false }: { onChange: (value: string) => void; readOnly?: boolean }) {
+    const handle = useRef<EditorHandle>(null);
+    return (
+      <>
+        <button type="button" onClick={() => handle.current?.format("bold")}>
+          bold
+        </button>
+        <MarkdownEditor
+          documentId="a.md"
+          value={"first file\nline two\n"}
+          onChange={onChange}
+          live={false}
+          readOnly={readOnly}
+          ref={handle}
+          ariaLabel="Markdown source"
+        />
+      </>
+    );
+  }
+
+  it("applies an action to the document and reports the edit", async () => {
+    const onChange = vi.fn();
+    render(<Formatting onChange={onChange} />);
+
+    // The caret opens at the start of the document, so the word it is in is the first one.
+    screen.getByRole("button", { name: "bold" }).click();
+    await Promise.resolve();
+
+    expect(onChange).toHaveBeenCalledWith("**first** file\nline two\n");
+  });
+
+  // The guide opens read-only, and read-only has to mean the surface itself refuses - not merely
+  // that nothing downstream records the change. A buffer that accepts keystrokes and silently drops
+  // them is a document the user watches themselves lose.
+  it("refuses to be typed into when the document is read-only", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Formatting onChange={onChange} readOnly />);
+
+    await user.click(screen.getByLabelText("Markdown source"));
+    await user.keyboard("X");
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

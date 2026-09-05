@@ -3,6 +3,7 @@ import { Annotation, Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { toolbarEdit, type ToolbarAction } from "@trypthos/domain";
 import { editorTheme } from "../lib/editorTheme";
 import { followLinks, liveMode } from "../lib/liveExtension";
 import { currentPlatform } from "../lib/windowControls";
@@ -32,6 +33,12 @@ export interface EditorSelection {
 }
 
 export interface EditorHandle {
+  /// Applies a formatting action to the current selection.
+  ///
+  /// The editor is the only place that knows the document and the selection as they are RIGHT NOW,
+  /// which is why the toolbar names an action rather than computing an edit: a toolbar working from
+  /// props would be working from the last render, and a render can be a keystroke old.
+  format(action: ToolbarAction): void;
   /// Replaces `from`..`to` with `insert`, as ONE transaction.
   ///
   /// One transaction so it is one undo step: a user who dislikes what the model wrote presses Ctrl+Z
@@ -50,6 +57,13 @@ interface Props {
   onChange: (value: string) => void;
   /// Whether markdown syntax is hidden away from the caret line.
   live: boolean;
+  /// Whether the document refuses edits - the built-in guide, which has no file to be saved to.
+  ///
+  /// Both halves of CodeMirror's answer are needed: `EditorState.readOnly` refuses changes, and
+  /// `EditorView.editable` takes the surface out of the tab order and hides the caret. With only
+  /// the first, the editor still looks and behaves like something you can type into, and silently
+  /// swallows every keystroke.
+  readOnly?: boolean;
   /// Reports the caret, one-based on both axes, whenever it moves.
   onCaret?: (line: number, column: number) => void;
   /// Reports the selection whenever it changes, with `text` empty when nothing is selected.
@@ -83,6 +97,7 @@ export default function MarkdownEditor({
   value,
   onChange,
   live,
+  readOnly = false,
   onCaret,
   onSelectionChange,
   onFollowLink,
@@ -95,8 +110,13 @@ export default function MarkdownEditor({
   /// the mode switch keeps undo history, selection and scroll position. Rebuilding would look
   /// identical and quietly discard all three.
   const liveCompartment = useRef(new Compartment());
+  /// Read-only is a compartment for the same reason Live is: one editor serves every document, and
+  /// switching to the guide and back must not rebuild the view and lose the undo history of the
+  /// file beside it.
+  const readOnlyCompartment = useRef(new Compartment());
   /// Read in the create-once effect below, where `live` itself must not be a dependency.
   const initialLive = useRef(live);
+  const initialReadOnly = useRef(readOnly);
   /// Read through a ref so the update listener never closes over a stale prop, which would let an
   /// edit be reported against an out-of-date handler.
   ///
@@ -126,6 +146,28 @@ export default function MarkdownEditor({
   useImperativeHandle(
     ref,
     () => ({
+      format(action) {
+        const editor = view.current;
+        if (editor === null) return;
+
+        const range = editor.state.selection.main;
+        const edit = toolbarEdit(action, editor.state.doc.toString(), {
+          from: range.from,
+          to: range.to,
+        });
+
+        // One transaction, so one press is one undo step - and the selection travels with the
+        // change rather than being restored afterwards, which would be a second step and a visible
+        // flicker through whatever the mapped selection happened to be.
+        editor.dispatch({
+          changes: { from: edit.from, to: edit.to, insert: edit.insert },
+          selection: { anchor: edit.selection.from, head: edit.selection.to },
+          scrollIntoView: true,
+        });
+        // Back to the document. The button prevented the mousedown from taking focus, so this is
+        // what puts the caret back in front of the user after a press from the keyboard as well.
+        editor.focus();
+      },
       applyChange(from, to, insert) {
         const editor = view.current;
         if (editor === null) return;
@@ -166,6 +208,11 @@ export default function MarkdownEditor({
           markdown(),
           editorTheme,
           liveCompartment.current.of(initialLive.current ? liveMode : []),
+          readOnlyCompartment.current.of(
+            initialReadOnly.current
+              ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+              : [],
+          ),
           // Outside the compartment on purpose. Only Live mode writes a target onto a link, so in
           // the other modes this handler finds nothing and returns - which is one extension created
           // once, rather than one more thing reconfigured on every mode switch.
@@ -227,6 +274,17 @@ export default function MarkdownEditor({
       effects: liveCompartment.current.reconfigure(live ? liveMode : []),
     });
   }, [live]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+
+    editor.dispatch({
+      effects: readOnlyCompartment.current.reconfigure(
+        readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+      ),
+    });
+  }, [readOnly]);
 
   useEffect(() => {
     const editor = view.current;

@@ -108,6 +108,7 @@ export {
 export type { ContextUsage } from "./contextUsage";
 
 export {
+  GUIDE_PATH,
   activateDocument,
   activeDocument,
   anyDirty,
@@ -123,6 +124,9 @@ export {
   updateContent,
 } from "./openDocuments";
 export type { DocumentSet, DocumentSource, OpenDocument } from "./openDocuments";
+
+export { INLINE_ACTIONS, TOOLBAR_ACTIONS, lineSpan, toolbarEdit } from "./markdownToolbar";
+export type { TextRange, ToolbarAction, ToolbarEdit } from "./markdownToolbar";
 
 export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
 export type { TreeEntry } from "./workspaceTree";

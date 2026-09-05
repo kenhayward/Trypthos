@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  GUIDE_PATH,
   activateDocument,
   activeDocument,
   anyDirty,
@@ -200,5 +201,43 @@ describe("tabLabels", () => {
       "one/docs/index.md",
       "two/docs/index.md",
     ]);
+  });
+});
+
+describe("a read-only document", () => {
+  const guide = (set = emptyDocumentSet()) =>
+    openDocument(set, {
+      path: GUIDE_PATH,
+      content: "# Guide\n",
+      revision: rev("built-in"),
+      readOnly: true,
+    });
+
+  it("opens in a tab like any other document", () => {
+    const set = guide(withFiles("a.md"));
+
+    expect(openPaths(set)).toEqual(["a.md", GUIDE_PATH]);
+    expect(set.activePath).toBe(GUIDE_PATH);
+  });
+
+  it("is marked read-only, and an ordinary document is not", () => {
+    expect(activeDocument(guide())?.readOnly).toBe(true);
+    expect(activeDocument(withFiles("a.md"))?.readOnly).toBe(false);
+  });
+
+  // The one invariant behind "never saved". A read-only document has nowhere to be written to, so
+  // it must never become dirty - otherwise closing it asks about saving work that has no home, and
+  // the only honest answer to the prompt is one the app cannot carry out.
+  it("never becomes dirty, whatever is written to it", () => {
+    const set = updateContent(guide(), GUIDE_PATH, "# edited\n");
+
+    expect(activeDocument(set)?.content).toBe("# Guide\n");
+    expect(anyDirty(set)).toBe(false);
+  });
+
+  it("has a path no workspace file can collide with", () => {
+    // A workspace path is relative and forward-slashed; this one is neither, so no file on disk can
+    // shadow the guide and the guide can shadow no file.
+    expect(GUIDE_PATH.startsWith("trypthos:")).toBe(true);
   });
 });

@@ -23,6 +23,12 @@ export interface OpenDocument {
   readonly content: string;
   /// True when `content` differs from what was last read or written.
   readonly dirty: boolean;
+  /// True for a document with no file behind it - the built-in markdown guide.
+  ///
+  /// One flag for the whole of what that means: it is never written anywhere, and so it must never
+  /// become dirty. `updateContent` enforces the second half, because a read-only document that
+  /// could go dirty would make the app ask about saving work it has nowhere to put.
+  readonly readOnly: boolean;
 }
 
 export interface DocumentSet {
@@ -36,7 +42,17 @@ export interface DocumentSource {
   readonly path: string;
   readonly content: string;
   readonly revision: Revision;
+  /// Opens a document that is not a file. Defaults to false, so every ordinary read is unchanged.
+  readonly readOnly?: boolean;
 }
+
+/// The path of the built-in markdown guide.
+///
+/// Not a workspace path, and it cannot be mistaken for one: every path in a workspace is relative
+/// and forward-slashed, so nothing on disk collides with this and this shadows nothing on disk. It
+/// is a document identity like any other - it names a tab, and it is what `readOnly` hangs on - but
+/// no read or write is ever attempted against it.
+export const GUIDE_PATH = "trypthos:markdown-guide";
 
 export function emptyDocumentSet(): DocumentSet {
   return { documents: [], activePath: null };
@@ -83,6 +99,7 @@ export function openDocument(set: DocumentSet, source: DocumentSource): Document
     revision: source.revision,
     content: source.content,
     dirty: false,
+    readOnly: source.readOnly ?? false,
   };
   // Appended, never inserted beside the active tab. One rule the user can predict: new files arrive
   // at the end, and the order is the order they were opened in.
@@ -115,7 +132,12 @@ export function closeDocument(set: DocumentSet, path: string): DocumentSet {
 /// that says otherwise is telling the user something untrue about their file.
 export function updateContent(set: DocumentSet, path: string, content: string): DocumentSet {
   return mapDocument(set, path, (document) =>
-    document.content === content ? document : { ...document, content, dirty: true },
+    // A read-only document is unchanged by an edit rather than merely un-dirtied by one. Recording
+    // the text and not the flag would leave the buffer disagreeing with what it says it holds, and
+    // the disagreement would only surface in whatever read it next.
+    document.content === content || document.readOnly
+      ? document
+      : { ...document, content, dirty: true },
   );
 }
 

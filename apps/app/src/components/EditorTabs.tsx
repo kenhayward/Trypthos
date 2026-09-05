@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { documentName, tabLabels } from "@trypthos/domain";
+import { builtInTitleKey } from "../lib/builtInDocuments";
 
 interface Props {
   /// Qualifies the hover text, because "docs/notes.md" alone does not say which folder it is in.
@@ -87,7 +88,10 @@ export default function EditorTabs({
     >
       {paths.map((path, index) => {
         const selected = path === activePath;
-        const name = documentName(path);
+        // A built-in document has no file name to show and no folder to qualify it with, so both
+        // the label and the hover come from the catalogue instead of from the path.
+        const titleKey = builtInTitleKey(path);
+        const name = titleKey === null ? documentName(path) : t(titleKey);
         const dirty = dirtyPaths.includes(path);
 
         return (
@@ -98,7 +102,9 @@ export default function EditorTabs({
             // One tab stop for the whole strip. Thirty open files must not be thirty stops between
             // the tree and the document.
             tabIndex={selected || (activePath === null && index === 0) ? 0 : -1}
-            title={workspaceName === null ? path : `${workspaceName}/${path}`}
+            title={
+              titleKey !== null ? name : workspaceName === null ? path : `${workspaceName}/${path}`
+            }
             onClick={() => onActivate(path)}
             onKeyDown={(event) => onKeyDown(event, index)}
             // Middle-click closes, as it does in every editor and every browser. `auxclick` rather
@@ -114,7 +120,7 @@ export default function EditorTabs({
                 : "group flex max-w-52 min-w-0 shrink-0 cursor-default items-center gap-1.5 border-r border-rule bg-sunken px-3 py-1.5 text-ui text-ink-3 hover:bg-hover hover:text-ink"
             }
           >
-            <span className="min-w-0 truncate">{labels[index]}</span>
+            <span className="min-w-0 truncate">{titleKey === null ? labels[index] : name}</span>
 
             {/* The dot and the close button share one slot: an X that appeared beside the dot would
                 shift every label along on hover. The dot is a background tab's only way to say it has
