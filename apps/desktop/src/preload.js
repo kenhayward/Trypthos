@@ -60,8 +60,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// says. The shell needs it to know whether a close is worth interrupting.
   setDocumentDirty: (dirty) => ipcRenderer.invoke("document:dirty", { dirty }),
 
-  /// The shared native prompt, for anything about to discard the open document.
-  confirmDiscard: () => ipcRenderer.invoke("document:confirmDiscard"),
+  /// The shared native prompt, for anything about to discard a document. The name is what the
+  /// dialog asks about - one of several open tabs, or nothing in particular.
+  confirmDiscard: (name) => ipcRenderer.invoke("document:confirmDiscard", { name: name ?? null }),
 
   /// The shell asking whether the window may close. Wrapped like `onWindowState`, so the renderer
   /// never receives the IpcRendererEvent and the `sender` on it.

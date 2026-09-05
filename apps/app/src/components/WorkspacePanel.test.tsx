@@ -26,8 +26,9 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     workspaceName: "Diariz",
     folders: FOLDERS,
     filter: "",
-    openFilePath: null,
-    dirty: false,
+    activePath: null,
+    openPaths: [] as readonly string[],
+    dirtyPaths: [] as readonly string[],
     onOpenWorkspace: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
@@ -68,15 +69,33 @@ describe("WorkspacePanel", () => {
     );
   });
 
-  it("marks the open file, and only that one", () => {
-    panel({ openFilePath: "docs/plan.md" });
+  it("marks the file on screen, and only that one", () => {
+    panel({ activePath: "docs/plan.md", openPaths: ["docs/plan.md"] });
     expect(screen.getByRole("button", { name: /plan\.md/ }).getAttribute("aria-current")).toBe("true");
     expect(screen.getByRole("button", { name: /README\.md/ }).getAttribute("aria-current")).toBeNull();
   });
 
-  it("marks unsaved changes on the open file", () => {
-    panel({ openFilePath: "docs/plan.md", dirty: true });
+  // Several files are open at once, and only one of them is on screen. The tree says which are open
+  // so that clicking one is understood as going to a tab rather than loading a file afresh.
+  it("marks every open file, whether or not it is the one on screen", () => {
+    panel({ activePath: "docs/plan.md", openPaths: ["docs/plan.md", "README.md"] });
+
+    expect(screen.getByRole("button", { name: /README\.md/ }).dataset.open).toBe("true");
+    expect(screen.getByRole("button", { name: /README\.md/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("marks unsaved changes on each file that has them", () => {
+    panel({
+      activePath: "README.md",
+      openPaths: ["docs/plan.md", "README.md"],
+      dirtyPaths: ["docs/plan.md"],
+    });
+
     expect(screen.getByLabelText("Unsaved changes")).toBeDefined();
+    // On the file that is unsaved, not on the one being looked at.
+    expect(
+      screen.getByRole("button", { name: /plan\.md/ }).querySelector("[aria-label]"),
+    ).not.toBeNull();
   });
 
   // Inline on the row that failed, never a toast, and never a spinner over the panel: one unreadable

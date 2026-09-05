@@ -11,6 +11,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. A mode is a view, never a transform. |
+| Tabs | Several files open at once, each with its own tab, its own unsaved changes and its own place in the document. Clicking a file already open goes to it rather than reloading it. |
 | Links | A link to a markdown file in the open folder opens it in the editor; a web address opens in your browser, never over the app. Hover shows the target. |
 | AI chat | Appears once you configure a model, and can be switched off in Settings. Ask about your document, a selection, attached files or the whole folder, apply proposed changes, and watch how full the model's context is. |
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. Unsaved changes are never discarded without asking. |

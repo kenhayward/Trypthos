@@ -1,6 +1,10 @@
 "use strict";
 
-const { CloseWindowRequest, DocumentDirtyRequest } = require("@trypthos/domain");
+const {
+  CloseWindowRequest,
+  ConfirmDiscardRequest,
+  DocumentDirtyRequest,
+} = require("@trypthos/domain");
 
 /// Minimise, maximise and close, for the frameless window - and the two channels that keep a close
 /// from throwing away unsaved work.
@@ -53,7 +57,14 @@ function registerWindowHandlers({ ipcMain, getWindow, guard }) {
     return { ok: true };
   });
 
-  ipcMain.handle("document:confirmDiscard", async () => ({ ok: true, choice: await guard.ask() }));
+  ipcMain.handle("document:confirmDiscard", async (_event, payload) => {
+    // Validated here like every other handler, even though the name only reaches a dialog: it is
+    // renderer input, and the renderer is the untrusted side.
+    const parsed = ConfirmDiscardRequest.safeParse(payload ?? {});
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    return { ok: true, choice: await guard.ask(parsed.data.name) };
+  });
 }
 
 module.exports = { registerWindowHandlers };

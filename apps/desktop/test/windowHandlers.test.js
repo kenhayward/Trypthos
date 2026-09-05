@@ -23,7 +23,10 @@ function harness(over = {}) {
   const guard = {
     setDirty: (value) => calls.push(`dirty:${value}`),
     allow: () => calls.push("allow"),
-    ask: async () => over.choice ?? "cancel",
+    ask: async (name) => {
+      calls.push(`ask:${name ?? ""}`);
+      return over.choice ?? "cancel";
+    },
   };
 
   registerWindowHandlers({
@@ -87,6 +90,21 @@ test("answers the discard prompt with what the user chose", async () => {
   const { invoke } = harness({ choice: "discard" });
 
   assert.deepEqual(await invoke("document:confirmDiscard"), { ok: true, choice: "discard" });
+});
+
+test("tells the guard which document the prompt is about", async () => {
+  const { invoke, calls } = harness({ choice: "save" });
+
+  await invoke("document:confirmDiscard", { name: "notes.md" });
+  assert.deepEqual(calls, ["ask:notes.md"]);
+});
+
+test("refuses a name that is not a string", async () => {
+  const { invoke, calls } = harness();
+
+  const result = await invoke("document:confirmDiscard", { name: 7 });
+  assert.equal(result.ok, false);
+  assert.deepEqual(calls, []);
 });
 
 // The window can be gone between a click and its handler - during shutdown, or after a crash.

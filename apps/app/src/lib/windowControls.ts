@@ -24,8 +24,9 @@ export interface WindowControls {
   /// Tells the shell whether the document has unsaved changes, so it knows whether a close is worth
   /// interrupting. The flag only - never what the document says.
   setDocumentDirty(dirty: boolean): Promise<unknown>;
-  /// The shared native prompt for anything about to discard the document.
-  confirmDiscard(): Promise<DiscardChoice>;
+  /// The shared native prompt for anything about to discard a document. `name` is the document it
+  /// asks about - one tab among several. Omitted when nothing in particular is at stake.
+  confirmDiscard(name?: string | null): Promise<DiscardChoice>;
   /// Subscribes to the shell asking whether the window may close. Returns an unsubscribe function.
   onCloseRequested(listener: () => void): () => void;
   /// Subscribes to maximise/restore. Returns an unsubscribe function.
@@ -41,7 +42,7 @@ interface WindowBridge {
   toggleMaximizeWindow?: () => Promise<unknown>;
   closeWindow?: (force: boolean) => Promise<unknown>;
   setDocumentDirty?: (dirty: boolean) => Promise<unknown>;
-  confirmDiscard?: () => Promise<unknown>;
+  confirmDiscard?: (name: string | null) => Promise<unknown>;
   onCloseRequested?: (listener: () => void) => () => void;
   onWindowState?: (listener: (state: unknown) => void) => () => void;
   popupMenu?: (menu: MenuName, x: number, y: number) => Promise<unknown>;
@@ -74,8 +75,8 @@ export function windowControls(): WindowControls {
     toggleMaximizeWindow: bridge.toggleMaximizeWindow ?? noop,
     closeWindow: (force = false) => bridge.closeWindow?.(force) ?? noop(),
     setDocumentDirty: (dirty) => bridge.setDocumentDirty?.(dirty) ?? noop(),
-    confirmDiscard: async () => {
-      const answer = await bridge.confirmDiscard?.();
+    confirmDiscard: async (name = null) => {
+      const answer = await bridge.confirmDiscard?.(name ?? null);
       // Validated on arrival, and anything unrecognised reads as cancel. This is the call that
       // decides whether somebody's document survives: proceeding on an answer nobody gave is how the
       // guard would destroy exactly the work it exists to protect.

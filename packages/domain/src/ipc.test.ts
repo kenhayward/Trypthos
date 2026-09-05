@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CloseWindowRequest,
+  ConfirmDiscardRequest,
   DiscardChoiceSchema,
   DocumentDirtyRequest,
   IPC_CHANNELS,
@@ -209,5 +210,26 @@ describe("the unsaved-changes channels", () => {
   it("registers both channels on the enumerated surface", () => {
     expect(IPC_CHANNELS).toContain("document:dirty");
     expect(IPC_CHANNELS).toContain("document:confirmDiscard");
+  });
+});
+
+describe("ConfirmDiscardRequest", () => {
+  it("carries the name of the document being discarded", () => {
+    const parsed = ConfirmDiscardRequest.safeParse({ name: "notes.md" });
+
+    expect(parsed.success && parsed.data.name).toBe("notes.md");
+  });
+
+  // With one document there was one thing the prompt could be about. With tabs there are several, so
+  // a nameless prompt asks about work the user cannot identify - but the name stays optional,
+  // because the window closing is about the window rather than about any one file.
+  it("allows no name at all", () => {
+    const parsed = ConfirmDiscardRequest.safeParse({});
+
+    expect(parsed.success && parsed.data.name).toBeNull();
+  });
+
+  it("refuses a name that is not a string", () => {
+    expect(ConfirmDiscardRequest.safeParse({ name: 7 }).success).toBe(false);
   });
 });

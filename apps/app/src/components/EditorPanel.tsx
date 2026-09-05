@@ -3,20 +3,30 @@ import { useTranslation } from "react-i18next";
 import { countWords, detectLineEnding } from "@trypthos/domain";
 import EditorHeader from "./EditorHeader";
 import EditorStatusBar from "./EditorStatusBar";
+import EditorTabs from "./EditorTabs";
 import MarkdownEditor, {
   type EditorHandle,
   type EditorSelection,
 } from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
-import { documentName, formatCaret } from "../lib/breadcrumb";
+import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 
 interface Props {
   workspaceName: string | null;
-  filePath: string | null;
+  /// Every open document, in tab order.
+  paths: readonly string[];
+  /// The document on screen, or null when it is the scratch buffer.
+  activePath: string | null;
+  /// The open documents with unsaved work, for the tabs that are not on screen.
+  dirtyPaths?: readonly string[];
+  /// Whether the document ON SCREEN has unsaved work. The header says so in words; the tabs mark the
+  /// others with a dot.
   dirty: boolean;
   value: string;
   onChange: (value: string) => void;
+  onActivateFile?: (path: string) => void;
+  onCloseFile?: (path: string) => void;
   /// Reports the editor selection, so the chat panel can ask about a passage rather than the whole
   /// file. Empty when nothing is selected.
   ///
@@ -40,44 +50,41 @@ interface Props {
   ref?: React.Ref<EditorHandle>;
 }
 
-/// Centre panel: the editor, its header and its status bar.
+/// Centre panel: the open files, the editor, and its status bar.
 ///
-/// The document lives ABOVE this component, which is what makes the mode invariant checkable rather
+/// The documents live ABOVE this component, which is what makes the mode invariant checkable rather
 /// than merely intended: switching mode is local state here and cannot reach `onChange`, so a mode
-/// switch has no path by which to alter the document.
+/// switch has no path by which to alter any document.
 export default function EditorPanel({
   workspaceName,
-  filePath,
+  paths,
+  activePath,
+  dirtyPaths = [],
   dirty,
   value,
   onChange,
+  onActivateFile,
+  onCloseFile,
   onSelectionChange,
   onFollowLink,
   defaultMode = DEFAULT_EDITOR_MODE,
   ref,
 }: Props) {
   const { t } = useTranslation();
-  /// The view the reader picked, and the document they picked it for.
+  /// The view each document is being read in, keyed by path.
   ///
-  /// Null until they pick one, rather than a copy of the setting: settings are read from disk AFTER
-  /// this mounts, so a copy taken at mount would be whatever the default was before the file had
-  /// been read, and the stored preference would never arrive.
+  /// A map rather than one choice, now that several documents are open at once: a per-document
+  /// choice that only remembered the last one would quietly reset a file every time you looked at
+  /// another and came back.
   ///
-  /// The document is stored WITH the choice so that opening another one falls back to the
-  /// configured view, which is what a default for documents means. Derived rather than reset in an
-  /// effect: an effect would render the new document in the old view first and correct it after.
-  const [chosen, setChosen] = useState<{ file: string | null; mode: EditorMode } | null>(null);
-  const mode = chosen !== null && chosen.file === filePath ? chosen.mode : defaultMode;
-  const setMode = (next: EditorMode) => setChosen({ file: filePath, mode: next });
+  /// Absent means "the configured default", rather than a copy of it - settings are read from disk
+  /// AFTER this mounts, so a copy taken at mount would be whatever the default was before the file
+  /// had been read, and the stored preference would never arrive.
+  const [chosen, setChosen] = useState<Record<string, EditorMode>>({});
+  const key = activePath ?? "";
+  const mode = chosen[key] ?? defaultMode;
+  const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
   const [caret, setCaret] = useState({ line: 1, column: 1 });
-
-  const name = useMemo(() => documentName(filePath), [filePath]);
-  /// The whole path, for the header's tooltip. Qualified with the workspace, because
-  /// "docs/notes.md" alone does not say which folder it is in.
-  const path = useMemo(() => {
-    if (filePath === null) return null;
-    return workspaceName === null ? filePath : `${workspaceName}/${filePath}`;
-  }, [workspaceName, filePath]);
 
   // Both walk the whole document, so they are memoised on the text rather than recomputed on every
   // keystroke-driven render. A word count is cheap on a page and not on a book.
@@ -91,19 +98,24 @@ export default function EditorPanel({
 
   return (
     <main aria-label={t("editor.title")} className="flex min-w-0 grow flex-col bg-app">
-      <EditorHeader
-        name={name}
-        path={path}
-        dirty={dirty}
-        stats={stats}
-        mode={mode}
-        onModeChange={setMode}
-      />
+      {/* One row: identity on the left, state on the right. The strip takes whatever width the
+          header does not need, and scrolls within it. */}
+      <div className="flex items-stretch border-b border-rule">
+        <EditorTabs
+          workspaceName={workspaceName}
+          paths={paths}
+          activePath={activePath}
+          dirtyPaths={dirtyPaths}
+          onActivate={(path) => onActivateFile?.(path)}
+          onClose={(path) => onCloseFile?.(path)}
+        />
+        <EditorHeader dirty={dirty} mode={mode} onModeChange={setMode} />
+      </div>
 
       <div className="min-h-0 grow">
         {isEditable(mode) ? (
           <MarkdownEditor
-            documentId={filePath}
+            documentId={activePath}
             value={value}
             onChange={onChange}
             live={mode === "live"}
@@ -118,7 +130,7 @@ export default function EditorPanel({
         )}
       </div>
 
-      <EditorStatusBar mode={mode} lineEnding={lineEnding} />
+      <EditorStatusBar mode={mode} lineEnding={lineEnding} stats={stats} />
     </main>
   );
 }

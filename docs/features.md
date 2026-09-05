@@ -46,12 +46,35 @@ The centre panel edits markdown in one of three views over the same document:
   for now - a construct without a decoration renders as
   itself rather than disappearing, so nothing is ever hidden that Trypthos cannot draw.
 
-The header above the editor names the document, marks it when there is something unsaved, and
-reports your cursor position and word count. A name too long for the space ends in an ellipsis rather
-than being cut off silently, and the whole path is on hover - where the file lives is also the tree
-beside it. The strip below names the format, the encoding and
-the line endings the file actually uses - measured rather than assumed, so a file that mixes Windows
-and Unix line endings is reported as mixed rather than as one or the other.
+The row above the editor holds the open files on the left and the state of the one you are in on the
+right: a pill when it has unsaved changes, and three icon buttons for Live, Source and Preview, whose
+names appear on hover. The strip along the bottom names the view you are in, your cursor position and
+word count, and the format, encoding and line endings the file actually uses - measured rather than
+assumed, so a file that mixes Windows and Unix line endings is reported as mixed rather than as one
+or the other.
+
+## Tabs
+
+Every file you open gets a tab. Clicking a file in the folder browser opens it in a new tab, or - if
+it is already open - goes to the tab it is in, without reading the file again, so anything you had
+typed is exactly as you left it. The same is true of a link you follow from one document to another.
+
+A tab shows the file's own name, cut short with an ellipsis when it does not fit, and the whole path
+on hover. Two open files with the same name grow just enough folder to tell them apart, and only
+those two - the rest of the strip stays short. With more files open than the row can hold, the tabs
+scroll, and the one you switch to is brought into view.
+
+Close a tab with the x on it, with a middle click, or with Ctrl+W (Cmd+W on macOS), which closes the
+one you are in. If that file has unsaved changes you are asked about it by name, which matters when more than
+one is unsaved: closing the window asks about each in turn, and cancelling any of them stops the
+close. A file with unsaved changes that you are not looking at shows a dot on its tab, since the pill
+in the header speaks only for the file on screen.
+
+Coming back to a tab puts you back where you were - the same caret position, and the same place in
+the document, rather than the top of it. Each file also keeps the view you were reading it in, so a
+file you switched to Source stays in Source while you work in Live elsewhere. The folder browser
+marks every open file, and marks the one on screen more strongly, so it is clear which click will
+open something and which will simply take you there.
 
 Switching view never rewrites your file. The bytes on disk are identical in every view, so a
 document can be shared between someone who wants to read it and someone who cares about its exact

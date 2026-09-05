@@ -14,6 +14,17 @@ import { currentPlatform } from "../lib/windowControls";
 /// every file arrived already marked Unsaved.
 const External = Annotation.define<boolean>();
 
+/// The document position showing at the top of the visible area.
+///
+/// What a reader means by "where I was": the first line they can see, which is not necessarily where
+/// their caret is. Asked in screen coordinates rather than computed from `scrollTop`, because the
+/// scroller's offset is only meaningful against heights CodeMirror has measured, and it measures the
+/// parts of a document it has drawn.
+function topPosition(editor: EditorView): number {
+  const box = editor.scrollDOM.getBoundingClientRect();
+  return editor.posAtCoords({ x: box.left + 1, y: box.top + 1 }, false);
+}
+
 export interface EditorSelection {
   text: string;
   from: number;
@@ -99,6 +110,12 @@ export default function MarkdownEditor({
   /// The document the editor is currently showing, so a change of file can be told from a change of
   /// text. Written after the transaction that switches it, never during render.
   const shownDocument = useRef(documentId);
+  /// Where each document was left: the caret, and how far down it was scrolled.
+  ///
+  /// One editor serves every open document, so without this, coming back to a tab you were halfway
+  /// through starts you at the top of it again - which is the difference between a tab and simply
+  /// reopening the file.
+  const places = useRef(new Map<string, { anchor: number; head: number; topLine: number }>());
   useEffect(() => {
     latestOnChange.current = onChange;
     latestOnCaret.current = onCaret;
@@ -219,17 +236,61 @@ export default function MarkdownEditor({
     const switchedFile = shownDocument.current !== documentId;
     if (current === value && !switchedFile) return;
 
+    // Remember where the document being left was up to, before its text is replaced. Read from the
+    // live editor rather than tracked as it moves: the caret and the scroll position change on every
+    // keystroke, and only their final values matter.
+    const leaving = shownDocument.current;
+    if (switchedFile && leaving !== null) {
+      const range = editor.state.selection.main;
+      places.current.set(leaving, {
+        anchor: range.anchor,
+        head: range.head,
+        // The text at the top of the view, not the pixel offset. A pixel offset means nothing until
+        // CodeMirror has measured the new document, and it measures lazily - restoring one lands
+        // wherever the estimated height happened to put it. Read from screen coordinates, which is
+        // the one frame of reference that is true at the moment it is asked.
+        topLine: topPosition(editor),
+      });
+    }
+
     // Only reached when the document changed from outside the editor - opening a different file, or a
     // reload from disk. Echoing the user's own keystrokes back through here would fight the caret.
     //
-    // A DIFFERENT file starts at the top: one editor serves every document, so without this the new
-    // one inherits wherever the last was left. A reload of the SAME file does not move the caret -
-    // that would throw away the reader's place for a change they did not make.
+    // A DIFFERENT file goes back to where it was last left, or to the top the first time it is
+    // opened. A reload of the SAME file does not move the caret - that would throw away the reader's
+    // place for a change they did not make.
+    const place = documentId === null ? undefined : places.current.get(documentId);
+    // Clamped, because the document can have been edited elsewhere - a chat edit, or a reload from
+    // disk - since the position was recorded, and an out-of-range selection throws inside CodeMirror.
+    const clamp = (offset: number) => Math.max(0, Math.min(offset, value.length));
+
     editor.dispatch({
       changes: { from: 0, to: current.length, insert: value },
-      ...(switchedFile ? { selection: { anchor: 0 }, scrollIntoView: true } : {}),
+      ...(switchedFile
+        ? {
+            selection: place
+              ? { anchor: clamp(place.anchor), head: clamp(place.head) }
+              : { anchor: 0 },
+            // Only for a document with no remembered place. The remembered case scrolls to the line
+            // the reader was on instead, which is not always the line the caret is on - a reader can
+            // scroll away from their caret, and the place they were looking at is the one to come
+            // back to.
+            scrollIntoView: place === undefined,
+          }
+        : {}),
       annotations: External.of(true),
     });
+
+    // A SECOND transaction, deliberately. A `scrollIntoView` effect is mapped through its own
+    // transaction's changes, and the one above replaces the whole document - so a position in the
+    // document being restored would map to the start of the replacement and scroll to the top, which
+    // is exactly what this exists to avoid.
+    if (switchedFile && place !== undefined) {
+      editor.dispatch({
+        effects: EditorView.scrollIntoView(clamp(place.topLine), { y: "start" }),
+        annotations: External.of(true),
+      });
+    }
 
     shownDocument.current = documentId;
   }, [value, documentId]);

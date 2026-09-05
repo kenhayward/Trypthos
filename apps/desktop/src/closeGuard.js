@@ -31,6 +31,22 @@ function closeDecision({ forced, hiding, dirty }) {
   return dirty ? "ask" : "close";
 }
 
+/// How long a file name may be before the dialog is shown a shortened one.
+///
+/// The name comes from the renderer, and nothing here interprets it - but a native dialog sizes
+/// itself to its message, and a 500-character name is a dialog whose buttons are off the screen.
+const NAME_LIMIT = 80;
+
+function promptFor(name) {
+  if (typeof name !== "string" || name.trim() === "") {
+    return "Save changes before closing this document?";
+  }
+
+  const trimmed = name.trim();
+  const shown = trimmed.length > NAME_LIMIT ? `${trimmed.slice(0, NAME_LIMIT)}...` : trimmed;
+  return `Save changes to ${shown} before closing?`;
+}
+
 function createCloseGuard({ dialog, send }) {
   let dirty = false;
   /// Set when the renderer has asked and been told to go ahead. Without it the close it then
@@ -59,8 +75,13 @@ function createCloseGuard({ dialog, send }) {
       return dirty;
     },
 
-    /// The native prompt, shared by every path that would discard the document.
-    async ask() {
+    /// The native prompt, shared by every path that would discard a document.
+    ///
+    /// `name` is the document it is about. The editor holds several at once, so a prompt that says
+    /// only "this document" asks about writing the user cannot identify - and the answer decides
+    /// whether it survives. Without a name it still reads as a sentence, which is what the window
+    /// closing on a scratch buffer needs.
+    async ask(name) {
       const { response } = await dialog.showMessageBox({
         type: "warning",
         buttons: ["Save", "Don't Save", "Cancel"],
@@ -68,7 +89,7 @@ function createCloseGuard({ dialog, send }) {
         // throws the work away is a trap.
         defaultId: 0,
         cancelId: 2,
-        message: "Save changes before closing this document?",
+        message: promptFor(name),
         detail: "Your changes will be lost if you do not save them.",
       });
 

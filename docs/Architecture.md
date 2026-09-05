@@ -70,9 +70,21 @@ round-trip and nothing that can reformat a user's file behind their back.
 - `components/MarkdownEditor.tsx` hosts the CodeMirror view. It is created **once** and then fed
   transactions. Recreating it per render would look correct while discarding undo history, selection
   and scroll position on every keystroke.
-- The document lives **above** `EditorPanel`, which is what makes the mode invariant checkable rather
+- The documents live **above** `EditorPanel`, which is what makes the mode invariant checkable rather
   than merely intended: mode is local state and has no path to `onChange`, so a mode switch cannot
-  alter the document. `EditorPanel.test.tsx` asserts it.
+  alter a document. `EditorPanel.test.tsx` asserts it.
+- **Several documents are open at once, and one editor serves them all.** `MarkdownEditor` is told
+  which document it is showing (`documentId`); a change of that value means a different FILE rather
+  than new text for the same one, and it remembers where each was left - the caret, and the line at
+  the top of the view - so returning to a tab is not the same as reopening the file. The place is
+  recorded as a POSITION, not a pixel offset: CodeMirror measures a document lazily, so an offset
+  restored into an unmeasured document lands wherever the estimate happened to put it. The scroll is
+  restored in a SECOND transaction, because a `scrollIntoView` effect is mapped through its own
+  transaction's changes, and the one that swaps the document replaces every character in it.
+- `components/EditorTabs.tsx` draws the open documents, and owns **identity** - which file, and
+  closing it. `EditorHeader` beside it owns **state** - whether what is on screen is saved, and which
+  view it is in. Neither repeats the other, which is why the only dirty dot in the strip is on a tab
+  that is NOT on screen: for the one that is, the header says so in words.
 - `lib/editorTheme.ts` holds the Source palette. In Source mode colour **stands in for** formatting
   rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
   of the bytes.
@@ -682,13 +694,18 @@ without the user pressing Apply.
 ## Unsaved changes, across the process boundary
 
 The one thing this app can destroy is somebody's own writing, and the paths that could are the ones
-that replace the open document: opening another file, opening another folder, and closing the window.
+that discard a document: closing its tab, opening another folder, and closing the window. **Opening
+another file is no longer one of them** - it opens a tab beside the first, and switching between them
+discards nothing, which is the whole point of the tab strip.
 
-**`mayDiscard` is the single implementation.** `useWorkspace` owns it, every renderer path calls it,
-and the shell asks the renderer for it before closing - three prompts would be three chances to get
-it subtly different, and the one that was wrong would be the one that lost a file. It returns false
-on cancel, and **false on a failed save**: `save()` now answers a boolean for exactly this reason, so
-a conflict cannot read as a save and let the document be thrown away.
+**`mayDiscardOne` is the single implementation**, and `mayDiscard` is it applied to every unsaved
+document in tab order. `useWorkspace` owns both, every renderer path calls them, and the shell asks
+the renderer before closing - three prompts would be three chances to get it subtly different, and
+the one that was wrong would be the one that lost a file. They return false on cancel, and **false on
+a failed save**: `save()` answers a boolean for exactly this reason, so a conflict cannot read as a
+save and let the document be thrown away. A window close asks about each unsaved document in turn and
+**stops at the first cancel**, since carrying on would shut the window on documents nobody had been
+asked about yet.
 
 **The split across the boundary is forced by where the facts live.** The renderer owns the document
 and the dirty flag; the main process owns the window and its `close` event. So the renderer reports
@@ -698,7 +715,12 @@ renderer answers by closing the window itself with `force`, which is what stops 
 again and the window never closing.
 
 The prompt itself is native and lives in the shell (`closeGuard.js`), shared by every path through
-`document:confirmDiscard` - including the two renderer-only ones, so there is one wording.
+`document:confirmDiscard` - including the renderer-only ones, so there is one wording. **The request
+carries the document's name** (`ConfirmDiscardRequest`, validated in the main process like every
+other payload), because several documents can be unsaved at once and "this document" would be asking
+about work the user cannot identify. The name is nullable: a window close that reaches the prompt
+without one still reads as a sentence. The shell shortens a preposterous name rather than trusting
+it - it is renderer input, and a native dialog sizes itself to its message.
 
 **Three policies meet on the `close` event**, and `closeDecision` states the order once rather than
 leaving it to the order of the `if`s in `main.js`: a forced close wins outright; close-to-tray hides
@@ -805,6 +827,21 @@ The renderer's own state machine is `apps/app/src/hooks/useWorkspace.ts`, delibe
 the panel so the interface can be redesigned without touching behaviour, and so the awkward cases -
 a conflicting save, a file that vanished, the browser preview with no filesystem at all - can be
 tested without rendering anything.
+
+It holds a **`DocumentSet`** (`packages/domain/src/openDocuments.ts`): every open document with its
+own text, revision and dirty flag, plus which one is on screen. The set is pure domain logic, so the
+rules that are easy to get wrong and invisible when they are - which tab is selected after a close,
+whether a second click on an open file reads over unsaved work, whether editing one document marks
+another - are answerable without rendering an editor. `file`, `content` and `dirty` remain on the
+hook's state as **derived** values for the document on screen, so nothing above has two answers to
+"which file is this". The scratch buffer is a field of its own rather than a document: it is nowhere
+on disk, so it is never dirty and has no save path to be wrong about, and closing the last tab
+returns to it with whatever was typed into it still there.
+
+Two consequences worth stating. **A save names its document** (`save(path?)`), because closing a
+background tab has to write that tab rather than the one on screen. And **opening a workspace closes
+every tab**: the paths are workspace-relative, so carrying them across would leave them pointing at
+files that are not in the new folder.
 
 The first three share a shape: OAuth, a mutable file at a stable id, delta sync, last-writer-wins.
 GitHub does not - there is no mutable path, and a save is a commit on a branch with history and merge

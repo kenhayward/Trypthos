@@ -8,13 +8,20 @@ const DOC = "# Title\n\nSome **bold** text and `code`.\n\n- one\n- two\n";
 
 /// Mirrors the real arrangement: the document lives above the panel, so a mode switch has no path
 /// by which to change it.
-function Harness({ onChange = vi.fn() }: { onChange?: (value: string) => void }) {
+function Harness({
+  onChange = vi.fn(),
+  dirty = false,
+}: {
+  onChange?: (value: string) => void;
+  dirty?: boolean;
+}) {
   const [value, setValue] = useState(DOC);
   return (
     <EditorPanel
       workspaceName="Diariz"
-      filePath="docs/notes.md"
-      dirty={false}
+      paths={["docs/notes.md"]}
+      activePath="docs/notes.md"
+      dirty={dirty}
       value={value}
       onChange={(next) => {
         setValue(next);
@@ -42,7 +49,8 @@ describe("EditorPanel", () => {
     render(
       <EditorPanel
         workspaceName="Diariz"
-        filePath="docs/notes.md"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
         dirty={false}
         value={DOC}
         defaultMode="source"
@@ -60,7 +68,8 @@ describe("EditorPanel", () => {
     const panel = (mode: "live" | "source" | "preview") => (
       <EditorPanel
         workspaceName="Diariz"
-        filePath="docs/notes.md"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
         dirty={false}
         value={DOC}
         defaultMode={mode}
@@ -82,7 +91,8 @@ describe("EditorPanel", () => {
     const panel = (filePath: string) => (
       <EditorPanel
         workspaceName="Diariz"
-        filePath={filePath}
+        paths={[filePath]}
+        activePath={filePath}
         dirty={false}
         value={DOC}
         defaultMode="live"
@@ -109,35 +119,43 @@ describe("EditorPanel", () => {
     expect(screen.getByLabelText("Markdown source")).toBe(before);
   });
 
-  // The name identifies the document; the path is what could not fit. A long workspace or folder
-  // name used to overflow its own span and print over the next one.
-  it("names the document, and leaves the path to the tooltip", () => {
+  // The document is named by its tab, not by the header. The header speaks for the STATE of what is
+  // on screen - saved or not, and how you are looking at it - and the two must not repeat each other.
+  it("names the document on its tab", () => {
     render(<Harness />);
 
-    expect(screen.getByText("notes.md")).toBeDefined();
-    expect(screen.queryByText("docs")).toBeNull();
-    expect(screen.queryByText("Diariz")).toBeNull();
+    expect(screen.getByRole("tab", { name: /notes\.md/ })).toBeDefined();
   });
 
-  // The full path is still one hover away, so nothing is lost - only moved out of a space it did not
-  // fit in. Named with the workspace, because "docs/notes.md" alone is ambiguous across folders.
-  it("puts the whole path in the tooltip", () => {
-    render(<Harness />);
-    expect(screen.getByText("notes.md").getAttribute("title")).toBe("Diariz/docs/notes.md");
-  });
-
-  it("says it is the editor when no document is open", () => {
+  it("names the scratch buffer when no document is open", () => {
     render(
       <EditorPanel
         workspaceName={null}
-        filePath={null}
+        paths={[]}
+        activePath={null}
         dirty={false}
         value={DOC}
         onChange={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("Editor")).toBeDefined();
+    expect(screen.getByText("Scratch buffer")).toBeDefined();
+  });
+
+  it("says in the header that the document on screen is unsaved", () => {
+    render(<Harness dirty />);
+
+    expect(screen.getByText("Unsaved")).toBeDefined();
+  });
+
+  // Moved out of the header when the tabs arrived: the top row has to give its width to the strip,
+  // and the status bar is where an editor reports where the caret is anyway.
+  it("reports the caret and the word count in the status bar", () => {
+    render(<Harness />);
+
+    const status = screen.getByText("UTF-8").parentElement;
+    expect(status?.textContent).toContain("Ln 1, Col 1");
+    expect(status?.textContent).toContain("words");
   });
 
   it("renders the document as prose in Preview mode", async () => {

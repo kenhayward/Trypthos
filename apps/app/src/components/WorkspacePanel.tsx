@@ -10,8 +10,13 @@ interface Props {
   workspaceName: string | null;
   folders: Record<string, FolderState>;
   filter: string;
-  openFilePath: string | null;
-  dirty: boolean;
+  /// The document on screen, highlighted as the one you are in.
+  activePath: string | null;
+  /// Every open document. Marked more lightly than the active one - clicking one of these goes to
+  /// its tab rather than loading the file again.
+  openPaths: readonly string[];
+  /// The open documents with unsaved work.
+  dirtyPaths: readonly string[];
   onOpenWorkspace: () => void;
   onFilterChange: (filter: string) => void;
   onToggleFolder: (path: string) => void;
@@ -29,8 +34,9 @@ export default function WorkspacePanel({
   workspaceName,
   folders,
   filter,
-  openFilePath,
-  dirty,
+  activePath,
+  openPaths,
+  dirtyPaths,
   onOpenWorkspace,
   onFilterChange,
   onToggleFolder,
@@ -115,8 +121,9 @@ export default function WorkspacePanel({
                 <FileRow
                   key={row.node.id}
                   row={row}
-                  selected={row.node.id === openFilePath}
-                  dirty={dirty && row.node.id === openFilePath}
+                  selected={row.node.id === activePath}
+                  open={openPaths.includes(row.node.id)}
+                  dirty={dirtyPaths.includes(row.node.id)}
                   onOpen={() => onOpenFile(row.node)}
                 />
               ),
@@ -185,11 +192,13 @@ function FolderRow({
 function FileRow({
   row,
   selected,
+  open,
   dirty,
   onOpen,
 }: {
   row: TreeRow;
   selected: boolean;
+  open: boolean;
   dirty: boolean;
   onOpen: () => void;
 }) {
@@ -200,11 +209,17 @@ function FileRow({
       type="button"
       onClick={onOpen}
       aria-current={selected ? "true" : undefined}
+      // Three states, not two: the file you are in, the files you have open behind it, and the rest.
+      // Without the middle one a click on an open file looks like it did nothing, when what it did
+      // was go to a tab.
+      data-open={open ? "true" : undefined}
       style={indent(row.depth + 1)}
       className={
         selected
           ? "flex w-full items-center gap-1.5 rounded-md bg-selected py-1 pr-2 text-left text-base font-semibold text-selected-ink"
-          : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink-3 hover:bg-hover"
+          : open
+            ? "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
+            : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink-3 hover:bg-hover"
       }
     >
       <Glyph className="size-3.5 shrink-0 text-faint">

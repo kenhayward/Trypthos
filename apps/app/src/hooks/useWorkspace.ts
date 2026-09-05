@@ -1,14 +1,30 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiscardChoice } from "@trypthos/domain";
-import type { Revision } from "@trypthos/domain";
+import type { DocumentSet, OpenDocument, Revision } from "@trypthos/domain";
+import {
+  activateDocument,
+  activeDocument,
+  anyDirty as anyDocumentDirty,
+  closeDocument,
+  dirtyPaths as dirtyDocumentPaths,
+  emptyDocumentSet,
+  isOpen,
+  markSaved,
+  openDocument,
+  updateContent,
+} from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
 import type { FolderState } from "../lib/treeRows";
 
 /// All the workspace state and the transitions between them.
 ///
 /// Separated from the panel so the interface can be redesigned without touching any of this, and so
-/// the awkward cases - a conflicting save, a folder that disappeared, unsaved edits - can be tested
-/// without rendering anything.
+/// the awkward cases - a conflicting save, a folder that disappeared, unsaved edits, a second click
+/// on a file already open - can be tested without rendering anything.
+///
+/// The documents themselves are a `DocumentSet` from the domain: what is open, which is on screen,
+/// and which have unsaved work. What is here is everything that needs the CLIENT - reading, writing,
+/// and asking the user before anything is thrown away.
 
 export interface OpenFile {
   path: string;
@@ -28,9 +44,19 @@ export interface WorkspaceState {
   folders: Record<string, FolderState>;
   /// Narrows the visible markdown files by name.
   filter: string;
+  /// Every open document, in the order their tabs appear.
+  documents: readonly OpenDocument[];
+  /// The path of the document on screen, or null when only the scratch buffer is.
+  activePath: string | null;
+  /// The open documents with unsaved work. What draws the dot on a tab that is not on screen.
+  dirtyPaths: readonly string[];
+  /// True when ANY open document has unsaved work - the window's question, not the editor's.
+  anyDirty: boolean;
+  /// The document on screen, or null when it is the scratch buffer. Derived from `activePath`, so
+  /// there is one answer to "which file is this" rather than two that can disagree.
   file: OpenFile | null;
   content: string;
-  /// True when `content` differs from what is on disk.
+  /// True when the document on screen differs from what is on disk.
   dirty: boolean;
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
@@ -48,27 +74,46 @@ export interface WorkspaceActions {
   setFilter(filter: string): void;
   openFile(node: RemoteNode): Promise<void>;
   /// Opens a file named only by its workspace-relative path - a link in a document, rather than a
-  /// row in the tree. The same act as `openFile` and the same implementation, so the prompt about
-  /// unsaved work, the error banner and the revision cannot behave differently depending on which
-  /// way the file was reached.
+  /// row in the tree. The same act as `openFile` and the same implementation, so the error banner
+  /// and the revision cannot behave differently depending on which way the file was reached.
+  ///
+  /// A file that is ALREADY open is switched to rather than read again: what is on disk would
+  /// replace what the user has typed.
   openPath(path: string): Promise<void>;
+  /// Puts an open document on screen. No reading, no prompt - the other one is still open.
+  activateFile(path: string): void;
+  /// Closes one document, asking about its unsaved work first. Nothing else is disturbed.
+  closeFile(path: string): Promise<void>;
   edit(content: string): void;
   /// True when the file is on disk as the editor shows it. False on a failed save, and on no file
   /// open at all - the caller may be about to discard the document on the strength of the answer.
-  save(): Promise<boolean>;
-  /// Whether the open document may be thrown away, asking the user when it is unsaved. Used by the
-  /// shell before closing the window; the other paths call it themselves.
+  save(path?: string): Promise<boolean>;
+  /// Whether EVERY open document may be thrown away, asking about each unsaved one in turn. Used by
+  /// the shell before closing the window, and before another folder replaces them all.
   mayDiscard(): Promise<boolean>;
   dismissError(): void;
 }
 
-const INITIAL: WorkspaceState = {
+/// What the hook actually holds. The state the interface reads is derived from this on each render,
+/// so a document's text, its dirty flag and the tab that shows it cannot drift apart.
+interface Internal {
+  workspace: WorkspaceInfo | null;
+  folders: Record<string, FolderState>;
+  filter: string;
+  documents: DocumentSet;
+  /// The buffer shown when no file is open. Kept while files are open rather than discarded: it is
+  /// text somebody typed, and closing the last tab brings them back to it.
+  scratch: string;
+  busy: boolean;
+  errorKey: string | null;
+}
+
+const INITIAL: Internal = {
   workspace: null,
   folders: {},
   filter: "",
-  file: null,
-  content: "",
-  dirty: false,
+  documents: emptyDocumentSet(),
+  scratch: "",
   busy: false,
   errorKey: null,
 };
@@ -105,12 +150,6 @@ export function parentOf(directory: string): string {
   return cut === -1 ? "" : directory.slice(0, cut);
 }
 
-/// The display name of a workspace-relative file path: its last segment.
-export function nameOf(filePath: string): string {
-  const cut = filePath.lastIndexOf("/");
-  return cut === -1 ? filePath : filePath.slice(cut + 1);
-}
-
 /// Removes a folder and everything beneath it from the map.
 ///
 /// Collapsing has to forget descendants, not just the folder itself. Keeping them would mean
@@ -125,34 +164,34 @@ export function withoutSubtree(
   );
 }
 
-/// Asks the user what to do about unsaved work. Null outside the desktop shell, where there is
-/// nowhere to save to and so nothing to protect.
-export type ConfirmDiscard = (() => Promise<DiscardChoice>) | null;
+/// Asks the user what to do about unsaved work in the named document. Null outside the desktop
+/// shell, where there is nowhere to save to and so nothing to protect.
+export type ConfirmDiscard = ((name?: string | null) => Promise<DiscardChoice>) | null;
 
 export function useWorkspace(
   client: WorkspaceClient,
   initialContent = "",
   confirmDiscard: ConfirmDiscard = null,
 ) {
-  const [state, setState] = useState<WorkspaceState>({ ...INITIAL, content: initialContent });
+  const [internal, setInternal] = useState<Internal>({ ...INITIAL, scratch: initialContent });
 
   /// The latest state, readable from an async callback.
   ///
   /// A save has to read the content and revision AFTER awaiting, and a stale closure would save the
   /// text as it was when the handler was created. Assigned in an effect rather than during render,
   /// because a render can be discarded or run twice.
-  const stateRef = useRef(state);
+  const stateRef = useRef(internal);
   useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+    stateRef.current = internal;
+  }, [internal]);
 
   const fail = useCallback((reason: string) => {
-    setState((prev) => ({ ...prev, busy: false, errorKey: failureKey(reason) }));
+    setInternal((prev) => ({ ...prev, busy: false, errorKey: failureKey(reason) }));
   }, []);
 
   const loadFolder = useCallback(
     async (path: string) => {
-      setState((prev) => ({
+      setInternal((prev) => ({
         ...prev,
         folders: { ...prev.folders, [path]: { status: "loading" } },
         errorKey: null,
@@ -160,7 +199,7 @@ export function useWorkspace(
 
       const result = await client.listDirectory(path);
 
-      setState((prev) => ({
+      setInternal((prev) => ({
         ...prev,
         folders: {
           ...prev.folders,
@@ -175,88 +214,139 @@ export function useWorkspace(
     [client],
   );
 
-  const save = useCallback(async () => {
-    const open = stateRef.current.file;
-    if (!open) return false;
-
-    setState((prev) => ({ ...prev, busy: true, errorKey: null }));
-
-    const result = await client.writeFile(open.path, stateRef.current.content, open.revision);
-    if (!result.ok) {
-      fail(result.reason);
-      // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
-      // document away on the strength of it. A conflict that read as a save is how the prompt would
-      // destroy the work it exists to protect.
-      return false;
-    }
-
-    // The editor keeps the user's text either way. On success the revision advances so the next save
-    // compares against what was just written; on a conflict nothing here changes, which is precisely
-    // what leaves their work intact for them to decide about.
-    setState((prev) => ({
-      ...prev,
-      file: prev.file ? { ...prev.file, revision: result.revision } : null,
-      dirty: false,
-      busy: false,
-    }));
-    return true;
-  }, [client, fail]);
-
-  /// May the open document be thrown away?
+  /// Writes one document out, named rather than assumed.
   ///
-  /// One implementation for every path that would discard it - opening another file, opening another
+  /// A named document rather than "the one on screen", because closing a background tab has to save
+  /// that tab: the two are only the same until there is more than one.
+  const save = useCallback(
+    async (path?: string) => {
+      const target = path ?? stateRef.current.documents.activePath;
+      const open = stateRef.current.documents.documents.find(
+        (document) => document.path === target,
+      );
+      if (!open) return false;
+
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
+
+      const result = await client.writeFile(open.path, open.content, open.revision);
+      if (!result.ok) {
+        fail(result.reason);
+        // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
+        // document away on the strength of it. A conflict that read as a save is how the prompt would
+        // destroy the work it exists to protect.
+        return false;
+      }
+
+      // The editor keeps the user's text either way. On success the revision advances so the next save
+      // compares against what was just written; on a conflict nothing here changes, which is precisely
+      // what leaves their work intact for them to decide about.
+      setInternal((prev) => ({
+        ...prev,
+        documents: markSaved(prev.documents, open.path, result.revision),
+        busy: false,
+      }));
+      return true;
+    },
+    [client, fail],
+  );
+
+  /// May this one document be thrown away?
+  ///
+  /// One implementation for every path that would discard it - closing its tab, opening another
   /// folder, and the shell asking whether the window may close - because three prompts would be
   /// three chances to get it subtly different, and the one that was wrong would be the one that lost
   /// somebody's writing.
   ///
-  /// A clean document is always discardable and asks nothing: a prompt on every file click would be
-  /// worse than the bug this prevents.
-  const mayDiscard = useCallback(async (): Promise<boolean> => {
-    if (!stateRef.current.dirty || confirmDiscard === null) return true;
+  /// A clean document is always discardable and asks nothing.
+  const mayDiscardOne = useCallback(
+    async (path: string): Promise<boolean> => {
+      const open = stateRef.current.documents.documents.find(
+        (document) => document.path === path,
+      );
+      if (!open?.dirty || confirmDiscard === null) return true;
 
-    const choice = await confirmDiscard();
-    if (choice === "cancel") return false;
-    if (choice === "discard") return true;
-    // Save, and only proceed if it actually landed.
-    return await save();
-  }, [confirmDiscard, save]);
+      // Named, because several documents can be unsaved at once: "this document" would be asking
+      // about work the user cannot identify.
+      const choice = await confirmDiscard(open.name);
+      if (choice === "cancel") return false;
+      if (choice === "discard") return true;
+      // Save, and only proceed if it actually landed.
+      return await save(path);
+    },
+    [confirmDiscard, save],
+  );
+
+  /// May everything be thrown away? Asked before the window closes, and before another folder
+  /// replaces the lot.
+  ///
+  /// One prompt per unsaved document, in tab order, and the first cancel stops the rest: a close
+  /// that carried on would shut the window on documents nobody had been asked about yet.
+  const mayDiscard = useCallback(async (): Promise<boolean> => {
+    for (const path of dirtyDocumentPaths(stateRef.current.documents)) {
+      if (!(await mayDiscardOne(path))) return false;
+    }
+    return true;
+  }, [mayDiscardOne]);
 
   const open = useCallback(async () => {
     if (!(await mayDiscard())) return;
 
-    setState((prev) => ({ ...prev, busy: true, errorKey: null }));
+    setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
     const result = await client.openWorkspace();
     if (!result.ok) return fail(result.reason);
 
-    setState((prev) => ({ ...prev, workspace: result.workspace, folders: {}, busy: false }));
+    setInternal((prev) => ({
+      ...prev,
+      workspace: result.workspace,
+      folders: {},
+      // Every tab belonged to the folder that was open. Carrying them across would leave paths
+      // pointing at files that are not in this workspace at all.
+      documents: emptyDocumentSet(),
+      busy: false,
+    }));
     await loadFolder("");
   }, [client, fail, loadFolder, mayDiscard]);
 
   const openPath = useCallback(
     async (path: string) => {
-      if (!(await mayDiscard())) return;
+      // Already open: go to it, and read nothing. This is what makes a second click on a file in the
+      // tree a switch rather than a reload over the top of unsaved work.
+      if (isOpen(stateRef.current.documents, path)) {
+        setInternal((prev) => ({ ...prev, documents: activateDocument(prev.documents, path) }));
+        return;
+      }
 
-      setState((prev) => ({ ...prev, busy: true, errorKey: null }));
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
       const result = await client.readFile(path);
       // A link can point at a file that has been renamed, moved or deleted since it was written, and
       // that is ordinary rather than exceptional - it reports through the same banner as any other
       // failed read, which already says "not found" in the user's language.
       if (!result.ok) return fail(result.reason);
 
-      setState((prev) => ({
+      setInternal((prev) => ({
         ...prev,
-        file: { path, name: nameOf(path), revision: result.revision },
-        content: result.content,
-        dirty: false,
+        documents: openDocument(prev.documents, {
+          path,
+          content: result.content,
+          revision: result.revision,
+        }),
         busy: false,
       }));
     },
-    [client, fail, mayDiscard],
+    [client, fail],
   );
 
   /// Clicking a row in the tree. The node's id IS its workspace-relative path, and its name is the
   /// last segment of that path, so there is nothing here the path does not already say.
   const openFile = useCallback(async (node: RemoteNode) => await openPath(node.id), [openPath]);
+
+  const closeFile = useCallback(
+    async (path: string) => {
+      if (!(await mayDiscardOne(path))) return;
+      setInternal((prev) => ({ ...prev, documents: closeDocument(prev.documents, path) }));
+    },
+    [mayDiscardOne],
+  );
 
   const reopen = useCallback(
     async (root: string) => {
@@ -266,7 +356,7 @@ export function useWorkspace(
       // simply opening with nothing.
       if (!result.ok) return;
 
-      setState((prev) => ({ ...prev, workspace: result.workspace, folders: {} }));
+      setInternal((prev) => ({ ...prev, workspace: result.workspace, folders: {} }));
       await loadFolder("");
     },
     [client, loadFolder],
@@ -276,7 +366,7 @@ export function useWorkspace(
     async (path: string) => {
       const current = stateRef.current.folders[path];
       if (current !== undefined && current.status !== "error") {
-        setState((prev) => ({ ...prev, folders: withoutSubtree(prev.folders, path) }));
+        setInternal((prev) => ({ ...prev, folders: withoutSubtree(prev.folders, path) }));
         return;
       }
       await loadFolder(path);
@@ -284,19 +374,49 @@ export function useWorkspace(
     [loadFolder],
   );
 
+  const active = activeDocument(internal.documents);
+
+  const state: WorkspaceState = useMemo(
+    () => ({
+      workspace: internal.workspace,
+      folders: internal.folders,
+      filter: internal.filter,
+      documents: internal.documents.documents,
+      activePath: internal.documents.activePath,
+      dirtyPaths: dirtyDocumentPaths(internal.documents),
+      anyDirty: anyDocumentDirty(internal.documents),
+      file: active === null ? null : { path: active.path, name: active.name, revision: active.revision },
+      // The scratch buffer is what "no file open" shows. It is a real buffer with real text in it,
+      // never a placeholder regenerated on each render - somebody may have typed into it.
+      content: active?.content ?? internal.scratch,
+      dirty: active?.dirty ?? false,
+      busy: internal.busy,
+      errorKey: internal.errorKey,
+    }),
+    [internal, active],
+  );
+
   const actions: WorkspaceActions = {
     open,
     reopen,
     toggleFolder,
     retryFolder: loadFolder,
-    setFilter: (filter: string) => setState((prev) => ({ ...prev, filter })),
+    setFilter: (filter: string) => setInternal((prev) => ({ ...prev, filter })),
     openFile,
     openPath,
+    activateFile: (path: string) =>
+      setInternal((prev) => ({ ...prev, documents: activateDocument(prev.documents, path) })),
+    closeFile,
     edit: (content: string) =>
-      setState((prev) => ({ ...prev, content, dirty: prev.file !== null })),
+      setInternal((prev) => {
+        const path = prev.documents.activePath;
+        // No document on screen means the scratch buffer, which is nowhere and so never dirty.
+        if (path === null) return { ...prev, scratch: content };
+        return { ...prev, documents: updateContent(prev.documents, path, content) };
+      }),
     save,
     mayDiscard,
-    dismissError: () => setState((prev) => ({ ...prev, error: null })),
+    dismissError: () => setInternal((prev) => ({ ...prev, error: null })),
   };
 
   return { state, actions };
