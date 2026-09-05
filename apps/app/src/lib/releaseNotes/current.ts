@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.30.0",
+    date: "2026-09-05",
+    pr: 63,
+    headline: "A list of every open file, at the end of the tabs",
+    summary:
+      "With enough files open, the tab strip scrolls and some of them are out of sight. There is now a button at the end of the strip, just before the Unsaved pill and the view buttons, that lists every open file: the file's name with the folder it lives in underneath, the one you are looking at highlighted, and a dot beside any with unsaved changes. Choose one and you go straight to it. The tabs themselves have not changed - this is simply another way to reach a file when its tab has scrolled away.",
+    added: [
+      "A list of every open file, from the button at the end of the tab strip.",
+      "Each entry names the file and the folder it is in, and marks unsaved changes.",
+    ],
+  },
+  {
     version: "0.29.1",
     date: "2026-09-05",
     pr: 62,
