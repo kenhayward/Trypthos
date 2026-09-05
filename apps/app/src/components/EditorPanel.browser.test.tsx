@@ -19,7 +19,8 @@ function Harness({
   return (
     <EditorPanel
       workspaceName="Notes"
-      filePath="notes.md"
+      paths={["notes.md"]}
+      activePath="notes.md"
       dirty={false}
       value={value}
       onChange={setValue}
@@ -186,7 +187,8 @@ describe("Opening a different file, rendered", () => {
         <div style={{ height: 300, display: "flex" }}>
           <EditorPanel
             workspaceName="ws"
-            filePath={path}
+            paths={[path]}
+            activePath={path}
             dirty={false}
             value={path === "long.md" ? long : "short file\n"}
             onChange={() => {}}
@@ -320,7 +322,8 @@ describe("Applying a resolved edit, in a real browser", () => {
     return (
       <EditorPanel
         workspaceName="Notes"
-        filePath="notes.md"
+        paths={["notes.md"]}
+        activePath="notes.md"
         dirty={false}
         value={value}
         onChange={setValue}
@@ -414,26 +417,148 @@ describe("Applying a resolved edit, in a real browser", () => {
   });
 });
 
-/// The header, with a name too long for the space it has.
+const scroller = () => document.querySelector(".cm-scroller") as HTMLElement;
+
+/// The lines the reader can see, in order, from the top of the view down.
+function visibleLines(): string[] {
+  const box = scroller().getBoundingClientRect();
+  return [...document.querySelectorAll(".cm-line")]
+    .filter((element) => {
+      const line = element.getBoundingClientRect();
+      return line.bottom > box.top + 1 && line.top < box.bottom - 1;
+    })
+    .map((element) => element.textContent ?? "");
+}
+
+/// The text of the first line the reader can see.
+function topLineText(): string {
+  return visibleLines()[0] ?? "";
+}
+
+/// The top line, once the editor has drawn the view it was scrolled to.
 ///
-/// A layout question, so it can only be answered here: jsdom has no layout engine, and the bug it
-/// exists to catch was one element drawing on top of another. The old header drew the whole path as
-/// segments, and every segment but the last refused to shrink - so a long workspace or folder name
-/// overflowed its span and printed over the next one.
-describe("EditorPanel: a document whose name does not fit", () => {
+/// CodeMirror scrolls in one measure pass and draws the lines it has arrived at in the next, so the
+/// first frame after a jump has nothing rendered where the reader is looking.
+async function topLineDrawn(): Promise<string> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const text = topLineText();
+    if (text !== "") return text;
+    await settled();
+  }
+  return "";
+}
+
+/// Waits for the browser to draw, twice - long enough for CodeMirror's own measure pass to run.
+async function settled(): Promise<void> {
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+/// Coming back to a document you were in the middle of.
+///
+/// Only answerable here: CodeMirror resolves a caret position by measuring text, so in jsdom the
+/// click that puts it there moves nothing and every assertion afterwards reads the wrong state.
+describe("EditorPanel: returning to a tab", () => {
+  // Every line carries text, deliberately: a blank line at the top of the view is still the top of
+  // the view, and a test that read one would be measuring nothing.
+  const LONG = Array.from({ length: 200 }, (_, index) => `Line ${index + 1} of the document.`).join(
+    "\n",
+  );
+
+  /// Two documents and a working tab strip, as the window has them.
+  function TwoFiles() {
+    const [active, setActive] = useState("first.md");
+    const [text, setText] = useState<Record<string, string>>({
+      "first.md": LONG,
+      "second.md": "# Second\n\nA much shorter file.\n",
+    });
+
+    return (
+      <div style={{ height: 300, display: "flex" }}>
+        <EditorPanel
+          workspaceName="Notes"
+          paths={["first.md", "second.md"]}
+          activePath={active}
+          dirty={false}
+          value={text[active]!}
+          onChange={(next) => setText((prev) => ({ ...prev, [active]: next }))}
+          onActivateFile={setActive}
+        />
+      </div>
+    );
+  }
+
+  it("puts the caret back where it was left", async () => {
+    render(<TwoFiles />);
+
+    await putCaretOn("Line 12 of the document.");
+    const before = screen.getByText(/Ln \d+, Col/).textContent;
+    expect(before).toContain("Ln 12");
+
+    await userEvent.click(screen.getByRole("tab", { name: /second\.md/ }));
+    // A different document starts at the top rather than inheriting where the last one was left.
+    expect(screen.getByText(/Ln \d+, Col/).textContent).toContain("Ln 1,");
+
+    await userEvent.click(screen.getByRole("tab", { name: /first\.md/ }));
+    expect(screen.getByText(/Ln \d+, Col/).textContent).toBe(before);
+  });
+
+  it("puts the view back where it was left", async () => {
+    render(<TwoFiles />);
+
+    // Moved with real input rather than by assigning `scrollTop`. CodeMirror redraws on the scroll
+    // events a reader generates; an assignment leaves it drawing the top of the document while the
+    // scroller sits somewhere else, so everything measured afterwards is of a view nobody is looking
+    // at.
+    await putCaretOn("Line 3 of the document.");
+    await userEvent.keyboard("{Control>}{End}{/Control}");
+    await settled();
+
+    const before = await topLineDrawn();
+    expect(before).not.toBe("");
+    expect(scroller().scrollTop).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole("tab", { name: /second\.md/ }));
+    // A document opened for the first time starts at the top.
+    expect(scroller().scrollTop).toBe(0);
+
+    await userEvent.click(screen.getByRole("tab", { name: /first\.md/ }));
+    await settled();
+    // The same TEXT at the top, which is what a reader means by where they were. Not the same pixel
+    // offset: CodeMirror measures a document lazily, so the height an offset would be measured
+    // against does not fully exist at the moment of the switch.
+    await topLineDrawn();
+    // Back at the top of the view, give or take the line above it: CodeMirror scrolls a line fully
+    // into view, so a line that was half cut off at the top comes back whole and brings its
+    // neighbour into sight. What matters is that the reader is looking at the same text, not at the
+    // top of a two-hundred-line file.
+    expect(visibleLines().indexOf(before)).toBeGreaterThanOrEqual(0);
+    expect(visibleLines().indexOf(before)).toBeLessThanOrEqual(1);
+  });
+});
+
+/// The tab strip, with more open files than the row can hold.
+///
+/// A layout question, so it can only be answered here: jsdom has no layout engine, and the bug this
+/// exists to catch was one element drawing on top of another. The name used to live in the header,
+/// which drew the whole path as segments that refused to shrink - so a long folder name overflowed
+/// its span and printed over the mode buttons. The name is a tab now, and the same thing must not
+/// happen to the strip.
+describe("EditorPanel: tabs that do not fit", () => {
   const LONG = "clinicaleligibility-deploy-quickstart-with-a-very-long-name-indeed.md";
 
   function narrow(children: React.ReactNode) {
-    // Narrow enough that the name cannot fit, which is the whole case under test.
+    // Narrow enough that the names cannot fit, which is the whole case under test.
     return <div style={{ width: "420px" }}>{children}</div>;
   }
 
-  it("keeps the header inside the panel rather than overflowing it", () => {
+  it("keeps the tabs off the controls beside them", () => {
+    const path = `deploy-quickstart-documentation/${LONG}`;
     render(
       narrow(
         <EditorPanel
           workspaceName="CLINICALELIGIBILITY"
-          filePath={`deploy-quickstart-documentation/${LONG}`}
+          paths={[path]}
+          activePath={path}
           dirty
           value={DOC}
           onChange={() => {}}
@@ -441,26 +566,67 @@ describe("EditorPanel: a document whose name does not fit", () => {
       ),
     );
 
-    const name = screen.getByTitle(`CLINICALELIGIBILITY/deploy-quickstart-documentation/${LONG}`);
+    const tab = screen.getByRole("tab");
     const modes = screen.getByRole("group", { name: "View mode" });
 
     // Measured against the controls beside it, because that is where the bug showed: with the old
     // markup and these exact names in a 420px panel, a segment's box ran to x=271 while the mode
     // buttons began at x=258 - it was drawn over them, and over the segment before it. The row's own
     // scrollWidth does NOT catch this, which is why it is not what is asserted.
-    expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+    expect(tab.getBoundingClientRect().right).toBeLessThanOrEqual(
       modes.getBoundingClientRect().left,
     );
   });
 
-  it("cuts the name short rather than drawing all of it", () => {
-    render(narrow(<EditorPanel workspaceName="Notes" filePath={LONG} dirty={false} value={DOC} onChange={() => {}} />));
+  it("cuts a name short rather than drawing all of it", () => {
+    render(
+      narrow(
+        <EditorPanel
+          workspaceName="Notes"
+          paths={[LONG]}
+          activePath={LONG}
+          dirty={false}
+          value={DOC}
+          onChange={() => {}}
+        />,
+      ),
+    );
 
-    const name = screen.getByTitle(`Notes/${LONG}`);
+    const name = screen.getByRole("tab").querySelector("span")!;
 
     // Ellipsised: the text is wider than the box it is drawn in, which is what `truncate` does - and
     // is how the reader can tell the name goes on.
     expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
     expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
   });
+
+  // Ten files open in a narrow window: the strip scrolls, and the row keeps its height. A strip that
+  // wrapped would push the document down the screen every time another file was opened.
+  it("scrolls rather than growing when many files are open", () => {
+    const paths = Array.from({ length: 10 }, (_, index) => `folder/document-${index}.md`);
+    render(
+      narrow(
+        <EditorPanel
+          workspaceName="Notes"
+          paths={paths}
+          activePath={paths[0]!}
+          dirty={false}
+          value={DOC}
+          onChange={() => {}}
+        />,
+      ),
+    );
+
+    const strip = screen.getByRole("tablist");
+    expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    // One row of tabs, not three: every tab shares the strip's own height.
+    const heights = [...strip.querySelectorAll('[role="tab"]')].map(
+      (tab) => tab.getBoundingClientRect().height,
+    );
+    expect(Math.max(...heights)).toBeLessThanOrEqual(strip.getBoundingClientRect().height);
+    // The panel itself does not grow with the strip: the overflow is the strip's, and stays there.
+    const panel = screen.getByRole("main", { name: "Editor" });
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+  });
 });
+

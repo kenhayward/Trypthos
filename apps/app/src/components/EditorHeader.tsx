@@ -7,41 +7,27 @@ import {
 } from "../lib/editorMode";
 
 interface Props {
-  /// The document's own name, or null when none is open.
-  name: string | null;
-  /// The whole path, shown on hover. Null when no document is open.
-  path: string | null;
   dirty: boolean;
-  /// Right-hand status: caret position and word count, already formatted.
-  stats: string;
   mode: EditorMode;
   onModeChange: (mode: EditorMode) => void;
 }
 
-/// The editor's header: where you are, whether it is saved, and how you are looking at it.
-export default function EditorHeader({ name, path, dirty, stats, mode, onModeChange }: Props) {
+/// The right-hand end of the editor's top row: whether what is on screen is saved, and how you are
+/// looking at it.
+///
+/// It used to name the document as well. The tabs beside it do that now, and they do it better -
+/// they name every open document rather than only this one. So the split is identity on the left,
+/// STATE on the right, and neither repeats the other.
+export default function EditorHeader({ dirty, mode, onModeChange }: Props) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center gap-3 border-b border-rule px-3 py-1.5">
-      {/* The name alone, and it truncates. This used to draw the whole path as segments, where every
-          segment but the last refused to shrink - so a long workspace or folder name overflowed its
-          own span and printed over the next one, which is unreadable rather than merely long. The
-          path is one hover away instead, which loses nothing and fits. */}
-      <span
-        title={path ?? undefined}
-        className="min-w-0 truncate text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase"
-      >
-        {name ?? t("editor.title")}
-      </span>
-
+    <div className="flex shrink-0 items-center gap-2 px-2 py-1.5">
       {dirty && (
         <span className="shrink-0 rounded-full bg-selected px-1.5 py-px text-2xs font-semibold text-selected-ink">
           {t("editor.unsavedPill")}
         </span>
       )}
-
-      <span className="ml-auto shrink-0 text-xs text-faint tabular-nums">{stats}</span>
 
       <div
         role="group"
@@ -53,18 +39,55 @@ export default function EditorHeader({ name, path, dirty, stats, mode, onModeCha
             key={candidate}
             type="button"
             aria-pressed={mode === candidate}
-            title={t(MODE_HINT_KEYS[candidate])}
+            // The words moved to the tooltip and the accessible name when the icons arrived. They
+            // are still the control's name for anybody reading it aloud - an icon button with no
+            // label is a button nobody can name.
+            aria-label={t(MODE_LABEL_KEYS[candidate])}
+            title={`${t(MODE_LABEL_KEYS[candidate])} - ${t(MODE_HINT_KEYS[candidate])}`}
             onClick={() => onModeChange(candidate)}
             className={
               mode === candidate
-                ? "rounded bg-app px-2.5 py-0.5 text-ui font-semibold text-ink shadow-tab"
-                : "rounded px-2.5 py-0.5 text-ui text-ink-4 hover:text-ink"
+                ? "grid size-6 place-items-center rounded bg-app text-ink shadow-tab"
+                : "grid size-6 place-items-center rounded text-ink-4 hover:text-ink"
             }
           >
-            {t(MODE_LABEL_KEYS[candidate])}
+            <ModeGlyph mode={candidate} />
           </button>
         ))}
       </div>
     </div>
+  );
+}
+
+/// One glyph per mode: a pencil for writing, brackets for the raw markup, an eye for reading.
+///
+/// Drawn rather than lettered because the strip of tabs beside this needs the width, and three words
+/// took more of it than the document's own name.
+function ModeGlyph({ mode }: { mode: EditorMode }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="size-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {mode === "live" && (
+        <>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </>
+      )}
+      {mode === "source" && <path d="M8 6l-5 6 5 6M16 6l5 6-5 6" />}
+      {mode === "preview" && (
+        <>
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      )}
+    </svg>
   );
 }

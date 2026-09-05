@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, type Settings } from "@trypthos/domain";
@@ -133,5 +133,128 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByRole("heading", { name: "Appearance" })).toBeDefined();
+  });
+
+  /// Several files open at once, from the tree to the tabs and back.
+  ///
+  /// The parts are tested on their own; this is the wiring between them, which is the thing that can
+  /// be right in every component and still wrong in the window.
+  describe("open files", () => {
+    function shellWithFiles(): { reads: string[]; asked: (string | null)[] } {
+      const reads: string[] = [];
+      const asked: (string | null)[] = [];
+      window.trypthos = {
+        ...browserClient,
+        isDesktop: true,
+        readSettings: async () => ({
+          ok: true as const,
+          settings: { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" },
+        }),
+        writeSettings: async () => {},
+        reopenWorkspace: async (root: string) => ({
+          ok: true as const,
+          workspace: { root, name: "Notes" },
+        }),
+        listDirectory: async () => ({
+          ok: true as const,
+          nodes: [
+            { id: "one.md", name: "one.md", kind: "file" as const },
+            { id: "two.md", name: "two.md", kind: "file" as const },
+          ],
+        }),
+        readFile: async (path: string) => {
+          reads.push(path);
+          return { ok: true as const, content: `# ${path}\n`, revision: { id: "r1" } };
+        },
+        // The prompt lives in the shell, and this is the message it is given.
+        confirmDiscard: async (name: string | null) => {
+          asked.push(name);
+          return { ok: true as const, choice: "discard" as const };
+        },
+        // Present so the window half of the bridge is taken to exist at all: without it the renderer
+        // uses its browser fallbacks, which ask nobody anything.
+        onWindowState: () => () => {},
+        onCloseRequested: () => () => {},
+        onMenuAction: () => () => {},
+        setDocumentDirty: async () => {},
+      } as unknown as typeof window.trypthos;
+      return { reads, asked };
+    }
+
+    /// A row in the TREE, not a tab - the file name appears in both, and the close button on a tab
+    /// carries it too.
+    const row = (name: string) =>
+      within(screen.getByRole("complementary", { name: "Workspace" })).getByRole("button", {
+        name: new RegExp(name),
+      });
+
+    it("opens each file in its own tab, and goes back to one without reading it again", async () => {
+      const user = userEvent.setup();
+      const { reads } = shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      await user.click(row("two.md"));
+
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+        "one.md",
+        "two.md",
+      ]);
+
+      await user.click(screen.getByRole("tab", { name: /one\.md/ }));
+      expect(screen.getByRole("tab", { name: /one\.md/ }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+      // Clicking the file in the TREE is the same act: it goes to the tab that is already open, and
+      // reads nothing, because what is on disk would replace what the user has typed.
+      await user.click(row("two.md"));
+      expect(reads).toEqual(["one.md", "two.md"]);
+    });
+
+    // Bound on the window rather than inside the strip, so it works wherever the caret is - which is
+    // in the document, essentially always.
+    it("closes the document you are in with the keyboard", async () => {
+      const user = userEvent.setup();
+      shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      await user.click(row("two.md"));
+      await user.keyboard("{Control>}w{/Control}");
+
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["one.md"]);
+    });
+
+    // Invisible when broken: the prompt still appears, and still asks about "this document" - which
+    // is the wording that stopped being good enough once more than one file can be unsaved.
+    it("names the document in the prompt about unsaved changes", async () => {
+      const user = userEvent.setup();
+      const { asked } = shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      await user.click(screen.getByLabelText("Markdown source"));
+      await user.keyboard("X");
+      await user.click(screen.getByRole("button", { name: "Close one.md" }));
+
+      expect(asked).toEqual(["one.md"]);
+    });
+
+    it("closes a tab from the strip", async () => {
+      const user = userEvent.setup();
+      shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      await user.click(screen.getByRole("button", { name: "Close one.md" }));
+
+      expect(screen.queryAllByRole("tab")).toHaveLength(0);
+      // Back to the buffer that was there before any file was opened, rather than an empty editor.
+      expect(screen.getByLabelText("Markdown source").textContent).toContain("Scratch buffer");
+    });
   });
 });

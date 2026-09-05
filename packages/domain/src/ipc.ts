@@ -91,6 +91,16 @@ export const DiscardChoiceSchema = z.enum(["save", "discard", "cancel"]);
 
 export type DiscardChoice = z.infer<typeof DiscardChoiceSchema>;
 
+/// The document a discard prompt is about.
+///
+/// Named, because the editor holds several documents at once: "save changes before closing this
+/// document?" over a tab strip asks about work the user cannot identify. Nullable rather than
+/// required, because closing the WINDOW is about the window - it walks each unsaved document in
+/// turn, and the shell still has a sentence to show if it is ever asked without one.
+export const ConfirmDiscardRequest = z
+  .object({ name: z.string().nullable().default(null) })
+  .strict();
+
 /// Closing the window. `force` says the renderer has already asked about unsaved work and been told
 /// to go ahead - without it the shell would ask again and the window could never close.
 export const CloseWindowRequest = z

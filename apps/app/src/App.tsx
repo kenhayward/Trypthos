@@ -121,11 +121,24 @@ export default function App() {
   });
   /// The prompt every path shares, or null in the browser preview - where there is nowhere to save
   /// to, so a question about saving would have only one honest answer and no way to act on it.
+  /// The name is passed through, not dropped: the prompt is about ONE document among however many
+  /// are open, and it can only say which if it is told.
   const confirmDiscard = useMemo(
-    () => (isDesktop() ? () => windowControls().confirmDiscard() : null),
+    () =>
+      isDesktop()
+        ? (name?: string | null) => windowControls().confirmDiscard(name ?? null)
+        : null,
     [],
   );
   const { state, actions } = useWorkspace(client, SCRATCH, confirmDiscard);
+
+  /// The open documents as paths, which is what both the tab strip and the tree ask for. Memoised
+  /// rather than mapped inline: a fresh array on every render re-renders both panels on every
+  /// keystroke.
+  const openPaths = useMemo(
+    () => state.documents.map((document) => document.path),
+    [state.documents],
+  );
 
   const chatModels = settings.chat.profiles;
   /// Which model answers the next turn.
@@ -272,8 +285,8 @@ export default function App() {
   // The shell keeps its own copy of the dirty flag, so that a window with nothing to lose closes
   // without asking the renderer anything at all.
   useEffect(() => {
-    void windowControls().setDocumentDirty(state.dirty);
-  }, [state.dirty]);
+    void windowControls().setDocumentDirty(state.anyDirty);
+  }, [state.anyDirty]);
 
   // The shell asking whether the window may close. It is a question, not an order: this side owns
   // the document and is the only one that can save it, so it answers by closing the window itself.
@@ -287,18 +300,27 @@ export default function App() {
     [actions],
   );
 
-  // Ctrl+S / Cmd+S. Bound on the window rather than inside the editor so it works wherever focus is,
-  // and preventDefault matters: the browser's own save dialog would otherwise open over the app.
+  // Ctrl+S / Cmd+S, and Ctrl+W / Cmd+W. Bound on the window rather than inside the editor so they
+  // work wherever focus is, and preventDefault matters: the browser's own save dialog, and its close
+  // of the whole tab, would otherwise happen over the app.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "s") {
         event.preventDefault();
         void actions.save();
+      } else if (key === "w" && state.activePath !== null) {
+        // Only with a document open. Otherwise this is the shell's own "close the window", and
+        // swallowing it would leave the shortcut doing nothing at all.
+        event.preventDefault();
+        void actions.closeFile(state.activePath);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions]);
+  }, [actions, state.activePath]);
 
   // Menu items the renderer carries out.
   //
@@ -375,8 +397,9 @@ export default function App() {
           workspaceName={state.workspace?.name ?? null}
           folders={state.folders}
           filter={state.filter}
-          openFilePath={state.file?.path ?? null}
-          dirty={state.dirty}
+          activePath={state.activePath}
+          openPaths={openPaths}
+          dirtyPaths={state.dirtyPaths}
           onOpenWorkspace={() => void actions.open()}
           onFilterChange={actions.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
@@ -396,10 +419,14 @@ export default function App() {
 
         <EditorPanel
           workspaceName={state.workspace?.name ?? null}
-          filePath={state.file?.path ?? null}
+          paths={openPaths}
+          activePath={state.activePath}
+          dirtyPaths={state.dirtyPaths}
           dirty={state.dirty}
           value={state.content}
           defaultMode={settings.editor.defaultViewMode}
+          onActivateFile={actions.activateFile}
+          onCloseFile={(path) => void actions.closeFile(path)}
           onSelectionChange={(next) => (selection.current = next)}
           // The same rule the rendered surfaces get, reached the other way: CodeMirror draws link
           // text as a decorated span rather than an anchor, so the delegated handler above cannot

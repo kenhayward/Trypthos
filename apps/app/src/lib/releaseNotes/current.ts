@@ -5,6 +5,28 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.29.0",
+    date: "2026-09-05",
+    pr: 60,
+    headline: "Open as many files as you like, and switch between them",
+    summary:
+      "Until now Trypthos held one document at a time: opening a second file closed the first, and if you had unsaved changes it stopped to ask you about them. Files now open in tabs along the top of the editor, the way they do in an editor like VS Code. Click a file in the folder browser and it opens in a new tab; click one that is already open and you go straight to it, with everything you had typed still there and nothing read back over the top of it. Each tab shows the file's own name, with the full path on hover, and two files with the same name grow just enough folder to tell them apart. Close a tab with its x, with a middle click, or with Ctrl+W (Cmd+W on macOS) - and if that file has unsaved changes, the prompt now names the file it is asking about, which matters when several are unsaved at once. Coming back to a tab puts you where you left it, at the same line and the same place in the document. The editor's header made room for the tabs: the file name moved to its tab, the caret position and word count moved down to the status bar, and the Live, Source and Preview buttons are now icons, with their names on hover.",
+    added: [
+      "Files open in tabs, with the file name on the tab and the full path on hover.",
+      "Clicking a file that is already open goes to its tab instead of reopening it.",
+      "Close a tab with its x, a middle click, or Ctrl+W (Cmd+W on macOS).",
+      "A dot on a tab marks a file with unsaved changes that you are not looking at.",
+      "Returning to a tab puts the caret and the view back where you left them.",
+      "The folder browser marks every open file, and the one on screen more strongly.",
+    ],
+    changed: [
+      "The prompt about unsaved changes names the file it is asking about.",
+      "The editor header now shows only whether the file is saved and how you are viewing it; the file name is on its tab.",
+      "The caret position and word count moved to the status bar.",
+      "Live, Source and Preview are icons rather than words, with their names on hover.",
+    ],
+  },
+  {
     version: "0.28.0",
     date: "2026-09-04",
     pr: 59,

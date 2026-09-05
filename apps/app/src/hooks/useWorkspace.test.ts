@@ -8,6 +8,7 @@ import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceC
 /// was read at.
 function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
   const writes: { path: string; content: string; revision: string | null }[] = [];
+  const reads: string[] = [];
 
   const client: WorkspaceClient = {
     // Chat's map of the folder. Nothing in this hook asks for it; it is here because the client is
@@ -26,11 +27,10 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
             ]
           : [{ id: `${path}/inner.md`, name: "inner.md", kind: "file" }],
     }),
-    readFile: async (): Promise<ReadResult> => ({
-      ok: true,
-      content: "# On disk\n",
-      revision: { id: "r1" },
-    }),
+    readFile: async (path): Promise<ReadResult> => {
+      reads.push(path);
+      return { ok: true, content: "# On disk\n", revision: { id: "r1" } };
+    },
     writeFile: async (path, content, expectedRevision): Promise<WriteResult> => {
       writes.push({ path, content, revision: expectedRevision?.id ?? null });
       return { ok: true, revision: { id: "r2" } };
@@ -38,7 +38,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     ...overrides,
   };
 
-  return { client, writes };
+  return { client, writes, reads };
 }
 
 describe("parentOf", () => {
@@ -270,9 +270,17 @@ describe("useWorkspace", () => {
       expect(result.current.state.file).toBeNull();
     });
 
-    it("asks before discarding unsaved changes, and opens nothing when cancelled", async () => {
+    it("opens a second document without asking about the first", async () => {
+      // The prompt used to live here because opening a file REPLACED the one on screen. Nothing is
+      // discarded now, so there is nothing to ask about.
       const { client } = fakeClient();
-      const { result } = renderHook(() => useWorkspace(client, "", async () => "cancel"));
+      let asked = 0;
+      const { result } = renderHook(() =>
+        useWorkspace(client, "", async () => {
+          asked += 1;
+          return "cancel";
+        }),
+      );
 
       await act(async () => {
         await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
@@ -284,8 +292,12 @@ describe("useWorkspace", () => {
         await result.current.actions.openPath("book/two.md");
       });
 
-      expect(result.current.state.file?.path).toBe("a.md");
-      expect(result.current.state.content).toBe("# Edited\n");
+      expect(asked).toBe(0);
+      expect(result.current.state.file?.path).toBe("book/two.md");
+      expect(result.current.state.documents.map((document) => document.path)).toEqual([
+        "a.md",
+        "book/two.md",
+      ]);
     });
   });
 
@@ -402,21 +414,277 @@ describe("useWorkspace", () => {
   });
 });
 
+/// Several documents open at once.
+///
+/// The tab strip is a view of this: what is open, which one is on screen, and which have unsaved
+/// work. All of it is here rather than in the strip, so the awkward cases - a second click on a file
+/// already open, closing the one being edited - are answerable without rendering anything.
+describe("open documents", () => {
+  const A = { id: "a.md", name: "a.md", kind: "file" as const };
+  const B = { id: "b.md", name: "b.md", kind: "file" as const };
+
+  it("keeps every opened document, with the newest active", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    await act(async () => {
+      await result.current.actions.openFile(B);
+    });
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      "a.md",
+      "b.md",
+    ]);
+    expect(result.current.state.activePath).toBe("b.md");
+  });
+
+  // The requirement in one test: clicking a file in the tree either opens it or goes to it, and
+  // going to it must not read the file - what is on disk would replace what the user has typed.
+  it("switches to a document that is already open, without reading it again", async () => {
+    const { client, reads } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.openFile(B);
+    });
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+
+    expect(reads).toEqual(["a.md", "b.md"]);
+    expect(result.current.state.activePath).toBe("a.md");
+    expect(result.current.state.content).toBe("# Mine\n");
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  it("edits one document without touching another", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.openFile(B);
+    });
+
+    expect(result.current.state.content).toBe("# On disk\n");
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.dirtyPaths).toEqual(["a.md"]);
+    // The window's own flag is about the WINDOW: one unsaved tab is enough to interrupt a close,
+    // whichever tab is on screen.
+    expect(result.current.state.anyDirty).toBe(true);
+  });
+
+  it("goes to a document without opening or reading anything", async () => {
+    const { client, reads } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    await act(async () => {
+      await result.current.actions.openFile(B);
+    });
+    act(() => result.current.actions.activateFile("a.md"));
+
+    expect(result.current.state.activePath).toBe("a.md");
+    expect(reads).toHaveLength(2);
+  });
+
+  it("saves the document that was named, not the one on screen", async () => {
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.openFile(B);
+    });
+    await act(async () => {
+      await result.current.actions.save("a.md");
+    });
+
+    expect(writes).toEqual([{ path: "a.md", content: "# Mine\n", revision: "r1" }]);
+    expect(result.current.state.dirtyPaths).toEqual([]);
+  });
+
+  describe("closing a tab", () => {
+    it("asks nothing about a document with no unsaved work", async () => {
+      const { client } = fakeClient();
+      let asked = 0;
+      const { result } = renderHook(() =>
+        useWorkspace(client, "", async () => {
+          asked += 1;
+          return "cancel";
+        }),
+      );
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(asked).toBe(0);
+      expect(result.current.state.documents).toHaveLength(0);
+    });
+
+    it("asks about the document by name before discarding it", async () => {
+      const { client } = fakeClient();
+      const asked: (string | null | undefined)[] = [];
+      const { result } = renderHook(() =>
+        useWorkspace(client, "", async (name) => {
+          asked.push(name);
+          return "discard";
+        }),
+      );
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      act(() => result.current.actions.edit("# Mine\n"));
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      // Named, because several documents can have unsaved work at once and the answer decides which
+      // one is thrown away.
+      expect(asked).toEqual(["a.md"]);
+      expect(result.current.state.documents).toHaveLength(0);
+    });
+
+    it("keeps the tab, and its text, on cancel", async () => {
+      const { client, writes } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client, "", async () => "cancel"));
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      act(() => result.current.actions.edit("# Mine\n"));
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(writes).toEqual([]);
+      expect(result.current.state.documents).toHaveLength(1);
+      expect(result.current.state.content).toBe("# Mine\n");
+      expect(result.current.state.dirty).toBe(true);
+    });
+
+    it("saves before closing when asked to", async () => {
+      const { client, writes } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client, "", async () => "save"));
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      act(() => result.current.actions.edit("# Mine\n"));
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(writes).toEqual([{ path: "a.md", content: "# Mine\n", revision: "r1" }]);
+      expect(result.current.state.documents).toHaveLength(0);
+    });
+
+    // The case that loses work if it is wrong: the save was refused, so the text only exists here.
+    it("keeps the tab open when the save it was asked for fails", async () => {
+      const { client } = fakeClient({
+        writeFile: async () => ({ ok: false, reason: "conflict", theirs: { id: "r9" } }),
+      });
+      const { result } = renderHook(() => useWorkspace(client, "", async () => "save"));
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      act(() => result.current.actions.edit("# Mine\n"));
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(result.current.state.documents).toHaveLength(1);
+      expect(result.current.state.content).toBe("# Mine\n");
+      expect(result.current.state.errorKey).toBe("errors.conflict");
+    });
+
+    it("closes a tab that is not the one on screen, leaving the selection alone", async () => {
+      const { client } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client));
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      await act(async () => {
+        await result.current.actions.openFile(B);
+      });
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(result.current.state.activePath).toBe("b.md");
+    });
+
+    it("returns to the scratch buffer when the last tab closes", async () => {
+      const { client } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client, "# Scratch\n"));
+
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(result.current.state.file).toBeNull();
+      expect(result.current.state.content).toBe("# Scratch\n");
+      expect(result.current.state.dirty).toBe(false);
+    });
+
+    it("keeps what was typed into the scratch buffer while files were open", async () => {
+      const { client } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client, "# Scratch\n"));
+
+      act(() => result.current.actions.edit("# Notes to self\n"));
+      await act(async () => {
+        await result.current.actions.openFile(A);
+      });
+      await act(async () => {
+        await result.current.actions.closeFile("a.md");
+      });
+
+      expect(result.current.state.content).toBe("# Notes to self\n");
+    });
+  });
+});
+
 /// Unsaved work, and everything that would throw it away.
 ///
-/// The dirty flag already existed - it draws the marker in the header and the dot in the tree -
-/// but nothing consulted it before replacing the document. These are the paths that did.
+/// With one document there was one question to ask. With several there is one PER document, and the
+/// two paths that ask are the two that discard everything: opening another folder, and closing the
+/// window. Switching tabs is not one of them, which is the point of tabs.
 describe("guarding unsaved changes", () => {
   const NODE = { id: "b.md", name: "b.md", kind: "file" as const };
   const OTHER = { id: "a.md", name: "a.md", kind: "file" as const };
 
-  /// Records what it was asked, and answers what the test tells it to.
+  /// Records what it was asked about, and answers what the test tells it to.
   function asker(answer: "save" | "discard" | "cancel") {
-    const asked: number[] = [];
+    const asked: (string | null | undefined)[] = [];
     return {
       asked,
-      confirm: async () => {
-        asked.push(1);
+      confirm: async (name?: string | null) => {
+        asked.push(name);
         return answer;
       },
     };
@@ -436,9 +704,9 @@ describe("guarding unsaved changes", () => {
     return { result, writes, ask };
   }
 
-  // Nothing to lose, so nothing to ask about. A prompt on every file click would be worse than the
-  // bug it exists to prevent.
-  it("asks nothing when the document is unchanged", async () => {
+  // Nothing to lose, so nothing to ask about. A prompt on every close would be worse than the bug it
+  // exists to prevent.
+  it("asks nothing when no document has been changed", async () => {
     const { client } = fakeClient();
     const ask = asker("cancel");
     const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
@@ -447,67 +715,44 @@ describe("guarding unsaved changes", () => {
       await result.current.actions.openFile(NODE);
     });
     await act(async () => {
-      await result.current.actions.openFile(OTHER);
+      await result.current.actions.open();
     });
 
     expect(ask.asked).toHaveLength(0);
-    expect(result.current.state.file?.path).toBe("a.md");
   });
 
-  it("saves first when asked to, then opens the other file", async () => {
-    const { result, writes, ask } = await dirtyEditor("save");
-
-    await act(async () => {
-      await result.current.actions.openFile(OTHER);
-    });
-
-    expect(ask.asked).toHaveLength(1);
-    expect(writes).toEqual([{ path: "b.md", content: "# Edited\n", revision: "r1" }]);
-    expect(result.current.state.file?.path).toBe("a.md");
-    expect(result.current.state.dirty).toBe(false);
-  });
-
-  it("opens without saving when the edits are discarded", async () => {
-    const { result, writes } = await dirtyEditor("discard");
-
-    await act(async () => {
-      await result.current.actions.openFile(OTHER);
-    });
-
-    expect(writes).toEqual([]);
-    expect(result.current.state.file?.path).toBe("a.md");
-  });
-
-  // Cancel has to leave everything exactly as it was - the same file, the same text, still unsaved.
-  // A cancel that half-happened would be worse than no prompt.
-  it("leaves the document alone on cancel", async () => {
-    const { result, writes } = await dirtyEditor("cancel");
-
-    await act(async () => {
-      await result.current.actions.openFile(OTHER);
-    });
-
-    expect(writes).toEqual([]);
-    expect(result.current.state.file?.path).toBe("b.md");
-    expect(result.current.state.content).toBe("# Edited\n");
-    expect(result.current.state.dirty).toBe(true);
-  });
-
-  it("guards opening another folder too", async () => {
+  it("guards opening another folder, and keeps the documents on cancel", async () => {
     const { result, ask } = await dirtyEditor("cancel");
 
     await act(async () => {
       await result.current.actions.open();
     });
 
-    expect(ask.asked).toHaveLength(1);
+    expect(ask.asked).toEqual(["b.md"]);
     expect(result.current.state.file?.path).toBe("b.md");
     expect(result.current.state.dirty).toBe(true);
   });
 
+  // Every tab belongs to the folder that was open. Carrying them into another workspace would leave
+  // paths pointing at files that are not there.
+  it("closes every document when another folder is opened", async () => {
+    const { result, writes } = await dirtyEditor("save");
+
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(result.current.state.documents).toHaveLength(0);
+    expect(result.current.state.file).toBeNull();
+  });
+
   // The same question the shell asks before closing the window, so there is one implementation of
   // "may I throw this away" rather than one per caller.
-  it("answers whether the document may be discarded, for the shell to close on", async () => {
+  it("answers whether everything may be discarded, for the shell to close on", async () => {
     const { result, writes } = await dirtyEditor("save");
 
     let mayClose = false;
@@ -519,30 +764,44 @@ describe("guarding unsaved changes", () => {
     expect(writes).toHaveLength(1);
   });
 
-  it("refuses the close when the prompt is cancelled", async () => {
-    const { result } = await dirtyEditor("cancel");
-
-    let mayClose = true;
-    await act(async () => {
-      mayClose = await result.current.actions.mayDiscard();
-    });
-
-    expect(mayClose).toBe(false);
-  });
-
-  // A save that failed - a conflict, a file gone read-only - must not be treated as a save that
-  // worked. Closing then would destroy exactly the work the prompt was protecting.
-  it("does not proceed when the save it was asked for failed", async () => {
-    const { client } = fakeClient({
-      writeFile: async () => ({ ok: false, reason: "conflict", theirs: { id: "r9" } }),
-    });
-    const ask = asker("save");
+  it("asks about each unsaved document in turn", async () => {
+    const { client } = fakeClient();
+    const ask = asker("discard");
     const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
 
     await act(async () => {
       await result.current.actions.openFile(NODE);
     });
-    act(() => result.current.actions.edit("# Edited\n"));
+    act(() => result.current.actions.edit("# One\n"));
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+    act(() => result.current.actions.edit("# Two\n"));
+
+    let mayClose = false;
+    await act(async () => {
+      mayClose = await result.current.actions.mayDiscard();
+    });
+
+    expect(ask.asked).toEqual(["b.md", "a.md"]);
+    expect(mayClose).toBe(true);
+  });
+
+  // One cancel stops the whole close. Anything else would have the window shut on the documents the
+  // user had not been asked about yet.
+  it("stops at the first cancel", async () => {
+    const { client } = fakeClient();
+    const ask = asker("cancel");
+    const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
+
+    await act(async () => {
+      await result.current.actions.openFile(NODE);
+    });
+    act(() => result.current.actions.edit("# One\n"));
+    await act(async () => {
+      await result.current.actions.openFile(OTHER);
+    });
+    act(() => result.current.actions.edit("# Two\n"));
 
     let mayClose = true;
     await act(async () => {
@@ -550,6 +809,6 @@ describe("guarding unsaved changes", () => {
     });
 
     expect(mayClose).toBe(false);
-    expect(result.current.state.dirty).toBe(true);
+    expect(ask.asked).toEqual(["b.md"]);
   });
 });

@@ -32,6 +32,10 @@
       "source": "Every character, colour-coded by role",
       "preview": "Read-only rendered prose"
     },
+    "tabs": "Open files",
+    "tabClose": "Close {{name}}",
+    "tabDirty": "{{name}} has unsaved changes",
+    "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
     "format": "Markdown",
     "encoding": "UTF-8",

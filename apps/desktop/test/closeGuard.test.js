@@ -69,6 +69,34 @@ test("the prompt offers save, discard and cancel", async () => {
   assert.equal(shown[0].cancelId, 2);
 });
 
+// With tabs, several documents can have unsaved work at once, so a prompt that says "this document"
+// asks about writing the user cannot identify. Named, it is answerable.
+test("the prompt names the document it is about", async () => {
+  const { guard: g, shown } = guard({ response: 0 });
+
+  await g.ask("notes.md");
+  assert.match(shown[0].message, /notes\.md/);
+});
+
+// The window closing is about the window, not about any one file, and the first release of this
+// prompt had no name to give. Both must still read as a sentence.
+test("asks about the document in general when it has no name", async () => {
+  const { guard: g, shown } = guard({ response: 0 });
+
+  await g.ask();
+  assert.match(shown[0].message, /document/);
+  assert.doesNotMatch(shown[0].message, /undefined|null/);
+});
+
+// A file name is renderer input, and it lands in a native dialog. Nothing here interprets it, but a
+// name long enough to push the buttons off the screen is a dialog nobody can answer.
+test("cuts a preposterous name down to something a dialog can show", async () => {
+  const { guard: g, shown } = guard({ response: 0 });
+
+  await g.ask("x".repeat(500));
+  assert.ok(shown[0].message.length < 200);
+});
+
 test("maps each button to what it means", async () => {
   for (const [response, choice] of [
     [0, "save"],
