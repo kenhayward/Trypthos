@@ -30,6 +30,7 @@ import { useWorkspace } from "./hooks/useWorkspace";
 import { builtInTitleKey } from "./lib/builtInDocuments";
 import { openExternal } from "./lib/externalLinks";
 import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
+import { wireTurns } from "./lib/conversation";
 import { followLink, markdownLinkHandler } from "./lib/markdownLinks";
 import type { SettingsSection } from "./lib/settingsSections";
 import {
@@ -533,7 +534,13 @@ export default function App() {
                   onDetach: scope.detach,
                 }}
                 onSaveChat={() =>
-                  void history.save(chat.turns, activeModel?.id ?? null, state.file?.path ?? null)
+                  // Wire turns, not the panel's: a saved chat is read back through
+                  // ChatSessionSchema, which is built on the strict wire turn.
+                  void history.save(
+                    wireTurns(chat.turns),
+                    activeModel?.id ?? null,
+                    state.file?.path ?? null,
+                  )
                 }
                 onOpenChat={(id) => void openChat(id)}
                 onDeleteChat={(id) => void history.remove(id)}

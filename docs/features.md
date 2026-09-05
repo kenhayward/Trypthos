@@ -459,6 +459,12 @@ A reply that quietly consulted five files, or quietly did not, is one you cannot
 without pasting one into the other. Attachments are read when you attach them, so editing a file
 afterwards does not silently change what an earlier answer was about.
 
+When the model reads a file from the folder you gave it, the reply says so: **one line at the bottom
+of that answer** naming every file it read, with the full paths on hover. One line however many it
+read, and it stays with the answer - scroll back to something from last week and you can still see
+what it was looking at. While you are waiting, the bubble still says which file is being read, since
+that is what is happening now rather than what happened.
+
 A model with a **reasoning mode** can be asked to think before it answers. Each model has a Thinking
 switch on its page in Settings, with a level - Low, Medium or High - and Trypthos sends that with
 every message to it. gpt-oss is the model this was built for, and it reasons at exactly those three

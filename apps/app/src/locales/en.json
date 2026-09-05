@@ -110,6 +110,7 @@
       "noFiles": "No other files to attach."
     },
     "readingFile": "Reading {{path}}...",
+    "filesRead": "Read {{files}}",
     "context": {
       "used": "About {{tokens}} of {{limit}} tokens used",
       "unknown": "About {{tokens}} tokens. Set this model's context window in Settings to see how much is left.",
