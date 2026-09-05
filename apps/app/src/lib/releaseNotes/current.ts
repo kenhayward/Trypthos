@@ -5,6 +5,24 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.34.0",
+    date: "2026-09-05",
+    pr: 75,
+    headline: "Six more file types, in colour",
+    summary:
+      "The File types page now offers JSON, YAML, XML and SVG, HTML, CSS, and JavaScript and TypeScript, alongside markdown and plain text. Turn one on and those files appear in the folder browser, open in the editor, and are coloured by role the way markdown already was - keywords, strings, comments, numbers, types and names, in colours that follow your light or dark theme rather than being painted on top of it. JavaScript and TypeScript are one choice rather than four: .js, .ts, .jsx and .tsx are the same language wearing different hats, and Trypthos works out which from the file's name. A file that is not markdown opens in Source and stays there. Live and Preview are markdown ideas - Live hides markdown punctuation and Preview renders markdown as prose - so neither means anything over a stylesheet, and the view buttons are simply not drawn for a document with one view. The formatting toolbar goes with them, since its buttons write markdown. Two things also change while you edit: lines no longer wrap in a file that is not prose, because in code the column a character sits in is information, and spelling is no longer checked there, because every identifier in a source file would otherwise be underlined in red. Trypthos also starts faster than it did: each language is fetched only when you open a file that needs it, and moving markdown onto the same footing took about a fifth off what the app loads at startup.",
+    added: [
+      "JSON, YAML, XML and SVG, HTML, CSS, and JavaScript and TypeScript on the File types page.",
+      "Syntax colouring by role for all of them, from the same palette as the rest of the app, in both themes.",
+      "TypeScript and JSX are recognised from the file name rather than needing choices of their own.",
+    ],
+    changed: [
+      "A file with one view no longer shows the view buttons, and the formatting toolbar appears only for markdown.",
+      "Lines wrap and spelling is checked only in prose - not in code, where both get in the way.",
+      "Languages load when a file needs one, so the app loads about a fifth less at startup than before.",
+    ],
+  },
+  {
     version: "0.33.0",
     date: "2026-09-05",
     pr: 74,

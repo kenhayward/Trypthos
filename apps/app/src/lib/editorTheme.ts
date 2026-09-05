@@ -22,6 +22,12 @@ const PALETTE = {
   code: "var(--color-tok-code)",
   link: "var(--color-leaf)",
   quote: "var(--color-tok-quote)",
+  keyword: "var(--color-tok-keyword)",
+  string: "var(--color-tok-string)",
+  comment: "var(--color-tok-comment)",
+  number: "var(--color-tok-number)",
+  type: "var(--color-tok-type)",
+  func: "var(--color-tok-func)",
 };
 
 export const markdownHighlighting = HighlightStyle.define([
@@ -45,6 +51,46 @@ export const markdownHighlighting = HighlightStyle.define([
   { tag: tags.quote, color: PALETTE.quote },
   // Deliberately no rule for tags.list: it covers the whole list ITEM, not the bullet, so styling it
   // dims the text of every list entry. The bullet is already covered by processingInstruction above.
+
+  // Code, in the SAME style rather than a second one. Markdown's tags and these barely collide, one
+  // style is one thing to reason about, and - the reason that actually decides it - a single style
+  // means a fenced code block inside a markdown document is coloured by the same rules as a
+  // standalone source file, without anybody arranging for that separately.
+  { tag: tags.keyword, color: PALETTE.keyword },
+  { tag: tags.controlKeyword, color: PALETTE.keyword },
+  { tag: tags.modifier, color: PALETTE.keyword },
+  { tag: tags.operatorKeyword, color: PALETTE.keyword },
+
+  { tag: tags.string, color: PALETTE.string },
+  { tag: tags.special(tags.string), color: PALETTE.string },
+  { tag: tags.regexp, color: PALETTE.string },
+
+  { tag: tags.comment, color: PALETTE.comment, fontStyle: "italic" },
+  { tag: tags.lineComment, color: PALETTE.comment, fontStyle: "italic" },
+  { tag: tags.blockComment, color: PALETTE.comment, fontStyle: "italic" },
+
+  { tag: tags.number, color: PALETTE.number },
+  { tag: tags.bool, color: PALETTE.number },
+  { tag: tags.null, color: PALETTE.number },
+  { tag: tags.atom, color: PALETTE.number },
+
+  { tag: tags.typeName, color: PALETTE.type },
+  { tag: tags.className, color: PALETTE.type },
+  { tag: tags.namespace, color: PALETTE.type },
+  // The tag XML and HTML give an element name, and what a reader of markup is actually scanning for.
+  { tag: tags.tagName, color: PALETTE.type },
+
+  { tag: tags.function(tags.variableName), color: PALETTE.func },
+  { tag: tags.function(tags.propertyName), color: PALETTE.func },
+  // A JSON key, and an attribute name in HTML or XML. The single most useful thing to colour in a
+  // configuration file, which is most of what this catalogue is for.
+  { tag: tags.propertyName, color: PALETTE.func },
+  { tag: tags.attributeName, color: PALETTE.func },
+
+  { tag: tags.operator, color: PALETTE.marker },
+  { tag: tags.punctuation, color: PALETTE.marker },
+  // Italic like a comment, because that is what it is doing: `#!/bin/sh`, an XML declaration.
+  { tag: tags.meta, color: PALETTE.comment, fontStyle: "italic" },
 ]);
 
 /// Layout only - no colour decisions here beyond the chrome, so the palette above stays the single

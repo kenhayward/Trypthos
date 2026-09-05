@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import MarkdownEditor, { type EditorHandle } from "./MarkdownEditor";
+import { FILE_TYPES, MARKDOWN_FILE_TYPE } from "@trypthos/domain";
+import DocumentEditor, { type EditorHandle } from "./DocumentEditor";
 
 function Harness({
   onChange,
@@ -21,11 +22,12 @@ function Harness({
       <button type="button" onClick={() => setDoc((d) => ({ ...d, text: "reloaded\n" }))}>
         reload same
       </button>
-      <MarkdownEditor
+      <DocumentEditor
         documentId={doc.id}
         value={doc.text}
         onChange={onChange}
         live={false}
+        fileType={MARKDOWN_FILE_TYPE}
         onCaret={onCaret}
         ariaLabel="Markdown source"
       />
@@ -33,7 +35,7 @@ function Harness({
   );
 }
 
-describe("MarkdownEditor", () => {
+describe("DocumentEditor", () => {
   // The document is replaced by dispatching a change into CodeMirror, which is indistinguishable
   // from typing unless it is marked. Unmarked, opening a file reported an edit the moment it loaded,
   // and every file arrived already marked Unsaved.
@@ -106,11 +108,12 @@ describe("MarkdownEditor", () => {
 describe("spelling", () => {
   it("lets the platform spellcheck the document", () => {
     render(
-      <MarkdownEditor
+      <DocumentEditor
         documentId="notes.md"
         value="Some prose."
         onChange={() => {}}
         live={false}
+        fileType={MARKDOWN_FILE_TYPE}
         ariaLabel="Editor"
       />,
     );
@@ -132,11 +135,12 @@ describe("formatting", () => {
         <button type="button" onClick={() => handle.current?.format("bold")}>
           bold
         </button>
-        <MarkdownEditor
+        <DocumentEditor
           documentId="a.md"
           value={"first file\nline two\n"}
           onChange={onChange}
           live={false}
+        fileType={MARKDOWN_FILE_TYPE}
           readOnly={readOnly}
           ref={handle}
           ariaLabel="Markdown source"
@@ -168,5 +172,39 @@ describe("formatting", () => {
     await user.keyboard("X");
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+/// Editing behaviour follows the file type's `kind`, and all three of these are invisible when
+/// wrong: a source file quietly underlined in red, or a log quietly rewrapped so the column a
+/// character sits in stops meaning anything.
+describe("behaviour by kind", () => {
+  const typeOf = (id: string) => FILE_TYPES.find((type) => type.id === id)!;
+
+  function open(id: string, name: string) {
+    render(
+      <DocumentEditor
+        documentId={name}
+        value={'{ "a": 1 }'}
+        onChange={() => {}}
+        live={false}
+        fileType={typeOf(id)}
+        ariaLabel="Editor"
+      />,
+    );
+    return document.querySelector(".cm-content") as HTMLElement;
+  }
+
+  it("does not spellcheck code", () => {
+    expect(open("json", "data.json").getAttribute("spellcheck")).toBe("false");
+  });
+
+  it("wraps prose", () => {
+    expect(open("markdown", "notes.md").classList.contains("cm-lineWrapping")).toBe(true);
+  });
+
+  // Wrapping a source file or a log is wrong: the column a character sits in is information there.
+  it("does not wrap code", () => {
+    expect(open("json", "data.json").classList.contains("cm-lineWrapping")).toBe(false);
   });
 });

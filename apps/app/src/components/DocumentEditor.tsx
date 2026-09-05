@@ -1,10 +1,12 @@
 import { useEffect, useImperativeHandle, useRef } from "react";
-import { Annotation, Compartment, EditorState } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { markdown } from "@codemirror/lang-markdown";
-import { toolbarEdit, type ToolbarAction } from "@trypthos/domain";
+import { closeBrackets } from "@codemirror/autocomplete";
+import { indentOnInput } from "@codemirror/language";
+import { toolbarEdit, type FileType, type FileTypeKind, type ToolbarAction } from "@trypthos/domain";
 import { editorTheme } from "../lib/editorTheme";
+import { LANGUAGE_LOADERS } from "../lib/languageLoaders";
 import { followLinks, liveMode } from "../lib/liveExtension";
 import { currentPlatform } from "../lib/windowControls";
 
@@ -14,6 +16,35 @@ import { currentPlatform } from "../lib/windowControls";
 /// arrive as a document change. Unmarked, opening a file reported an edit the instant it loaded, so
 /// every file arrived already marked Unsaved.
 const External = Annotation.define<boolean>();
+
+/// How editing a document of this kind behaves.
+///
+/// One function rather than three props, because wrapping, spellchecking and bracket-closing all
+/// follow from the same question about a file - which is why `kind` is one field on a file type and
+/// not three.
+///
+/// Spellcheck is the one that is not cosmetic: left on, every identifier in a source file is
+/// underlined in red. Wrapping is the reverse - right for prose, wrong for a log or a line of code,
+/// where the column a character sits in is information.
+function behaviourFor(kind: FileTypeKind): Extension[] {
+  return [
+    kind === "prose" ? EditorView.lineWrapping : [],
+    EditorView.contentAttributes.of({ spellcheck: kind === "prose" ? "true" : "false" }),
+    // Tab is deliberately NOT rebound to indent, in code files either. `defaultKeymap` omits
+    // `indentWithTab` so Tab moves focus, which is the accessible behaviour and the one somebody
+    // navigating by keyboard needs. These two cover the ergonomics that actually matter.
+    kind === "code" ? [closeBrackets(), indentOnInput()] : [],
+  ];
+}
+
+/// The name a language loader reads its dialect from - TypeScript and JSX are the same package as
+/// JavaScript, configured differently. "" for a document with no file behind it, which is markdown
+/// and does not care.
+function fileNameOf(documentId: string | null): string {
+  if (documentId === null) return "";
+  const cut = documentId.lastIndexOf("/");
+  return cut === -1 ? documentId : documentId.slice(cut + 1);
+}
 
 /// The document position showing at the top of the visible area.
 ///
@@ -57,6 +88,12 @@ interface Props {
   onChange: (value: string) => void;
   /// Whether markdown syntax is hidden away from the caret line.
   live: boolean;
+  /// The type of the document on screen, from the catalogue.
+  ///
+  /// Decides three things at once: which language colours it, whether lines wrap and spelling is
+  /// checked, and whether brackets close themselves. All three are reconfigured rather than
+  /// rebuilt, so opening a JSON file after a markdown one still uses the ONE editor.
+  fileType: FileType;
   /// Whether the document refuses edits - the built-in guide, which has no file to be saved to.
   ///
   /// Both halves of CodeMirror's answer are needed: `EditorState.readOnly` refuses changes, and
@@ -92,11 +129,12 @@ interface Props {
 /// The React integration has one rule worth stating, because getting it wrong is subtle: the view is
 /// created ONCE and then fed transactions. Recreating it on every render would work visually while
 /// discarding the undo history, the selection and the scroll position on each keystroke.
-export default function MarkdownEditor({
+export default function DocumentEditor({
   documentId,
   value,
   onChange,
   live,
+  fileType,
   readOnly = false,
   onCaret,
   onSelectionChange,
@@ -114,9 +152,15 @@ export default function MarkdownEditor({
   /// switching to the guide and back must not rebuild the view and lose the undo history of the
   /// file beside it.
   const readOnlyCompartment = useRef(new Compartment());
+  /// The language, loaded on demand. Empty until a loader resolves, and emptied again the moment a
+  /// document of another type arrives - see the effect below for why the order matters.
+  const languageCompartment = useRef(new Compartment());
+  /// Wrapping, spellcheck and bracket-closing, all from the file type's `kind`.
+  const behaviourCompartment = useRef(new Compartment());
   /// Read in the create-once effect below, where `live` itself must not be a dependency.
   const initialLive = useRef(live);
   const initialReadOnly = useRef(readOnly);
+  const initialKind = useRef(fileType.kind);
   /// Read through a ref so the update listener never closes over a stale prop, which would let an
   /// edit be reported against an out-of-date handler.
   ///
@@ -205,7 +249,10 @@ export default function MarkdownEditor({
           lineNumbers(),
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown(),
+          // No language in the base configuration. Every one of them is loaded on demand, so a
+          // grammar reaches a user only when they open a file that needs it.
+          languageCompartment.current.of([]),
+          behaviourCompartment.current.of(behaviourFor(initialKind.current)),
           editorTheme,
           liveCompartment.current.of(initialLive.current ? liveMode : []),
           readOnlyCompartment.current.of(
@@ -220,7 +267,6 @@ export default function MarkdownEditor({
             platform: currentPlatform(),
             onFollow: (href) => latestOnFollowLink.current?.(href),
           }),
-          EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
             const external = update.transactions.some((tr) => tr.annotation(External) === true);
             if (update.docChanged && !external) {
@@ -245,13 +291,11 @@ export default function MarkdownEditor({
               });
             }
           }),
-          EditorView.contentAttributes.of({
-            "aria-label": ariaLabel,
-            // CodeMirror sets spellcheck="false" on its content element by default. Left alone, the
-            // editor - the app's main text surface - would be the one place with no spelling
-            // corrections, while the chat box and the settings fields had them.
-            spellcheck: "true",
-          }),
+          // Spellcheck is NOT here: it moved into the behaviour compartment, because whether it
+          // belongs on depends on what is in the document. CodeMirror sets spellcheck="false" by
+          // default, which would make the app's main text surface the one place with no spelling
+          // corrections - but leaving it on for a source file underlines every identifier in red.
+          EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
         ],
       }),
     });
@@ -285,6 +329,50 @@ export default function MarkdownEditor({
       ),
     });
   }, [readOnly]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+
+    editor.dispatch({
+      effects: behaviourCompartment.current.reconfigure(behaviourFor(fileType.kind)),
+    });
+  }, [fileType.kind]);
+
+  /// Loads the language for the document on screen, in two steps.
+  ///
+  /// **Declared BEFORE the effect that swaps the document**, deliberately: both fire in the same
+  /// commit and React runs them in declaration order, so the previous file's parser is discarded
+  /// before the new file's text arrives. The other order leaves one document briefly parsed as
+  /// another - harmless on screen, and exactly the kind of thing that stops being harmless later.
+  ///
+  /// The cleanup flag IS the document-identity guard. Without it, switching tabs quickly applies
+  /// whichever load resolves last, so a YAML file ends up parsed as TypeScript - and the failure is
+  /// timing-dependent, which is to say intermittent and unreproducible.
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+
+    editor.dispatch({ effects: languageCompartment.current.reconfigure([]) });
+
+    const load = LANGUAGE_LOADERS[fileType.id];
+    if (load === null) return;
+
+    let cancelled = false;
+    void load(fileNameOf(documentId))
+      .then((support) => {
+        if (cancelled || view.current === null) return;
+        view.current.dispatch({ effects: languageCompartment.current.reconfigure(support) });
+      })
+      .catch(() => {
+        // A chunk that will not load leaves the document open with no colouring. It must never take
+        // the centre panel down: uncoloured text is a document you can still read and edit.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fileType.id, documentId]);
 
   useEffect(() => {
     const editor = view.current;
@@ -353,5 +441,5 @@ export default function MarkdownEditor({
     shownDocument.current = documentId;
   }, [value, documentId]);
 
-  return <div ref={host} className="h-full overflow-auto" data-testid="markdown-editor" />;
+  return <div ref={host} className="h-full overflow-auto" data-testid="document-editor" />;
 }

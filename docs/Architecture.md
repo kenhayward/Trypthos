@@ -77,13 +77,13 @@ both processes and testable without booting either.
 serialiser: Source, Preview and (next) Live are views over one document, so there is nothing to
 round-trip and nothing that can reformat a user's file behind their back.
 
-- `components/MarkdownEditor.tsx` hosts the CodeMirror view. It is created **once** and then fed
+- `components/DocumentEditor.tsx` hosts the CodeMirror view. It is created **once** and then fed
   transactions. Recreating it per render would look correct while discarding undo history, selection
   and scroll position on every keystroke.
 - The documents live **above** `EditorPanel`, which is what makes the mode invariant checkable rather
   than merely intended: mode is local state and has no path to `onChange`, so a mode switch cannot
   alter a document. `EditorPanel.test.tsx` asserts it.
-- **Several documents are open at once, and one editor serves them all.** `MarkdownEditor` is told
+- **Several documents are open at once, and one editor serves them all.** `DocumentEditor` is told
   which document it is showing (`documentId`); a change of that value means a different FILE rather
   than new text for the same one, and it remembers where each was left - the caret, and the line at
   the top of the view - so returning to a tab is not the same as reopening the file. The place is
@@ -101,7 +101,7 @@ round-trip and nothing that can reformat a user's file behind their back.
   shape (outside click and Escape to close) rather than inventing a second one.
 - `components/EditorToolbar.tsx` draws the formatting buttons, in **Source only**. It knows the order
   of the buttons, their glyphs and their names, and nothing about markdown: it names an action, and
-  `MarkdownEditor` turns the current document and selection into one change through `toolbarEdit`.
+  `DocumentEditor` turns the current document and selection into one change through `toolbarEdit`.
   The action is named rather than the edit computed because the toolbar renders from props, and a
   render can be a keystroke behind the buffer - the editor is the only place that knows the document
   and the selection as they are at the moment of the press. `EditorPanel` attaches the editor handle
@@ -111,7 +111,7 @@ round-trip and nothing that can reformat a user's file behind their back.
   which no workspace-relative path can collide with). The flag is enforced in three places, and all
   three are needed: `updateContent` refuses to record an edit, so it can never become dirty;
   `useWorkspace.save` refuses to write, rather than leaving the path guard in the main process to
-  refuse it as a failed save the user was never offered; and `MarkdownEditor` reconfigures both
+  refuse it as a failed save the user was never offered; and `DocumentEditor` reconfigures both
   `EditorState.readOnly` and `EditorView.editable`, so the surface itself declines keystrokes rather
   than accepting and dropping them. `lib/markdownGuide.md` is the text, imported with Vite's `?raw`
   so the one document in the app whose purpose is to show markdown is not a template literal full of
@@ -355,9 +355,53 @@ Four things that are easy to get wrong:
 `Makefile` have no extension, and retrofitting a second matching rule through every call site later
 is the expensive version of this.
 
-The renderer half - a language `Compartment`, the loaders that turn an id into a CodeMirror language,
-and per-`kind` editing behaviour - does not exist yet. It is specified in `docs/specs/file-types.md`,
-along with the rule that no eagerly-imported module may import a `lang-*` package.
+### Turning a type into a language
+
+`lib/languageLoaders.ts` maps each `FileTypeId` to a loader, and **every import in it is dynamic**.
+Vite code-splits an `import()` into its own chunk, so a grammar reaches a user only when they open a
+file that needs it. Measured: moving markdown onto this footing took the initial chunk from **1,019
+KB to 825 KB** while adding six languages, which now sit in eight lazy chunks totalling ~238 KB.
+
+`null` is a real answer - plain text needs no highlighting, and CodeMirror's default is already that.
+The loader takes the file's NAME, because a type can have dialects: TypeScript and JSX are the same
+package as JavaScript, configured differently. That is dialect selection within one type, not a
+second type, which is why Settings has one row for all four.
+
+**No eagerly-imported module may statically import a `lang-*` package.** `languageLoaders.test.ts`
+asserts it over the module graph, comments stripped first (the module documents the rule it
+enforces). The rule is invisible when broken: a static `import { python } from
+"@codemirror/lang-python"` type-checks, renders perfectly and passes every other test while putting
+a grammar table on every cold start.
+
+`DocumentEditor` applies it through a compartment, in two steps whose ORDER is load-bearing:
+
+1. Reconfigure to `[]` synchronously. The effect is declared **before** the one that swaps the
+   document, and React runs effects in declaration order within a commit, so the previous file's
+   parser is gone before the new file's text arrives.
+2. Load, then reconfigure again - **guarded by the effect's cleanup flag**. Without it, switching
+   tabs quickly applies whichever load resolves last, so a YAML file ends up parsed as TypeScript,
+   and the failure is timing-dependent and therefore unreproducible.
+
+A loader that rejects leaves the document open with no colouring. Uncoloured text is still readable.
+
+### Behaviour by kind, and views by type
+
+`behaviourFor(kind)` is one function because wrapping, spellchecking and bracket-closing all follow
+from the same question - which is why `kind` is one field and not three. `prose` wraps and
+spellchecks; `code` does neither and adds `closeBrackets` and `indentOnInput`. **Tab is deliberately
+not rebound**: `defaultKeymap` omits `indentWithTab`, so Tab moves focus, which is the accessible
+behaviour and the one somebody navigating by keyboard needs.
+
+`EditorHeader` draws only the modes the type lists, and draws no switcher at all below two. The
+formatting toolbar is markdown-only, since its buttons write markdown. `EditorPanel` falls back to
+`MARKDOWN_FILE_TYPE` for three cases that look different and behave the same: the scratch buffer,
+the built-in guide, and a file whose type was turned off while it was open in a tab - the last is
+why this falls back rather than refusing.
+
+The Source palette gained the standard code tags in the **same** `HighlightStyle`, not a second one:
+markdown's tags and these barely collide, and one style means a fenced code block inside a markdown
+document is coloured by the same rules as a standalone source file, which is what phase 5 needs.
+Six tokens were added to `index.css` in all three theme blocks.
 
 ## Settings, and the panel layout
 
@@ -639,7 +683,7 @@ The pieces:
 | `documentEdit.ts` | The edit model, heading discovery, and resolving an edit to a range |
 | `editBlocks.ts` | Reading a proposed edit out of the reply text |
 | `ChatEditCard.tsx` | The card: what would change, where, and the Apply button |
-| `MarkdownEditor` handle | `applyChange(from, to, insert)` - one transaction |
+| `DocumentEditor` handle | `applyChange(from, to, insert)` - one transaction |
 
 Five rules, each a test:
 
@@ -912,7 +956,7 @@ It does nothing on macOS, where spellchecking goes through the OS, which owns it
 setting one there is an error rather than a preference.
 
 CodeMirror sets `spellcheck="false"` on its content element, so the editor overrides it back
-(`MarkdownEditor.tsx`). The chat box and the system prompt say `spellCheck` out loud for the opposite
+(`DocumentEditor.tsx`). The chat box and the system prompt say `spellCheck` out loud for the opposite
 reason: they inherit the right answer from the browser, and saying so is what makes a later
 `spellcheck="false"`, copied in from a form field, a visible change rather than a silent one. Fields
 holding an endpoint, a model slug or a key are deliberately left alone - a URL is not prose.

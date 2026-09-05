@@ -1,14 +1,19 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { countWords, detectLineEnding } from "@trypthos/domain";
+import {
+  MARKDOWN_FILE_TYPE,
+  countWords,
+  detectLineEnding,
+  fileTypeFor,
+} from "@trypthos/domain";
 import EditorHeader from "./EditorHeader";
 import EditorToolbar from "./EditorToolbar";
 import EditorStatusBar from "./EditorStatusBar";
 import EditorTabs from "./EditorTabs";
-import MarkdownEditor, {
+import DocumentEditor, {
   type EditorHandle,
   type EditorSelection,
-} from "./MarkdownEditor";
+} from "./DocumentEditor";
 import MarkdownPreview from "./MarkdownPreview";
 import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
@@ -53,6 +58,9 @@ interface Props {
   /// caller with no settings to hand - a test, the browser preview before its first render - should
   /// get the same Live the app has always opened in.
   defaultMode?: EditorMode;
+  /// The file types the user has turned on, by id. What the document on screen IS decides which
+  /// views the header offers and how the editing surface behaves.
+  fileTypes?: readonly string[];
   /// Handle for applying a chat edit the user accepted.
   ref?: React.Ref<EditorHandle>;
 }
@@ -76,6 +84,7 @@ export default function EditorPanel({
   onSelectionChange,
   onFollowLink,
   defaultMode = DEFAULT_EDITOR_MODE,
+  fileTypes = [],
   ref,
 }: Props) {
   const { t } = useTranslation();
@@ -90,7 +99,24 @@ export default function EditorPanel({
   /// had been read, and the stored preference would never arrive.
   const [chosen, setChosen] = useState<Record<string, EditorMode>>({});
   const key = activePath ?? "";
-  const mode = chosen[key] ?? defaultMode;
+
+  /// What the document on screen IS.
+  ///
+  /// Markdown is the answer in three cases that all look different and behave the same: the scratch
+  /// buffer, the built-in guide, and a file whose type is turned off but which is still open in a
+  /// tab from before the setting changed. The last of those is the reason this falls back rather
+  /// than refusing - taking a document's panel away because of a settings toggle is hostile.
+  const fileType = useMemo(() => {
+    if (activePath === null) return MARKDOWN_FILE_TYPE;
+    const cut = activePath.lastIndexOf("/");
+    const name = cut === -1 ? activePath : activePath.slice(cut + 1);
+    return fileTypeFor(name, fileTypes) ?? MARKDOWN_FILE_TYPE;
+  }, [activePath, fileTypes]);
+
+  // The configured default applies only where the type has it. Live is the default and a JSON file
+  // has no Live, so honouring it blindly would open the centre panel on a view that cannot be drawn.
+  const preferred = fileType.modes.includes(defaultMode) ? defaultMode : fileType.modes[0]!;
+  const mode = chosen[key] ?? preferred;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
   const [caret, setCaret] = useState({ line: 1, column: 1 });
 
@@ -140,22 +166,23 @@ export default function EditorPanel({
           dirtyPaths={dirtyPaths}
           onActivate={(path) => onActivateFile?.(path)}
         />
-        <EditorHeader dirty={dirty} mode={mode} onModeChange={setMode} />
+        <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
       </div>
 
       {/* Source only. Live hides the markers a press writes, so the same button in that view would
           insert punctuation that disappears as it lands, and Preview has nothing to write into. */}
-      {mode === "source" && !readOnly && (
+      {mode === "source" && !readOnly && fileType.id === "markdown" && (
         <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
       )}
 
       <div className="min-h-0 grow">
         {isEditable(mode) ? (
-          <MarkdownEditor
+          <DocumentEditor
             documentId={activePath}
             value={value}
             onChange={onChange}
             live={mode === "live"}
+            fileType={fileType}
             onCaret={(line, column) => setCaret({ line, column })}
             onSelectionChange={onSelectionChange}
             onFollowLink={onFollowLink}

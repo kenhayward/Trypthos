@@ -134,6 +134,7 @@ export {
   DEFAULT_FILE_TYPES,
   FILE_TYPES,
   FILE_TYPE_GROUPS,
+  MARKDOWN_FILE_TYPE,
   enabledFileTypes,
   fileTypeFor,
   isOpenable,

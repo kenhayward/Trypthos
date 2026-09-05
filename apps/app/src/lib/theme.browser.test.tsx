@@ -45,6 +45,8 @@ describe("design tokens", () => {
       "--tp-leaf", "--tp-danger", "--tp-danger-strong",
       "--tp-gutter", "--tp-marker", "--tp-tok-head", "--tp-tok-strong",
       "--tp-tok-code", "--tp-tok-quote", "--tp-caret-line",
+      "--tp-tok-keyword", "--tp-tok-string", "--tp-tok-comment",
+      "--tp-tok-number", "--tp-tok-type", "--tp-tok-func",
     ];
 
     const light = Object.fromEntries(names.map((n) => [n, token(n)]));

@@ -3,6 +3,7 @@ import {
   DEFAULT_FILE_TYPES,
   FILE_TYPES,
   FILE_TYPE_GROUPS,
+  MARKDOWN_FILE_TYPE,
   enabledFileTypes,
   fileTypeFor,
   isOpenable,
@@ -162,5 +163,34 @@ describe("the catalogue", () => {
   it("names only types that exist", () => {
     const known = new Set(FILE_TYPES.map((type) => type.id));
     expect(DEFAULT_FILE_TYPES.filter((id) => !known.has(id))).toEqual([]);
+  });
+
+  // The editor reads `kind` to decide whether to wrap lines, spellcheck, and close brackets. A type
+  // whose kind was wrong would spellcheck a source file or refuse to wrap a note, so the assignment
+  // is asserted rather than left to whoever adds the next row.
+  it("calls prose only what somebody writes prose in", () => {
+    expect(FILE_TYPES.filter((type) => type.kind === "prose").map((type) => type.id)).toEqual([
+      "markdown",
+      "text",
+    ]);
+  });
+
+  it("gives every group at least one type", () => {
+    const empty = FILE_TYPE_GROUPS.filter(
+      (group) => !FILE_TYPES.some((type) => type.group === group),
+    );
+    expect(empty).toEqual([]);
+  });
+});
+
+describe("MARKDOWN_FILE_TYPE", () => {
+  // What a document with no file behind it is treated as: the scratch buffer, and the built-in
+  // guide. Both are markdown, and neither has a name an extension could be read from.
+  it("is the catalogue's own markdown entry, not a copy of it", () => {
+    expect(MARKDOWN_FILE_TYPE).toBe(FILE_TYPES.find((type) => type.id === "markdown"));
+  });
+
+  it("offers all three views", () => {
+    expect(MARKDOWN_FILE_TYPE.modes).toEqual(["live", "source", "preview"]);
   });
 });

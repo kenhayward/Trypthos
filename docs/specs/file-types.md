@@ -34,7 +34,7 @@ read, and every dependency is a decision somebody made.
 ## What already exists, and where the seam is
 
 The centre panel is one CodeMirror 6 view created once and fed transactions
-(`components/MarkdownEditor.tsx`). It already reconfigures two `Compartment`s - Live mode and
+(`components/DocumentEditor.tsx`, named `MarkdownEditor.tsx` when this was written). It already reconfigures two `Compartment`s - Live mode and
 read-only - on a document switch, without rebuilding the view and losing undo history. **A language
 compartment is that same pattern a third time**, which is why this feature is cheap rather than
 structural.
@@ -118,7 +118,7 @@ already exactly that.
 
 **Nothing eagerly loaded may import a `lang-*` package.** This is the rule that keeps the whole
 design honest, and it is invisible when broken: an `import { python } from "@codemirror/lang-python"`
-at the top of `MarkdownEditor.tsx` type-checks, renders perfectly, passes every other test, and puts
+at the top of `DocumentEditor.tsx` type-checks, renders perfectly, passes every other test, and puts
 a grammar table on every cold start. **Assert it with a module-graph test**, the way the release
 notes archive is already asserted out of the initial bundle.
 
