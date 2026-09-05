@@ -256,5 +256,38 @@ describe("App", () => {
       // Back to the buffer that was there before any file was opened, rather than an empty editor.
       expect(screen.getByLabelText("Markdown source").textContent).toContain("Scratch buffer");
     });
+
+    // The button, not the state behind it. A Dismiss that does nothing looks exactly like a Dismiss
+    // that works until you press it, and no test of the banner's wording would have noticed.
+    it("dismisses the banner when a file cannot be opened", async () => {
+      const user = userEvent.setup();
+      window.trypthos = {
+        ...browserClient,
+        isDesktop: true,
+        readSettings: async () => ({
+          ok: true as const,
+          settings: { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" },
+        }),
+        writeSettings: async () => {},
+        reopenWorkspace: async (root: string) => ({
+          ok: true as const,
+          workspace: { root, name: "Notes" },
+        }),
+        listDirectory: async () => ({
+          ok: true as const,
+          nodes: [{ id: "gone.md", name: "gone.md", kind: "file" as const }],
+        }),
+        readFile: async () => ({ ok: false as const, reason: "not-found" }),
+      } as unknown as typeof window.trypthos;
+      render(<App />);
+
+      await screen.findByRole("button", { name: /gone\.md/ });
+      await user.click(row("gone.md"));
+      expect(screen.getByRole("alert").textContent).toContain("no longer there");
+
+      await user.click(screen.getByRole("button", { name: "Dismiss" }));
+
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
   });
 });

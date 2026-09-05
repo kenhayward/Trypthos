@@ -5,6 +5,15 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.29.1",
+    date: "2026-09-05",
+    pr: 62,
+    headline: "The Dismiss button on a message now dismisses it",
+    summary:
+      "When something goes wrong - a file that is no longer there, a save refused because the file changed on disk - a message appears under the title bar with a Dismiss button beside it. Pressing Dismiss did nothing at all, so the only way to clear a message about something that failed was to do something else that worked. It now clears the message, and leaves everything else exactly as it was: the file you are in, what you have typed, and whether it is saved.",
+    fixed: ["Dismiss now clears the message under the title bar."],
+  },
+  {
     version: "0.29.0",
     date: "2026-09-05",
     pr: 60,
