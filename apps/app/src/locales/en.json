@@ -21,7 +21,7 @@
   "editor": {
     "title": "Editor",
     "viewMode": "View mode",
-    "surface": "Markdown source",
+    "surface": "Document source",
     "preview": "Markdown preview",
     "nothingToPreview": "Nothing to preview yet.",
     "mode": {
@@ -61,7 +61,6 @@
     "tabDirty": "{{name}} has unsaved changes",
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
-    "format": "Markdown",
     "encoding": "UTF-8",
     "stats": "{{caret}} · {{words}} words"
   },
@@ -102,11 +101,11 @@
     },
     "scope": {
       "folder": "Folder",
-      "folderHint": "Send the list of markdown files in the top level of this folder. The model can then ask to read any of them.",
+      "folderHint": "Send the list of files in the top level of this folder. The model can then ask to read any of them.",
       "attach": "Attach a file",
       "detach": "Remove {{path}}",
       "filter": "Find a file",
-      "noFiles": "No other markdown files to attach."
+      "noFiles": "No other files to attach."
     },
     "readingFile": "Reading {{path}}...",
     "context": {
@@ -242,7 +241,7 @@
       "supportsTools": "This endpoint supports tool calling",
       "supportsToolsHint": "Lets the model propose document changes as a structured call rather than as text, which is more reliable where it works. Leave this off if you are unsure: changes still work without it.",
       "folderFiles": "Files offered from the folder",
-      "folderFilesHint": "How many of the folder's markdown files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one.",
+      "folderFilesHint": "How many of the folder's files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one.",
       "intro": "Models Trypthos can chat with. Add as many as you like, and mark the one new chats should start on."
     },
     "fileTypes": {

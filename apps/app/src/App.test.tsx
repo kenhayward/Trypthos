@@ -282,7 +282,7 @@ describe("App", () => {
 
       const tab = await screen.findByRole("tab", { name: /Markdown Syntax Guide/ });
       expect(tab.getAttribute("aria-selected")).toBe("true");
-      expect(screen.getByLabelText("Markdown source").textContent).toContain(
+      expect(screen.getByLabelText("Document source").textContent).toContain(
         "GitHub Flavored Markdown",
       );
 
@@ -302,7 +302,7 @@ describe("App", () => {
 
       await screen.findByRole("button", { name: /one\.md/ });
       await user.click(row("one.md"));
-      await user.click(screen.getByLabelText("Markdown source"));
+      await user.click(screen.getByLabelText("Document source"));
       await user.keyboard("X");
       await user.click(screen.getByRole("button", { name: "Close one.md" }));
 
@@ -320,7 +320,7 @@ describe("App", () => {
 
       expect(screen.queryAllByRole("tab")).toHaveLength(0);
       // Back to the buffer that was there before any file was opened, rather than an empty editor.
-      expect(screen.getByLabelText("Markdown source").textContent).toContain("Scratch buffer");
+      expect(screen.getByLabelText("Document source").textContent).toContain("Scratch buffer");
     });
 
     // The button, not the state behind it. A Dismiss that does nothing looks exactly like a Dismiss

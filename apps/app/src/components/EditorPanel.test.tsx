@@ -40,7 +40,7 @@ describe("EditorPanel", () => {
     expect(modeButton("Live").getAttribute("aria-pressed")).toBe("true");
     expect(modeButton("Source").getAttribute("aria-pressed")).toBe("false");
     expect(modeButton("Preview").getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByLabelText("Markdown source")).toBeDefined();
+    expect(screen.getByLabelText("Document source")).toBeDefined();
   });
 
   // The configured default, not a hard-coded one: the setting decides which view a document opens
@@ -111,12 +111,12 @@ describe("EditorPanel", () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    const before = screen.getByLabelText("Markdown source");
+    const before = screen.getByLabelText("Document source");
     await user.click(modeButton("Source"));
 
     // The same element, not a replacement: Live and Source are decorations over one editor, so
     // switching between them must not rebuild it and discard undo history.
-    expect(screen.getByLabelText("Markdown source")).toBe(before);
+    expect(screen.getByLabelText("Document source")).toBe(before);
   });
 
   // The document is named by its tab, not by the header. The header speaks for the STATE of what is
@@ -217,7 +217,7 @@ describe("EditorPanel", () => {
 
     await user.click(modeButton("Preview"));
 
-    expect(screen.queryByLabelText("Markdown source")).toBeNull();
+    expect(screen.queryByLabelText("Document source")).toBeNull();
   });
 
   // The invariant the whole editor design rests on. If a mode switch could rewrite the document,
@@ -228,7 +228,7 @@ describe("EditorPanel", () => {
     render(<Harness onChange={onChange} />);
 
     await user.click(modeButton("Source"));
-    const before = screen.getByLabelText("Markdown source").textContent;
+    const before = screen.getByLabelText("Document source").textContent;
 
     await user.click(modeButton("Preview"));
     await user.click(modeButton("Live"));
@@ -237,7 +237,7 @@ describe("EditorPanel", () => {
     await user.click(modeButton("Source"));
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Markdown source").textContent).toBe(before);
+    expect(screen.getByLabelText("Document source").textContent).toBe(before);
   });
 
   it("reports edits to the owner of the document", async () => {
@@ -246,7 +246,7 @@ describe("EditorPanel", () => {
     render(<Harness onChange={onChange} />);
 
     await user.click(modeButton("Source"));
-    await user.click(screen.getByLabelText("Markdown source"));
+    await user.click(screen.getByLabelText("Document source"));
     await user.keyboard("X");
 
     expect(onChange).toHaveBeenCalled();
@@ -353,7 +353,7 @@ describe("the views a document offers", () => {
         fileTypes={["markdown", "json"]}
       />,
     );
-    expect(screen.getByLabelText("Markdown source")).toBeDefined();
+    expect(screen.getByLabelText("Document source")).toBeDefined();
   });
 
   // The buttons write markdown. On anything else they would insert punctuation that means nothing
@@ -367,6 +367,18 @@ describe("the views a document offers", () => {
   // a tab from before the setting changed. It stays readable rather than losing its panel.
   it("falls back to markdown for a document of no known type", () => {
     open("mystery.qqq", ["markdown"]);
-    expect(screen.getByLabelText("Markdown source")).toBeDefined();
+    expect(screen.getByLabelText("Document source")).toBeDefined();
+  });
+
+  // The strip said Markdown on every file from the moment more than markdown could be opened - a
+  // claim about the user's document, and the wrong one.
+  it("names the document's type in the status bar", () => {
+    open("data.json");
+    expect(screen.getByText("JSON")).toBeDefined();
+  });
+
+  it("still says Markdown for a markdown document", () => {
+    open("notes.md");
+    expect(screen.getByText("Markdown")).toBeDefined();
   });
 });

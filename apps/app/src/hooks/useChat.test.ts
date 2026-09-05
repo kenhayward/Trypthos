@@ -288,7 +288,7 @@ describe("useChat", () => {
 /// types a question, and may well change the selection before pressing Enter.
 describe("useChat and the document", () => {
   const FILE: ChatContext = {
-    document: { kind: "file", path: "notes.md", text: "# Notes", truncated: false },
+    document: { kind: "file", path: "notes.md", text: "# Notes", truncated: false, fileType: "markdown" },
     attachments: [],
     folder: null,
   };
@@ -315,7 +315,7 @@ describe("useChat and the document", () => {
     act(() => harness.push({ type: "end" }));
 
     current = {
-      document: { kind: "selection", path: "notes.md", text: "One line", truncated: false },
+      document: { kind: "selection", path: "notes.md", text: "One line", truncated: false, fileType: "markdown" },
       attachments: [],
       folder: null,
     };
@@ -339,7 +339,7 @@ describe("useChat and the document", () => {
 
     current = {
       ...FILE,
-      document: { kind: "file", path: "notes.md", text: "# Notes edited since.", truncated: false },
+      document: { kind: "file", path: "notes.md", text: "# Notes edited since.", truncated: false, fileType: "markdown" },
     };
     await act(async () => {
       await result.current.retry();

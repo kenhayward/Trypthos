@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.37.0",
+    date: "2026-09-05",
+    pr: 79,
+    headline: "Chat knows what kind of file it is looking at",
+    summary:
+      "Chat has been told, on every turn, that it was inside a markdown editor looking at a markdown document. That was true until Trypthos started opening other things, and since then asking about a Python file got you an answer phrased as though it were prose - matching heading depth and list markers in a file that has neither. The turn carrying your document now says what kind of file it is when it is not markdown, and the built-in instructions tell the model what to do about it: answer about it as that kind of file, write anything it proposes in that file's own language rather than in markdown, and use only the two kinds of change that can be placed in a file without headings. It will say so rather than guess if neither fits. If you have written your own instructions in Settings, yours are untouched - this changes only the built-in ones, so it reaches you if you have never edited them. Two smaller things follow from the same change: the strip along the bottom of the editor now names the type of the file you are in rather than always saying Markdown, and the chat panel no longer describes the folder as a list of markdown files, which it stopped being when you could turn other types on.",
+    changed: [
+      "The document sent to chat says what kind of file it is, when it is not markdown.",
+      "The built-in instructions tell the model how to answer about, and how to propose changes to, a file that is not markdown.",
+      "The status bar names the open document's type instead of always saying Markdown.",
+      "The chat panel and its settings no longer call the folder's contents markdown files.",
+    ],
+  },
+  {
     version: "0.36.0",
     date: "2026-09-05",
     pr: 78,

@@ -49,6 +49,22 @@ describe("the default system prompt", () => {
   it("tells the model an edit is proposed rather than applied", () => {
     expect(DEFAULT_SYSTEM_PROMPT).toMatch(/nothing is written until/i);
   });
+
+  // Trypthos opens more than markdown. A model told only that it is inside a markdown editor
+  // answers about a Python file as though it were prose - matching heading depth and list markers
+  // in a file that has neither.
+  it("says the app opens more than markdown", () => {
+    expect(DEFAULT_SYSTEM_PROMPT).toMatch(/not markdown/i);
+  });
+
+  // The heading operations anchor to ATX headings. A Python file has no headings, but it is full of
+  // lines beginning with a hash - so the model must be told to use the two operations that do not
+  // need one, rather than aiming an edit at a comment.
+  it("says which edit operations work in a document that is not markdown", () => {
+    const guidance = DEFAULT_SYSTEM_PROMPT.slice(DEFAULT_SYSTEM_PROMPT.indexOf("not markdown"));
+    expect(guidance).toContain("replace-selection");
+    expect(guidance).toContain("append");
+  });
 });
 
 describe("effectiveSystemPrompt", () => {

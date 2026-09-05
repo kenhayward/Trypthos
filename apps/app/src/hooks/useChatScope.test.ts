@@ -4,7 +4,7 @@ import { useChatScope, type ScopeBridge, type ScopeSource } from "./useChatScope
 
 const SOURCE: ScopeSource = {
   selection: "",
-  file: { path: "notes/plan.md", content: "# Plan" },
+  file: { path: "notes/plan.md", content: "# Plan", fileType: "markdown" },
 };
 
 function fakeBridge(files: Record<string, string> = {}) {
