@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.33.0",
+    date: "2026-09-05",
+    pr: 74,
+    headline: "Choose which kinds of file Trypthos shows you",
+    summary:
+      "Settings has a new page, File types, listing the kinds of file Trypthos takes an interest in. Markdown is always on and cannot be turned off, and this release adds Plain text - .txt, .text and .nfo - which you turn on yourself. Nothing changes until you do: upgrading leaves you with exactly the folder browser you had yesterday. A type that is turned off is not simply uncoloured, it is absent - its files do not appear in the folder browser, clicking a link to one does nothing, and chat is neither shown them nor allowed to read them. That is worth knowing before you turn one on, because pointing Trypthos at a folder full of that type makes the list on the left a great deal longer. The footer under the folder browser now says which types are on - the type's name when there is one, a count when there are several - and clicking it goes straight to the page that changes them. This is the groundwork for source code, configuration and log files, which arrive with their syntax colouring in later releases.",
+    added: [
+      "A File types page in Settings, listing every kind of file Trypthos can show and what each one matches.",
+      "Plain text as the first type you can turn on: .txt, .text and .nfo.",
+      "The folder browser's footer names the types being shown, and opens the page that changes them.",
+    ],
+    changed: [
+      "Markdown is drawn as always on rather than left off the page, because it is what Trypthos is.",
+      "Which files chat is offered, and may ask to read, follows the same setting as the folder browser.",
+    ],
+  },
+  {
     version: "0.32.1",
     date: "2026-09-05",
     pr: 73,

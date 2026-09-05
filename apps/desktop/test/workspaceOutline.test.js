@@ -8,6 +8,13 @@ const path = require("node:path");
 const { DEFAULT_OUTLINE_FILE_LIMIT } = require("@trypthos/domain");
 const { outlineWorkspace } = require("../src/workspaceOutline");
 
+/// Most of these cases are about the walk - one level, sorting, the cap, a folder that is not there
+/// - and say nothing about file types, so they run against what a fresh installation has. The cases
+/// that ARE about file types name their own list.
+function outlineOf(root, options = {}) {
+  return outlineWorkspace(root, { fileTypes: ["markdown"], ...options });
+}
+
 /// The files chat is offered, and may then ask to read.
 ///
 /// One level only, and this list is also the allowlist - so a file that does not appear here cannot
@@ -30,7 +37,7 @@ async function withTree(files, body) {
 
 test("lists the markdown files at the top level", async () => {
   await withTree({ "plan.md": null, "risks.md": null }, async (dir) => {
-    const outline = await outlineWorkspace(dir);
+    const outline = await outlineOf(dir);
     assert.deepEqual(outline.paths, ["plan.md", "risks.md"]);
     assert.equal(outline.truncated, false);
   });
@@ -40,19 +47,19 @@ test("lists the markdown files at the top level", async () => {
 // recursive walk of a large folder is neither - measured at 39 seconds on a home directory.
 test("does not descend into subfolders", async () => {
   await withTree({ "plan.md": null, "notes/risks.md": null }, async (dir) => {
-    assert.deepEqual((await outlineWorkspace(dir)).paths, ["plan.md"]);
+    assert.deepEqual((await outlineOf(dir)).paths, ["plan.md"]);
   });
 });
 
 test("lists markdown only, not everything in the folder", async () => {
   await withTree({ "plan.md": null, "photo.png": null, "notes.txt": null }, async (dir) => {
-    assert.deepEqual((await outlineWorkspace(dir)).paths, ["plan.md"]);
+    assert.deepEqual((await outlineOf(dir)).paths, ["plan.md"]);
   });
 });
 
 test("accepts the other markdown extension", async () => {
   await withTree({ "a.md": null, "b.markdown": null }, async (dir) => {
-    assert.deepEqual((await outlineWorkspace(dir)).paths, ["a.md", "b.markdown"]);
+    assert.deepEqual((await outlineOf(dir)).paths, ["a.md", "b.markdown"]);
   });
 });
 
@@ -60,13 +67,13 @@ test("accepts the other markdown extension", async () => {
 // drift between turns with nothing having changed.
 test("is in a stable order", async () => {
   await withTree({ "c.md": null, "a.md": null, "b.md": null }, async (dir) => {
-    assert.deepEqual((await outlineWorkspace(dir)).paths, ["a.md", "b.md", "c.md"]);
+    assert.deepEqual((await outlineOf(dir)).paths, ["a.md", "b.md", "c.md"]);
   });
 });
 
 test("names no more files than it was asked for, and says it stopped", async () => {
   await withTree({ "a.md": null, "b.md": null, "c.md": null }, async (dir) => {
-    const outline = await outlineWorkspace(dir, 2);
+    const outline = await outlineOf(dir, { limit: 2 });
     assert.deepEqual(outline.paths, ["a.md", "b.md"]);
     assert.equal(outline.truncated, true);
   });
@@ -79,7 +86,7 @@ test("defaults to a short menu rather than a complete one", async () => {
   }
 
   await withTree(many, async (dir) => {
-    const outline = await outlineWorkspace(dir);
+    const outline = await outlineOf(dir);
     assert.equal(outline.paths.length, DEFAULT_OUTLINE_FILE_LIMIT);
     assert.equal(outline.truncated, true);
   });
@@ -87,13 +94,25 @@ test("defaults to a short menu rather than a complete one", async () => {
 
 test("an empty folder produces an empty outline rather than a failure", async () => {
   await withTree({}, async (dir) => {
-    assert.deepEqual(await outlineWorkspace(dir), { paths: [], truncated: false });
+    assert.deepEqual(await outlineOf(dir), { paths: [], truncated: false });
   });
 });
 
 test("a folder that is not there produces an empty outline", async () => {
-  assert.deepEqual(await outlineWorkspace(path.join(os.tmpdir(), "trypthos-not-a-folder")), {
+  assert.deepEqual(await outlineOf(path.join(os.tmpdir(), "trypthos-not-a-folder")), {
     paths: [],
     truncated: false,
+  });
+});
+
+/// This list is the allowlist, so which file types are on decides what the model may read - not just
+/// what it is shown. A type the user has turned off is a file chat cannot ask for.
+test("offers only the file types that are turned on", async () => {
+  await withTree({ "plan.md": null, "notes.txt": null, "logo.png": null }, async (dir) => {
+    assert.deepEqual((await outlineOf(dir)).paths, ["plan.md"]);
+    assert.deepEqual((await outlineOf(dir, { fileTypes: ["markdown", "text"] })).paths, [
+      "notes.txt",
+      "plan.md",
+    ]);
   });
 });

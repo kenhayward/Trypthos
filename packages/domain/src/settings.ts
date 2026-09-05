@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ChatProfileListSchema } from "./chat";
 import { DEFAULT_EDITOR_MODE, EditorModeSchema } from "./editorMode";
+import { DEFAULT_FILE_TYPES } from "./fileTypes";
 import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
 import { loadPersisted, type Migration } from "./persisted";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
@@ -14,7 +15,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 10;
+export const SETTINGS_VERSION = 11;
 
 export const SettingsSchema = z
   .object({
@@ -82,6 +83,21 @@ export const SettingsSchema = z
         showPanel: z.boolean().nullable(),
       })
       .strict(),
+    fileTypes: z
+      .object({
+        /// The file types the app takes an interest in, by id.
+        ///
+        /// **Strings, not an enum, and deliberately so.** A settings file written by a newer build
+        /// names types this one has never heard of; a strict enum would refuse the whole file and
+        /// take the user's panel widths, their open folder and every configured model with it. An
+        /// id nothing recognises is ignored where it is READ (`enabledFileTypes`) and left alone
+        /// here, so an upgrade and a downgrade do not each wipe the other's choices.
+        ///
+        /// Ids rather than extensions, so a type can gain an extension in a later release without
+        /// a migration.
+        enabled: z.array(z.string()),
+      })
+      .strict(),
     editor: z
       .object({
         /// The view a document opens in.
@@ -115,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
     folderFileLimit: DEFAULT_OUTLINE_FILE_LIMIT,
     showPanel: null,
   },
+  fileTypes: { enabled: [...DEFAULT_FILE_TYPES] },
   editor: { defaultViewMode: DEFAULT_EDITOR_MODE },
 };
 
@@ -190,6 +207,14 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
         },
       };
     },
+  },
+  {
+    to: 11,
+    // Version 11 added the file types. Markdown alone, written out rather than read from
+    // DEFAULT_FILE_TYPES: a migration is a record of what a version DID, and reading a constant
+    // would silently change what old files become the day that constant changes. Nothing an
+    // existing installation shows is altered by this.
+    migrate: (input) => ({ ...input, fileTypes: { enabled: ["markdown"] } }),
   },
   {
     to: 6,

@@ -12,6 +12,7 @@ export const CAPABILITIES = `
 | Feature | Description |
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
+| File types | Choose which kinds of file Trypthos shows. Markdown is always on; turn on anything else from Settings. A type that is off is not listed, not opened, and not offered to chat. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. |
 | Formatting toolbar | In Source view, a button for every markdown construct. Headings act on the current line, character formatting wraps your selection, and a second press removes what the first added. |
 | Tabs | Open as many files as you like. Each has its own tab, keeps its own unsaved changes, and comes back where you left it. A list at the end of the strip reaches any of them. |
@@ -19,7 +20,7 @@ export const CAPABILITIES = `
 | AI chat | Appears once you configure a model, and can be switched off. Ask about your document, a selection, attached files or the folder, apply proposed changes, and watch how full the context is. |
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk, and unsaved changes are never discarded without asking. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
-| Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt and the editor. |
+| Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and file types. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it here. Switched on from Settings. |
 | Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. |

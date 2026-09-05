@@ -245,7 +245,10 @@ function registerIpcHandlers({
             const workspace = getWorkspace();
             if (!workspace) return { ok: false, reason: "no-workspace" };
 
-            const outline = await outlineWorkspace(workspace.root, settings.chat.folderFileLimit);
+            const outline = await outlineWorkspace(workspace.root, {
+              fileTypes: settings.fileTypes.enabled,
+              limit: settings.chat.folderFileLimit,
+            });
             if (!outline.paths.includes(wanted)) return { ok: false, reason: "not-allowed" };
 
             const result = await workspace.provider.read(wanted);
@@ -294,7 +297,12 @@ function registerIpcHandlers({
     const settings = await readSettings(userDataDir);
     return {
       ok: true,
-      outline: await outlineWorkspace(workspace.root, settings.chat.folderFileLimit),
+      outline: await outlineWorkspace(workspace.root, {
+        // Both from settings read HERE, never from the renderer: this list is the allowlist the
+        // model reads from, so widening it is a decision the main process makes.
+        fileTypes: settings.fileTypes.enabled,
+        limit: settings.chat.folderFileLimit,
+      }),
     };
   });
 

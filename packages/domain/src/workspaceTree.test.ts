@@ -1,33 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isMarkdownFile, isHidden, sortNodes, type TreeEntry } from "./workspaceTree";
+import { isHidden, sortNodes, type TreeEntry } from "./workspaceTree";
 
 const file = (name: string): TreeEntry => ({ name, kind: "file" });
 const dir = (name: string): TreeEntry => ({ name, kind: "directory" });
-
-describe("isMarkdownFile", () => {
-  it("recognises the usual markdown extensions", () => {
-    expect(isMarkdownFile("notes.md")).toBe(true);
-    expect(isMarkdownFile("notes.markdown")).toBe(true);
-    expect(isMarkdownFile("notes.mdown")).toBe(true);
-  });
-
-  it("ignores case, because Windows and macOS do", () => {
-    expect(isMarkdownFile("NOTES.MD")).toBe(true);
-  });
-
-  it("rejects anything else", () => {
-    expect(isMarkdownFile("notes.txt")).toBe(false);
-    expect(isMarkdownFile("notes")).toBe(false);
-    expect(isMarkdownFile("md")).toBe(false);
-  });
-
-  // "archive.md.bak" ends in .bak, not .md. Matching a substring rather than the extension would
-  // offer to open a backup as markdown.
-  it("matches the extension, not a substring", () => {
-    expect(isMarkdownFile("archive.md.bak")).toBe(false);
-    expect(isMarkdownFile("readme.mdx")).toBe(false);
-  });
-});
 
 describe("isHidden", () => {
   it("treats dot-prefixed entries as hidden", () => {

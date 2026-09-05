@@ -1,9 +1,9 @@
 "use strict";
 
 const fs = require("node:fs/promises");
-const { DEFAULT_OUTLINE_FILE_LIMIT, isMarkdownFile } = require("@trypthos/domain");
+const { DEFAULT_OUTLINE_FILE_LIMIT, isOpenable } = require("@trypthos/domain");
 
-/// The markdown files chat is offered, and may then ask to read.
+/// The files chat is offered, and may then ask to read.
 ///
 /// **One level only.** Not a recursive walk: measured on a home directory, one took 39 seconds
 /// across 113,553 folders, and the result was a list far too long to be useful as a menu. The
@@ -16,11 +16,15 @@ const { DEFAULT_OUTLINE_FILE_LIMIT, isMarkdownFile } = require("@trypthos/domain
 /// is deliberate: a separate check would be a second definition of "which files are readable", and
 /// the two would drift.
 
-/// The markdown files directly inside `root`, relative to it.
+/// The files directly inside `root`, relative to it, of the types the user has turned on.
+///
+/// **`fileTypes` widens an allowlist**, which is why it is required and why it comes from settings
+/// read in the main process rather than from anything the renderer sends. A type that is off is a
+/// file the model is neither shown nor able to ask for.
 ///
 /// Total: it never throws. A folder that has been deleted answers with an empty outline rather than
 /// an error nobody can act on.
-async function outlineWorkspace(root, limit = DEFAULT_OUTLINE_FILE_LIMIT) {
+async function outlineWorkspace(root, { fileTypes, limit = DEFAULT_OUTLINE_FILE_LIMIT }) {
   let entries;
   try {
     entries = await fs.readdir(root, { withFileTypes: true });
@@ -31,7 +35,7 @@ async function outlineWorkspace(root, limit = DEFAULT_OUTLINE_FILE_LIMIT) {
   // Sorted so the same folder produces the same menu twice running. Without it the order is the
   // filesystem's, and which files the model can see would drift between turns.
   const files = entries
-    .filter((entry) => entry.isFile() && isMarkdownFile(entry.name))
+    .filter((entry) => entry.isFile() && isOpenable(entry.name, fileTypes))
     .map((entry) => entry.name)
     .sort((a, b) => a.localeCompare(b));
 

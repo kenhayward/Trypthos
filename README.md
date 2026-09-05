@@ -10,6 +10,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Feature | Description |
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
+| File types | Choose which kinds of file Trypthos takes an interest in. Markdown is always on; anything else is turned on from Settings, and a type that is off does not appear in the browser, cannot be opened, and is not offered to chat. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. A mode is a view, never a transform. |
 | Formatting toolbar | Source view has a button for every markdown construct Trypthos renders. Headings toggle on the line you are on; bold, italic and the rest wrap what you have selected, and press again to remove. |
 | Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct with an example, and the flavour of markdown named. |
@@ -18,7 +19,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | AI chat | Appears once you configure a model, and can be switched off in Settings. Ask about your document, a selection, attached files or the whole folder, apply proposed changes, and watch how full the model's context is. |
 | Editing files | Open, edit and save, with a save refused if the file changed on disk since you opened it. Unsaved changes are never discarded without asking. |
 | Appearance | Light, dark, or follow your system, from Settings. The window draws its own title bar. |
-| Settings | One window with a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and About. |
+| Settings | One window with a page per subject: appearance, window behaviour, chat models, the system prompt, the editor, file types and About. |
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it in Trypthos. Switched on from Settings, and off again the same way. |
 | Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with editing and spelling suggestions in every text field. |

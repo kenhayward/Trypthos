@@ -34,6 +34,8 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),
     onOpenFile: vi.fn(),
+    fileTypes: ["markdown"] as readonly string[],
+    onOpenFileTypes: vi.fn(),
     ...overrides,
   };
   render(<WorkspacePanel {...props} />);
@@ -46,7 +48,7 @@ describe("WorkspacePanel", () => {
     expect(screen.getByText("No folder open yet.")).toBeDefined();
   });
 
-  it("lists folders and markdown files, and nothing else", () => {
+  it("lists folders and files of an enabled type, and nothing else", () => {
     panel();
     expect(screen.getByRole("button", { name: /docs/ })).toBeDefined();
     expect(screen.getByRole("button", { name: /README\.md/ })).toBeDefined();
@@ -113,11 +115,37 @@ describe("WorkspacePanel", () => {
 
   it("says so when a filter matches nothing", () => {
     panel({ filter: "nothing-matches-this" });
-    expect(screen.getByText("No markdown files match.")).toBeDefined();
+    expect(screen.getByText("No files match.")).toBeDefined();
   });
 
-  it("counts the markdown files it is showing", () => {
+  it("counts the files it is showing", () => {
     panel();
     expect(screen.getByText(/2 files/)).toBeDefined();
+  });
+});
+
+/// The footer is where the file types are discoverable at all. Every type but markdown is off by
+/// default, so a user who never opens Settings would otherwise have no way of learning the setting
+/// exists - the release notes are the only other place it is mentioned.
+describe("the file types the panel is showing", () => {
+  it("names the one type that is on", () => {
+    panel();
+    expect(screen.getByRole("button", { name: "Markdown" })).toBeDefined();
+  });
+
+  it("counts them once there is more than one", () => {
+    panel({ fileTypes: ["markdown", "text"] });
+    expect(screen.getByRole("button", { name: "2 file types" })).toBeDefined();
+  });
+
+  it("opens the page that changes them", async () => {
+    const props = panel();
+    await userEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(props.onOpenFileTypes).toHaveBeenCalled();
+  });
+
+  it("counts the files on screen beside them", () => {
+    panel();
+    expect(screen.getByText("2 files")).toBeDefined();
   });
 });

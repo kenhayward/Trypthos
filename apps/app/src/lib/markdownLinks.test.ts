@@ -24,8 +24,8 @@ describe("markdownLinkHandler", () => {
     openExternal.mockReset();
   });
 
-  const handler = (fromPath: string | null = null) =>
-    markdownLinkHandler({ fromPath, openDocument, openExternal });
+  const handler = (fromPath: string | null = null, fileTypes: readonly string[] = ["markdown"]) =>
+    markdownLinkHandler({ fromPath, fileTypes, openDocument, openExternal });
 
   it("sends a web address to the browser instead of navigating the window", () => {
     const { event, preventDefault } = clickOn(

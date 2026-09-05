@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { enabledFileTypes } from "@trypthos/domain";
 import { treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { RemoteNode } from "../lib/workspaceClient";
 
@@ -22,6 +23,15 @@ interface Props {
   onToggleFolder: (path: string) => void;
   onRetryFolder: (path: string) => void;
   onOpenFile: (node: RemoteNode) => void;
+  /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
+  /// the footer names them.
+  fileTypes: readonly string[];
+  /// Opens the File types page of Settings.
+  ///
+  /// The footer is the only place the setting is discoverable at all: every type but markdown is
+  /// off by default, so a user who never opens Settings would never learn it exists. Naming what is
+  /// on and being the way to change it is one affordance rather than a label plus a hunt.
+  onOpenFileTypes: () => void;
 }
 
 /// Left panel: the folder browser.
@@ -42,14 +52,23 @@ export default function WorkspacePanel({
   onToggleFolder,
   onRetryFolder,
   onOpenFile,
+  fileTypes,
+  onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
-  const rows = useMemo(() => treeRows(folders, filter), [folders, filter]);
+  const rows = useMemo(() => treeRows(folders, filter, fileTypes), [folders, filter, fileTypes]);
   const fileCount = visibleFileCount(rows);
   // Folders survive a filter, so the row list is never empty while any exist - which meant a filter
   // matching nothing left folder rows on screen with no explanation at all. The message keys off the
   // FILE count instead, and reads correctly beside folders nobody has opened yet.
   const noMatches = filter.trim() !== "" && fileCount === 0;
+
+  // Resolved through the domain rather than counting the stored ids, so a pinned type and an id
+  // this build does not recognise are handled here exactly as the tree handles them. The footer
+  // must describe what is actually being listed, not what a settings file happens to say.
+  const types = enabledFileTypes(fileTypes);
+  const typesLabel =
+    types.length === 1 ? t(types[0]!.labelKey) : t("workspace.typeCount", { count: types.length });
 
   return (
     <aside
@@ -130,8 +149,17 @@ export default function WorkspacePanel({
             )}
           </div>
 
-          <div className="border-t border-rule px-3 py-1 text-xs text-faint">
-            {t("workspace.footer", { count: fileCount })}
+          <div className="flex items-center gap-1 border-t border-rule px-3 py-1 text-xs text-faint">
+            <button
+              type="button"
+              onClick={onOpenFileTypes}
+              title={t("workspace.fileTypesHint")}
+              className="rounded px-1 underline decoration-dotted underline-offset-2 hover:bg-hover hover:text-ink-2"
+            >
+              {typesLabel}
+            </button>
+            <span aria-hidden="true">{"·"}</span>
+            <span>{t("workspace.footer", { count: fileCount })}</span>
           </div>
         </>
       )}

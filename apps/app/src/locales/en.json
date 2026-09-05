@@ -8,13 +8,15 @@
     "openFolder": "Open folder",
     "noFolder": "No folder open yet.",
     "emptyFolder": "This folder is empty.",
-    "filter": "Filter markdown files",
+    "filter": "Filter files",
     "loading": "Loading...",
     "listFailed": "Couldn't list this folder.",
     "retry": "Retry",
     "unsavedDot": "Unsaved changes",
-    "noMatches": "No markdown files match.",
-    "footer": "Markdown only · {{count}} files"
+    "noMatches": "No files match.",
+    "footer": "{{count}} files",
+    "typeCount": "{{count}} file types",
+    "fileTypesHint": "Choose which file types appear here"
   },
   "editor": {
     "title": "Editor",
@@ -113,6 +115,10 @@
       "over": "About {{tokens}} tokens, past this model's {{limit}}. The oldest of the conversation may be dropped."
     }
   },
+  "fileTypes": {
+    "markdown": "Markdown",
+    "text": "Plain text"
+  },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
     "noWorkspace": "No folder is open yet.",
@@ -153,6 +159,7 @@
       "chatModels": "Chat models",
       "ai": "AI & system prompt",
       "editor": "Editor",
+      "fileTypes": "File types",
       "about": "About"
     },
     "theme": {
@@ -208,6 +215,13 @@
       "folderFiles": "Files offered from the folder",
       "folderFilesHint": "How many of the folder's markdown files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one.",
       "intro": "Models Trypthos can chat with. Add as many as you like, and mark the one new chats should start on."
+    },
+    "fileTypes": {
+      "intro": "Which files Trypthos shows you. A type that is turned off does not appear in the folder browser, cannot be opened, and is not offered to chat. Turning one on in a folder full of them will make the list on the left a great deal longer.",
+      "always": "Always on",
+      "group": {
+        "documents": "Documents"
+      }
     },
     "editor": {
       "defaultView": "The view documents open in",
