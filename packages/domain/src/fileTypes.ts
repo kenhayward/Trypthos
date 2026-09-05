@@ -15,11 +15,19 @@ import type { EditorMode } from "./editorMode";
 /// Nothing here imports CodeMirror - the loaders that turn an id into a language belong to the
 /// renderer, and a module-graph test keeps them there.
 
-export type FileTypeId = "markdown" | "text";
+export type FileTypeId =
+  | "markdown"
+  | "text"
+  | "json"
+  | "yaml"
+  | "xml"
+  | "html"
+  | "css"
+  | "javascript";
 
 /// How the settings page arranges its rows. Groups are added as types arrive rather than declared
 /// ahead of them: a heading with nothing under it is a page that looks broken.
-export type FileTypeGroup = "documents";
+export type FileTypeGroup = "documents" | "data" | "languages";
 
 /// What editing a file of this type is like, and therefore how the surface behaves.
 ///
@@ -46,7 +54,7 @@ export interface FileType {
   readonly pinned: boolean;
 }
 
-export const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = ["documents"];
+export const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = ["documents", "data", "languages"];
 
 /// In the order the settings page lists them within their group.
 export const FILE_TYPES: readonly FileType[] = [
@@ -71,7 +79,82 @@ export const FILE_TYPES: readonly FileType[] = [
     kind: "prose",
     pinned: false,
   },
+  {
+    id: "json",
+    labelKey: "fileTypes.json",
+    group: "data",
+    // `.map` is a source map, which is JSON and is what a person finds beside a built file.
+    extensions: ["json", "jsonc", "map", "webmanifest"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "yaml",
+    labelKey: "fileTypes.yaml",
+    group: "data",
+    extensions: ["yaml", "yml"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "xml",
+    labelKey: "fileTypes.xml",
+    group: "data",
+    extensions: ["xml", "svg", "xsd", "xsl"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "html",
+    labelKey: "fileTypes.html",
+    group: "data",
+    extensions: ["html", "htm"],
+    filenames: [],
+    // Source alone, deliberately. Rendering a workspace file's HTML would execute its scripts inside
+    // the renderer, which is a security surface rather than a feature - see docs/specs/file-types.md.
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "css",
+    labelKey: "fileTypes.css",
+    group: "data",
+    // `.css` only. SCSS and LESS parse as CSS right up to the first nested rule, and highlighting
+    // that is confidently wrong is worse than none - they arrive with their own grammars.
+    extensions: ["css"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "javascript",
+    labelKey: "fileTypes.javascript",
+    group: "languages",
+    // One type, not four. TypeScript and JSX are dialects of the same grammar and the same npm
+    // package, and a settings page that made somebody tick four boxes to open a project would be
+    // describing the packaging rather than the choice. The loader picks the dialect from the name.
+    extensions: ["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
 ];
+
+/// What a document with no file behind it is treated as.
+///
+/// The scratch buffer and the built-in guide are both markdown, and neither has a name an extension
+/// could be read from. The catalogue's own entry rather than a copy of it, so there is one answer to
+/// "what is markdown" and it cannot drift.
+export const MARKDOWN_FILE_TYPE: FileType = FILE_TYPES.find((type) => type.id === "markdown")!;
 
 /// What a new installation, and an upgraded one, both start with.
 ///

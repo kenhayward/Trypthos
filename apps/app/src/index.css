@@ -50,6 +50,12 @@
   --color-tok-strong: var(--tp-tok-strong);
   --color-tok-code: var(--tp-tok-code);
   --color-tok-quote: var(--tp-tok-quote);
+  --color-tok-keyword: var(--tp-tok-keyword);
+  --color-tok-string: var(--tp-tok-string);
+  --color-tok-comment: var(--tp-tok-comment);
+  --color-tok-number: var(--tp-tok-number);
+  --color-tok-type: var(--tp-tok-type);
+  --color-tok-func: var(--tp-tok-func);
   --color-caret-line: var(--tp-caret-line);
 
   --shadow-tab: var(--tp-shadow-tab);
@@ -112,6 +118,14 @@
   --tp-tok-strong: #b0651e;
   --tp-tok-code: #a6386b;
   --tp-tok-quote: #6b6280;
+  /* Code roles. The same idea as the markdown ones above - a role, not a hue - and shared with
+     fenced code inside a markdown document, so the two cannot drift into different palettes. */
+  --tp-tok-keyword: #8250df;
+  --tp-tok-string: #0a7c5a;
+  --tp-tok-comment: #6b7688;
+  --tp-tok-number: #b0651e;
+  --tp-tok-type: #2a5d9f;
+  --tp-tok-func: #a6386b;
   --tp-caret-line: rgba(47, 107, 237, 0.05);
 
   --tp-shadow-tab: 0 1px 2px rgba(15, 23, 42, 0.1);
@@ -157,6 +171,12 @@
     --tp-tok-strong: #e0a567;
     --tp-tok-code: #e58bb0;
     --tp-tok-quote: #a79abf;
+    --tp-tok-keyword: #c69cf5;
+    --tp-tok-string: #6cd0a8;
+    --tp-tok-comment: #8b95a7;
+    --tp-tok-number: #e0a567;
+    --tp-tok-type: #7fb0e8;
+    --tp-tok-func: #e58bb0;
     --tp-caret-line: rgba(47, 107, 237, 0.14);
 
     --tp-shadow-tab: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -201,6 +221,12 @@
   --tp-tok-strong: #e0a567;
   --tp-tok-code: #e58bb0;
   --tp-tok-quote: #a79abf;
+  --tp-tok-keyword: #c69cf5;
+  --tp-tok-string: #6cd0a8;
+  --tp-tok-comment: #8b95a7;
+  --tp-tok-number: #e0a567;
+  --tp-tok-type: #7fb0e8;
+  --tp-tok-func: #e58bb0;
   --tp-caret-line: rgba(47, 107, 237, 0.14);
 
   --tp-shadow-tab: 0 1px 2px rgba(0, 0, 0, 0.5);

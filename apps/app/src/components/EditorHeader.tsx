@@ -1,14 +1,13 @@
 import { useTranslation } from "react-i18next";
-import {
-  EDITOR_MODES,
-  MODE_HINT_KEYS,
-  MODE_LABEL_KEYS,
-  type EditorMode,
-} from "../lib/editorMode";
+import { MODE_HINT_KEYS, MODE_LABEL_KEYS, type EditorMode } from "../lib/editorMode";
 
 interface Props {
   dirty: boolean;
   mode: EditorMode;
+  /// The views THIS document offers, from its file type. Three for markdown, one for everything
+  /// else - Live hides markdown punctuation and Preview renders markdown, so neither means anything
+  /// over a source file.
+  modes: readonly EditorMode[];
   onModeChange: (mode: EditorMode) => void;
 }
 
@@ -18,7 +17,7 @@ interface Props {
 /// It used to name the document as well. The tabs beside it do that now, and they do it better -
 /// they name every open document rather than only this one. So the split is identity on the left,
 /// STATE on the right, and neither repeats the other.
-export default function EditorHeader({ dirty, mode, onModeChange }: Props) {
+export default function EditorHeader({ dirty, mode, modes, onModeChange }: Props) {
   const { t } = useTranslation();
 
   return (
@@ -29,12 +28,15 @@ export default function EditorHeader({ dirty, mode, onModeChange }: Props) {
         </span>
       )}
 
+      {/* Nothing to switch between is nothing to draw. A group of one button, permanently pressed,
+          is a control answering a question the user did not ask. */}
+      {modes.length > 1 && (
       <div
         role="group"
         aria-label={t("editor.viewMode")}
         className="flex shrink-0 gap-0.5 rounded-md bg-sunken p-0.5"
       >
-        {EDITOR_MODES.map((candidate) => (
+        {modes.map((candidate) => (
           <button
             key={candidate}
             type="button"
@@ -55,6 +57,7 @@ export default function EditorHeader({ dirty, mode, onModeChange }: Props) {
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }

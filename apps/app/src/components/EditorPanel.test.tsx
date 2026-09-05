@@ -307,3 +307,66 @@ describe("the formatting toolbar", () => {
     expect(toolbar()).toBeNull();
   });
 });
+
+/// Live and Preview are markdown constructs - Live hides markdown punctuation, Preview renders
+/// markdown - so the views a document offers are a property of its type rather than of the app.
+describe("the views a document offers", () => {
+  function open(path: string, fileTypes: readonly string[] = ["markdown", "json"]) {
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={[path]}
+        activePath={path}
+        dirty={false}
+        value={'{ "a": 1 }\n'}
+        onChange={vi.fn()}
+        fileTypes={fileTypes}
+      />,
+    );
+  }
+
+  it("offers no switcher at all for a type with one view", () => {
+    open("data.json");
+    expect(screen.queryByRole("button", { name: "Live" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "View mode" })).toBeNull();
+  });
+
+  it("still offers all three for markdown", () => {
+    open("notes.md");
+    expect(screen.getByRole("button", { name: "Live" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDefined();
+  });
+
+  // The stored default is Live, which a JSON file cannot honour. Falling back to the type's own
+  // first view is what stops the centre panel opening empty.
+  it("ignores a default view its type does not have", () => {
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["data.json"]}
+        activePath="data.json"
+        dirty={false}
+        value={'{ "a": 1 }\n'}
+        onChange={vi.fn()}
+        defaultMode="live"
+        fileTypes={["markdown", "json"]}
+      />,
+    );
+    expect(screen.getByLabelText("Markdown source")).toBeDefined();
+  });
+
+  // The buttons write markdown. On anything else they would insert punctuation that means nothing
+  // in the file it landed in.
+  it("shows the formatting toolbar only for markdown", () => {
+    open("data.json");
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  // A file whose type is turned off is not reachable through the tree, but it can still be open in
+  // a tab from before the setting changed. It stays readable rather than losing its panel.
+  it("falls back to markdown for a document of no known type", () => {
+    open("mystery.qqq", ["markdown"]);
+    expect(screen.getByLabelText("Markdown source")).toBeDefined();
+  });
+});

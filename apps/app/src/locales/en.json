@@ -117,7 +117,13 @@
   },
   "fileTypes": {
     "markdown": "Markdown",
-    "text": "Plain text"
+    "text": "Plain text",
+    "json": "JSON",
+    "yaml": "YAML",
+    "xml": "XML and SVG",
+    "html": "HTML",
+    "css": "CSS",
+    "javascript": "JavaScript and TypeScript"
   },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
@@ -220,7 +226,9 @@
       "intro": "Which files Trypthos shows you. A type that is turned off does not appear in the folder browser, cannot be opened, and is not offered to chat. Turning one on in a folder full of them will make the list on the left a great deal longer.",
       "always": "Always on",
       "group": {
-        "documents": "Documents"
+        "documents": "Documents",
+        "data": "Markup and data",
+        "languages": "Programming languages"
       }
     },
     "editor": {

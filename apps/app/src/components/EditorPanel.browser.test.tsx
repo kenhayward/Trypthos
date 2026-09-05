@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import { userEvent } from "@vitest/browser/context";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
 import { resolveEdit } from "@trypthos/domain";
-import type { EditorHandle, EditorSelection } from "./MarkdownEditor";
+import type { EditorHandle, EditorSelection } from "./DocumentEditor";
 
 const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) here.\n";
 
@@ -667,5 +667,79 @@ describe("the formatting toolbar, on a real selection", () => {
     // Typing goes into the document rather than into the button that was just pressed.
     await userEvent.keyboard("X");
     expect(lineWith("Title").textContent).toContain("X");
+  });
+});
+
+/// Syntax colouring, which only a browser can answer.
+///
+/// CodeMirror decides what to decorate by measuring the visible range, and jsdom has no layout
+/// engine - so a jsdom assertion here would be testing the geometry polyfill rather than the editor.
+/// It is also the only place the two halves meet: the loader fetches a grammar, and the theme turns
+/// its tags into the same CSS variables the chrome around it reads.
+describe("syntax colouring, rendered", () => {
+  function open(path: string, value: string) {
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={[path]}
+        activePath={path}
+        dirty={false}
+        value={value}
+        onChange={() => {}}
+        fileTypes={["markdown", "json", "javascript"]}
+      />,
+    );
+  }
+
+  /// The colours actually painted in the content, ignoring the inherited default.
+  const paintedColours = (): Set<string> => {
+    const base = getComputedStyle(surface()).color;
+    const seen = new Set<string>();
+    for (const span of surface().querySelectorAll("span")) {
+      const colour = getComputedStyle(span).color;
+      if (colour !== base) seen.add(colour);
+    }
+    return seen;
+  };
+
+  async function settle() {
+    // The grammar arrives through a dynamic import, so there is a turn of the event loop between
+    // the document appearing and its colouring doing so.
+    await vi.waitFor(() => expect(paintedColours().size).toBeGreaterThan(0), { timeout: 3000 });
+  }
+
+  it("colours a JSON document once its grammar has loaded", async () => {
+    open("data.json", '{\n  "name": "Ada",\n  "count": 42\n}\n');
+    await settle();
+
+    // Keys, strings and numbers are three different roles, so three different colours.
+    expect(paintedColours().size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("colours TypeScript, from the same one row in Settings as JavaScript", async () => {
+    open("main.ts", "const answer: number = 42; // a comment\n");
+    await settle();
+
+    expect(paintedColours().size).toBeGreaterThanOrEqual(3);
+  });
+
+  // Plain text has no loader at all, and CodeMirror's default is already exactly that. This is the
+  // control: it proves the assertions above are measuring colouring rather than something the
+  // editor paints regardless.
+  it("leaves plain text uncoloured", async () => {
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["notes.txt"]}
+        activePath="notes.txt"
+        dirty={false}
+        value={"const answer = 42;\n"}
+        onChange={() => {}}
+        fileTypes={["markdown", "text"]}
+      />,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(paintedColours().size).toBe(0);
   });
 });

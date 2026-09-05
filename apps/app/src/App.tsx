@@ -12,7 +12,7 @@ import {
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
 import EditorPanel from "./components/EditorPanel";
-import type { EditorHandle, EditorSelection } from "./components/MarkdownEditor";
+import type { EditorHandle, EditorSelection } from "./components/DocumentEditor";
 import PanelDivider from "./components/PanelDivider";
 import PanelRail from "./components/PanelRail";
 import SettingsDialog from "./components/SettingsDialog";
@@ -451,6 +451,7 @@ export default function App() {
           value={state.content}
           readOnly={state.readOnly}
           defaultMode={settings.editor.defaultViewMode}
+          fileTypes={settings.fileTypes.enabled}
           onActivateFile={actions.activateFile}
           onCloseFile={(path) => void actions.closeFile(path)}
           onSelectionChange={(next) => (selection.current = next)}

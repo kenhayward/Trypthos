@@ -31,7 +31,23 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 Trypthos opens markdown, and the **File types** page of Settings decides what else it opens. Markdown
 is always on and cannot be turned off - it is what the app is - and every other type is off until you
-turn it on. Plain text is the first of them: `.txt`, `.text` and `.nfo`.
+turn it on:
+
+| Group | Types |
+| --- | --- |
+| Documents | Markdown (always on), Plain text (`.txt` `.text` `.nfo`) |
+| Markup and data | JSON, YAML, XML and SVG, HTML, CSS |
+| Programming languages | JavaScript and TypeScript (`.js` `.mjs` `.cjs` `.jsx` `.ts` `.mts` `.cts` `.tsx`) |
+
+JavaScript and TypeScript are one choice rather than four. They are the same language wearing
+different hats, and Trypthos works out from a file's name whether to read it as TypeScript, as JSX,
+or as both.
+
+Every type is **coloured by role** - keywords, strings, comments, numbers, types and names - using
+the same palette as the rest of the app, so the editor follows your light or dark theme instead of
+being painted on top of it. As in Source view, colour stands in for meaning: nothing is resized or
+made bold. A grammar is fetched only the first time you open a file that needs one, so types you
+never turn on cost you nothing.
 
 A type that is off is not merely uncoloured, it is absent. Its files do not appear in the folder
 browser, cannot be opened by clicking a link to one, and are not among the files chat is offered or
@@ -44,6 +60,15 @@ count when there are more - and clicking it goes straight to the page that chang
 Your choice is remembered between launches, and upgrading never turns anything on for you: a
 Trypthos that has been showing you markdown alone carries on doing exactly that until you say
 otherwise.
+
+A file that is not markdown opens in **Source** and stays there. Live and Preview are markdown ideas
+- Live hides markdown punctuation, Preview renders markdown as prose - so neither means anything over
+a stylesheet, and the view buttons are simply not drawn for a document with one view. The formatting
+toolbar goes with them, since its buttons write markdown.
+
+Two things about editing change with the file as well. Lines wrap only in prose, because in code and
+in logs the column a character sits in is information. And spelling is checked only in prose, because
+otherwise every identifier in a source file is underlined in red.
 
 ## Markdown editor
 
