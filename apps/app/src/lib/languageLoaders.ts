@@ -1,5 +1,6 @@
 import { LanguageSupport, StreamLanguage, type StreamParser } from "@codemirror/language";
 import type { FileTypeId } from "@trypthos/domain";
+import { fenceLanguages } from "./fenceLanguages";
 
 /// Turning a file type into a CodeMirror language, on demand.
 ///
@@ -15,10 +16,20 @@ import type { FileTypeId } from "@trypthos/domain";
 /// Nothing here belongs in the domain: the catalogue is data about files, and this is the renderer's
 /// own business.
 
-/// Given the file's NAME, because a type can have dialects: TypeScript and JSX are the same grammar
-/// and the same package as JavaScript, configured differently. That is dialect selection within one
-/// type, not a second type - see the catalogue's note on why they are one row.
-export type LanguageLoader = (name: string) => Promise<LanguageSupport>;
+/// What a loader is told about the document it is loading for.
+///
+/// `name` because a row can carry several grammars: TypeScript and JSX are the same package as
+/// JavaScript configured differently, and a stylesheet is one of four. That is dialect selection
+/// within one type rather than a second type - see the catalogue's note on why they are one row.
+///
+/// `fileTypes` because ONE loader needs the rest of the catalogue: markdown colours the fenced code
+/// blocks inside a document, and which languages those may be is the user's File types setting.
+export interface LanguageRequest {
+  name: string;
+  fileTypes: readonly string[];
+}
+
+export type LanguageLoader = (request: LanguageRequest) => Promise<LanguageSupport>;
 
 const TYPESCRIPT = /\.[cm]?tsx?$/i;
 const JSX = /x$/i;
@@ -40,7 +51,12 @@ const extensionOf = (name: string): string => {
 /// already exactly that. Keyed by every id in the catalogue, so a type added there without a loader
 /// is a type-error rather than a file that silently opens uncoloured.
 export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
-  markdown: () => import("@codemirror/lang-markdown").then((m) => m.markdown()),
+  // The one loader that reads the rest of the catalogue: a fenced code block is coloured only if
+  // its language is a type the user has turned on.
+  markdown: ({ fileTypes }) =>
+    import("@codemirror/lang-markdown").then((m) =>
+      m.markdown({ codeLanguages: fenceLanguages(fileTypes) }),
+    ),
   text: null,
   json: () => import("@codemirror/lang-json").then((m) => m.json()),
   yaml: () => import("@codemirror/lang-yaml").then((m) => m.yaml()),
@@ -48,7 +64,7 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
   html: () => import("@codemirror/lang-html").then((m) => m.html()),
   // One row in Settings, three grammars. A stylesheet is a stylesheet to somebody choosing what to
   // see; which of them it is, is this function's problem rather than theirs.
-  css: (name) => {
+  css: ({ name }) => {
     const extension = extensionOf(name);
     if (extension === "less") return import("@codemirror/lang-less").then((m) => m.less());
     if (extension === "scss" || extension === "sass") {
@@ -56,7 +72,7 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
     }
     return import("@codemirror/lang-css").then((m) => m.css());
   },
-  javascript: (name) =>
+  javascript: ({ name }) =>
     import("@codemirror/lang-javascript").then((m) =>
       m.javascript({ typescript: TYPESCRIPT.test(name), jsx: JSX.test(name) }),
     ),
@@ -73,7 +89,7 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
   go: () => import("@codemirror/lang-go").then((m) => m.go()),
   cpp: () => import("@codemirror/lang-cpp").then((m) => m.cpp()),
   csharp: () => import("@codemirror/legacy-modes/mode/clike").then((m) => legacy(m.csharp)),
-  java: (name) =>
+  java: ({ name }) =>
     extensionOf(name).startsWith("kt")
       ? import("@codemirror/legacy-modes/mode/clike").then((m) => legacy(m.kotlin))
       : import("@codemirror/lang-java").then((m) => m.java()),

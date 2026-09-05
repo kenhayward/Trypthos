@@ -70,6 +70,13 @@ interface Props {
 /// The documents live ABOVE this component, which is what makes the mode invariant checkable rather
 /// than merely intended: switching mode is local state here and cannot reach `onChange`, so a mode
 /// switch has no path by which to alter any document.
+/// Hoisted, not written inline as a default.
+///
+/// The editor now keys an effect on this list, so a fresh `[]` on every render would discard and
+/// reload the document's language on every render - a visible flicker of uncoloured text, from
+/// nothing more than an array literal in a parameter list.
+const NO_FILE_TYPES: readonly string[] = [];
+
 export default function EditorPanel({
   workspaceName,
   paths,
@@ -84,7 +91,7 @@ export default function EditorPanel({
   onSelectionChange,
   onFollowLink,
   defaultMode = DEFAULT_EDITOR_MODE,
-  fileTypes = [],
+  fileTypes = NO_FILE_TYPES,
   ref,
 }: Props) {
   const { t } = useTranslation();
@@ -183,6 +190,7 @@ export default function EditorPanel({
             onChange={onChange}
             live={mode === "live"}
             fileType={fileType}
+            fileTypes={fileTypes}
             onCaret={(line, column) => setCaret({ line, column })}
             onSelectionChange={onSelectionChange}
             onFollowLink={onFollowLink}

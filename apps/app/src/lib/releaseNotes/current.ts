@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.36.0",
+    date: "2026-09-05",
+    pr: 78,
+    headline: "Code inside your notes is coloured too",
+    summary:
+      "A fenced code block in a markdown document is now coloured by whatever language its fence names, using exactly the same colours a file of that language gets on its own. Write three backticks and python, and what follows reads as Python. The tags you would expect all work: the short ones like py, ts, rs and sh, and the written-out ones like typescript, kotlin and c++. This follows your File types setting rather than working for everything: a fence is coloured only if you have turned that language on, so the setting governs the inside of a document as well as which files appear on the left. A fence naming a language you have not turned on still reads as a code block, in the code colour markdown has always given it - nothing is lost, it simply is not broken up by role. One thing this does not yet reach: Preview still shows code blocks as plain monospace, because it renders through a different path from the editor. Source and Live have it.",
+    added: [
+      "Fenced code blocks in markdown are coloured by the language on the fence, in Source and Live.",
+      "Short tags and written-out names both work: py and python, ts and typescript, c++ and cpp.",
+    ],
+    changed: [
+      "A fence is coloured only if its language is turned on in File types, like everything else there.",
+    ],
+  },
+  {
     version: "0.35.0",
     date: "2026-09-05",
     pr: 76,
