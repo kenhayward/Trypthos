@@ -718,7 +718,7 @@ describe("ChatPanel: scope", () => {
     withScope({ files: [] });
 
     await user.click(screen.getByRole("button", { name: "Attach a file" }));
-    expect(screen.getByText(/No other markdown files/)).toBeDefined();
+    expect(screen.getByText(/No other files/)).toBeDefined();
   });
 
   // Changing what an answer is based on mid-reply would make the reply unexplainable.

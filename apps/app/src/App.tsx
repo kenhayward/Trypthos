@@ -6,6 +6,7 @@ import {
   contextTokens,
   defaultChatProfile,
   effectiveSystemPrompt,
+  fileTypeFor,
   resolveEdit,
   resolvePanelWidths,
   type ProposedEdit,
@@ -175,9 +176,18 @@ export default function App() {
   const scopeSource = useCallback(
     () => ({
       selection: selection.current.text,
-      file: state.file === null ? null : { path: state.file.path, content: state.content },
+      file:
+        state.file === null
+          ? null
+          : {
+              path: state.file.path,
+              content: state.content,
+              // Resolved from the same catalogue and the same setting the tree filters on, so what
+              // chat is told a file is cannot disagree with what the editor is drawing.
+              fileType: fileTypeFor(state.file.name, settings.fileTypes.enabled)?.id ?? null,
+            },
     }),
-    [state.file, state.content],
+    [state.file, state.content, settings.fileTypes.enabled],
   );
 
   /// The shell calls chat needs for scope. Built once: `client` is chosen at module scope and does

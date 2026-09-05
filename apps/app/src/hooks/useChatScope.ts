@@ -30,7 +30,10 @@ export interface ScopeBridge {
 
 export interface ScopeSource {
   selection: string;
-  file: { path: string; content: string } | null;
+  /// The open file, with the id of its type from the catalogue - or null when nothing recognises
+  /// it. The model is told which kind of file it is looking at, so an answer about a Python file
+  /// is not phrased as though it were prose.
+  file: { path: string; content: string; fileType: string | null } | null;
 }
 
 export function useChatScope(bridge: ScopeBridge | null, source: () => ScopeSource) {

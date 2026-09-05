@@ -203,7 +203,12 @@ export default function EditorPanel({
         )}
       </div>
 
-      <EditorStatusBar mode={mode} lineEnding={lineEnding} stats={stats} />
+      <EditorStatusBar
+        mode={mode}
+        fileTypeKey={fileType.labelKey}
+        lineEnding={lineEnding}
+        stats={stats}
+      />
     </main>
   );
 }

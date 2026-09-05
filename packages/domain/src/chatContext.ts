@@ -48,9 +48,12 @@ export const OUTLINE_PATH_LIMIT = 200;
 /// close the block early would leave everything after it reading as conversation again.
 const FENCE = "-----TRYPTHOS DOCUMENT-----";
 
+/// `fileType` is the catalogue id of the document's type, or null when nothing recognises it - the
+/// scratch buffer, or a file whose type the user has since turned off. A selection carries the type
+/// of the file it came from: a passage of Python is Python.
 export type DocumentContext =
-  | { kind: "selection"; path: string | null; text: string; truncated: boolean }
-  | { kind: "file"; path: string | null; text: string; truncated: boolean }
+  | { kind: "selection"; path: string | null; text: string; truncated: boolean; fileType: string | null }
+  | { kind: "file"; path: string | null; text: string; truncated: boolean; fileType: string | null }
   | { kind: "none" };
 
 export interface AttachedFile {
@@ -82,6 +85,7 @@ const DocumentContextSchema = z.discriminatedUnion("kind", [
       path: z.string().nullable(),
       text: sized,
       truncated: z.boolean(),
+      fileType: z.string().nullable(),
     })
     .strict(),
   z
@@ -90,6 +94,7 @@ const DocumentContextSchema = z.discriminatedUnion("kind", [
       path: z.string().nullable(),
       text: sized,
       truncated: z.boolean(),
+      fileType: z.string().nullable(),
     })
     .strict(),
   z.object({ kind: z.literal("none") }).strict(),
@@ -117,7 +122,7 @@ export interface ContextSource {
   /// The editor selection, exactly as selected. Empty when nothing is selected.
   selection: string;
   /// The open file, or null - the scratch buffer, or nothing opened yet.
-  file: { path: string; content: string } | null;
+  file: { path: string; content: string; fileType: string | null } | null;
   /// Files the user attached, already read.
   attachments?: readonly { path: string; content: string }[];
   /// The folder outline, when the user asked for it.
@@ -148,11 +153,17 @@ export function resolveChatContext(source: ContextSource): ChatContext {
     // Not trimmed, only tested: leading whitespace is what makes a line part of a code block or a
     // nested list item, and removing it changes what the passage means.
     const { text, truncated } = capped(source.selection, CONTEXT_CHARACTER_LIMIT);
-    document = { kind: "selection", path: file?.path ?? null, text, truncated };
+    document = {
+      kind: "selection",
+      path: file?.path ?? null,
+      text,
+      truncated,
+      fileType: file?.fileType ?? null,
+    };
     spent = text.length;
   } else if (file !== null && file.content.trim() !== "") {
     const { text, truncated } = capped(file.content, CONTEXT_CHARACTER_LIMIT);
-    document = { kind: "file", path: file.path, text, truncated };
+    document = { kind: "file", path: file.path, text, truncated, fileType: file.fileType };
     spent = text.length;
   } else {
     document = { kind: "none" };
@@ -212,7 +223,7 @@ export function contextTurns(context: ChatContext): ChatTurn[] {
       : "";
     turns.push(
       fenced(
-        "Here are the markdown files in the top level of the folder the user is working in. This " +
+        "Here are the files in the top level of the folder the user is working in. This " +
           "is a list of paths only - you have not been shown their contents. To read one, call " +
           "get_file_contents with its path exactly as written here. Only these paths can be read.",
         context.folder.paths.join("\n"),
@@ -230,12 +241,21 @@ export function contextTurns(context: ChatContext): ChatTurn[] {
 
   const document = context.document;
   if (document.kind !== "none") {
+    // Named only when it is NOT markdown. The system prompt already says the app is a markdown
+    // editor, so repeating it on every turn spends tokens telling the model something it has been
+    // told twice - while a Python file genuinely needs saying, or the answer comes back matching
+    // heading depth and list markers in a file that has neither.
+    const kindOfFile =
+      document.fileType === null || document.fileType === "markdown"
+        ? ""
+        : `, which Trypthos recognises as a ${document.fileType} file`;
+
     const what =
       document.kind === "selection"
         ? document.path === null
           ? "the text the user has selected"
-          : `the text the user has selected in ${document.path}`
-        : `the document the user is editing, ${document.path}`;
+          : `the text the user has selected in ${document.path}${kindOfFile}`
+        : `the document the user is editing, ${document.path}${kindOfFile}`;
     const note = document.truncated
       ? "\n\nThe document was longer than could be sent and has been truncated here."
       : "";

@@ -647,6 +647,16 @@ Four things about it are load-bearing:
   other side. The fence is a delimiter no ordinary document produces - ``` is far too common in a
   notes app, and a document appearing to close the block early would leave the rest reading as
   conversation.
+- **The document carries its file type id**, and the turn names it **only when it is not markdown**.
+  The system prompt already says the app is a markdown editor, so repeating it every turn spends
+  tokens telling the model something it has been told twice - while a Python file genuinely needs
+  saying, or the answer comes back matching heading depth and list markers in a file that has
+  neither. A selection carries the type of the file it came from: a passage of Python is Python.
+
+The prompt's non-markdown section names **`replace-selection` and `append` only**. The three heading
+operations anchor to ATX headings, and `headings()` skips fenced code - which a Python file has none
+of, so every `# comment` in one reads as a level-1 heading. Telling the model to use the two
+operations that need no anchor is what stops an edit being aimed at a comment.
 
 Selection is reported by CodeMirror through `onSelectionChange`, including when it empties - which is
 what makes chat fall back to the file rather than sending the last selection for ever. Preview mode

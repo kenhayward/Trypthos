@@ -94,7 +94,7 @@ const turns = [{ role: "user", content: "Hello" }];
 const NO_CONTEXT = { document: { kind: "none" }, attachments: [], folder: null };
 /// A context carrying just the open document, which is the common case.
 const withDocument = (over = {}) => ({
-  document: { kind: "file", path: "notes/plan.md", text: "# Plan", truncated: false },
+  document: { kind: "file", path: "notes/plan.md", text: "# Plan", truncated: false, fileType: "markdown" },
   attachments: [],
   folder: null,
   ...over,
@@ -174,7 +174,7 @@ test("refuses a malformed request before anything is sent", async () => {
       // Larger than the cap the renderer applies, so it is a bug or a renderer doing as it pleases.
       send({
         context: withDocument({
-          document: { kind: "file", path: "big.md", text: "x".repeat(60_001), truncated: false },
+          document: { kind: "file", path: "big.md", text: "x".repeat(60_001), truncated: false, fileType: "markdown" },
         }),
       }),
     ]) {
@@ -313,6 +313,7 @@ test("says when the text was a selection rather than the whole file", async () =
             path: "notes/plan.md",
             text: "One paragraph",
             truncated: false,
+            fileType: "markdown",
           },
         }),
       }),

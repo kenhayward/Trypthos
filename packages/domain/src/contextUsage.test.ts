@@ -10,7 +10,7 @@ import type { ChatTurn } from "./chatCompletion";
 
 const document = (text: string): ChatContext => ({
   ...EMPTY_CONTEXT,
-  document: { kind: "file", path: "notes.md", text, truncated: false },
+  document: { kind: "file", path: "notes.md", text, truncated: false, fileType: "markdown" },
 });
 
 describe("estimateTokens", () => {

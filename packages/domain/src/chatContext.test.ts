@@ -12,7 +12,11 @@ import {
 /// selection and sending a whole file is the difference between a useful answer and a confusing one,
 /// and neither is visible in a screenshot of the panel.
 
-const file = { path: "notes/plan.md", content: "# Plan\n\nThe whole document." };
+const file = {
+  path: "notes/plan.md",
+  content: "# Plan\n\nThe whole document.",
+  fileType: "markdown",
+};
 
 const document = (source: ContextSource) => resolveChatContext(source).document;
 const turns = (source: ContextSource) => contextTurns(resolveChatContext(source));
@@ -56,7 +60,7 @@ describe("the document", () => {
   });
 
   it("sends nothing for an empty file rather than an empty document", () => {
-    expect(document({ selection: "", file: { path: "empty.md", content: "  " } })).toEqual({
+    expect(document({ selection: "", file: { path: "empty.md", content: "  ", fileType: "markdown" } })).toEqual({
       kind: "none",
     });
   });
@@ -74,7 +78,7 @@ describe("the size cap", () => {
   const huge = "x".repeat(CONTEXT_CHARACTER_LIMIT + 5_000);
 
   it("truncates a document too large to send", () => {
-    const result = document({ selection: "", file: { path: "big.md", content: huge } });
+    const result = document({ selection: "", file: { path: "big.md", content: huge, fileType: "markdown" } });
     if (result.kind === "none") throw new Error("expected context");
 
     expect(result.text.length).toBe(CONTEXT_CHARACTER_LIMIT);
@@ -97,7 +101,7 @@ describe("the size cap", () => {
 
   it("takes the beginning, which is where a document says what it is", () => {
     const content = `START${"x".repeat(CONTEXT_CHARACTER_LIMIT)}END`;
-    const result = document({ selection: "", file: { path: "big.md", content } });
+    const result = document({ selection: "", file: { path: "big.md", content, fileType: "markdown" } });
     if (result.kind === "none") throw new Error("expected context");
 
     expect(result.text.startsWith("START")).toBe(true);
@@ -123,7 +127,7 @@ describe("the document turn", () => {
 
   it("says so when the document was cut short, rather than implying it ended there", () => {
     const content = "x".repeat(CONTEXT_CHARACTER_LIMIT + 1);
-    expect(documentTurn({ selection: "", file: { path: "big.md", content } })?.content).toMatch(
+    expect(documentTurn({ selection: "", file: { path: "big.md", content, fileType: "markdown" } })?.content).toMatch(
       /truncated/i,
     );
   });
@@ -139,7 +143,7 @@ describe("the document turn", () => {
 
   it("uses a fence the document cannot close by accident", () => {
     const content = "```\nnot the end\n```\nstill the document";
-    const turn = documentTurn({ selection: "", file: { path: "fence.md", content } });
+    const turn = documentTurn({ selection: "", file: { path: "fence.md", content, fileType: "markdown" } });
     const fence = turn?.content.match(/^-{3,}[A-Z ]*-{3,}$/m)?.[0] ?? "";
 
     expect(fence).not.toBe("");
@@ -179,7 +183,7 @@ describe("attachments", () => {
     const big = "x".repeat(CONTEXT_CHARACTER_LIMIT - 10);
     const context = resolveChatContext({
       selection: "",
-      file: { path: "big.md", content: big },
+      file: { path: "big.md", content: big, fileType: "markdown" },
       attachments: [{ path: "extra.md", content: "y".repeat(1_000) }],
     });
 
@@ -195,7 +199,7 @@ describe("attachments", () => {
   it("still names an attachment there was no room for", () => {
     const context = resolveChatContext({
       selection: "",
-      file: { path: "big.md", content: "x".repeat(CONTEXT_CHARACTER_LIMIT) },
+      file: { path: "big.md", content: "x".repeat(CONTEXT_CHARACTER_LIMIT), fileType: "markdown" },
       attachments: [{ path: "extra.md", content: "content" }],
     });
 
@@ -263,5 +267,62 @@ describe("the folder outline", () => {
   it("is absent unless it was asked for", () => {
     expect(resolveChatContext({ selection: "", file }).folder).toBeNull();
     expect(turns({ selection: "", file })).toHaveLength(1);
+  });
+});
+
+/// What the model is told about the KIND of document it is looking at.
+///
+/// Trypthos opens more than markdown now, and a model told only "the document the user is editing"
+/// will answer about a Python file as though it were prose - matching heading depth and list
+/// markers in a file that has neither.
+describe("the document's file type", () => {
+  const source = (path: string, fileType: string | null) => ({
+    selection: "",
+    file: { path, content: "print('hi')\n", fileType },
+  });
+
+  it("names the type when the document is not markdown", () => {
+    const [turn] = contextTurns(resolveChatContext(source("main.py", "python")));
+    expect(turn?.content).toContain("main.py");
+    expect(turn?.content).toContain("python");
+  });
+
+  // Markdown is the app's own default and the whole system prompt already assumes it. Saying so
+  // again on every turn is tokens spent to tell the model something it was told twice already.
+  it("says nothing extra for markdown", () => {
+    const [turn] = contextTurns(resolveChatContext(source("notes.md", "markdown")));
+    expect(turn?.content).not.toContain("markdown file");
+  });
+
+  it("says nothing extra when the type is unknown", () => {
+    const [turn] = contextTurns(resolveChatContext(source("scratch", null)));
+    expect(turn?.content).toContain("scratch");
+    expect(turn?.content).not.toContain("recognises");
+  });
+
+  // A selection carries its file's type too: a passage from a Python file is Python, and the model
+  // is being asked about that passage rather than about the file.
+  it("names the type of the file a selection came from", () => {
+    const context = resolveChatContext({
+      selection: "def greet():",
+      file: { path: "main.py", content: "def greet():\n    pass\n", fileType: "python" },
+    });
+    const [turn] = contextTurns(context);
+    expect(turn?.content).toContain("python");
+  });
+});
+
+/// The outline follows the File types setting, so it has not been markdown-only since 0.33.0.
+/// Telling the model otherwise is telling it something false about the list it is reading.
+describe("what the outline turn calls its list", () => {
+  it("does not claim the files are all markdown", () => {
+    const context = resolveChatContext({
+      selection: "",
+      file: null,
+      folder: { paths: ["main.py", "notes.md"], truncated: false },
+    });
+    const [turn] = contextTurns(context);
+    expect(turn?.content).toContain("main.py");
+    expect(turn?.content).not.toContain("markdown files");
   });
 });

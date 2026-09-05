@@ -30,7 +30,7 @@ function Harness({
         fileType={MARKDOWN_FILE_TYPE}
         fileTypes={["markdown"]}
         onCaret={onCaret}
-        ariaLabel="Markdown source"
+        ariaLabel="Document source"
       />
     </>
   );
@@ -58,7 +58,7 @@ describe("DocumentEditor", () => {
     const onChange = vi.fn();
     render(<Harness onChange={onChange} />);
 
-    await user.click(screen.getByLabelText("Markdown source"));
+    await user.click(screen.getByLabelText("Document source"));
     await user.keyboard("X");
 
     expect(onChange).toHaveBeenCalled();
@@ -88,7 +88,7 @@ describe("DocumentEditor", () => {
     const onCaret = vi.fn();
     render(<Harness onChange={vi.fn()} onCaret={onCaret} />);
 
-    await user.click(screen.getByLabelText("Markdown source"));
+    await user.click(screen.getByLabelText("Document source"));
     await user.keyboard("{ArrowDown}{ArrowDown}");
     expect(onCaret.mock.calls.at(-1)?.[0]).toBeGreaterThan(1);
 
@@ -146,7 +146,7 @@ describe("formatting", () => {
         fileTypes={["markdown"]}
           readOnly={readOnly}
           ref={handle}
-          ariaLabel="Markdown source"
+          ariaLabel="Document source"
         />
       </>
     );
@@ -171,7 +171,7 @@ describe("formatting", () => {
     const onChange = vi.fn();
     render(<Formatting onChange={onChange} readOnly />);
 
-    await user.click(screen.getByLabelText("Markdown source"));
+    await user.click(screen.getByLabelText("Document source"));
     await user.keyboard("X");
 
     expect(onChange).not.toHaveBeenCalled();

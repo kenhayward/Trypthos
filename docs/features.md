@@ -448,9 +448,15 @@ A reply that quietly consulted five files, or quietly did not, is one you cannot
 without pasting one into the other. Attachments are read when you attach them, so editing a file
 afterwards does not silently change what an earlier answer was about.
 
-**Folder** sends the *list* of markdown files at the top level of your workspace - the names, never
-the contents. A notes folder can hold a great many files; sending them all would bury the document
+**Folder** sends the *list* of files at the top level of your workspace - the names, never the
+contents, and only the file types you have turned on. A notes folder can hold a great many files; sending them all would bury the document
 your question was actually about, and on a hosted endpoint it would cost real money.
+
+The turn carrying your document also says **what kind of file it is** when it is not markdown, and
+the built-in instructions tell the model what to do about that: answer about it as that kind of
+file, write anything it proposes in the file's own language rather than in markdown, and use only
+the two kinds of change that can be placed in a file with no headings. It says so rather than guess
+if neither fits. If you have written your own instructions in Settings, yours are used unchanged.
 
 If your endpoint supports tool calling, the model can then **ask to read** one of those files, and
 another, until it has what it needs. The panel says which file it is reading while it does. It can
