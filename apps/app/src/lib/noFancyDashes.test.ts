@@ -21,8 +21,9 @@ function sourceFiles(dir: string): string[] {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) return sourceFiles(full);
     // The translation catalogue is now the largest user-facing surface in the app, and JSON has no
-    // comments to strip - so it is scanned whole.
-    return /\.tsx?$|\.json$/.test(entry) ? [full] : [];
+    // comments to strip - so it is scanned whole. The markdown guide is scanned for the same
+    // reason: it is a whole document of user-facing prose, and every character in it is read.
+    return /\.tsx?$|\.json$|\.md$/.test(entry) ? [full] : [];
   });
 }
 
@@ -33,7 +34,8 @@ describe("user-facing text", () => {
     for (const surface of SURFACES) {
       for (const file of sourceFiles(surface)) {
         const raw = readFileSync(file, "utf8");
-        const stripped = file.endsWith(".json") ? raw : stripComments(raw);
+        const scanWhole = file.endsWith(".json") || file.endsWith(".md");
+        const stripped = scanWhole ? raw : stripComments(raw);
         stripped.split("\n").forEach((line, index) => {
           if (line.includes(EM_DASH) || line.includes(EN_DASH)) {
             offences.push(`${relative(repoPath(), file).split(sep).join("/")}:${index + 1}`);

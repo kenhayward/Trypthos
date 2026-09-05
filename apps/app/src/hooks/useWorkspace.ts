@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiscardChoice } from "@trypthos/domain";
 import type { DocumentSet, OpenDocument, Revision } from "@trypthos/domain";
 import {
+  GUIDE_PATH,
   activateDocument,
   activeDocument,
   anyDirty as anyDocumentDirty,
@@ -58,6 +59,8 @@ export interface WorkspaceState {
   content: string;
   /// True when the document on screen differs from what is on disk.
   dirty: boolean;
+  /// True when the document on screen has no file behind it, and so cannot be edited or saved.
+  readOnly: boolean;
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
   errorKey: string | null;
@@ -82,6 +85,12 @@ export interface WorkspaceActions {
   openPath(path: string): Promise<void>;
   /// Puts an open document on screen. No reading, no prompt - the other one is still open.
   activateFile(path: string): void;
+  /// Opens the built-in markdown guide in a tab, or goes to it if it is already open.
+  ///
+  /// The text is passed in rather than read from anywhere: the guide is part of the app, not of the
+  /// workspace, and nothing here should have to know how to find it. Read-only and never written,
+  /// which is what keeps it out of the save path and out of the prompt about unsaved work.
+  openGuide(content: string): void;
   /// Opens what the app was handed from outside - a folder from File Explorer, or a markdown file
   /// within one. A file names both, because every path here is relative to one open folder.
   openTarget(target: { root: string; file: string | null }): Promise<void>;
@@ -228,6 +237,10 @@ export function useWorkspace(
         (document) => document.path === target,
       );
       if (!open) return false;
+      // A read-only document has no file to be written to. Refused HERE rather than left to the
+      // path guard in the main process, which would refuse it too - as an error banner about a
+      // failed save, for a document the user was never told they could save.
+      if (open.readOnly) return false;
 
       setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
 
@@ -425,6 +438,7 @@ export function useWorkspace(
       // never a placeholder regenerated on each render - somebody may have typed into it.
       content: active?.content ?? internal.scratch,
       dirty: active?.dirty ?? false,
+      readOnly: active?.readOnly ?? false,
       busy: internal.busy,
       errorKey: internal.errorKey,
     }),
@@ -442,6 +456,18 @@ export function useWorkspace(
     openTarget,
     activateFile: (path: string) =>
       setInternal((prev) => ({ ...prev, documents: activateDocument(prev.documents, path) })),
+    openGuide: (content: string) =>
+      setInternal((prev) => ({
+        ...prev,
+        documents: openDocument(prev.documents, {
+          path: GUIDE_PATH,
+          content,
+          // A revision nothing will ever present: the guide is never read from disk and never
+          // written back, so this exists only because every document carries one.
+          revision: { id: "built-in" },
+          readOnly: true,
+        }),
+      })),
     closeFile,
     edit: (content: string) =>
       setInternal((prev) => {

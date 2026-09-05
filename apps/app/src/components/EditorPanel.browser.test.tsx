@@ -630,3 +630,42 @@ describe("EditorPanel: tabs that do not fit", () => {
   });
 });
 
+
+/// The toolbar, acting on a REAL selection.
+///
+/// The rule each button follows is tested as data in the domain, and the wiring in jsdom - but
+/// neither can select text. A selection made with the pointer is the case the toolbar exists for,
+/// and it is the one CodeMirror only produces for real input: a synthetic double-click leaves the
+/// selection empty, and the button then acts on the word under a caret that never moved.
+describe("the formatting toolbar, on a real selection", () => {
+  it("wraps the selected word, and unwraps it when pressed again", async () => {
+    render(<Harness />);
+    await userEvent.click(modeButton("Source"));
+
+    // Selected with the keyboard, from a caret the pointer put on the line. A double-click would
+    // land wherever the middle of the line happens to be, which is a different word on a different
+    // day; Home and four shifted rights are the same four characters every time.
+    await userEvent.click(lineWith("Some"));
+    await userEvent.keyboard("{Home}");
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
+
+    await userEvent.click(screen.getByRole("button", { name: "Bold" }));
+    expect(lineWith("Some").textContent).toContain("**Some**");
+
+    // The selection survives the press, so a second one takes the markers off again.
+    await userEvent.click(screen.getByRole("button", { name: "Bold" }));
+    expect(lineWith("Some").textContent).not.toContain("**Some**");
+  });
+
+  it("puts the caret back in the document after a press", async () => {
+    render(<Harness />);
+    await userEvent.click(modeButton("Source"));
+
+    await userEvent.click(lineWith("Title"));
+    await userEvent.click(screen.getByRole("button", { name: "Quote" }));
+
+    // Typing goes into the document rather than into the button that was just pressed.
+    await userEvent.keyboard("X");
+    expect(lineWith("Title").textContent).toContain("X");
+  });
+});

@@ -253,3 +253,57 @@ describe("EditorPanel", () => {
     expect(onChange.mock.calls.at(-1)?.[0]).toContain("X");
   });
 });
+
+/// The formatting toolbar.
+///
+/// It lives in Source, where the markers it writes are visible. What each button produces is tested
+/// as data in the domain; what matters here is that the toolbar is in the right view, acts on the
+/// document actually on screen, and is not offered for a document that refuses edits.
+describe("the formatting toolbar", () => {
+  const toolbar = () => screen.queryByRole("toolbar", { name: "Formatting" });
+
+  it("appears in Source, and in neither of the other views", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    expect(toolbar()).toBeNull();
+
+    await user.click(modeButton("Source"));
+    expect(toolbar()).not.toBeNull();
+
+    await user.click(modeButton("Preview"));
+    expect(toolbar()).toBeNull();
+  });
+
+  it("changes the document on screen", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+
+    await user.click(modeButton("Source"));
+    // The caret opens at the start of the document, so this acts on the title line - which is
+    // already a level one heading, and so goes back to being a paragraph.
+    await user.click(screen.getByRole("button", { name: "Heading 1" }));
+
+    expect(onChange).toHaveBeenLastCalledWith(DOC.replace("# Title", "Title"));
+  });
+
+  it("is not offered for a document that cannot be edited", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditorPanel
+        workspaceName={null}
+        paths={["trypthos:markdown-guide"]}
+        activePath="trypthos:markdown-guide"
+        dirty={false}
+        value={DOC}
+        readOnly
+        onChange={vi.fn()}
+      />,
+    );
+
+    await user.click(modeButton("Source"));
+
+    expect(toolbar()).toBeNull();
+  });
+});

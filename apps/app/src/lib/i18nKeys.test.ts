@@ -58,6 +58,12 @@ const DYNAMIC_PREFIXES = [
   // Built from MENU_NAMES as the title bar draws the menu bar. The names live in the domain because
   // the shell reads them too, so the set is iterated rather than written out.
   "menu.",
+  // Built from ACTION_LABEL_KEYS as the formatting toolbar draws its buttons. `toolbarActions.test`
+  // checks the other direction: every action has a key, and every key has an entry here.
+  "editor.toolbar.",
+  // Looked up by path in `builtInDocuments`, because the tab strip, the list of open files and the
+  // window title all have to call the built-in guide the same thing.
+  "editor.guide",
 ];
 
 function usedKeys(): Map<string, string[]> {

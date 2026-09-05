@@ -30,6 +30,7 @@ const SAVE = "Save";
 const SETTINGS = "Settings";
 const ABOUT = `About ${APP_NAME}`;
 const CHECK_FOR_UPDATES = "Check for Updates...";
+const MARKDOWN_GUIDE = "Markdown Syntax Guide";
 
 const separator = { type: "separator" };
 
@@ -65,8 +66,16 @@ function editItems() {
   ];
 }
 
+/// The guide opens as a read-only tab in the editor, which is the renderer's business - so this is
+/// an action like Open Folder and Save, not something the main process arranges itself.
+function guideItem(on) {
+  return { label: MARKDOWN_GUIDE, click: () => on.action("markdown-guide") };
+}
+
 function helpItems(on) {
   return [
+    guideItem(on),
+    separator,
     { label: CHECK_FOR_UPDATES, click: () => on.checkForUpdates() },
     separator,
     { label: ABOUT, click: () => on.action("about") },
@@ -116,7 +125,14 @@ function appMenuTemplate({ appName = APP_NAME, on }) {
     { label: "File", submenu: [...fileItems(on), separator, { role: "close" }] },
     { label: "Edit", submenu: editItems() },
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }] },
-    { label: "Help", submenu: [{ label: CHECK_FOR_UPDATES, click: () => on.checkForUpdates() }] },
+    {
+      label: "Help",
+      submenu: [
+        guideItem(on),
+        separator,
+        { label: CHECK_FOR_UPDATES, click: () => on.checkForUpdates() },
+      ],
+    },
   ];
 }
 

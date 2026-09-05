@@ -251,6 +251,48 @@ describe("App", () => {
       );
     });
 
+    /// The Help menu's guide, end to end.
+    ///
+    /// The shell sends an action, the window opens a document that is not a file, and the document
+    /// behaves as one: a tab of its own, named, and refusing everything a save would need.
+    it("opens the markdown guide from the Help menu, read-only and never saved", async () => {
+      const user = userEvent.setup();
+      // The shell pushes a MESSAGE, not a bare name, and the renderer validates it on arrival - so
+      // the fake pushes what the preload really sends.
+      let choose: ((message: unknown) => void) | null = null;
+      const writes: string[] = [];
+      shellWithFiles();
+      window.trypthos = {
+        ...window.trypthos,
+        onMenuAction: (listener: (message: unknown) => void) => {
+          choose = listener;
+          return () => {};
+        },
+        writeFile: async (path: string) => {
+          writes.push(path);
+          return { ok: true as const, revision: { id: "r2" } };
+        },
+      } as unknown as typeof window.trypthos;
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await act(async () => {
+        choose!({ action: "markdown-guide" });
+      });
+
+      const tab = await screen.findByRole("tab", { name: /Markdown Syntax Guide/ });
+      expect(tab.getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByLabelText("Markdown source").textContent).toContain(
+        "GitHub Flavored Markdown",
+      );
+
+      // Ctrl+S is the app's save, bound on the window. The guide has nowhere to be written to, so
+      // nothing is written and nothing is said about it.
+      await user.keyboard("{Control>}s{/Control}");
+      expect(writes).toEqual([]);
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
     // Invisible when broken: the prompt still appears, and still asks about "this document" - which
     // is the wording that stopped being good enough once more than one file can be unsaved.
     it("names the document in the prompt about unsaved changes", async () => {

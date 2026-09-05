@@ -23,7 +23,13 @@ export type MenuName = (typeof MENU_NAMES)[number];
 /// the title bar - and the menu item drives that same path rather than a second copy of it. Items
 /// the main process handles itself (quit, close, check for updates) are not actions: they never
 /// reach the renderer.
-export const MENU_ACTIONS = ["open-folder", "save", "preferences", "about"] as const;
+export const MENU_ACTIONS = [
+  "open-folder",
+  "save",
+  "preferences",
+  "about",
+  "markdown-guide",
+] as const;
 
 export type MenuAction = (typeof MENU_ACTIONS)[number];
 

@@ -69,6 +69,17 @@ test("Help carries About, and the update check that was only on the tray", () =>
   assert.ok(find(template, "Check for Updates..."));
 });
 
+// The guide is help, and it is help the renderer draws: it opens as a read-only tab in the editor,
+// so the menu sends an action rather than doing anything itself.
+test("Help offers the markdown syntax guide, on both platforms", () => {
+  const windows = popupTemplate("help", { platform: "win32", on: handlers() });
+  assert.ok(find(windows, "Markdown Syntax Guide"));
+
+  const mac = appMenuTemplate({ appName: "Trypthos", on: handlers() });
+  const help = mac.find((item) => item.label === "Help");
+  assert.ok(find(help.submenu, "Markdown Syntax Guide"));
+});
+
 test("choosing an item tells the renderer what was chosen", () => {
   const chosen = [];
   const on = { ...handlers(), action: (name) => chosen.push(name) };
@@ -77,8 +88,9 @@ test("choosing an item tells the renderer what was chosen", () => {
   find(popupTemplate("file", { platform: "win32", on }), "Save").click();
   find(popupTemplate("tools", { platform: "win32", on }), "Settings").click();
   find(popupTemplate("help", { platform: "win32", on }), "About Trypthos").click();
+  find(popupTemplate("help", { platform: "win32", on }), "Markdown Syntax Guide").click();
 
-  assert.deepEqual(chosen, ["open-folder", "save", "preferences", "about"]);
+  assert.deepEqual(chosen, ["open-folder", "save", "preferences", "about", "markdown-guide"]);
 });
 
 // Handled where they belong: quitting is not something the renderer should be asked to arrange.

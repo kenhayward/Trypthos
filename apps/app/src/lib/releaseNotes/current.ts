@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.32.0",
+    date: "2026-09-05",
+    pr: 65,
+    headline: "A formatting toolbar in Source, and a guide to the markdown Trypthos speaks",
+    summary:
+      "Source view now has a row of buttons above the document for every piece of markdown Trypthos renders: bold, italic, strikethrough and inline code; links and images; the first three heading levels; quotes, bulleted, numbered and task lists; code blocks, tables and horizontal rules. The buttons work with what you are doing rather than only inserting characters. A heading button acts on the line your cursor is on whether or not anything is selected - press it once to make the line a heading, press the same level again to turn it back into a paragraph, or press a different level to change it. Bold, italic, strikethrough and inline code wrap the text you have selected, and pressing the same button again with that text still selected takes the markers off; with nothing selected they act on the word your cursor is in. The list buttons convert one kind of list into another rather than adding a second marker. The toolbar is in Source only, where the markers it writes are visible, and one press is one undo step. The Help menu now also carries a Markdown Syntax Guide: it opens in a tab like any document, shows every construct with an example and says which flavour of markdown Trypthos supports, which is GitHub Flavored Markdown. The guide is part of the app rather than a file in your folder, so it is read-only and is never saved anywhere.",
+    added: [
+      "A formatting toolbar above the document in Source view, with a button for every markdown construct Trypthos renders.",
+      "Heading buttons act on the current line and toggle between levels; character formatting wraps the selection, or the word the cursor is in.",
+      "A second press removes what the first added, so every button is a toggle.",
+      "Markdown Syntax Guide on the Help menu, opening in a read-only tab, with examples and the flavour of markdown named.",
+    ],
+  },
+  {
     version: "0.31.0",
     date: "2026-09-05",
     pr: 64,

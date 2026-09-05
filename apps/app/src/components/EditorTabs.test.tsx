@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { GUIDE_PATH } from "@trypthos/domain";
 import EditorTabs from "./EditorTabs";
 
 /// The tab strip: which files are open, which one you are in, and which have unsaved work.
@@ -127,5 +128,26 @@ describe("EditorTabs", () => {
 
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.getByText("Scratch buffer")).toBeDefined();
+  });
+});
+
+/// The built-in guide is a document like any other, except that its name is not in its path.
+describe("a built-in document", () => {
+  it("is named from the catalogue rather than from its path", () => {
+    render(
+      <EditorTabs
+        workspaceName="Notes"
+        paths={[GUIDE_PATH]}
+        activePath={GUIDE_PATH}
+        dirtyPaths={[]}
+        onActivate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const tab = screen.getByRole("tab");
+    expect(tab.textContent).toContain("Markdown Syntax Guide");
+    // And not qualified with the open folder, which it is not in.
+    expect(tab.getAttribute("title")).toBe("Markdown Syntax Guide");
   });
 });

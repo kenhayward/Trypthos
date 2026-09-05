@@ -53,6 +53,48 @@ word count, and the format, encoding and line endings the file actually uses - m
 assumed, so a file that mixes Windows and Unix line endings is reported as mixed rather than as one
 or the other.
 
+### The formatting toolbar
+
+Source view carries a row of buttons above the document, one for every construct Trypthos renders:
+bold, italic, strikethrough and inline code; links and images; heading levels one to three; quotes,
+bulleted lists, numbered lists and task lists; code blocks, tables and horizontal rules. Hovering a
+button names it, and the buttons are grouped by what they act on.
+
+They act on what you are doing rather than simply inserting characters:
+
+- A **heading** button works on the line the cursor is on, whether or not anything is selected.
+  Press it once to make that line a heading, press the same level again to turn it back into a
+  paragraph, or press a different level to change level. Select several lines and it acts on all of
+  them.
+- **Bold**, **italic**, **strikethrough** and **inline code** wrap the text you have selected, and
+  the text stays selected afterwards - so pressing the same button again removes the markers. With
+  nothing selected they act on the word the cursor is in, and on nothing at all they insert the pair
+  of markers with the cursor between them.
+- **Link** and **image** turn a selection into `[text](url)` with the address selected ready to type
+  over, and a link that is already a link is unlinked rather than wrapped in another.
+- The three **list** buttons and **quote** prefix every line the selection touches, and remove the
+  prefix when every line already has it. They convert one kind of list into another rather than
+  stacking markers, so a bulleted list becomes a numbered one in one press.
+- **Code block**, **table** and **horizontal rule** insert a block. A rule or a table goes below the
+  line you are on rather than into the middle of it, and a table arrives with its first heading
+  selected.
+
+Each press is a single change, so one Ctrl+Z (Cmd+Z on macOS) undoes it, and the cursor goes back
+into the document afterwards. The toolbar is in Source view only: Live hides the markers a press
+writes, so the same button there would insert punctuation that vanished as it landed, and Preview is
+not an editing surface.
+
+## The markdown Trypthos speaks
+
+Trypthos reads and renders **GitHub Flavored Markdown**: the CommonMark specification, plus the
+GitHub extensions for tables, task lists, strikethrough and automatic links. Footnotes, definition
+lists, mathematics and YAML front matter are not part of that and are left as plain text.
+
+**Help > Markdown Syntax Guide** opens a guide to all of it in a tab, with each construct shown as
+markdown and as what it produces. It is part of the app rather than a file in your folder, so it is
+read-only and is never saved: nothing you do to it can change it, and closing it asks nothing. Read
+it in Preview to see the examples rendered, or in Source to see how they are written.
+
 ## Tabs
 
 Every file you open gets a tab. Clicking a file in the folder browser opens it in a new tab, or - if
@@ -139,7 +181,7 @@ system menu bar at the top of the screen, and the window draws no menu labels of
 - **Edit** carries undo, redo, cut, copy, paste and select all.
 - **Tools** carries Settings. On macOS this lives in the application menu instead, which is where
   that platform expects it.
-- **Help** carries About and Check for Updates.
+- **Help** carries the Markdown Syntax Guide, Check for Updates and About.
 
 Nothing on a menu is a separate implementation: each item drives the same thing its button or
 shortcut does, so they cannot drift apart.

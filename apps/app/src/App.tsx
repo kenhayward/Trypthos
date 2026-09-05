@@ -26,7 +26,9 @@ import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { builtInTitleKey } from "./lib/builtInDocuments";
 import { openExternal } from "./lib/externalLinks";
+import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
 import { followLink, markdownLinkHandler } from "./lib/markdownLinks";
 import type { SettingsSection } from "./lib/settingsSections";
 import {
@@ -349,6 +351,7 @@ export default function App() {
         else if (action === "save") void actions.save();
         else if (action === "preferences") setSettingsOn("appearance");
         else if (action === "about") setSettingsOn("about");
+        else if (action === "markdown-guide") actions.openGuide(MARKDOWN_GUIDE);
       }),
     [actions],
   );
@@ -371,11 +374,16 @@ export default function App() {
   );
   const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
 
+  /// What the window is called after the app's own name: the file on screen, or the built-in
+  /// document's title. Its path is not a name a user would recognise.
+  const titleKey = builtInTitleKey(state.activePath);
+  const documentTitle = titleKey === null ? (state.file?.name ?? null) : t(titleKey);
+
   return (
     <div className="flex h-full flex-col bg-app text-ink" onClick={onMarkdownLink}>
       <TitleBar
         platform={platform}
-        fileName={state.file?.name ?? null}
+        fileName={documentTitle}
         onAbout={() => setSettingsOn("about")}
         onSettings={() => setSettingsOn("appearance")}
       />
@@ -438,6 +446,7 @@ export default function App() {
           dirtyPaths={state.dirtyPaths}
           dirty={state.dirty}
           value={state.content}
+          readOnly={state.readOnly}
           defaultMode={settings.editor.defaultViewMode}
           onActivateFile={actions.activateFile}
           onCloseFile={(path) => void actions.closeFile(path)}

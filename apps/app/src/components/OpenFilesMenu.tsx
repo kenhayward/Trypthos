@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { documentName } from "@trypthos/domain";
+import { builtInTitleKey } from "../lib/builtInDocuments";
 
 interface Props {
   /// Qualifies each row's folder, because "docs" alone does not say which folder it is in.
@@ -82,8 +83,11 @@ export default function OpenFilesMenu({
         <div className="absolute top-full right-0 z-40 mt-1 max-h-80 w-72 overflow-auto rounded-md border border-rule bg-app py-1 shadow-menu">
           <ul>
             {paths.map((path) => {
-              const name = documentName(path);
-              const folder = folderOf(path, workspaceName);
+              const titleKey = builtInTitleKey(path);
+              const name = titleKey === null ? documentName(path) : t(titleKey);
+              // A built-in document is in no folder, so the line under its name says what it is
+              // instead. A blank line there reads as a file whose folder could not be worked out.
+              const folder = titleKey === null ? folderOf(path, workspaceName) : t("editor.readOnly");
               const dirty = dirtyPaths.includes(path);
 
               return (

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { countWords, detectLineEnding } from "@trypthos/domain";
 import EditorHeader from "./EditorHeader";
+import EditorToolbar from "./EditorToolbar";
 import EditorStatusBar from "./EditorStatusBar";
 import EditorTabs from "./EditorTabs";
 import MarkdownEditor, {
@@ -25,6 +26,11 @@ interface Props {
   /// others with a dot.
   dirty: boolean;
   value: string;
+  /// Whether the document on screen refuses edits - the built-in guide, which has no file behind it.
+  ///
+  /// It takes the toolbar away as well as the caret: a row of buttons that write into a document
+  /// nothing can be written to is a row of buttons that do nothing.
+  readOnly?: boolean;
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
@@ -63,6 +69,7 @@ export default function EditorPanel({
   dirtyPaths = [],
   dirty,
   value,
+  readOnly = false,
   onChange,
   onActivateFile,
   onCloseFile,
@@ -86,6 +93,21 @@ export default function EditorPanel({
   const mode = chosen[key] ?? defaultMode;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
   const [caret, setCaret] = useState({ line: 1, column: 1 });
+
+  /// The live editor, so the toolbar can act on the document and the selection as they are now.
+  ///
+  /// Held here as well as handed upwards because two callers need it and they need different things
+  /// from it: the window applies a chat edit through the same handle. Attached with a callback so
+  /// the one editor answers both, rather than one of them silently getting null.
+  const editor = useRef<EditorHandle | null>(null);
+  const attach = useCallback(
+    (handle: EditorHandle | null) => {
+      editor.current = handle;
+      if (typeof ref === "function") ref(handle);
+      else if (ref) ref.current = handle;
+    },
+    [ref],
+  );
 
   // Both walk the whole document, so they are memoised on the text rather than recomputed on every
   // keystroke-driven render. A word count is cheap on a page and not on a book.
@@ -121,6 +143,12 @@ export default function EditorPanel({
         <EditorHeader dirty={dirty} mode={mode} onModeChange={setMode} />
       </div>
 
+      {/* Source only. Live hides the markers a press writes, so the same button in that view would
+          insert punctuation that disappears as it lands, and Preview has nothing to write into. */}
+      {mode === "source" && !readOnly && (
+        <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
+      )}
+
       <div className="min-h-0 grow">
         {isEditable(mode) ? (
           <MarkdownEditor
@@ -131,7 +159,8 @@ export default function EditorPanel({
             onCaret={(line, column) => setCaret({ line, column })}
             onSelectionChange={onSelectionChange}
             onFollowLink={onFollowLink}
-            ref={ref}
+            readOnly={readOnly}
+            ref={attach}
             ariaLabel={t("editor.surface")}
           />
         ) : (
