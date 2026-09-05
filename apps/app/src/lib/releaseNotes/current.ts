@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.40.0",
+    date: "2026-09-05",
+    pr: 82,
+    headline: "Chat maps the folder you chose, not always the top one",
+    summary:
+      "The Folder button beside the chat box sent the list of files at the top level of your workspace, whichever part of it you were actually working in. Now you choose: click a folder in the browser on the left and it becomes the selected one, shown highlighted, and that is the folder chat maps. The button says which - Folder: specs rather than just Folder - so what would be sent is something you read rather than remember. Clicking a folder still opens and closes it as it always did; selecting it is the same click. The selection stays where you put it as you move between files, because which document you are reading and which folder your question is about are different questions. Opening a different workspace puts it back to the top. The model is told which folder it is looking at, and it can still only read the files on that list - the folder is a choice about scope, not permission, and everything stays inside the folder you have open.",
+    added: [
+      "Clicking a folder in the browser selects it, and the chat Folder button uses it.",
+      "The Folder button names the folder it would send.",
+    ],
+    fixed: [
+      "The Folder button no longer always sends the workspace root regardless of where you are working.",
+    ],
+  },
+  {
     version: "0.39.0",
     date: "2026-09-05",
     pr: 81,

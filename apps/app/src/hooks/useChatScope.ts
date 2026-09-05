@@ -21,10 +21,11 @@ import {
 /// a turn is sent.
 
 export interface ScopeBridge {
-  /// The markdown files in the open folder. The walk happens in the shell, where the workspace is.
-  workspaceOutline(): Promise<
-    { ok: true; outline: FolderOutline } | { ok: false; reason: string }
-  >;
+  /// The files in one folder of the workspace. The walk happens in the shell, where the workspace
+  /// is, and the path is validated there like every other one the renderer names.
+  workspaceOutline(
+    path: string,
+  ): Promise<{ ok: true; outline: FolderOutline } | { ok: false; reason: string }>;
   readFile(path: string): Promise<{ ok: true; content: string } | { ok: false; reason: string }>;
 }
 
@@ -36,20 +37,37 @@ export interface ScopeSource {
   file: { path: string; content: string; fileType: string | null } | null;
 }
 
-export function useChatScope(bridge: ScopeBridge | null, source: () => ScopeSource) {
+/// `folderPath` is the folder selected in the tree, "" being the workspace root. Changing it
+/// re-reads the outline and clears the picker's list, because both describe a folder and the one
+/// they describe has just changed - a stale list would offer files that are somewhere else.
+export function useChatScope(
+  bridge: ScopeBridge | null,
+  source: () => ScopeSource,
+  folderPath: string,
+) {
   /// Files the user attached, with their contents at the moment they were attached.
   const [attachments, setAttachments] = useState<{ path: string; content: string }[]>([]);
   const [includeFolder, setIncludeFolder] = useState(false);
   const [outline, setOutline] = useState<FolderOutline | null>(null);
-  /// The folder's files, for the attachment picker. Fetched on demand and independently of
-  /// `includeFolder`: picking a file to attach is not the same as sending the whole map.
-  const [files, setFiles] = useState<string[]>([]);
+  /// The picker's files, WITH the folder they came from.
+  ///
+  /// Kept together so staleness is derived rather than reset: a list describing one folder must not
+  /// survive into another, and clearing it from an effect on `folderPath` would be a cascading
+  /// render to express something the data can say itself.
+  ///
+  /// Fetched on demand and independently of `includeFolder`: picking a file to attach is not the
+  /// same as sending the whole map.
+  const [loaded, setLoaded] = useState<{ folder: string; paths: string[] }>({
+    folder: "",
+    paths: [],
+  });
+  const files = loaded.folder === folderPath ? loaded.paths : [];
 
   useEffect(() => {
     if (!includeFolder || bridge === null) return;
 
     let cancelled = false;
-    void bridge.workspaceOutline().then((result) => {
+    void bridge.workspaceOutline(folderPath).then((result) => {
       if (cancelled || !result.ok) return;
       setOutline(result.outline);
     });
@@ -57,7 +75,7 @@ export function useChatScope(bridge: ScopeBridge | null, source: () => ScopeSour
     return () => {
       cancelled = true;
     };
-  }, [bridge, includeFolder]);
+  }, [bridge, includeFolder, folderPath]);
 
   /// Fetches the folder's files for the picker, if they are not already known.
   ///
@@ -66,9 +84,9 @@ export function useChatScope(bridge: ScopeBridge | null, source: () => ScopeSour
   const loadFiles = useCallback(async () => {
     if (bridge === null || files.length > 0) return;
 
-    const result = await bridge.workspaceOutline();
-    if (result.ok) setFiles(result.outline.paths);
-  }, [bridge, files.length]);
+    const result = await bridge.workspaceOutline(folderPath);
+    if (result.ok) setLoaded({ folder: folderPath, paths: result.outline.paths });
+  }, [bridge, files.length, folderPath]);
 
   const attach = useCallback(
     async (path: string) => {

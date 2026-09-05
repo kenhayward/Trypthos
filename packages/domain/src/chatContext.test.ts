@@ -220,7 +220,7 @@ describe("attachments", () => {
 
 /// The folder, as a map rather than a payload.
 describe("the folder outline", () => {
-  const folder = { paths: ["notes/plan.md", "notes/risks.md"], truncated: false };
+  const folder = { path: "", paths: ["notes/plan.md", "notes/risks.md"], truncated: false };
 
   it("lists the paths", () => {
     const [outline] = turns({ selection: "", file, folder });
@@ -319,7 +319,7 @@ describe("what the outline turn calls its list", () => {
     const context = resolveChatContext({
       selection: "",
       file: null,
-      folder: { paths: ["main.py", "notes.md"], truncated: false },
+      folder: { path: "", paths: ["main.py", "notes.md"], truncated: false },
     });
     const [turn] = contextTurns(context);
     expect(turn?.content).toContain("main.py");

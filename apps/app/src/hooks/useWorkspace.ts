@@ -45,8 +45,14 @@ export interface WorkspaceState {
   /// folder can fail or hang while the rest are fine, and a spinner over the whole panel would hide
   /// the parts that worked.
   folders: Record<string, FolderState>;
-  /// Narrows the visible markdown files by name.
+  /// Narrows the visible files by name.
   filter: string;
+  /// The folder chat maps when its Folder button is on. "" is the workspace root.
+  ///
+  /// A real selection rather than something derived from the open file: which document you are
+  /// reading and which folder your question is about are different questions, and asking about one
+  /// folder while reading a file from another is the ordinary case rather than the odd one.
+  selectedFolder: string;
   /// Every open document, in the order their tabs appear.
   documents: readonly OpenDocument[];
   /// The path of the document on screen, or null when only the scratch buffer is.
@@ -79,6 +85,8 @@ export interface WorkspaceActions {
   /// Re-lists a folder whose listing failed.
   retryFolder(path: string): Promise<void>;
   setFilter(filter: string): void;
+  /// Chooses the folder chat maps. Expanding a folder is a separate act - see `toggleFolder`.
+  selectFolder(path: string): void;
   openFile(node: RemoteNode): Promise<void>;
   /// Opens a file named only by its workspace-relative path - a link in a document, rather than a
   /// row in the tree. The same act as `openFile` and the same implementation, so the error banner
@@ -117,6 +125,7 @@ interface Internal {
   folders: Record<string, FolderState>;
   filter: string;
   documents: DocumentSet;
+  selectedFolder: string;
   /// The buffer shown when no file is open. Kept while files are open rather than discarded: it is
   /// text somebody typed, and closing the last tab brings them back to it.
   scratch: string;
@@ -129,6 +138,7 @@ const INITIAL: Internal = {
   workspace: null,
   folders: {},
   filter: "",
+  selectedFolder: "",
   documents: emptyDocumentSet(),
   scratch: "",
   busy: false,
@@ -359,8 +369,10 @@ export function useWorkspace(
       workspace: result.workspace,
       folders: {},
       // Every tab belonged to the folder that was open. Carrying them across would leave paths
-      // pointing at files that are not in this workspace at all.
+      // pointing at files that are not in this workspace at all - and the same goes for the folder
+      // chat was mapping, which may not exist here.
       documents: emptyDocumentSet(),
+      selectedFolder: "",
       busy: false,
     }));
     await loadFolder("");
@@ -429,6 +441,7 @@ export function useWorkspace(
           workspace: result.workspace,
           folders: {},
           documents: emptyDocumentSet(),
+          selectedFolder: "",
           busy: false,
         }));
         await loadFolder("");
@@ -472,6 +485,7 @@ export function useWorkspace(
       workspace: internal.workspace,
       folders: internal.folders,
       filter: internal.filter,
+      selectedFolder: internal.selectedFolder,
       documents: internal.documents.documents,
       activePath: internal.documents.activePath,
       dirtyPaths: dirtyDocumentPaths(internal.documents),
@@ -495,6 +509,7 @@ export function useWorkspace(
     toggleFolder,
     retryFolder: loadFolder,
     setFilter: (filter: string) => setInternal((prev) => ({ ...prev, filter })),
+    selectFolder: (path: string) => setInternal((prev) => ({ ...prev, selectedFolder: path })),
     openFile,
     openPath,
     openTarget,

@@ -202,7 +202,7 @@ export default function App() {
     // folder walk, which is the expensive thing here.
     [client],
   );
-  const scope = useChatScope(scopeBridge, scopeSource);
+  const scope = useChatScope(scopeBridge, scopeSource, state.selectedFolder);
 
   /// Where a proposed edit would land in the document AS IT IS NOW.
   ///
@@ -439,6 +439,8 @@ export default function App() {
           onRetryFolder={(path) => void actions.retryFolder(path)}
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
+          selectedFolder={state.selectedFolder}
+          onSelectFolder={actions.selectFolder}
           onOpenFileTypes={() => setSettingsOn("fileTypes")}
         />
             <PanelDivider
@@ -523,6 +525,7 @@ export default function App() {
                   attachments: scope.attachments,
                   files: scope.files,
                   includeFolder: scope.includeFolder,
+            folderPath: state.selectedFolder,
                   canUseFolder: state.workspace !== null,
                   onToggleFolder: scope.setIncludeFolder,
                   onNeedFiles: () => void scope.loadFiles(),

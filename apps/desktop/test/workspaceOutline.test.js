@@ -6,13 +6,24 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { DEFAULT_OUTLINE_FILE_LIMIT } = require("@trypthos/domain");
+const { createPathGuard } = require("@trypthos/domain");
+const { createLocalWorkspace } = require("../src/localWorkspace");
 const { outlineWorkspace } = require("../src/workspaceOutline");
 
 /// Most of these cases are about the walk - one level, sorting, the cap, a folder that is not there
 /// - and say nothing about file types, so they run against what a fresh installation has. The cases
 /// that ARE about file types name their own list.
+/// A real guarded provider over a real directory, because what this walks and what it REFUSES to
+/// walk are the same question - the outline is the allowlist chat reads from.
+function providerFor(root) {
+  return createLocalWorkspace({
+    root,
+    guard: createPathGuard({ root, caseInsensitive: process.platform !== "linux" }),
+  });
+}
+
 function outlineOf(root, options = {}) {
-  return outlineWorkspace(root, { fileTypes: ["markdown"], ...options });
+  return outlineWorkspace(providerFor(root), { path: "", fileTypes: ["markdown"], ...options });
 }
 
 /// The files chat is offered, and may then ask to read.
@@ -94,12 +105,13 @@ test("defaults to a short menu rather than a complete one", async () => {
 
 test("an empty folder produces an empty outline rather than a failure", async () => {
   await withTree({}, async (dir) => {
-    assert.deepEqual(await outlineOf(dir), { paths: [], truncated: false });
+    assert.deepEqual(await outlineOf(dir), { path: "", paths: [], truncated: false });
   });
 });
 
 test("a folder that is not there produces an empty outline", async () => {
   assert.deepEqual(await outlineOf(path.join(os.tmpdir(), "trypthos-not-a-folder")), {
+    path: "",
     paths: [],
     truncated: false,
   });
@@ -114,5 +126,37 @@ test("offers only the file types that are turned on", async () => {
       "notes.txt",
       "plan.md",
     ]);
+  });
+});
+
+/// The outline follows the folder the user selected in the tree, not always the workspace root.
+///
+/// It is still the allowlist, so the folder is a path from the renderer and goes through the same
+/// guarded provider every other path does - the boundary is the workspace root, not the folder.
+test("walks the folder it was given, not the root", async () => {
+  await withTree({ "top.md": null, "notes/inner.md": null, "notes/deep/far.md": null }, async (dir) => {
+    assert.deepEqual((await outlineOf(dir)).paths, ["top.md"]);
+    assert.deepEqual((await outlineOf(dir, { path: "notes" })).paths, ["notes/inner.md"]);
+  });
+});
+
+test("names paths from the workspace root, so a file can be read back", async () => {
+  await withTree({ "notes/inner.md": null }, async (dir) => {
+    const outline = await outlineOf(dir, { path: "notes" });
+    assert.deepEqual(outline.paths, ["notes/inner.md"]);
+    assert.equal(outline.path, "notes");
+  });
+});
+
+test("refuses a folder that climbs out of the workspace", async () => {
+  await withTree({ "top.md": null }, async (dir) => {
+    assert.deepEqual(await outlineOf(dir, { path: "../.." }), { path: "", paths: [], truncated: false });
+  });
+});
+
+test("answers empty for a folder that is not there", async () => {
+  await withTree({ "top.md": null }, async (dir) => {
+    const outline = await outlineOf(dir, { path: "nowhere" });
+    assert.deepEqual(outline.paths, []);
   });
 });

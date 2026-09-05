@@ -36,10 +36,13 @@ export type WriteResult =
   | Failure;
 
 export interface WorkspaceClient {
-  /// The markdown files in the open folder, for chat to use as a map. Paths only.
-  workspaceOutline(): Promise<
-    { ok: true; outline: { paths: string[]; truncated: boolean } } | Failure
-  >;
+  /// The files in ONE folder of the workspace, for chat to use as a map. Paths only.
+  ///
+  /// The folder is the one selected in the tree, "" being the root. Validated in the main process
+  /// like every other path the renderer names.
+  workspaceOutline(
+    path: string,
+  ): Promise<{ ok: true; outline: { path: string; paths: string[]; truncated: boolean } } | Failure>;
   openWorkspace(): Promise<OpenResult>;
   /// Reopens a remembered folder without asking. The shell still checks it exists and is a
   /// directory - a stored path can have been deleted, renamed or moved to another machine.

@@ -7,6 +7,12 @@ interface Props {
   /// Files attached to the conversation, workspace-relative.
   attachments: readonly string[];
   includeFolder: boolean;
+  /// The folder that would be sent, workspace-relative. "" is the workspace root.
+  ///
+  /// Named on the button rather than left implicit: the folder is chosen somewhere else entirely -
+  /// the tree on the far side of the window - so a button that only said "Folder" would be one
+  /// whose meaning the user has to remember rather than read.
+  folderPath: string;
   /// False in the browser preview, and with no folder open: there is nothing to include.
   canUseFolder: boolean;
   disabled: boolean;
@@ -28,6 +34,7 @@ interface Props {
 export default function ChatScope({
   attachments,
   includeFolder,
+  folderPath,
   canUseFolder,
   disabled,
   onToggleFolder,
@@ -80,7 +87,9 @@ export default function ChatScope({
             : "rounded px-2 py-0.5 text-xs text-ink-4 hover:bg-hover hover:text-ink disabled:opacity-40"
         }
       >
-        {t("chat.scope.folder")}
+        {folderPath === ""
+          ? t("chat.scope.folder")
+          : t("chat.scope.folderNamed", { name: folderName(folderPath) })}
       </button>
 
       {attachments.map((path) => (
@@ -165,4 +174,13 @@ export default function ChatScope({
       <ContextDial usage={usage} />
     </div>
   );
+}
+
+/// The last segment of a workspace-relative path - what a person calls that folder.
+///
+/// The whole path would be more precise and less readable, on a button beside a composer where
+/// width is the scarce thing.
+function folderName(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return cut === -1 ? path : path.slice(cut + 1);
 }

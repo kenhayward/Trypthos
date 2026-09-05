@@ -35,6 +35,8 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onRetryFolder: vi.fn(),
     onOpenFile: vi.fn(),
     fileTypes: ["markdown"] as readonly string[],
+    selectedFolder: "",
+    onSelectFolder: vi.fn(),
     onOpenFileTypes: vi.fn(),
     ...overrides,
   };
@@ -48,7 +50,7 @@ describe("WorkspacePanel", () => {
     expect(screen.getByText("No folder open yet.")).toBeDefined();
   });
 
-  it("lists folders and files of an enabled type, and nothing else", () => {
+  it("offers folders and openable files as things to click", () => {
     panel();
     expect(screen.getByRole("button", { name: /docs/ })).toBeDefined();
     expect(screen.getByRole("button", { name: /README\.md/ })).toBeDefined();
@@ -173,8 +175,6 @@ describe("files nothing can open", () => {
     expect(props.onOpenFile).not.toHaveBeenCalled();
   });
 
-  // The footer counts what the enabled types cover. Counting files those types cannot open would
-  // make the two halves of one sentence disagree with each other.
   // Three files are on screen - README.md, docs/plan.md and logo.png - and the footer says two.
   // That gap is the point: the footer names the types that are on and then counts, so counting a
   // file those types cannot open would make the two halves of one sentence disagree.
@@ -182,5 +182,28 @@ describe("files nothing can open", () => {
     panel();
     expect(screen.getByText("logo.png")).toBeDefined();
     expect(screen.getByText("2 files")).toBeDefined();
+  });
+});
+
+/// Which folder chat maps, chosen in the tree.
+describe("choosing the folder chat maps", () => {
+  it("selects a folder and expands it in one click", async () => {
+    const props = panel();
+    await userEvent.click(screen.getByRole("button", { name: /docs/ }));
+
+    expect(props.onSelectFolder).toHaveBeenCalledWith("docs");
+    expect(props.onToggleFolder).toHaveBeenCalledWith("docs");
+  });
+
+  // Selection and expansion are separate facts about a folder, so they are separate attributes: a
+  // folder can be the one chat is mapping while collapsed, and expanded while another is chosen.
+  it("marks the chosen folder, and only that one", () => {
+    panel({ selectedFolder: "docs" });
+    expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-current")).toBe("true");
+  });
+
+  it("marks nothing when the root is the one chat maps", () => {
+    panel({ selectedFolder: "" });
+    expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-current")).toBeNull();
   });
 });

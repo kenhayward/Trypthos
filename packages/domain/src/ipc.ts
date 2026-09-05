@@ -155,6 +155,13 @@ const relativePath = z.string();
 
 export const ListRequest = z.object({ path: relativePath }).strict();
 
+/// The folder chat should map. "" is the workspace root.
+///
+/// A path from the renderer, so it is validated in the main process like every other one - and the
+/// walk goes through the workspace provider rather than `fs`, which is what applies the guard. The
+/// boundary is the workspace root; which folder inside it is a choice, not a permission.
+export const OutlineRequest = z.object({ path: relativePath }).strict();
+
 export const ReadRequest = z.object({ path: relativePath.min(1) }).strict();
 
 export const WriteRequest = z
@@ -271,6 +278,7 @@ export const WriteSettingsRequest = SettingsSchema;
 export type SetSecretRequest = z.infer<typeof SetSecretRequest>;
 export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
+export type OutlineRequest = z.infer<typeof OutlineRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
 export type WriteRequest = z.infer<typeof WriteRequest>;
 

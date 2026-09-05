@@ -26,6 +26,13 @@ interface Props {
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
   /// the footer names them.
   fileTypes: readonly string[];
+  /// The folder chat maps when its Folder button is on, workspace-relative. "" is the root, which
+  /// is drawn as selected only when a folder row is not.
+  selectedFolder: string;
+  /// Chooses that folder. Clicking a folder both selects it and expands or collapses it - one
+  /// click, because a row that needed two different gestures for two different meanings would need
+  /// two different targets, and this row is one word wide.
+  onSelectFolder: (path: string) => void;
   /// Opens the File types page of Settings.
   ///
   /// The footer is the only place the setting is discoverable at all: every type but markdown is
@@ -53,6 +60,8 @@ export default function WorkspacePanel({
   onRetryFolder,
   onOpenFile,
   fileTypes,
+  selectedFolder,
+  onSelectFolder,
   onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
@@ -133,7 +142,11 @@ export default function WorkspacePanel({
                 <FolderRow
                   key={row.node.id}
                   row={row}
-                  onToggle={() => onToggleFolder(row.node.id)}
+                  selected={selectedFolder === row.node.id}
+                  onToggle={() => {
+                    onSelectFolder(row.node.id);
+                    void onToggleFolder(row.node.id);
+                  }}
                   onRetry={() => onRetryFolder(row.node.id)}
                 />
               ) : (
@@ -172,10 +185,12 @@ const indent = (depth: number) => ({ paddingLeft: `${depth * 16 + 4}px` });
 
 function FolderRow({
   row,
+  selected,
   onToggle,
   onRetry,
 }: {
   row: TreeRow;
+  selected: boolean;
   onToggle: () => void;
   onRetry: () => void;
 }) {
@@ -187,8 +202,16 @@ function FolderRow({
         type="button"
         onClick={onToggle}
         aria-expanded={row.expanded}
+        // Selection and expansion are separate facts about a folder, so they are separate
+        // attributes: a folder can be the one chat is mapping while collapsed, and expanded while
+        // some other folder is chosen.
+        aria-current={selected ? "true" : undefined}
         style={indent(row.depth)}
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
+        className={
+          selected
+            ? "flex w-full items-center gap-1.5 rounded-md bg-selected py-1 pr-2 text-left text-base font-semibold text-selected-ink"
+            : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
+        }
       >
         <Chevron open={row.expanded} />
         <Glyph className={row.status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
