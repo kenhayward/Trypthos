@@ -755,8 +755,11 @@ vanishes takes with it the answer to what it would do. Settings version 12 adds 
 versions 6 and 10 the migration exists for the DOWNGRADE direction, since `ChatProfileSchema` is
 strict and a file written here would otherwise take every configured model down on an older build.
 
-Reasoning OUTPUT is not displayed. Some servers return it in a `reasoning_content` delta, which the
-stream reader ignores - the answer still arrives in `content`.
+Reasoning OUTPUT is already parsed and already crosses IPC - see "Reasoning is a separate channel"
+above, which this paragraph previously contradicted. What it is NOT is attached to a turn: `useChat`
+accumulates it into one string for the reply in flight, and the panel shows it only when that reply
+finished with no content at all. So it is lost when a turn produces an answer, and lost again when a
+saved chat is reopened. Showing it for every turn is specified in `docs/specs/reasoning-display.md`.
 
 ### Which folder chat maps
 
