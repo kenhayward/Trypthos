@@ -18,6 +18,7 @@ const {
   SetSecretRequest,
   createPathGuard,
   ListRequest,
+  OutlineRequest,
   ReadRequest,
   WriteRequest,
   WriteSettingsRequest,
@@ -245,7 +246,12 @@ function registerIpcHandlers({
             const workspace = getWorkspace();
             if (!workspace) return { ok: false, reason: "no-workspace" };
 
-            const outline = await outlineWorkspace(workspace.root, {
+            // Rebuilt HERE rather than trusted from the request: the outline is the allowlist, so
+            // what may be read is decided by the main process walking the folder again. The folder
+            // itself is the user's choice and comes with the context; the guard is what keeps that
+            // choice inside the workspace.
+            const outline = await outlineWorkspace(workspace.provider, {
+              path: parsed.data.context.folder.path,
               fileTypes: settings.fileTypes.enabled,
               limit: settings.chat.folderFileLimit,
             });
@@ -288,16 +294,21 @@ function registerIpcHandlers({
   // Saved conversations. Files in the app-data directory, never in the user's workspace.
   // The markdown files in the open folder, as a map for chat. A real recursive walk, so it happens
   // here and is capped: measured on a home directory one took 39 seconds.
-  ipcMain.handle("workspace:outline", async () => {
+  ipcMain.handle("workspace:outline", async (_event, payload) => {
+    const parsed = OutlineRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
     const workspace = getWorkspace();
     if (!workspace) return { ok: false, reason: "no-workspace" };
 
-    // The root comes from the workspace the main process holds, never from the renderer, and the
-    // size from settings.
+    // The FOLDER comes from the renderer - it is what the user selected in the tree - and is
+    // therefore validated by the provider, which applies the same guard every other path gets. The
+    // file types and the size come from settings read here, never from the renderer.
     const settings = await readSettings(userDataDir);
     return {
       ok: true,
-      outline: await outlineWorkspace(workspace.root, {
+      outline: await outlineWorkspace(workspace.provider, {
+        path: parsed.data.path,
         // Both from settings read HERE, never from the renderer: this list is the allowlist the
         // model reads from, so widening it is a decision the main process makes.
         fileTypes: settings.fileTypes.enabled,

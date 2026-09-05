@@ -9,9 +9,9 @@ const SOURCE: ScopeSource = {
 
 function fakeBridge(files: Record<string, string> = {}) {
   return {
-    workspaceOutline: vi.fn(async () => ({
+    workspaceOutline: vi.fn(async (path: string) => ({
       ok: true as const,
-      outline: { paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
+      outline: { path, paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
     })),
     readFile: vi.fn(async (path: string) =>
       path in files
@@ -21,8 +21,8 @@ function fakeBridge(files: Record<string, string> = {}) {
   } satisfies ScopeBridge;
 }
 
-const scope = (bridge: ScopeBridge | null, source: ScopeSource = SOURCE) =>
-  renderHook(() => useChatScope(bridge, () => source));
+const scope = (bridge: ScopeBridge | null, source: ScopeSource = SOURCE, folder = "") =>
+  renderHook(() => useChatScope(bridge, () => source, folder));
 
 describe("attachments", () => {
   it("reads a file when it is attached, and sends it", async () => {
@@ -158,5 +158,42 @@ describe("the context it builds", () => {
       attachments: [],
       folder: null,
     });
+  });
+});
+
+/// The folder the user selected in the tree, not always the workspace root.
+describe("the folder chat maps", () => {
+  it("asks for the folder that is selected", async () => {
+    const bridge = fakeBridge();
+    const { result } = scope(bridge, SOURCE, "notes/specs");
+
+    act(() => result.current.setIncludeFolder(true));
+    await waitFor(() => expect(bridge.workspaceOutline).toHaveBeenCalledWith("notes/specs"));
+  });
+
+  it("asks for the root when nothing is selected", async () => {
+    const bridge = fakeBridge();
+    const { result } = scope(bridge);
+
+    act(() => result.current.setIncludeFolder(true));
+    await waitFor(() => expect(bridge.workspaceOutline).toHaveBeenCalledWith(""));
+  });
+
+  // A list describing one folder must not survive into another. The picker's files are loaded on
+  // demand, so the answer is to forget them rather than fetch a folder nobody has asked about.
+  it("forgets the picker's files when the folder changes", async () => {
+    const bridge = fakeBridge();
+    let folder = "";
+    const { result, rerender } = renderHook(() => useChatScope(bridge, () => SOURCE, folder));
+
+    await act(async () => {
+      await result.current.loadFiles();
+    });
+    expect(result.current.files).toHaveLength(2);
+
+    folder = "notes/specs";
+    rerender();
+
+    await waitFor(() => expect(result.current.files).toHaveLength(0));
   });
 });

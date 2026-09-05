@@ -14,7 +14,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
   const client: WorkspaceClient = {
     // Chat's map of the folder. Nothing in this hook asks for it; it is here because the client is
     // one interface.
-    workspaceOutline: async () => ({ ok: true, outline: { paths: [], truncated: false } }),
+    workspaceOutline: async () => ({ ok: true, outline: { path: "", paths: [], truncated: false } }),
     openWorkspace: async () => ({ ok: true, workspace: { root: "/ws", name: "ws" } }),
     reopenWorkspace: async (root) => ({ ok: true, workspace: { root, name: "ws" } }),
     listDirectory: async (path) => ({
@@ -1123,5 +1123,69 @@ describe("the built-in guide", () => {
 
     expect(result.current.state.documents).toEqual([]);
     expect(ask.asked).toEqual([]);
+  });
+});
+
+/// Which folder chat maps when the Folder button is on.
+///
+/// A real selection rather than something derived from the open file: the two are different
+/// questions, and somebody reading one document while asking about another folder is the ordinary
+/// case rather than the odd one.
+describe("the selected folder", () => {
+  it("starts at the workspace root", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(result.current.state.selectedFolder).toBe("");
+  });
+
+  it("follows the folder that was chosen", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    act(() => result.current.actions.selectFolder("notes"));
+
+    expect(result.current.state.selectedFolder).toBe("notes");
+  });
+
+  // Opening a document says nothing about which folder the question is about. A selection that
+  // moved with the open file would be a selection the user could not keep.
+  it("stays put when a document elsewhere is opened", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    act(() => result.current.actions.selectFolder("notes"));
+    await act(async () => {
+      await result.current.actions.openPath("a.md");
+    });
+
+    expect(result.current.state.selectedFolder).toBe("notes");
+  });
+
+  // A folder in the old workspace is not a folder in the new one, and carrying the path across
+  // would point chat at a directory that may not exist.
+  it("goes back to the root when another workspace is opened", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    act(() => result.current.actions.selectFolder("notes"));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(result.current.state.selectedFolder).toBe("");
   });
 });

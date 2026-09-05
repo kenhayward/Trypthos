@@ -481,7 +481,7 @@ test("sends the folder outline before the document", async () => {
         "chat:send",
         send({
           context: withDocument({
-            folder: { paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
+            folder: { path: "", paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
           }),
         }),
       );

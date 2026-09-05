@@ -739,6 +739,29 @@ a real `ReadableStream`, bytes arriving in whatever pieces the socket delivers. 
 the class of bug a fake reader cannot produce, such as a multi-byte character split across two reads
 decoding as two replacement characters.
 
+### Which folder chat maps
+
+`selectedFolder` lives in `useWorkspace` ("" being the root) and is chosen by clicking a folder in
+the tree - the same click that expands or collapses it, because a row one word wide cannot carry two
+gestures for two meanings. Selection and expansion are separate facts and separate attributes
+(`aria-current` and `aria-expanded`): a folder can be the one chat maps while collapsed, and
+expanded while another is chosen. It survives opening documents elsewhere and resets when a
+different workspace opens, where the path may not exist.
+
+**The folder is a path from the renderer, so `outlineWorkspace` now walks the workspace PROVIDER
+rather than `fs`** - it inherits the lexical guard and the realpath check every other path gets. The
+boundary is the workspace root; which folder inside it is a choice, not a permission. A folder that
+cannot be listed answers with an empty outline rather than an error nobody can act on.
+
+The outline is still the **allowlist**, so `chat:send` rebuilds it in the main process from
+`context.folder.path` rather than trusting the paths in the request - the folder is the user's
+choice, the guard is what keeps that choice inside the workspace, and the file types and size come
+from settings read there.
+
+`FolderOutline` carries its `path` so the turn can name the folder, and the picker's file list is
+stored WITH the folder it came from - staleness derived rather than reset, since clearing it from an
+effect on `folderPath` is a cascading render expressing something the data can say itself.
+
 ### How full the context is, and why it can only be an estimate
 
 `contextUsage.ts` answers "how much of the window will this request use", and every surface that

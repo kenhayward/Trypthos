@@ -63,6 +63,9 @@ interface Props {
     attachments: readonly string[];
     files: readonly string[];
     includeFolder: boolean;
+    /// The folder that would be sent, named on the button - it is chosen on the far side of the
+    /// window, so a button saying only "Folder" would be one whose meaning has to be remembered.
+    folderPath: string;
     canUseFolder: boolean;
     onToggleFolder: (include: boolean) => void;
     onNeedFiles: () => void;
@@ -355,6 +358,7 @@ export default function ChatPanel({
           attachments={scope.attachments}
           files={scope.files}
           includeFolder={scope.includeFolder}
+          folderPath={scope.folderPath}
           canUseFolder={scope.canUseFolder}
           disabled={streaming}
           onToggleFolder={scope.onToggleFolder}

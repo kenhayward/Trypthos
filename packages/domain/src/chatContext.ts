@@ -63,7 +63,13 @@ export interface AttachedFile {
 }
 
 export interface FolderOutline {
-  /// Workspace-relative paths, in the order the walk found them.
+  /// The folder this describes, workspace-relative. "" is the workspace root.
+  ///
+  /// Carried rather than assumed, because the user chooses it in the tree: the turn names it so the
+  /// model knows which folder it is reading, and the main process uses it to serve exactly the same
+  /// list it offered - the outline being the allowlist means those two must be one answer.
+  path: string;
+  /// Paths from the workspace ROOT, so a file can be read back by the path it is named by.
   paths: string[];
   /// True when the folder holds more than the outline may name.
   truncated: boolean;
@@ -112,7 +118,11 @@ export const ChatContextSchema = z
       .array(z.object({ path: z.string(), text: sized, truncated: z.boolean() }).strict())
       .max(20),
     folder: z
-      .object({ paths: z.array(z.string()).max(OUTLINE_PATH_LIMIT), truncated: z.boolean() })
+      .object({
+        path: z.string(),
+        paths: z.array(z.string()).max(OUTLINE_PATH_LIMIT),
+        truncated: z.boolean(),
+      })
       .strict()
       .nullable(),
   })
@@ -223,7 +233,7 @@ export function contextTurns(context: ChatContext): ChatTurn[] {
       : "";
     turns.push(
       fenced(
-        "Here are the files in the top level of the folder the user is working in. This " +
+        `Here are the files in ${context.folder.path === "" ? "the folder the user is working in" : context.folder.path}. This ` +
           "is a list of paths only - you have not been shown their contents. To read one, call " +
           "get_file_contents with its path exactly as written here. Only these paths can be read.",
         context.folder.paths.join("\n"),
