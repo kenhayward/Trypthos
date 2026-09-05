@@ -56,6 +56,29 @@ being painted on top of it. As in Source view, colour stands in for meaning: not
 made bold. A grammar is fetched only the first time you open a file that needs one, so types you
 never turn on cost you nothing.
 
+### Code inside your notes
+
+A **fenced code block** in a markdown document is coloured by the language its fence names, in the
+same colours a file of that language gets on its own:
+
+````
+```python
+def greet(name):
+    return f"hello {name}"
+```
+````
+
+The tags you would expect all work - the short ones (`py`, `ts`, `rs`, `sh`, `yml`) and the
+written-out ones (`typescript`, `kotlin`, `c++`).
+
+This follows your File types setting rather than working for everything. A fence naming a language
+you have not turned on still reads as a code block, in the code colour markdown has always given it;
+it simply is not broken up by role. So the setting governs the inside of a document as much as which
+files appear on the left.
+
+**Preview does not colour code blocks yet**, only Source and Live. Preview renders through a
+different path from the editor, and reaching it is outstanding work rather than a decision.
+
 A type that is off is not merely uncoloured, it is absent. Its files do not appear in the folder
 browser, cannot be opened by clicking a link to one, and are not among the files chat is offered or
 allowed to read. Turning a type on is therefore a decision about what you want to see: point Trypthos

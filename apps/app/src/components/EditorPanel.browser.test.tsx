@@ -743,3 +743,84 @@ describe("syntax colouring, rendered", () => {
     expect(paintedColours().size).toBe(0);
   });
 });
+
+/// Fenced code inside a markdown document.
+///
+/// The payoff of the whole File types arc for the audience Trypthos actually has: notes full of
+/// code are far commoner here than source files opened as documents. Only a browser can answer it -
+/// the fence's language is decided by parsing, and the colouring by measuring.
+describe("fenced code inside markdown, rendered", () => {
+  const FENCED = [
+    "# Notes",
+    "",
+    "```python",
+    "def greet(name):",
+    '    return f"hello {name}"',
+    "```",
+    "",
+    "Prose after it.",
+    "",
+  ].join("\n");
+
+  function open(fileTypes: readonly string[]) {
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["notes.md"]}
+        activePath="notes.md"
+        dirty={false}
+        value={FENCED}
+        onChange={() => {}}
+        fileTypes={fileTypes}
+      />,
+    );
+  }
+
+  /// Colours painted on the line holding `text`, ignoring the inherited default.
+  const coloursOn = (text: string): Set<string> => {
+    const line = lineWith(text);
+    const base = getComputedStyle(surface()).color;
+    const seen = new Set<string>();
+    for (const span of line.querySelectorAll("span")) {
+      const colour = getComputedStyle(span).color;
+      if (colour !== base) seen.add(colour);
+    }
+    return seen;
+  };
+
+  // MORE than one colour, not merely some. Markdown's own grammar already paints a fence's contents
+  // in the code colour, so "is it coloured at all" passes with Python turned off - which is exactly
+  // what the control below caught when it was first written the other way round.
+  it("colours the code inside the fence by role", async () => {
+    open(["markdown", "python"]);
+    await userEvent.click(modeButton("Source"));
+
+    await vi.waitFor(() => expect(coloursOn("def greet").size).toBeGreaterThan(1), {
+      timeout: 3000,
+    });
+  });
+
+  // The setting governs the inside of a document as much as the folder tree. This is the control
+  // for the test above: same document, same fence, Python turned off.
+  it("leaves the fence in markdown's own code colour when its language is turned off", async () => {
+    open(["markdown"]);
+    await userEvent.click(modeButton("Source"));
+
+    // Long enough for a load to have happened if one were going to.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    // ONE colour, not none: markdown paints a fence's contents in the code colour whatever is
+    // inside them. What turning Python on adds is the difference between one colour and several -
+    // which is why the test above asks for more than one rather than for any at all.
+    expect(coloursOn("def greet").size).toBe(1);
+  });
+
+  // The prose around it is still markdown. A fence that swallowed the rest of the document would
+  // colour this line as Python, or not at all.
+  it("still colours the markdown around it", async () => {
+    open(["markdown", "python"]);
+    await userEvent.click(modeButton("Source"));
+
+    await vi.waitFor(() => expect(coloursOn("# Notes").size).toBeGreaterThan(0), { timeout: 3000 });
+  });
+});

@@ -88,6 +88,12 @@ interface Props {
   onChange: (value: string) => void;
   /// Whether markdown syntax is hidden away from the caret line.
   live: boolean;
+  /// Every file type the user has turned on, by id.
+  ///
+  /// Only the markdown loader reads it - it decides which fenced code blocks inside a document get
+  /// coloured - but it travels with every load, because a loader is handed what it might need
+  /// rather than the editor guessing which one is special.
+  fileTypes: readonly string[];
   /// The type of the document on screen, from the catalogue.
   ///
   /// Decides three things at once: which language colours it, whether lines wrap and spelling is
@@ -135,6 +141,7 @@ export default function DocumentEditor({
   onChange,
   live,
   fileType,
+  fileTypes,
   readOnly = false,
   onCaret,
   onSelectionChange,
@@ -359,7 +366,7 @@ export default function DocumentEditor({
     if (load === null) return;
 
     let cancelled = false;
-    void load(fileNameOf(documentId))
+    void load({ name: fileNameOf(documentId), fileTypes })
       .then((support) => {
         if (cancelled || view.current === null) return;
         view.current.dispatch({ effects: languageCompartment.current.reconfigure(support) });
@@ -372,7 +379,7 @@ export default function DocumentEditor({
     return () => {
       cancelled = true;
     };
-  }, [fileType.id, documentId]);
+  }, [fileType.id, documentId, fileTypes]);
 
   useEffect(() => {
     const editor = view.current;

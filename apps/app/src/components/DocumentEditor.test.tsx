@@ -28,6 +28,7 @@ function Harness({
         onChange={onChange}
         live={false}
         fileType={MARKDOWN_FILE_TYPE}
+        fileTypes={["markdown"]}
         onCaret={onCaret}
         ariaLabel="Markdown source"
       />
@@ -114,6 +115,7 @@ describe("spelling", () => {
         onChange={() => {}}
         live={false}
         fileType={MARKDOWN_FILE_TYPE}
+        fileTypes={["markdown"]}
         ariaLabel="Editor"
       />,
     );
@@ -141,6 +143,7 @@ describe("formatting", () => {
           onChange={onChange}
           live={false}
         fileType={MARKDOWN_FILE_TYPE}
+        fileTypes={["markdown"]}
           readOnly={readOnly}
           ref={handle}
           ariaLabel="Markdown source"
@@ -189,6 +192,7 @@ describe("behaviour by kind", () => {
         onChange={() => {}}
         live={false}
         fileType={typeOf(id)}
+        fileTypes={["markdown", "json"]}
         ariaLabel="Editor"
       />,
     );

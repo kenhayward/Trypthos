@@ -387,6 +387,37 @@ Where a real Lezer grammar exists this file uses it; the long tail comes from
 grammar, so it produces no syntax tree and colours by token name alone - the accepted floor, since
 the alternative for those languages is nothing at all.
 
+A loader is handed a `LanguageRequest`, not a bare name, because **one** of them needs more than the
+filename: `markdown` builds its `codeLanguages` from the rest of the catalogue. Every loader is
+given the whole request rather than the editor special-casing the one that is different.
+
+### Fenced code inside markdown
+
+`lib/fenceLanguages.ts` turns the enabled catalogue into the `LanguageDescription`s that
+`markdown({ codeLanguages })` matches a fence tag against. A fence is coloured only if its type is
+turned on, which is the point: the setting governs the inside of a document as much as the tree.
+
+**One description per TAG, not per type.** `LanguageDescription.load()` takes no argument, so a
+description cannot ask which of its aliases matched - one per type would have to pick a single
+dialect for the whole row, and ```` ```ts ```` would load whatever ```` ```js ```` does. Each
+description closes over the filename its own tag implies (`fence.ts`), which is also why the loaders
+take a name at all.
+
+Tags come from the id and the extensions, which cover `py`, `ts`, `rs`, `sh` for free, plus
+`fenceAliases` on the catalogue for names no extension produces (`typescript`, `c++`, `kotlin`).
+That field maps a tag to the extension it stands for rather than being a plain list, because
+```` ```typescript ```` has to reach the same grammar ```` ```ts ```` does.
+
+**Preview does not colour fenced code** - only Source and Live. `renderMarkdown` is synchronous and
+serves Preview, chat replies and the About box alike, so reaching it means making that async
+(rippling through three surfaces) or colouring only with grammars that happen to be loaded, which
+would be worse than not colouring at all. Tracked, not forgotten.
+
+One trap that is easy to reintroduce: `EditorPanel`'s `fileTypes` default is a **hoisted constant**,
+not an inline `[]`. The editor keys its language effect on that list, so a fresh array each render
+would discard and reload the document's language on every render - a visible flicker, from an array
+literal in a parameter list.
+
 **No eagerly-imported module may statically import a `lang-*` package.** `languageLoaders.test.ts`
 asserts it over the module graph, comments stripped first (the module documents the rule it
 enforces). The rule is invisible when broken: a static `import { python } from

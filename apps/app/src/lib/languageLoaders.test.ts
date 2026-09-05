@@ -2,6 +2,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FILE_TYPES, type FileType } from "@trypthos/domain";
+
+/// Every type turned on. Only markdown reads this - it decides which fenced code blocks inside a
+/// document get coloured - but every loader is handed it, so a test asking for one gives the real
+/// answer rather than an empty list.
+const ALL_TYPES = FILE_TYPES.map((type) => type.id);
 import { repoPath } from "../testing/repoRoot";
 import { stripComments } from "../testing/stripComments";
 import { LANGUAGE_LOADERS } from "./languageLoaders";
@@ -51,7 +56,7 @@ describe("the language grammars stay out of the initial bundle", () => {
 /// How many places the parser could not make sense of. Zero means the dialect was configured the way
 /// the file's name implied.
 async function parseErrors(name: string, code: string): Promise<number> {
-  const support = await LANGUAGE_LOADERS.javascript!(name);
+  const support = await LANGUAGE_LOADERS.javascript!({ name, fileTypes: ALL_TYPES });
   let errors = 0;
   support.language.parser.parse(code).iterate({
     enter: (node) => {
@@ -83,15 +88,15 @@ describe("LANGUAGE_LOADERS", () => {
   });
 
   it("loads a language when asked", async () => {
-    const support = await LANGUAGE_LOADERS.json!("data.json");
+    const support = await LANGUAGE_LOADERS.json!({ name: "data.json", fileTypes: ALL_TYPES });
     expect(support.language.name).toBe("json");
   });
 
   // One row in Settings, four dialects underneath. The name is what picks between them, which is
   // why a loader takes one at all.
   it("reads the dialect off the file name", async () => {
-    const ts = await LANGUAGE_LOADERS.javascript!("main.ts");
-    const js = await LANGUAGE_LOADERS.javascript!("main.js");
+    const ts = await LANGUAGE_LOADERS.javascript!({ name: "main.ts", fileTypes: ALL_TYPES });
+    const js = await LANGUAGE_LOADERS.javascript!({ name: "main.js", fileTypes: ALL_TYPES });
     expect(ts.language.name).toBe("typescript");
     expect(js.language.name).toBe("javascript");
   });
@@ -129,7 +134,7 @@ describe("every language in the catalogue", () => {
   // `language.name` is deliberately NOT asserted: a legacy stream mode carries no name of its own,
   // so `dockerFile` legitimately resolves to one that is empty.
   it.each(loadable.map((type) => [type.id, type] as const))("loads %s", async (_id, type) => {
-    const support = await LANGUAGE_LOADERS[type.id]!(exampleName(type));
+    const support = await LANGUAGE_LOADERS[type.id]!({ name: exampleName(type), fileTypes: ALL_TYPES });
 
     expect(support.language).toBeDefined();
     expect(support.language.parser.parse("a\n")).toBeDefined();
@@ -147,18 +152,18 @@ describe("the rows that carry more than one grammar", () => {
   // A stylesheet is a stylesheet to somebody choosing what to see, but SCSS, Sass and LESS are not
   // the same language - so the row is one and the grammars are three.
   it("picks the stylesheet grammar from the extension", async () => {
-    expect((await LANGUAGE_LOADERS.css!("main.css")).language.name).toBe("css");
-    expect((await LANGUAGE_LOADERS.css!("main.scss")).language.name).toBe("sass");
-    expect((await LANGUAGE_LOADERS.css!("main.less")).language.name).toBe("less");
+    expect((await LANGUAGE_LOADERS.css!({ name: "main.css", fileTypes: ALL_TYPES })).language.name).toBe("css");
+    expect((await LANGUAGE_LOADERS.css!({ name: "main.scss", fileTypes: ALL_TYPES })).language.name).toBe("sass");
+    expect((await LANGUAGE_LOADERS.css!({ name: "main.less", fileTypes: ALL_TYPES })).language.name).toBe("less");
   });
 
   it("reads Kotlin off the extension, and Java otherwise", async () => {
-    expect((await LANGUAGE_LOADERS.java!("Main.java")).language.name).toBe("java");
+    expect((await LANGUAGE_LOADERS.java!({ name: "Main.java", fileTypes: ALL_TYPES })).language.name).toBe("java");
     // A stream mode has no grammar name of its own, so what is asserted is that it is a DIFFERENT
     // language from the Java one - which is the thing that would be wrong if the branch were.
-    const kotlin = await LANGUAGE_LOADERS.java!("Main.kt");
-    const java = await LANGUAGE_LOADERS.java!("Main.java");
+    const kotlin = await LANGUAGE_LOADERS.java!({ name: "Main.kt", fileTypes: ALL_TYPES });
+    const java = await LANGUAGE_LOADERS.java!({ name: "Main.java", fileTypes: ALL_TYPES });
     expect(kotlin.language).not.toBe(java.language);
-    expect((await LANGUAGE_LOADERS.java!("build.gradle.kts")).language).not.toBe(java.language);
+    expect((await LANGUAGE_LOADERS.java!({ name: "build.gradle.kts", fileTypes: ALL_TYPES })).language).not.toBe(java.language);
   });
 });

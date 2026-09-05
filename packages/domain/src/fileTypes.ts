@@ -73,6 +73,14 @@ export interface FileType {
   /// punctuation and Preview renders markdown - so every other type is Source and nothing else.
   readonly modes: readonly EditorMode[];
   readonly kind: FileTypeKind;
+  /// Fence tags a person writes that are NOT one of the extensions above, each mapped to the
+  /// extension it stands for.
+  ///
+  /// Only read by the markdown editor, which colours fenced code blocks from this catalogue: a
+  /// row's extensions already cover ```py and ```ts, and this covers ```typescript and ```c++.
+  /// The value is an extension rather than a flag because a row can carry several grammars, and
+  /// ```typescript has to reach the same one ```ts does.
+  readonly fenceAliases?: Readonly<Record<string, string>>;
   /// Always on, and drawn as a checked box the user cannot clear. Markdown is what the app is.
   readonly pinned: boolean;
 }
@@ -174,6 +182,7 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: ["source"],
     kind: "code",
+    fenceAliases: { typescript: "ts" },
     pinned: false,
   },
   {
@@ -214,6 +223,7 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: ["source"],
     kind: "code",
+    fenceAliases: { console: "sh", "shell-session": "sh" },
     pinned: false,
   },
   {
@@ -226,6 +236,7 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: ["source"],
     kind: "code",
+    fenceAliases: { pwsh: "ps1" },
     pinned: false,
   },
   {
@@ -267,6 +278,7 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: ["source"],
     kind: "code",
+    fenceAliases: { "c++": "cpp", cplusplus: "cpp" },
     pinned: false,
   },
   {
@@ -277,6 +289,7 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: ["source"],
     kind: "code",
+    fenceAliases: { "c#": "cs" },
     pinned: false,
   },
   {
@@ -288,6 +301,7 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: ["source"],
     kind: "code",
+    fenceAliases: { kotlin: "kt" },
     pinned: false,
   },
   {
