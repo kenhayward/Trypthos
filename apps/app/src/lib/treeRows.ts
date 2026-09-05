@@ -1,4 +1,4 @@
-import { isHidden, isMarkdownFile, sortNodes } from "@trypthos/domain";
+import { isHidden, isOpenable, sortNodes } from "@trypthos/domain";
 import type { RemoteNode } from "./workspaceClient";
 
 /// What is known about one folder in the tree.
@@ -22,7 +22,11 @@ export interface TreeRow {
 ///
 /// Pure, so the awkward parts - what a filter hides, how deep a row sits, which folder is still
 /// loading - are all testable without rendering a tree or touching a filesystem.
-export function treeRows(folders: Record<string, FolderState>, filter: string): TreeRow[] {
+export function treeRows(
+  folders: Record<string, FolderState>,
+  filter: string,
+  enabled: readonly string[],
+): TreeRow[] {
   const query = filter.trim().toLowerCase();
 
   const rowsFor = (path: string, depth: number): TreeRow[] => {
@@ -35,8 +39,9 @@ export function treeRows(folders: Record<string, FolderState>, filter: string): 
       if (isHidden(node.name)) return [];
 
       if (node.kind === "file") {
-        // Non-markdown files never appear: the panel is a markdown browser, and its footer says so.
-        if (!isMarkdownFile(node.name)) return [];
+        // A file whose type is off never appears, and neither does one no type describes at all.
+        // The footer says which types are on, and offers the page that changes them.
+        if (!isOpenable(node.name, enabled)) return [];
         if (query !== "" && !node.name.toLowerCase().includes(query)) return [];
         return [{ node, depth, expanded: false, status: null }];
       }
@@ -56,7 +61,7 @@ export function treeRows(folders: Record<string, FolderState>, filter: string): 
   return rowsFor("", 0);
 }
 
-/// Markdown files currently on screen.
+/// Files currently on screen.
 ///
 /// Counts what is shown rather than what exists. A recursive count of a whole workspace is not free:
 /// measured on a home directory it took 40 seconds across 113,000 folders, so a number that claimed

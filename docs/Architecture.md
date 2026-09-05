@@ -61,6 +61,8 @@ both processes and testable without booting either.
   unchanged: the size cap, the binary sniff, a strict UTF-8 decode, and byte order mark handling. In
   the domain so the shell that enforces the limits and the renderer that explains them cannot
   disagree about what they are. See "The read boundary".
+- `fileTypes.ts` - the catalogue of file types the app opens, as data, plus the pure resolution over
+  it. See "File types".
 - `provider.ts` - the storage contract. A write **returns a revision, never void**, and a conflict is
   a **result, not an exception** - both shaped for GitHub, where a save is a commit, before any cloud
   backend exists.
@@ -312,6 +314,50 @@ deep a row sits and which folder is still loading are all testable without a tre
 - **Counting is lazy, and that is measured rather than assumed.** A recursive markdown count took 5ms
   on this repo, 80ms on Diariz, and **40 seconds across 113,000 folders on a home directory** - which
   is a perfectly plausible workspace. The footer therefore counts what is on screen.
+
+## File types
+
+Which files the app takes an interest in. `packages/domain/src/fileTypes.ts` is the catalogue, as
+DATA: id, translation key, group, extensions, whole filenames, the views the header offers, and a
+`kind` that decides what editing one is like. It is in the domain because a stored setting names its
+ids - the schema that reads settings, the tree that filters on it and the page that draws the
+checkboxes must agree about which types exist, and three lists agreeing by hand are three lists that
+will not.
+
+**The setting is about scope, not performance.** A language's colouring loads on demand, so a
+checkbox cannot buy back startup time. What it decides is what the folder tree lists, what the editor
+opens and what chat can see - which is why the page is called File types and its wording talks about
+the folder browser.
+
+`isMarkdownFile` is gone; `isOpenable(name, enabled)` replaced it at all three widening call sites:
+`treeRows`, `markdownLink` and `workspaceOutline`. **`launchTarget.js` and `explorerIntegration.js`
+deliberately keep their own markdown-only lists** - registering `.py` under
+`HKCU\Software\Classes\SystemFileAssociations` is a far larger claim on a user's machine than the
+setting's wording makes, and the two lists there are the same on purpose so the app never acts on an
+argument it did not ask to receive.
+
+Four things that are easy to get wrong:
+
+- **`fileTypes.enabled` is `z.array(z.string())`, never a `z.enum`.** A settings file written by a
+  newer build names types this one has never heard of; a strict enum would refuse the whole file and
+  take the user's panel widths, open folder and every configured model with it. Unknown ids are
+  ignored where they are read and carried through untouched where they are written, including by the
+  settings page's own toggle - so an upgrade and a downgrade do not each wipe the other's choices.
+- **The default is `["markdown"]` for a fresh install and for the migration alike.** Adding a setting
+  must not change what an existing installation does, and a fresh install disagreeing with a migrated
+  one is a second kind of wrong.
+- **Markdown is pinned**, and `enabledFileTypes` honours that whatever the stored list says. A
+  hand-edited file must not leave a markdown editor unable to open markdown.
+- **The catalogue invariant is one equality over the whole set**, not a check per type: every type
+  can be well-formed while two of them claim `.m`.
+
+`filenames` is in the shape from the start even though no type uses it yet. `Dockerfile` and
+`Makefile` have no extension, and retrofitting a second matching rule through every call site later
+is the expensive version of this.
+
+The renderer half - a language `Compartment`, the loaders that turn an id into a CodeMirror language,
+and per-`kind` editing behaviour - does not exist yet. It is specified in `docs/specs/file-types.md`,
+along with the rule that no eagerly-imported module may import a `lang-*` package.
 
 ## Settings, and the panel layout
 

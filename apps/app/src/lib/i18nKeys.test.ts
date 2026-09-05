@@ -64,6 +64,12 @@ const DYNAMIC_PREFIXES = [
   // Looked up by path in `builtInDocuments`, because the tab strip, the list of open files and the
   // window title all have to call the built-in guide the same thing.
   "editor.guide",
+  // Built from FILE_TYPES as the settings page draws its rows and the workspace footer names what
+  // it is showing. The catalogue lives in the domain because a stored setting names its ids, so the
+  // set is iterated rather than written out. `fileTypes.test` checks the other direction.
+  "fileTypes.",
+  // Built from FILE_TYPE_GROUPS as the settings page draws its headings.
+  "settings.fileTypes.group.",
 ];
 
 function usedKeys(): Map<string, string[]> {

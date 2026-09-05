@@ -6,12 +6,12 @@ About box carries a shorter table again; all three change together.
 ## Workspace browser
 
 The left panel shows a workspace as a tree. Open a folder from your machine, expand folders in place,
-and click a file to open it in the editor. A filter box narrows the markdown files by name.
+and click a file to open it in the editor. A filter box narrows the files by name.
 
-Every folder is listed but only markdown files within them, and hidden entries such as `.git` are left
-out - they are not what this panel is for. The footer counts the markdown files currently on screen
-rather than the whole tree: a recursive count is not free, and measured on a home directory it took
-40 seconds across 113,000 folders.
+Every folder is listed, but only the files of a type you have turned on (see **File types**), and
+hidden entries such as `.git` are left out - they are not what this panel is for. The footer names
+which types are on and counts the files currently on screen rather than the whole tree: a recursive
+count is not free, and measured on a home directory it took 40 seconds across 113,000 folders.
 
 If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
 the tree keeps working, because one unreadable folder is a fact about that folder rather than about
@@ -26,6 +26,24 @@ are. Trypthos will not decide for you which version wins.
 Local and cloud look like one tree to you, but they behave differently underneath: cloud listings are
 paged, slow, and can fail part-way through. Trypthos shows that on the node it affects rather than
 blanking the whole panel, so a directory that is still loading, or that failed, says so in place.
+
+## File types
+
+Trypthos opens markdown, and the **File types** page of Settings decides what else it opens. Markdown
+is always on and cannot be turned off - it is what the app is - and every other type is off until you
+turn it on. Plain text is the first of them: `.txt`, `.text` and `.nfo`.
+
+A type that is off is not merely uncoloured, it is absent. Its files do not appear in the folder
+browser, cannot be opened by clicking a link to one, and are not among the files chat is offered or
+allowed to read. Turning a type on is therefore a decision about what you want to see: point Trypthos
+at a folder full of that type and the list on the left gets a great deal longer.
+
+The footer under the folder browser says which types are on - the type's name when there is one, a
+count when there are more - and clicking it goes straight to the page that changes them.
+
+Your choice is remembered between launches, and upgrading never turns anything on for you: a
+Trypthos that has been showing you markdown alone carries on doing exactly that until you say
+otherwise.
 
 ## Markdown editor
 
@@ -421,7 +439,7 @@ treated as unsaved work.
 ## Settings
 
 Settings opens as a window of its own, with a rail down the left and a page per subject: Appearance,
-Window, Chat models, AI and system prompt, Editor, and About. Open it from the cog in the title bar,
+Window, Chat models, AI and system prompt, Editor, File types, and About. Open it from the cog in the title bar,
 from Tools on Windows or the app menu on macOS, or with Ctrl+comma. Escape closes it.
 
 Every setting takes effect the moment you choose it. There is no Save button, and so nothing to

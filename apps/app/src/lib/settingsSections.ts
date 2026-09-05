@@ -11,6 +11,7 @@ export type SettingsSection =
   | "chatModels"
   | "ai"
   | "editor"
+  | "fileTypes"
   | "about";
 
 /// In rail order. About is last because it is set apart from the working settings above it - the
@@ -22,6 +23,9 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "chatModels",
   "ai",
   "editor",
+  // Beside Editor, because it is the other half of the same question: Editor is how a document is
+  // drawn, this is which documents there are.
+  "fileTypes",
   "about",
 ];
 
@@ -31,5 +35,6 @@ export const SECTION_LABEL_KEYS: Record<SettingsSection, string> = {
   chatModels: "settings.section.chatModels",
   ai: "settings.section.ai",
   editor: "settings.section.editor",
+  fileTypes: "settings.section.fileTypes",
   about: "settings.section.about",
 };

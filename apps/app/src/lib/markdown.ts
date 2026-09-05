@@ -1,6 +1,6 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { linkAction } from "@trypthos/domain";
+import { isUnsupportedScheme } from "@trypthos/domain";
 
 /// Markdown to sanitised HTML.
 ///
@@ -54,10 +54,10 @@ marked.use({
       // page - inert there, but naming a target nothing will open is worse than saying nothing.
       //
       // Only the SCHEME is judged here. Whether a relative path resolves to a file in the workspace
-      // depends on which document is open, which this renderer does not know and must not guess -
-      // the same markdown is rendered in the chat panel and the About box.
-      const decision = linkAction(href, null);
-      const refused = decision.kind === "none" && decision.reason === "unsupported-scheme";
+      // depends on which document is open and which file types are turned on, neither of which this
+      // renderer knows or may guess - the same markdown is rendered in the chat panel and the About
+      // box. Asking `isUnsupportedScheme` rather than `linkAction` is what keeps it out of that.
+      const refused = isUnsupportedScheme(href);
       const hover = title ?? (refused ? null : href);
       if (hover !== null) attributes.push(`title="${escapeAttribute(hover)}"`);
 

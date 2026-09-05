@@ -6,7 +6,7 @@ export type {
   PathResolution,
 } from "./workspacePath";
 
-export { isExternalUrl, linkAction } from "./markdownLink";
+export { isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
 export type { LinkAction, LinkRejection } from "./markdownLink";
 
 export { normaliseEndpoint } from "./endpoints";
@@ -128,7 +128,18 @@ export type { DocumentSet, DocumentSource, OpenDocument } from "./openDocuments"
 export { INLINE_ACTIONS, TOOLBAR_ACTIONS, lineSpan, toolbarEdit } from "./markdownToolbar";
 export type { TextRange, ToolbarAction, ToolbarEdit } from "./markdownToolbar";
 
-export { isHidden, isMarkdownFile, sortNodes } from "./workspaceTree";
+export { isHidden, sortNodes } from "./workspaceTree";
+
+export {
+  DEFAULT_FILE_TYPES,
+  FILE_TYPES,
+  FILE_TYPE_GROUPS,
+  enabledFileTypes,
+  fileTypeFor,
+  isOpenable,
+  matchesFileType,
+} from "./fileTypes";
+export type { FileType, FileTypeGroup, FileTypeId, FileTypeKind } from "./fileTypes";
 export type { TreeEntry } from "./workspaceTree";
 
 export {

@@ -1,4 +1,4 @@
-import { isMarkdownFile } from "./workspaceTree";
+import { isOpenable } from "./fileTypes";
 
 /// What clicking a link in rendered markdown should do.
 ///
@@ -12,8 +12,9 @@ import { isMarkdownFile } from "./workspaceTree";
 /// application with that page, and given it the app's own origin on the way.
 
 export type LinkAction =
-  /// A markdown file inside the open workspace. The path is workspace-relative, exactly as the
-  /// folder browser names one, and is validated again in the main process before anything is read.
+  /// A file inside the open workspace, of a type the user has turned on. The path is
+  /// workspace-relative, exactly as the folder browser names one, and is validated again in the
+  /// main process before anything is read.
   | { kind: "document"; path: string }
   /// A web address, for the user's browser.
   | { kind: "external"; url: string }
@@ -31,8 +32,9 @@ export type LinkRejection =
   | "unsupported-scheme"
   /// Lexically well-formed, but `..` walks above the workspace root.
   | "escapes-workspace"
-  /// Inside the workspace, but not a file the editor opens.
-  | "not-markdown";
+  /// Inside the workspace, but not a file the editor opens - either no file type describes it, or
+  /// the type that does is turned off. Both mean the same thing to a click: nothing happens.
+  | "not-openable";
 
 /// The schemes handed to the operating system, and the complete list of them.
 ///
@@ -62,7 +64,36 @@ function folderOf(filePath: string): string {
   return cut === -1 ? "" : filePath.slice(0, cut);
 }
 
-export function linkAction(href: string, fromPath: string | null): LinkAction {
+/// Whether a link names a scheme the app will not hand anywhere.
+///
+/// Split out because one caller asks only this and cannot answer anything else: `renderMarkdown`
+/// decides whether to show a link's target in its hover text, and it renders the same markdown in
+/// Preview, in chat replies and in the About box - so it does not know which document is open, and
+/// must not be handed a question about file types that has no answer where it stands.
+export function isUnsupportedScheme(href: string): boolean {
+  const trimmed = href.trim();
+
+  // Two leading separators are a host, not a path: `//example.com/a` is a URL whose scheme is
+  // inherited from the page, and `\\server\share` is a Windows network share. Neither is inside the
+  // workspace, and both would survive the walk below as an ordinary-looking relative path once the
+  // separators were unified - which is precisely the reading that must not happen.
+  if (/^[/\\]{2}/.test(trimmed)) return true;
+
+  const scheme = SCHEME.exec(trimmed);
+  return scheme !== null && !EXTERNAL_SCHEMES.has(scheme[0].toLowerCase());
+}
+
+/// What clicking this link should do.
+///
+/// `enabled` is the user's file types, by id. It is required rather than defaulted because there is
+/// no safe default: a link the folder browser would not show must not be a link the editor opens,
+/// and a caller that cannot answer the question is a caller asking the wrong function - see
+/// `isUnsupportedScheme`.
+export function linkAction(
+  href: string,
+  fromPath: string | null,
+  enabled: readonly string[],
+): LinkAction {
   const trimmed = href.trim();
   if (trimmed === "") return { kind: "none", reason: "empty" };
 
@@ -73,18 +104,8 @@ export function linkAction(href: string, fromPath: string | null): LinkAction {
       : { kind: "anchor", fragment };
   }
 
-  // Two leading separators are a host, not a path: `//example.com/a` is a URL whose scheme is
-  // inherited from the page, and `\\server\share` is a Windows network share. Neither is inside the
-  // workspace, and both would survive the walk below as an ordinary-looking relative path once the
-  // separators were unified - which is precisely the reading that must not happen.
-  if (/^[/\\]{2}/.test(trimmed)) return { kind: "none", reason: "unsupported-scheme" };
-
-  const scheme = SCHEME.exec(trimmed);
-  if (scheme !== null) {
-    return EXTERNAL_SCHEMES.has(scheme[0].toLowerCase())
-      ? { kind: "external", url: trimmed }
-      : { kind: "none", reason: "unsupported-scheme" };
-  }
+  if (isUnsupportedScheme(trimmed)) return { kind: "none", reason: "unsupported-scheme" };
+  if (isExternalUrl(trimmed)) return { kind: "external", url: trimmed };
 
   // Everything from here is workspace-relative. The fragment and query are dropped rather than
   // carried: what is wanted is the file, and neither has a meaning the editor could honour yet.
@@ -123,10 +144,10 @@ export function linkAction(href: string, fromPath: string | null): LinkAction {
   if (segments.length === 0) return { kind: "none", reason: "empty" };
 
   const path = segments.join("/");
-  // The same idea of markdown the folder browser uses. A link to a PDF is refused rather than opened
-  // as text, because the editor has nothing to show for it.
-  if (!isMarkdownFile(segments[segments.length - 1]!)) {
-    return { kind: "none", reason: "not-markdown" };
+  // The same catalogue the folder browser filters on, so a link the tree would not show is a link
+  // the editor will not open. Two lists answering this separately is two lists that will disagree.
+  if (!isOpenable(segments[segments.length - 1]!, enabled)) {
+    return { kind: "none", reason: "not-openable" };
   }
 
   return { kind: "document", path };

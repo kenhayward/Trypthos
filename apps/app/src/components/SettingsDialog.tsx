@@ -13,6 +13,7 @@ import { SECTION_LABEL_KEYS, type SettingsSection } from "../lib/settingsSection
 import { THEME_PREFERENCES, type ThemePreference } from "../lib/theme";
 import type { SaveKeyResult } from "./ChatProfileForm";
 import SettingsAbout from "./SettingsAbout";
+import SettingsFileTypes from "./SettingsFileTypes";
 import SettingsChatModels from "./SettingsChatModels";
 import SettingsNav from "./SettingsNav";
 
@@ -344,6 +345,13 @@ export default function SettingsDialog({
                 </p>
                 <p className="mt-4 text-xs text-ink-4">{t("settings.editor.defaultViewHint")}</p>
               </div>
+            )}
+
+            {section === "fileTypes" && (
+              <SettingsFileTypes
+                enabled={settings.fileTypes.enabled}
+                onChange={(enabled) => onChange({ fileTypes: { enabled } })}
+              />
             )}
 
             {section === "about" && <SettingsAbout />}

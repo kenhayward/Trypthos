@@ -9,6 +9,7 @@ describe("settings sections", () => {
       "chatModels",
       "ai",
       "editor",
+      "fileTypes",
       "about",
     ]);
   });

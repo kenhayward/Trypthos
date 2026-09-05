@@ -50,6 +50,12 @@ const ICONS: Record<SettingsSection, React.ReactNode> = {
       <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </>
   ),
+  fileTypes: (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <polyline points="14 2 14 8 20 8" />
+    </>
+  ),
   about: (
     <>
       <circle cx="12" cy="12" r="10" />

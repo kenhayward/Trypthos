@@ -9,18 +9,6 @@ export interface TreeEntry {
   kind: "file" | "directory";
 }
 
-const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdown", "mkd"]);
-
-/// Whether a name is a markdown file.
-///
-/// Matches the extension, not a substring: `archive.md.bak` ends in `.bak`, and offering to open a
-/// backup as markdown is the kind of thing that looks like it works until someone saves over it.
-export function isMarkdownFile(name: string): boolean {
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0) return false;
-  return MARKDOWN_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
-}
-
 /// Dot-prefixed entries. Not a security boundary - `.git` and `.env` are simply noise in a document
 /// tree, and the user can still reach them by other means.
 export function isHidden(name: string): boolean {

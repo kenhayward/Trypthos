@@ -8,6 +8,7 @@ import {
   loadSettings,
 } from "./settings";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
+import { DEFAULT_FILE_TYPES } from "./fileTypes";
 
 describe("SettingsSchema", () => {
   it("accepts the defaults it ships with", () => {
@@ -463,6 +464,53 @@ describe("migrating from version 9", () => {
 
   it("arrives at the current version", () => {
     expect(loadSettings(v9).schemaVersion).toBe(SETTINGS_VERSION);
+  });
+});
+
+describe("the file types a settings file names", () => {
+  const before = {
+    schemaVersion: 10,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    chat: { systemPrompt: null, folderFileLimit: 40, showPanel: null, profiles: [] },
+    editor: { defaultViewMode: "live" as const },
+  };
+
+  // Adding a setting must not change what an existing installation does. Somebody who upgrades sees
+  // exactly the tree they saw yesterday until they go and turn something on.
+  it("seeds an upgraded file with markdown alone", () => {
+    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown"]);
+  });
+
+  it("leaves everything else version 10 stored", () => {
+    const migrated = loadSettings(before);
+    expect(migrated.lastWorkspace).toBe("D:/Notes");
+    expect(migrated.chat.folderFileLimit).toBe(40);
+    expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
+  });
+
+  // A fresh install must not disagree with an upgraded one. Two answers to "what is on by default"
+  // is a bug report nobody can reproduce, because it depends on when the user installed.
+  it("agrees with what a fresh installation starts with", () => {
+    expect(DEFAULT_SETTINGS.fileTypes.enabled).toEqual([...DEFAULT_FILE_TYPES]);
+    expect(loadSettings(before).fileTypes.enabled).toEqual([...DEFAULT_FILE_TYPES]);
+  });
+
+  it("keeps a list the user has chosen", () => {
+    const chosen = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "text"] } };
+    expect(loadSettings(chosen).fileTypes.enabled).toEqual(["markdown", "text"]);
+  });
+
+  // Strings rather than an enum, on purpose. A file written by a NEWER build names types this one
+  // has never heard of; a strict enum would refuse the whole file and take the user's panel widths,
+  // their open folder and every configured model down with it. The unknown id survives the round
+  // trip and is ignored where it is read.
+  it("loads a file naming a type it does not know", () => {
+    const newer = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "klingon"] } };
+    expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon"]);
+    expect(loadSettings(newer).lastWorkspace).toBe("D:/Notes");
   });
 });
 

@@ -367,10 +367,11 @@ export default function App() {
   const linkHandlers = useMemo(
     () => ({
       fromPath: state.file?.path ?? null,
+      fileTypes: settings.fileTypes.enabled,
       openDocument: (path: string) => void actions.openPath(path),
       openExternal,
     }),
-    [state.file?.path, actions],
+    [state.file?.path, settings.fileTypes.enabled, actions],
   );
   const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
 
@@ -427,6 +428,8 @@ export default function App() {
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
           onOpenFile={(node) => void actions.openFile(node)}
+          fileTypes={settings.fileTypes.enabled}
+          onOpenFileTypes={() => setSettingsOn("fileTypes")}
         />
             <PanelDivider
               grows="right"
