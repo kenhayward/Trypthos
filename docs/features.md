@@ -64,6 +64,12 @@ on hover. Two open files with the same name grow just enough folder to tell them
 those two - the rest of the strip stays short. With more files open than the row can hold, the tabs
 scroll, and the one you switch to is brought into view.
 
+A tab that has scrolled out of sight is a file you would otherwise have to go looking for, so the
+button at the end of the strip lists every open file at once: each one named, with the folder it
+lives in underneath it, the file you are looking at highlighted, and a dot beside any with unsaved
+changes. Choose one and you go to it. There is more room for a folder name here than there is on a
+tab, which is what makes the list worth having even when every tab does fit.
+
 Close a tab with the x on it, with a middle click, or with Ctrl+W (Cmd+W on macOS), which closes the
 one you are in. If that file has unsaved changes you are asked about it by name, which matters when more than
 one is unsaved: closing the window asks about each in turn, and cancelling any of them stops the

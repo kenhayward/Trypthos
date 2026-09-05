@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
@@ -125,6 +125,45 @@ describe("EditorPanel", () => {
     render(<Harness />);
 
     expect(screen.getByRole("tab", { name: /notes\.md/ })).toBeDefined();
+  });
+
+  // The strip scrolls, so a tab can be out of sight. The list is how you reach it, and it sits at the
+  // end of the strip rather than inside it, where it would scroll away with the tabs.
+  it("reaches an open file through the list as well as its tab", async () => {
+    const user = userEvent.setup();
+    const onActivateFile = vi.fn();
+    render(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md", "docs/plan.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        onActivateFile={onActivateFile}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "All open files" }));
+    // The list, not the close button on the tab of the same name.
+    await user.click(within(screen.getByRole("list")).getByRole("button", { name: /plan\.md/ }));
+
+    expect(onActivateFile).toHaveBeenCalledWith("docs/plan.md");
+  });
+
+  it("has no open-files list when there is nothing open", () => {
+    render(
+      <EditorPanel
+        workspaceName={null}
+        paths={[]}
+        activePath={null}
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "All open files" })).toBeNull();
   });
 
   it("names the scratch buffer when no document is open", () => {

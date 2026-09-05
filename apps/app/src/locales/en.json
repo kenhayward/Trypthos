@@ -33,6 +33,7 @@
       "preview": "Read-only rendered prose"
     },
     "tabs": "Open files",
+    "openFiles": "All open files",
     "tabClose": "Close {{name}}",
     "tabDirty": "{{name}} has unsaved changes",
     "scratch": "Scratch buffer",

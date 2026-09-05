@@ -85,6 +85,10 @@ round-trip and nothing that can reformat a user's file behind their back.
   closing it. `EditorHeader` beside it owns **state** - whether what is on screen is saved, and which
   view it is in. Neither repeats the other, which is why the only dirty dot in the strip is on a tab
   that is NOT on screen: for the one that is, the header says so in words.
+- `components/OpenFilesMenu.tsx` lists every open document, and is **pinned between the strip and the
+  header** rather than drawn inside the strip - the strip scrolls, so an affordance for reaching a
+  tab that has scrolled away must not scroll away with it. It follows `ChatHistoryMenu`'s popover
+  shape (outside click and Escape to close) rather than inventing a second one.
 - `lib/editorTheme.ts` holds the Source palette. In Source mode colour **stands in for** formatting
   rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
   of the bytes.

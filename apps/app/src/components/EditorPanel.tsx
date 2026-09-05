@@ -9,6 +9,7 @@ import MarkdownEditor, {
   type EditorSelection,
 } from "./MarkdownEditor";
 import MarkdownPreview from "./MarkdownPreview";
+import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 
@@ -99,7 +100,8 @@ export default function EditorPanel({
   return (
     <main aria-label={t("editor.title")} className="flex min-w-0 grow flex-col bg-app">
       {/* One row: identity on the left, state on the right. The strip takes whatever width the
-          header does not need, and scrolls within it. */}
+          header does not need, and scrolls within it - so the list of open files is pinned between
+          the two rather than inside the strip, where it would scroll away with the tabs. */}
       <div className="flex items-stretch border-b border-rule">
         <EditorTabs
           workspaceName={workspaceName}
@@ -108,6 +110,13 @@ export default function EditorPanel({
           dirtyPaths={dirtyPaths}
           onActivate={(path) => onActivateFile?.(path)}
           onClose={(path) => onCloseFile?.(path)}
+        />
+        <OpenFilesMenu
+          workspaceName={workspaceName}
+          paths={paths}
+          activePath={activePath}
+          dirtyPaths={dirtyPaths}
+          onActivate={(path) => onActivateFile?.(path)}
         />
         <EditorHeader dirty={dirty} mode={mode} onModeChange={setMode} />
       </div>
