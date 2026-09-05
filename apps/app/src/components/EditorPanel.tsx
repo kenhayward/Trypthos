@@ -199,7 +199,7 @@ export default function EditorPanel({
             ariaLabel={t("editor.surface")}
           />
         ) : (
-          <MarkdownPreview source={value} />
+          <MarkdownPreview source={value} fileTypes={fileTypes} />
         )}
       </div>
 

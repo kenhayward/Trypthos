@@ -23,6 +23,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     selectedId: "one",
     onSelectModel: vi.fn(),
     turns: [],
+    fileTypes: ["markdown"] as readonly string[],
     streaming: false,
     error: null,
     reasoning: "",

@@ -76,8 +76,10 @@ you have not turned on still reads as a code block, in the code colour markdown 
 it simply is not broken up by role. So the setting governs the inside of a document as much as which
 files appear on the left.
 
-**Preview does not colour code blocks yet**, only Source and Live. Preview renders through a
-different path from the editor, and reaching it is outstanding work rather than a decision.
+Preview colours them too, and so do **replies in the chat panel** - the same colours, from the same
+list of file types. The colouring appears a moment after the text, because the language is fetched
+only when something needs it, exactly as in the editor. Your code is untouched down to the
+character, and anything that looks like markup inside a code block stays text.
 
 A type that is off is not merely uncoloured, it is absent. Its files do not appear in the folder
 browser, cannot be opened by clicking a link to one, and are not among the files chat is offered or

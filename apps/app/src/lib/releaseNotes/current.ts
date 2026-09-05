@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.38.0",
+    date: "2026-09-05",
+    pr: 80,
+    headline: "Preview colours code blocks too, and so do chat replies",
+    summary:
+      "Code blocks were coloured in Source and Live but not in Preview, so the same document looked different depending on how you were reading it. Preview now colours them, in the same colours, from the same list of file types - and a fence naming a language you have not turned on still reads as a code block, exactly as before. Replies in the chat panel get the same treatment, which is where it may matter most: an answer that includes a snippet now reads like code rather than like a wall of monospace. The colouring appears a moment after the text, because the language is fetched only when something needs it - the same way the editor has always behaved. Nothing about your document changes: the code is untouched down to the character, and anything that looks like markup inside a code block stays text.",
+    added: [
+      "Fenced code blocks are coloured in Preview.",
+      "Fenced code blocks in chat replies are coloured the same way.",
+    ],
+    fixed: [
+      "The same document no longer looks different in Source and Preview.",
+    ],
+  },
+  {
     version: "0.37.0",
     date: "2026-09-05",
     pr: 79,

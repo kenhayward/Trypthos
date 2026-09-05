@@ -7,6 +7,7 @@ import {
   type EditTarget,
   type ProposedEdit,
 } from "@trypthos/domain";
+import { useCodeHighlighting } from "../hooks/useCodeHighlighting";
 import { renderMarkdown } from "../lib/markdown";
 import { contextUsage } from "@trypthos/domain";
 import type { Turn } from "../lib/conversation";
@@ -22,6 +23,9 @@ interface Props {
   selectedId: string | null;
   onSelectModel: (id: string) => void;
   turns: readonly Turn[];
+  /// The file types the user has turned on, so a fenced code block in a reply is coloured on the
+  /// same terms one in their own document is.
+  fileTypes: readonly string[];
   streaming: boolean;
   error: string | null;
   /// What the model thought, when it produced no answer. See the empty-reply branch below.
@@ -86,6 +90,7 @@ export default function ChatPanel({
   selectedId,
   onSelectModel,
   turns,
+  fileTypes,
   streaming,
   error,
   reasoning,
@@ -113,6 +118,10 @@ export default function ChatPanel({
   /// once the turns behind them are gone.
   const [applied, setApplied] = useState<ReadonlySet<string>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
+
+  // A reply arrives a token at a time, so this runs often. It is cheap when it does: a coloured
+  // block is marked, and a pass over an unchanged thread is one query.
+  useCodeHighlighting(threadRef, fileTypes, turns);
 
   // Keep the thread pinned to the newest message as tokens stream in.
   useEffect(() => {

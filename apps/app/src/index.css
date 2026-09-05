@@ -297,6 +297,25 @@ body {
   margin: 0.8em 0;
 }
 .markdown-body pre code { background: none; padding: 0; }
+
+/* Syntax colouring in rendered markdown - Preview, and the chat panel's replies.
+
+   Deliberately NOT scoped to .markdown-body: the chat panel renders replies under .chat-md, and a
+   code block should not be one thing in a document and another in an answer about it. The classes
+   are written by `codeHighlight.ts` from the same table the editor's HighlightStyle is built from,
+   so all three surfaces resolve to these same tokens. */
+.tp-tok-marker { color: var(--color-marker); }
+.tp-tok-heading { color: var(--color-tok-head); }
+.tp-tok-strong { color: var(--color-tok-strong); }
+.tp-tok-code { color: var(--color-tok-code); }
+.tp-tok-link { color: var(--color-leaf); }
+.tp-tok-quote { color: var(--color-tok-quote); }
+.tp-tok-keyword { color: var(--color-tok-keyword); }
+.tp-tok-string { color: var(--color-tok-string); }
+.tp-tok-number { color: var(--color-tok-number); }
+.tp-tok-type { color: var(--color-tok-type); }
+.tp-tok-func { color: var(--color-tok-func); }
+.tp-tok-comment { color: var(--color-tok-comment); font-style: italic; }
 .markdown-body blockquote {
   border-left: 3px solid var(--color-rule);
   padding-left: 0.9em;

@@ -408,10 +408,42 @@ Tags come from the id and the extensions, which cover `py`, `ts`, `rs`, `sh` for
 That field maps a tag to the extension it stands for rather than being a plain list, because
 ```` ```typescript ```` has to reach the same grammar ```` ```ts ```` does.
 
-**Preview does not colour fenced code** - only Source and Live. `renderMarkdown` is synchronous and
-serves Preview, chat replies and the About box alike, so reaching it means making that async
-(rippling through three surfaces) or colouring only with grammars that happen to be loaded, which
-would be worse than not colouring at all. Tracked, not forgotten.
+### Colouring code in rendered markdown
+
+Preview and the chat panel have no CodeMirror, so `lib/codeHighlight.ts` colours their code blocks
+as a **second pass over the DOM** rather than as part of the renderer. `renderMarkdown` stays
+synchronous and untouched - it serves Preview, chat replies and the About box alike, and making it
+async to solve a problem one of them has would have rippled through all three. The other option,
+colouring only with grammars that happened to be loaded, would mean a block is coloured if you
+visited Source first and not otherwise, which is worse than not colouring it.
+
+The rendered markup already carries what is needed: marked emits `<pre><code class="language-x">`
+and DOMPurify keeps the class. So the pass reads the tag, resolves it through the same
+`fenceLanguages` the editor uses, parses, and rebuilds the block with `highlightTree`.
+
+Four things hold it together:
+
+- **`TOKEN_ROLES` in `editorTheme.ts` is one table with two consumers**: the editor's
+  `HighlightStyle`, and a `tagHighlighter` emitting `tp-tok-*` classes for rendered HTML. Deriving
+  both is the only thing stopping the same code being one colour in the editor and another three
+  pixels away in Preview. `codeHighlight.test.ts` asserts every role has a rule in `index.css` and
+  that no rule outlives its role - a class nothing styles renders as the inherited colour, in a
+  block full of colours, which is where nobody notices.
+- **The classes are NOT scoped to `.markdown-body`**, because the chat panel renders under
+  `.chat-md` and a code block must not differ between a document and an answer about it.
+- **Every piece is written with `textContent`, never markup.** The text is the user's document or a
+  model's reply; it arrives escaped and rebuilding a block by hand is exactly where somebody would
+  unescape it. A `<script>` inside a code block is text and stays text - asserted, with the test
+  deliberately using a language that is turned ON, since a block nothing colours is never taken
+  apart and would pass for the wrong reason.
+- **Blocks are marked once coloured, and only when coloured.** A re-render then costs one query,
+  which matters in the chat panel where this runs on every streamed token; and a block that was
+  skipped stays unmarked, so a half-typed fence becomes a real one a moment later and turning a
+  file type on reaches the blocks it was previously off for.
+
+The cancellation flag is checked after every await, for the same reason the editor's is: the
+document can be replaced while a grammar is still loading, and writing into it then would paint one
+document's colouring onto another's text.
 
 One trap that is easy to reintroduce: `EditorPanel`'s `fileTypes` default is a **hoisted constant**,
 not an inline `[]`. The editor keys its language effect on that list, so a fresh array each render
