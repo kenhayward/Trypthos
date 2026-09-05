@@ -496,6 +496,7 @@ export default function App() {
                 selectedId={activeModel?.id ?? null}
                 onSelectModel={setChosenModel}
                 turns={chat.turns}
+          fileTypes={settings.fileTypes.enabled}
                 streaming={chat.streaming}
                 error={chat.error}
                 reasoning={chat.reasoning}

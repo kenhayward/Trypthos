@@ -817,6 +817,39 @@ describe("fenced code inside markdown, rendered", () => {
 
   // The prose around it is still markdown. A fence that swallowed the rest of the document would
   // colour this line as Python, or not at all.
+
+  // Preview renders through marked rather than CodeMirror, and until now showed code as plain
+  // monospace - so the same document looked different in two of its three views. Only a browser can
+  // answer this: the classes resolve to CSS variables, and nothing but a real engine computes them.
+  it("colours the fence in Preview too", async () => {
+    open(["markdown", "python"]);
+    await userEvent.click(modeButton("Preview"));
+
+    const painted = async () => {
+      const block = document.querySelector(".markdown-body pre code");
+      if (block === null) return new Set<string>();
+      const base = getComputedStyle(block).color;
+      return new Set(
+        [...block.querySelectorAll("span")]
+          .map((span) => getComputedStyle(span).color)
+          .filter((colour) => colour !== base),
+      );
+    };
+
+    await vi.waitFor(async () => expect((await painted()).size).toBeGreaterThan(1), {
+      timeout: 3000,
+    });
+  });
+
+  // The control, as in Source: the setting governs Preview on the same terms.
+  it("leaves Preview's fence uncoloured when its language is turned off", async () => {
+    open(["markdown"]);
+    await userEvent.click(modeButton("Preview"));
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(document.querySelectorAll(".markdown-body pre code span")).toHaveLength(0);
+  });
+
   it("still colours the markdown around it", async () => {
     open(["markdown", "python"]);
     await userEvent.click(modeButton("Source"));
