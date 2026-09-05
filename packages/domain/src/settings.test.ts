@@ -313,6 +313,8 @@ describe("migrating from version 7", () => {
           model: "qwen2.5-coder",
           supportsImages: false,
           supportsTools: false,
+          thinking: false,
+          reasoningEffort: "medium" as const,
           isDefault: true,
         },
       ],
@@ -348,6 +350,8 @@ describe("chatPanelVisible", () => {
     contextWindow: null,
     supportsImages: false,
     supportsTools: false,
+    thinking: false,
+    reasoningEffort: "medium" as const,
     isDefault: true,
   };
   const chat = DEFAULT_SETTINGS.chat;
@@ -442,6 +446,8 @@ describe("migrating from version 9", () => {
           model: "qwen2.5-coder",
           supportsImages: false,
           supportsTools: false,
+          thinking: false,
+          reasoningEffort: "medium" as const,
           isDefault: true,
         },
       ],
@@ -531,6 +537,8 @@ describe("the context window on a profile", () => {
     model: "qwen2.5-coder",
     supportsImages: false,
     supportsTools: false,
+    thinking: false,
+    reasoningEffort: "medium" as const,
     isDefault: true,
   };
   const withWindow = (contextWindow: unknown) => ({
@@ -547,5 +555,73 @@ describe("the context window on a profile", () => {
     expect(loadSettings(withWindow(0)).chat.profiles).toEqual([]);
     expect(loadSettings(withWindow(-1)).chat.profiles).toEqual([]);
     expect(loadSettings(withWindow(1.5)).chat.profiles).toEqual([]);
+  });
+});
+
+/// Reasoning effort, added at version 12.
+///
+/// The schema defaults both fields, so an old file would load either way. The version exists for the
+/// OTHER direction, as with versions 6 and 10: `ChatProfileSchema` is strict, so a file written here
+/// and read by the previous build would fail to parse and take every configured model with it.
+describe("thinking on a profile", () => {
+  const v11 = {
+    schemaVersion: 11,
+    panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
+    lastWorkspace: "D:/Notes",
+    appearance: { theme: "dark" as const },
+    window: { closeToTray: true },
+    fileTypes: { enabled: ["markdown"] },
+    chat: {
+      systemPrompt: null,
+      folderFileLimit: 40,
+      showPanel: null,
+      profiles: [
+        {
+          id: "one",
+          label: "Local model",
+          endpoint: "http://localhost:11434/v1",
+          model: "gpt-oss:20b",
+          contextWindow: null,
+          supportsImages: false,
+          supportsTools: false,
+          thinking: false,
+          reasoningEffort: "medium" as const,
+          isDefault: true,
+        },
+      ],
+    },
+    editor: { defaultViewMode: "live" as const },
+  };
+
+  // Off, because a model configured before this existed was answering perfectly well without it -
+  // and `reasoning_effort` is a field a server that has never heard of it may reject outright.
+  it("leaves thinking off for a model configured before it existed", () => {
+    expect(loadSettings(v11).chat.profiles[0]?.thinking).toBe(false);
+  });
+
+  // A level is still stored while thinking is off, so turning it on does not ask the user to choose
+  // one before they can see what it does.
+  it("gives it a level to use when it is turned on", () => {
+    expect(loadSettings(v11).chat.profiles[0]?.reasoningEffort).toBe("medium");
+  });
+
+  it("keeps everything version 11 stored", () => {
+    const migrated = loadSettings(v11);
+    expect(migrated.chat.profiles[0]?.label).toBe("Local model");
+    expect(migrated.fileTypes.enabled).toEqual(["markdown"]);
+    expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
+  });
+
+  it("keeps a level the user has chosen", () => {
+    const chosen = {
+      ...v11,
+      schemaVersion: 12,
+      chat: {
+        ...v11.chat,
+        profiles: [{ ...v11.chat.profiles[0], thinking: true, reasoningEffort: "high" }],
+      },
+    };
+    expect(loadSettings(chosen).chat.profiles[0]?.reasoningEffort).toBe("high");
+    expect(loadSettings(chosen).chat.profiles[0]?.thinking).toBe(true);
   });
 });

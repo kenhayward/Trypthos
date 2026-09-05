@@ -70,6 +70,10 @@ const DYNAMIC_PREFIXES = [
   "fileTypes.",
   // Built from FILE_TYPE_GROUPS as the settings page draws its headings.
   "settings.fileTypes.group.",
+  // Built from REASONING_LEVELS as the model form draws its three radios. The levels are the
+  // model's own vocabulary - low, medium, high - and iterating them keeps the control and the
+  // schema's enum from drifting into different sets.
+  "settings.chat.reasoning.",
 ];
 
 function usedKeys(): Map<string, string[]> {

@@ -36,6 +36,18 @@ export const ChatProfileSchema = z
     /// fenced transport works everywhere, so the safe default is the one that always works and this
     /// is opt-in.
     supportsTools: z.boolean().default(false),
+    /// Whether to ask the model to reason before answering.
+    ///
+    /// Off by default, for the same reason `supportsTools` is: `reasoning_effort` is a field a
+    /// server that has never heard of it will at best ignore and at worst reject, and a model with
+    /// no reasoning mode gains nothing from being asked for one. Opt in per model.
+    thinking: z.boolean().default(false),
+    /// How much, when thinking is on. The three levels gpt-oss names.
+    ///
+    /// A SEPARATE field from `thinking` rather than a fourth value of it, so turning thinking off
+    /// and on again does not lose the level somebody chose. Medium is the middle of the three and
+    /// what these models default to themselves.
+    reasoningEffort: z.enum(["low", "medium", "high"]).default("medium"),
     isDefault: z.boolean().default(false),
   })
   .strict();

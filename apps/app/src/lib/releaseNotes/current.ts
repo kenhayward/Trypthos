@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.41.0",
+    date: "2026-09-05",
+    pr: 83,
+    headline: "Ask a model to think before it answers",
+    summary:
+      "Each configured model now has a Thinking switch and a level - Low, Medium or High - on its page in Settings. Turn it on and Trypthos asks the model to reason before answering, at the level you chose. This is for models that have a reasoning mode: gpt-oss is the one it was built for, and it reasons at exactly those three levels. It is off for every model, including ones you already have, and deliberately so - an endpoint that has never heard of the setting may ignore it or refuse the request outright, which is the same reason tool calling is a switch rather than something Trypthos assumes. The level stays as you set it while Thinking is off, so turning it back on does not make you choose again, and the level is shown but greyed while the switch is off rather than disappearing - a control that vanishes takes with it the answer to what it would do. Trypthos does not show you the model's reasoning; what changes is the answer you get.",
+    added: [
+      "A Thinking switch on each model, with Low, Medium and High.",
+      "The level is sent with every message to that model, as reasoning effort.",
+    ],
+  },
+  {
     version: "0.40.0",
     date: "2026-09-05",
     pr: 82,

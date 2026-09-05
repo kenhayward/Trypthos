@@ -18,6 +18,8 @@ const draft: ProfileDraft = {
   contextWindow: "",
   supportsImages: false,
   supportsTools: false,
+  thinking: false,
+  reasoningEffort: "medium" as const,
   isDefault: false,
 };
 
@@ -61,6 +63,8 @@ describe("the context window", () => {
       contextWindow: 8192,
       supportsImages: false,
       supportsTools: false,
+      thinking: false,
+      reasoningEffort: "medium" as const,
       isDefault: false,
     };
 

@@ -459,6 +459,15 @@ A reply that quietly consulted five files, or quietly did not, is one you cannot
 without pasting one into the other. Attachments are read when you attach them, so editing a file
 afterwards does not silently change what an earlier answer was about.
 
+A model with a **reasoning mode** can be asked to think before it answers. Each model has a Thinking
+switch on its page in Settings, with a level - Low, Medium or High - and Trypthos sends that with
+every message to it. gpt-oss is the model this was built for, and it reasons at exactly those three
+levels. It is **off** for every model, including ones you already have: an endpoint that has never
+heard of the setting may ignore it or refuse the request outright, which is the same reason tool
+calling is a switch rather than an assumption. The level stays as you set it while Thinking is off,
+so turning it back on does not make you choose again. Trypthos does not show you the reasoning - what
+changes is the answer.
+
 **Folder** sends the *list* of files in the folder **you selected in the browser** - the names, never
 the contents, and only the file types you have turned on. Click a folder on the left and it becomes
 the selected one, shown highlighted; the same click still opens and closes it. The Folder button says

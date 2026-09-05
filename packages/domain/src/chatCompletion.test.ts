@@ -322,3 +322,42 @@ describe("composeMessages with several context turns", () => {
     ]);
   });
 });
+
+/// Reasoning effort, for models that have levels of it.
+///
+/// gpt-oss is the one this was built for: it reasons at low, medium or high, and OpenAI-compatible
+/// servers take that as `reasoning_effort` on the request. Off is the default because a field a
+/// server does not know is at best ignored and at worst a 400 - the same reasoning that keeps
+/// `tools` behind a switch.
+describe("reasoning effort", () => {
+  const withThinking = (over: Partial<typeof profile> = {}): typeof profile => ({
+    ...profile,
+    thinking: true,
+    reasoningEffort: "medium",
+    ...over,
+  });
+
+  it("sends nothing at all when thinking is off", () => {
+    const body = buildChatRequest({ ...profile, thinking: false }, turns);
+    expect("reasoning_effort" in body).toBe(false);
+  });
+
+  it("sends the level under the name an OpenAI-compatible server reads", () => {
+    expect(buildChatRequest(withThinking(), turns).reasoning_effort).toBe("medium");
+  });
+
+  it("sends each level as the model names it", () => {
+    for (const level of ["low", "medium", "high"] as const) {
+      expect(buildChatRequest(withThinking({ reasoningEffort: level }), turns).reasoning_effort).toBe(
+        level,
+      );
+    }
+  });
+
+  // The level is remembered while thinking is off, so turning it back on does not lose the choice.
+  // That is why these are two fields rather than one four-valued one.
+  it("keeps a level that is not being sent out of the request", () => {
+    const body = buildChatRequest({ ...profile, thinking: false, reasoningEffort: "high" }, turns);
+    expect("reasoning_effort" in body).toBe(false);
+  });
+});

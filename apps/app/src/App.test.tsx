@@ -14,6 +14,8 @@ const PROFILE = {
   contextWindow: null,
   supportsImages: false,
   supportsTools: false,
+  thinking: false,
+  reasoningEffort: "medium" as const,
   isDefault: true,
 };
 

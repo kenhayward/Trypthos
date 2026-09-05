@@ -92,6 +92,11 @@ export interface ChatRequestBody {
   /// one of them, because which is offered depends on whether a folder outline was sent.
   tools?: (ReturnType<typeof editTools>[number] | ReturnType<typeof readTools>[number])[];
   tool_choice?: "auto";
+  /// How hard the model should think before answering, for models that have levels of it.
+  ///
+  /// The wire name OpenAI-compatible servers read for gpt-oss and its relatives. Absent unless the
+  /// profile turned it on: a field a server does not know is at best ignored and at worst a 400.
+  reasoning_effort?: "low" | "medium" | "high";
 }
 
 /// The request body for one turn.
@@ -117,6 +122,9 @@ export function buildChatRequest(
     ...(profile.topP === undefined ? {} : { top_p: profile.topP }),
     // Only when the profile says the endpoint supports it. Sent to one that does not, a `tools`
     // array is at best ignored and at worst a 400 - and the fenced transport would have worked.
+    // Only when the profile asks for it. The level is remembered while thinking is off, which is
+    // why it is a separate field - and why an unsent level must not leak into the body here.
+    ...(profile.thinking ? { reasoning_effort: profile.reasoningEffort } : {}),
     ...(profile.supportsTools
       ? {
           tools: canReadFiles ? [...editTools(), ...readTools()] : editTools(),

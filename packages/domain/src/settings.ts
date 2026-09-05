@@ -15,7 +15,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 11;
+export const SETTINGS_VERSION = 12;
 
 export const SettingsSchema = z
   .object({
@@ -204,6 +204,29 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
         chat: {
           ...chat,
           profiles: profiles.map((profile) => ({ contextWindow: null, ...(profile as object) })),
+        },
+      };
+    },
+  },
+  {
+    to: 12,
+    // Version 12 added thinking and its level to each profile. The schema defaults both, so an old
+    // file would load either way - the version is for the OTHER direction, as with versions 6 and
+    // 10: ChatProfileSchema is strict, so a file written here and read by the previous build would
+    // fail to parse and take every configured model with it. A version it does not recognise is
+    // refused cleanly instead.
+    migrate: (input) => {
+      const chat = (input as { chat?: { profiles?: unknown[] } }).chat ?? {};
+      const profiles = Array.isArray(chat.profiles) ? chat.profiles : [];
+      return {
+        ...input,
+        chat: {
+          ...chat,
+          profiles: profiles.map((profile) => ({
+            thinking: false,
+            reasoningEffort: "medium",
+            ...(profile as object),
+          })),
         },
       };
     },

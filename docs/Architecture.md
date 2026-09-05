@@ -739,6 +739,25 @@ a real `ReadableStream`, bytes arriving in whatever pieces the socket delivers. 
 the class of bug a fake reader cannot produce, such as a multi-byte character split across two reads
 decoding as two replacement characters.
 
+### Reasoning effort
+
+A profile carries `thinking` and `reasoningEffort` (`low`/`medium`/`high`), and `buildChatRequest`
+sends `reasoning_effort` only when `thinking` is on. The wire name is what OpenAI-compatible servers
+read for gpt-oss and its relatives.
+
+**Off by default, and opt-in per model**, for exactly the reason `supportsTools` is: a field a
+server has never heard of is at best ignored and at worst a 400, and there is no way to ask an
+endpoint whether it has a reasoning mode.
+
+**Two fields rather than one four-valued one**, so turning thinking off and on again does not lose
+the level - which is also why the form disables the level rather than hiding it: a control that
+vanishes takes with it the answer to what it would do. Settings version 12 adds both; as with
+versions 6 and 10 the migration exists for the DOWNGRADE direction, since `ChatProfileSchema` is
+strict and a file written here would otherwise take every configured model down on an older build.
+
+Reasoning OUTPUT is not displayed. Some servers return it in a `reasoning_content` delta, which the
+stream reader ignores - the answer still arrives in `content`.
+
 ### Which folder chat maps
 
 `selectedFolder` lives in `useWorkspace` ("" being the root) and is chosen by clicking a folder in
