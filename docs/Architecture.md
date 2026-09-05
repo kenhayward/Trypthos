@@ -780,6 +780,26 @@ wait, and saying it again in the past tense is two controls for one fact.
 
 This is also the shape `docs/specs/reasoning-display.md` recommends for reasoning - a second use of
 it, arrived at independently.
+### The barrel is a contract the compiler cannot see
+
+`apps/desktop` is plain CommonJS, so a name it destructures from `@trypthos/domain` that the barrel
+does not export binds `undefined` - not a syntax error, not a lint error, and not a failure until
+the one line that uses it runs.
+
+That went out in 0.40.0. `OutlineRequest` was added to `ipc.ts` and never exported from `index.ts`,
+so `ipcHandlers.js` bound `undefined` and `workspace:outline` threw on its first line. The renderer's
+`.then` never ran and had no `.catch`, so chat's folder was silently empty for two releases while
+every test passed - the unit test underneath called `outlineWorkspace` directly, which was the half
+that worked.
+
+Two guards now stand there, and both are needed:
+
+- `apps/desktop/test/domainExports.test.js` scans every `const { ... } = require("@trypthos/domain")`
+  in the shell and asserts each name is actually exported. It carries a second test proving the scan
+  matches anything at all, since a regex that quietly found nothing would pass for ever.
+- `apps/desktop/test/outlineIpc.test.js` exercises the CHANNEL rather than the function under it,
+  including that a malformed request is refused rather than thrown. There was no test on that
+  channel at all, which is why a handler that could not run reached two releases.
 
 ### Which folder chat maps
 

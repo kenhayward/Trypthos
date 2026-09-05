@@ -193,6 +193,7 @@ export {
   OpenTargetSchema,
   SetIntegrationRequest,
   ListRequest,
+  OutlineRequest,
   OpenExternalRequest,
   SendChatRequest,
   ReadRequest,
