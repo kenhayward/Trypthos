@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.42.1",
+    date: "2026-09-05",
+    pr: 87,
+    headline: "Chat can see your folder again",
+    summary:
+      "Since 0.40.0, turning the Folder button on did nothing: the list of files was never sent, so the model could only see the document you had open and would tell you so. The request for that list was failing before it started, and failing in a way nothing reported - not in the panel, not in a message, not anywhere. It works again. If you turned Folder on and got answers that ignored your folder, that is what was happening, and it was not your setup.",
+    fixed: [
+      "The chat Folder button sends the folder's files again, instead of silently sending nothing.",
+    ],
+  },
+  {
     version: "0.42.0",
     date: "2026-09-05",
     pr: 86,

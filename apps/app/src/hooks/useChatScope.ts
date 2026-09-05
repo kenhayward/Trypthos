@@ -67,10 +67,16 @@ export function useChatScope(
     if (!includeFolder || bridge === null) return;
 
     let cancelled = false;
-    void bridge.workspaceOutline(folderPath).then((result) => {
-      if (cancelled || !result.ok) return;
-      setOutline(result.outline);
-    });
+    void bridge.workspaceOutline(folderPath)
+      .then((result) => {
+        if (cancelled || !result.ok) return;
+        setOutline(result.outline);
+      })
+      // A rejected invoke is how this failed silently for two releases: the shell's handler threw,
+      // nothing here was listening, and the folder was simply never sent. Caught so it is a handled
+      // failure rather than an unhandled rejection - the folder still goes unsent, which is why the
+      // guards that stop the handler throwing at all are the real fix.
+      .catch(() => {});
 
     return () => {
       cancelled = true;
