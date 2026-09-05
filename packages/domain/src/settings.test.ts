@@ -491,11 +491,20 @@ describe("the file types a settings file names", () => {
     expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
   });
 
-  // A fresh install must not disagree with an upgraded one. Two answers to "what is on by default"
-  // is a bug report nobody can reproduce, because it depends on when the user installed.
-  it("agrees with what a fresh installation starts with", () => {
+  // A fresh installation and an upgraded one deliberately DIFFER here, which is the opposite of
+  // what this test used to assert.
+  //
+  // A new install turns everything on: it has nobody to surprise, and a folder browser showing one
+  // file type's worth of a folder is only useful to somebody who finds the settings page first. An
+  // upgrade keeps what it has, because changing what somebody's browser shows without being asked
+  // is the thing the original markdown-only default existed to avoid.
+  it("starts a fresh installation with every type", () => {
     expect(DEFAULT_SETTINGS.fileTypes.enabled).toEqual([...DEFAULT_FILE_TYPES]);
-    expect(loadSettings(before).fileTypes.enabled).toEqual([...DEFAULT_FILE_TYPES]);
+    expect(DEFAULT_SETTINGS.fileTypes.enabled.length).toBeGreaterThan(1);
+  });
+
+  it("leaves an upgraded installation on the list it already had", () => {
+    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown"]);
   });
 
   it("keeps a list the user has chosen", () => {

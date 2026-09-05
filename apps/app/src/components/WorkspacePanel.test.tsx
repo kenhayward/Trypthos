@@ -149,3 +149,38 @@ describe("the file types the panel is showing", () => {
     expect(screen.getByText("2 files")).toBeDefined();
   });
 });
+
+/// A folder is shown as it is, so files nothing can open appear too - drawn as unopenable rather
+/// than left out. A file that is simply absent gives the user nothing to act on: "Trypthos will not
+/// open this" and "this is not there" look identical.
+describe("files nothing can open", () => {
+  it("lists them", () => {
+    panel();
+    expect(screen.getByText("logo.png")).toBeDefined();
+  });
+
+  // Not a button, so it cannot be clicked, cannot be tabbed to, and is not announced as something
+  // to activate. Disabling a button would leave it in the tree for a screen reader to offer.
+  it("does not offer them as something to open", () => {
+    panel();
+    expect(screen.queryByRole("button", { name: /logo\.png/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /README\.md/ })).toBeDefined();
+  });
+
+  it("does nothing when one is clicked", async () => {
+    const props = panel();
+    await userEvent.click(screen.getByText("logo.png"));
+    expect(props.onOpenFile).not.toHaveBeenCalled();
+  });
+
+  // The footer counts what the enabled types cover. Counting files those types cannot open would
+  // make the two halves of one sentence disagree with each other.
+  // Three files are on screen - README.md, docs/plan.md and logo.png - and the footer says two.
+  // That gap is the point: the footer names the types that are on and then counts, so counting a
+  // file those types cannot open would make the two halves of one sentence disagree.
+  it("are not counted in the footer", () => {
+    panel();
+    expect(screen.getByText("logo.png")).toBeDefined();
+    expect(screen.getByText("2 files")).toBeDefined();
+  });
+});

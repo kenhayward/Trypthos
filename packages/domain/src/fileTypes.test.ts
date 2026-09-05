@@ -183,10 +183,17 @@ describe("the catalogue", () => {
     expect(strays).toEqual([]);
   });
 
-  // The default must not change what an existing installation does, and a fresh install must not
-  // disagree with an upgraded one. Both are markdown and nothing else.
-  it("defaults to markdown alone", () => {
-    expect(DEFAULT_FILE_TYPES).toEqual(["markdown"]);
+  // Everything, so a new installation shows a folder as it is rather than as one file type's worth
+  // of it. Somebody who wants less turns rows off, which is the direction that needs no discovery:
+  // a type you cannot see is a type you do not know to look for.
+  it("defaults to every type", () => {
+    expect([...DEFAULT_FILE_TYPES]).toEqual(FILE_TYPES.map((type) => type.id));
+  });
+
+  // Derived from the catalogue, not written out beside it. A list typed by hand is a list that
+  // silently stops covering the type somebody adds next.
+  it("derives that list rather than repeating it", () => {
+    expect(DEFAULT_FILE_TYPES).toHaveLength(FILE_TYPES.length);
   });
 
   it("names only types that exist", () => {

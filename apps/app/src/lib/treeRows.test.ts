@@ -24,27 +24,42 @@ const FOLDERS: Record<string, FolderState> = {
 describe("treeRows", () => {
   it("lists the root when nothing is expanded", () => {
     const rows = rows_({ "": FOLDERS[""]! }, "");
-    expect(rows.map((r) => r.node.name)).toEqual(["docs", "README.md"]);
+    expect(rows.map((r) => r.node.name)).toEqual(["docs", "logo.png", "README.md"]);
   });
 
-  // "Shows all folders but only markdown files within them." A .png in a documents tree is noise, and
-  // the footer promises markdown only.
-  it("hides a file no enabled type claims, and keeps every folder", () => {
+  // A folder is shown as it is - every folder, and every file, with the ones nothing can open drawn
+  // as unopenable rather than left out.
+  // A folder is shown as it IS. Leaving files out made the panel disagree with every other way of
+  // looking at the same folder, and a file that is simply absent gives the user nothing to act on -
+  // they cannot tell "Trypthos will not open this" from "this is not there".
+  it("lists a file no enabled type claims, alongside the folders", () => {
     const rows = rows_({ "": FOLDERS[""]! }, "");
-    expect(rows.map((r) => r.node.name)).not.toContain("logo.png");
+    expect(rows.map((r) => r.node.name)).toContain("logo.png");
     expect(rows.map((r) => r.node.name)).toContain("docs");
   });
 
-  // This is what the File types page actually does: a type that is off is a file the tree does not
-  // list. Turning one on is the difference between a folder of notes and a folder of everything.
-  it("lists a file only while its type is turned on", () => {
-    const folders = { "": loaded([file("notes.txt", "notes.txt"), file("a.md", "a.md")]) };
+  // The distinction moved from whether a row EXISTS to what the row says about itself. The panel
+  // draws an unopenable file dim and refuses to open it.
+  it("marks which files can be opened and which cannot", () => {
+    const folders = { "": loaded([file("notes.txt", "notes.txt"), file("logo.png", "logo.png")]) };
+    const openable = Object.fromEntries(
+      rows_(folders, "", ["markdown", "text"]).map((r) => [r.node.name, r.openable]),
+    );
 
-    expect(rows_(folders, "").map((r) => r.node.name)).toEqual(["a.md"]);
-    expect(rows_(folders, "", ["markdown", "text"]).map((r) => r.node.name)).toEqual([
-      "a.md",
-      "notes.txt",
-    ]);
+    expect(openable).toEqual({ "notes.txt": true, "logo.png": false });
+  });
+
+  it("marks a file whose type has been turned off as unopenable", () => {
+    const folders = { "": loaded([file("notes.txt", "notes.txt")]) };
+
+    expect(rows_(folders, "", ["markdown"])[0]?.openable).toBe(false);
+    expect(rows_(folders, "", ["markdown", "text"])[0]?.openable).toBe(true);
+  });
+
+  // Folders are not files, and nothing about a folder is unopenable - expanding one always works.
+  it("marks every folder openable", () => {
+    const rows = rows_({ "": FOLDERS[""]! }, "");
+    expect(rows.filter((r) => r.node.kind === "directory").every((r) => r.openable)).toBe(true);
   });
 
   // Found by running the panel's logic over a real repository: .git, .github and .claude all
@@ -70,6 +85,7 @@ describe("treeRows", () => {
       "0:docs",
       "1:specs",
       "1:plan.md",
+      "0:logo.png",
       "0:README.md",
     ]);
   });

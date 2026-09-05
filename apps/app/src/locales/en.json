@@ -16,7 +16,8 @@
     "noMatches": "No files match.",
     "footer": "{{count}} files",
     "typeCount": "{{count}} file types",
-    "fileTypesHint": "Choose which file types appear here"
+    "fileTypesHint": "Choose which file types appear here",
+    "cannotOpen": "Trypthos does not open this kind of file. Turn its type on from the File types page of Settings, if there is one."
   },
   "editor": {
     "title": "Editor",

@@ -232,6 +232,26 @@ function FileRow({
 }) {
   const { t } = useTranslation();
 
+  // A plain div, not a disabled button. A disabled button is still in the accessibility tree, still
+  // announced as something to activate, and still something a keyboard lands on - three promises
+  // about a row that does nothing. `aria-disabled` says the same thing without any of that.
+  if (!row.openable) {
+    return (
+      <div
+        aria-disabled="true"
+        title={t("workspace.cannotOpen")}
+        style={indent(row.depth + 1)}
+        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-faint"
+      >
+        <Glyph className="size-3.5 shrink-0 text-faint">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+        </Glyph>
+        <span className="min-w-0 truncate">{row.node.name}</span>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"

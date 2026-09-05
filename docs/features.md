@@ -8,10 +8,11 @@ About box carries a shorter table again; all three change together.
 The left panel shows a workspace as a tree. Open a folder from your machine, expand folders in place,
 and click a file to open it in the editor. A filter box narrows the files by name.
 
-Every folder is listed, but only the files of a type you have turned on (see **File types**), and
-hidden entries such as `.git` are left out - they are not what this panel is for. The footer names
-which types are on and counts the files currently on screen rather than the whole tree: a recursive
-count is not free, and measured on a home directory it took 40 seconds across 113,000 folders.
+Every folder and every file is listed, except hidden entries such as `.git` - they are not what this
+panel is for. Files your enabled types cannot open are drawn in grey and cannot be clicked (see
+**File types**). The footer names which types are on and counts the openable files currently on
+screen rather than the whole tree: a recursive count is not free, and measured on a home directory
+it took 40 seconds across 113,000 folders.
 
 If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
 the tree keeps working, because one unreadable folder is a fact about that folder rather than about
@@ -30,8 +31,9 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 ## File types
 
 Trypthos opens markdown, and the **File types** page of Settings decides what else it opens. Markdown
-is always on and cannot be turned off - it is what the app is - and every other type is off until you
-turn it on:
+is always on and cannot be turned off - it is what the app is. Everything else starts **on** in a new
+installation, so a folder looks the way it does everywhere else on your machine; turn types off when
+you want a narrower list:
 
 | Group | Types |
 | --- | --- |
@@ -89,9 +91,16 @@ at a folder full of that type and the list on the left gets a great deal longer.
 The footer under the folder browser says which types are on - the type's name when there is one, a
 count when there are more - and clicking it goes straight to the page that changes them.
 
-Your choice is remembered between launches, and upgrading never turns anything on for you: a
-Trypthos that has been showing you markdown alone carries on doing exactly that until you say
-otherwise.
+Your choice is remembered between launches, and **upgrading never changes it**. A Trypthos that has
+been showing you markdown alone carries on doing exactly that until you say otherwise - only a new
+installation starts with everything on, because it has nobody to surprise.
+
+A file no enabled type covers - a picture, an archive, or a type you have turned off - is **listed
+in grey** rather than left out, and cannot be clicked. Hovering it says why. Leaving such files out
+made the panel disagree with every other way of looking at the same folder, and a file that is
+simply absent tells you nothing: "Trypthos will not open this" and "this is not there" look
+identical. The count in the footer still counts only the files your enabled types can open, so it
+matches the types named beside it.
 
 A file that is not markdown opens in **Source** and stays there. Live and Preview are markdown ideas
 - Live hides markdown punctuation, Preview renders markdown as prose - so neither means anything over
