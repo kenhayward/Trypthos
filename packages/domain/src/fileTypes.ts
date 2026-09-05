@@ -23,11 +23,34 @@ export type FileTypeId =
   | "xml"
   | "html"
   | "css"
-  | "javascript";
+  | "javascript"
+  | "toml"
+  | "ini"
+  | "python"
+  | "shell"
+  | "powershell"
+  | "sql"
+  | "rust"
+  | "go"
+  | "cpp"
+  | "csharp"
+  | "java"
+  | "php"
+  | "ruby"
+  | "diff"
+  | "dockerfile"
+  | "makefile"
+  | "latex"
+  | "r"
+  | "lua"
+  | "perl"
+  | "swift"
+  | "scala"
+  | "dart";
 
 /// How the settings page arranges its rows. Groups are added as types arrive rather than declared
 /// ahead of them: a heading with nothing under it is a page that looks broken.
-export type FileTypeGroup = "documents" | "data" | "languages";
+export type FileTypeGroup = "documents" | "data" | "languages" | "utility";
 
 /// What editing a file of this type is like, and therefore how the surface behaves.
 ///
@@ -54,7 +77,12 @@ export interface FileType {
   readonly pinned: boolean;
 }
 
-export const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = ["documents", "data", "languages"];
+export const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = [
+  "documents",
+  "data",
+  "languages",
+  "utility",
+];
 
 /// In the order the settings page lists them within their group.
 export const FILE_TYPES: readonly FileType[] = [
@@ -126,9 +154,10 @@ export const FILE_TYPES: readonly FileType[] = [
     id: "css",
     labelKey: "fileTypes.css",
     group: "data",
-    // `.css` only. SCSS and LESS parse as CSS right up to the first nested rule, and highlighting
-    // that is confidently wrong is worse than none - they arrive with their own grammars.
-    extensions: ["css"],
+    // SCSS, Sass and LESS are here rather than in rows of their own: to somebody choosing what to
+    // see, they are all "stylesheets". They are NOT the same grammar, so the loader picks the right
+    // one from the extension - the same dialect selection JavaScript does.
+    extensions: ["css", "scss", "sass", "less"],
     filenames: [],
     modes: ["source"],
     kind: "code",
@@ -142,6 +171,245 @@ export const FILE_TYPES: readonly FileType[] = [
     // package, and a settings page that made somebody tick four boxes to open a project would be
     // describing the packaging rather than the choice. The loader picks the dialect from the name.
     extensions: ["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "toml",
+    labelKey: "fileTypes.toml",
+    group: "data",
+    extensions: ["toml"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "ini",
+    labelKey: "fileTypes.ini",
+    group: "data",
+    extensions: ["ini", "properties", "cfg", "conf"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "python",
+    labelKey: "fileTypes.python",
+    group: "languages",
+    extensions: ["py", "pyw", "pyi"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "shell",
+    labelKey: "fileTypes.shell",
+    group: "languages",
+    extensions: ["sh", "bash", "zsh", "ksh"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "powershell",
+    labelKey: "fileTypes.powershell",
+    group: "languages",
+    // Windows writes these, and Trypthos is a Windows-first app - a general-purpose
+    // ranking of languages would put PowerShell far lower than it belongs here.
+    extensions: ["ps1", "psm1", "psd1"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "sql",
+    labelKey: "fileTypes.sql",
+    group: "languages",
+    extensions: ["sql"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "rust",
+    labelKey: "fileTypes.rust",
+    group: "languages",
+    extensions: ["rs"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "go",
+    labelKey: "fileTypes.go",
+    group: "languages",
+    extensions: ["go"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "cpp",
+    labelKey: "fileTypes.cpp",
+    group: "languages",
+    // One type, because `.h` belongs to both and a catalogue cannot let two rows claim it.
+    extensions: ["c", "h", "cpp", "hpp", "cc", "cxx", "hh", "hxx"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "csharp",
+    labelKey: "fileTypes.csharp",
+    group: "languages",
+    extensions: ["cs"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "java",
+    labelKey: "fileTypes.java",
+    group: "languages",
+    // Two grammars, one row: the loader picks Kotlin off the extension.
+    extensions: ["java", "kt", "kts"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "php",
+    labelKey: "fileTypes.php",
+    group: "languages",
+    extensions: ["php", "phtml"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "ruby",
+    labelKey: "fileTypes.ruby",
+    group: "languages",
+    extensions: ["rb"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "diff",
+    labelKey: "fileTypes.diff",
+    group: "utility",
+    extensions: ["diff", "patch"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "dockerfile",
+    labelKey: "fileTypes.dockerfile",
+    group: "utility",
+    extensions: ["dockerfile"],
+    filenames: ["Dockerfile"],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "makefile",
+    labelKey: "fileTypes.makefile",
+    group: "utility",
+    // No grammar exists for this in @codemirror/legacy-modes, so it opens uncoloured.
+    // It earns its row anyway: the point of a file type is that the file APPEARS and can
+    // be opened at all, which is the same reason Plain text is a row.
+    extensions: ["mk"],
+    filenames: ["Makefile", "GNUmakefile"],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "latex",
+    labelKey: "fileTypes.latex",
+    group: "utility",
+    extensions: ["tex", "ltx", "sty"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "r",
+    labelKey: "fileTypes.r",
+    group: "utility",
+    extensions: ["r"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "lua",
+    labelKey: "fileTypes.lua",
+    group: "utility",
+    extensions: ["lua"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "perl",
+    labelKey: "fileTypes.perl",
+    group: "utility",
+    // `.pl` is Perl here rather than Prolog. One owner per extension, and Perl is the one
+    // somebody is more likely to have beside their notes.
+    extensions: ["pl", "pm"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "swift",
+    labelKey: "fileTypes.swift",
+    group: "utility",
+    extensions: ["swift"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "scala",
+    labelKey: "fileTypes.scala",
+    group: "utility",
+    extensions: ["scala", "sc"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    pinned: false,
+  },
+  {
+    id: "dart",
+    labelKey: "fileTypes.dart",
+    group: "utility",
+    extensions: ["dart"],
     filenames: [],
     modes: ["source"],
     kind: "code",

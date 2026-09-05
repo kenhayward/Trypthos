@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.35.0",
+    date: "2026-09-05",
+    pr: 76,
+    headline: "Twenty-two more file types, and a Utility group",
+    summary:
+      "The File types page is now the full list. Markup and data gains TOML and INI files, and the CSS row covers SCSS, Sass and LESS as well. Programming languages gains Python, Shell, PowerShell, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP and Ruby. A new Utility group holds the things that turn up beside a project rather than inside it: diffs and patches, Dockerfiles, Makefiles, LaTeX, R, Lua, Perl, Swift, Scala and Dart. As before, every one of them is off until you turn it on, and turning one on is what makes those files appear in the folder browser at all. Some rows carry more than one language where the difference is not one you would want to tick a box about: CSS covers four stylesheet dialects, Java covers Kotlin, and C covers C++. Trypthos works out which from the file's name. Two rows are matched by whole filenames rather than extensions, because Dockerfile and Makefile do not have any. Makefile is the one type with no colouring, because no grammar for it exists - it is there so the file opens at all, which is the same reason Plain text is there. None of this makes Trypthos slower to start: a language is fetched only the first time you open a file that needs it, so the twenty-two here cost about 14 KB at startup between them.",
+    added: [
+      "TOML and INI files, and SCSS, Sass and LESS alongside CSS.",
+      "Python, Shell, PowerShell, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP and Ruby.",
+      "A Utility group: diffs and patches, Dockerfile, Makefile, LaTeX, R, Lua, Perl, Swift, Scala and Dart.",
+      "Dockerfile and Makefile are recognised by name, since neither has an extension.",
+    ],
+  },
+  {
     version: "0.34.0",
     date: "2026-09-05",
     pr: 75,

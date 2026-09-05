@@ -110,14 +110,43 @@ describe("fileTypeFor", () => {
 });
 
 describe("the catalogue", () => {
-  // ONE equality over the whole catalogue, not a check per type. Every type can be well-formed while
-  // the set still has two of them claiming `.m`, and a per-type check cannot see that.
-  it("has no extension or filename claimed twice", () => {
-    const claims = FILE_TYPES.flatMap((type) => [
-      ...type.extensions,
-      ...type.filenames.map((name) => name.toLowerCase()),
-    ]);
-    expect([...new Set(claims)].sort()).toEqual([...claims].sort());
+  // ONE assertion over the whole catalogue, not a check per type. Every type can be well-formed
+  // while the set still has two of them claiming `.m`, and a per-type check cannot see that.
+  //
+  // The rule is about OWNERS, not about a token appearing twice. One type may legitimately claim
+  // both an extension and a filename that lowercase to the same word - `Dockerfile` and
+  // `.dockerfile` are both Dockerfiles - and an earlier version of this test called that a clash.
+  it("has no extension or filename claimed by two different types", () => {
+    const owners = new Map<string, Set<string>>();
+    for (const type of FILE_TYPES) {
+      for (const claim of [...type.extensions, ...type.filenames.map((n) => n.toLowerCase())]) {
+        owners.set(claim, (owners.get(claim) ?? new Set()).add(type.id));
+      }
+    }
+
+    const contested = [...owners]
+      .filter(([, ids]) => ids.size > 1)
+      .map(([claim, ids]) => `${claim}: ${[...ids].join(" and ")}`);
+
+    expect(contested).toEqual([]);
+  });
+
+  // The other half of what the pooled check used to cover. Each LIST is checked on its own, because
+  // an extension and a filename that lowercase alike are two different rules on the same type and
+  // both do work - `foo.dockerfile` and `Dockerfile`.
+  //
+  // Within one list a repeat is dead weight, and worth failing on: matching is already
+  // case-insensitive, so listing `Makefile` and `makefile` is a second entry that can never be the
+  // one that matches.
+  it("has no type repeating an extension or a filename", () => {
+    const repeats = FILE_TYPES.flatMap((type) => {
+      const filenames = type.filenames.map((name) => name.toLowerCase());
+      const repeated =
+        type.extensions.length !== new Set(type.extensions).size ||
+        filenames.length !== new Set(filenames).size;
+      return repeated ? [type.id] : [];
+    });
+    expect(repeats).toEqual([]);
   });
 
   it("has no id used twice", () => {

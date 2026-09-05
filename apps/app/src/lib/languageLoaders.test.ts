@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FILE_TYPES } from "@trypthos/domain";
+import { FILE_TYPES, type FileType } from "@trypthos/domain";
 import { repoPath } from "../testing/repoRoot";
 import { stripComments } from "../testing/stripComments";
 import { LANGUAGE_LOADERS } from "./languageLoaders";
@@ -105,5 +105,60 @@ describe("LANGUAGE_LOADERS", () => {
     expect(await parseErrors("App.tsx", markup)).toBe(0);
     expect(await parseErrors("App.jsx", markup)).toBe(0);
     expect(await parseErrors("main.ts", markup)).toBeGreaterThan(0);
+  });
+});
+
+/// Every loader, actually loaded.
+///
+/// This is the test that earns its place. A wrong export name - `m.powershell` where the package
+/// says `m.powerShell` - throws inside the loader, and `DocumentEditor` deliberately swallows a
+/// failed load so a bad chunk cannot take the centre panel down. The file simply opens uncoloured,
+/// which looks exactly like a type that has no grammar. Nothing else in the suite would notice.
+describe("every language in the catalogue", () => {
+  /// A name a file of this type could plausibly have, from the catalogue itself.
+  const exampleName = (type: FileType): string =>
+    type.extensions[0] !== undefined ? `example.${type.extensions[0]}` : type.filenames[0]!;
+
+  const loadable = FILE_TYPES.filter((type) => LANGUAGE_LOADERS[type.id] !== null);
+
+  // Awaiting IS the assertion. A wrong export name makes the module's binding `undefined`, and both
+  // `StreamLanguage.define(undefined)` and a call on `undefined` throw - so the promise rejects and
+  // this fails, where in the app it would be swallowed. Verified against the real failure mode:
+  // `StreamLanguage.define(undefined)` throws "Cannot read properties of undefined".
+  //
+  // `language.name` is deliberately NOT asserted: a legacy stream mode carries no name of its own,
+  // so `dockerFile` legitimately resolves to one that is empty.
+  it.each(loadable.map((type) => [type.id, type] as const))("loads %s", async (_id, type) => {
+    const support = await LANGUAGE_LOADERS[type.id]!(exampleName(type));
+
+    expect(support.language).toBeDefined();
+    expect(support.language.parser.parse("a\n")).toBeDefined();
+  });
+
+  // Only Makefile and Plain text. Both are deliberate, and both are listed here so that adding a
+  // third by accident - a loader forgotten when a type was added - fails rather than passing.
+  it("has exactly two types with nothing to load", () => {
+    const bare = FILE_TYPES.filter((type) => LANGUAGE_LOADERS[type.id] === null).map((t) => t.id);
+    expect(bare).toEqual(["text", "makefile"]);
+  });
+});
+
+describe("the rows that carry more than one grammar", () => {
+  // A stylesheet is a stylesheet to somebody choosing what to see, but SCSS, Sass and LESS are not
+  // the same language - so the row is one and the grammars are three.
+  it("picks the stylesheet grammar from the extension", async () => {
+    expect((await LANGUAGE_LOADERS.css!("main.css")).language.name).toBe("css");
+    expect((await LANGUAGE_LOADERS.css!("main.scss")).language.name).toBe("sass");
+    expect((await LANGUAGE_LOADERS.css!("main.less")).language.name).toBe("less");
+  });
+
+  it("reads Kotlin off the extension, and Java otherwise", async () => {
+    expect((await LANGUAGE_LOADERS.java!("Main.java")).language.name).toBe("java");
+    // A stream mode has no grammar name of its own, so what is asserted is that it is a DIFFERENT
+    // language from the Java one - which is the thing that would be wrong if the branch were.
+    const kotlin = await LANGUAGE_LOADERS.java!("Main.kt");
+    const java = await LANGUAGE_LOADERS.java!("Main.java");
+    expect(kotlin.language).not.toBe(java.language);
+    expect((await LANGUAGE_LOADERS.java!("build.gradle.kts")).language).not.toBe(java.language);
   });
 });
