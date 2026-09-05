@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { GUIDE_PATH } from "@trypthos/domain";
-import { failureKey, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
+import { GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
+import { failureKey, failureParams, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
 /// A hand-written fake, not a mocking library. It records what it was asked to do, which is what most
@@ -87,10 +87,38 @@ describe("failureKey", () => {
     expect(failureKey("cancelled")).toBeNull();
   });
 
+  // Each refusal from the read boundary has its own key. One shared "cannot open that" would tell a
+  // user nothing about which of three different problems their file has, and two of the three are
+  // fixable by them.
+  it("maps each read refusal to its own key", () => {
+    expect(failureKey("too-large")).toBe("errors.tooLarge");
+    expect(failureKey("not-text")).toBe("errors.notText");
+    expect(failureKey("unsupported-encoding")).toBe("errors.unsupportedEncoding");
+  });
+
   // An errno must never reach the interface, whether as wording or as a key that renders raw.
   it("maps anything unrecognised to the generic key", () => {
     expect(failureKey("EACCES")).toBe("errors.unknown");
     expect(failureKey("")).toBe("errors.unknown");
+  });
+});
+
+describe("failureParams", () => {
+  // Only one refusal carries numbers, and it is the one where a bare "too large" would leave the
+  // user guessing at both halves: how big their file is, and what the app will take.
+  it("names both sizes for a file over the cap", () => {
+    expect(
+      failureParams({
+        reason: "too-large",
+        sizeBytes: 431467151,
+        limitBytes: MAX_TEXT_FILE_BYTES,
+      }),
+    ).toEqual({ size: "411.5 MB", limit: "16 MB" });
+  });
+
+  it("has nothing to interpolate for any other reason", () => {
+    expect(failureParams({ reason: "not-text" })).toBeNull();
+    expect(failureParams({ reason: "not-found" })).toBeNull();
   });
 });
 
@@ -385,6 +413,54 @@ describe("useWorkspace", () => {
 
     await waitFor(() => expect(result.current.state.errorKey).toBe("errors.notFound"));
     expect(result.current.state.file).toBeNull();
+  });
+
+  // The numbers travel with the key, or the banner can only say "too large" about a file whose size
+  // is the one thing the user needs to know.
+  it("carries the sizes through when a file is refused for being too large", async () => {
+    const { client } = fakeClient({
+      readFile: async () => ({
+        ok: false,
+        reason: "too-large",
+        sizeBytes: 431467151,
+        limitBytes: MAX_TEXT_FILE_BYTES,
+      }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile({ id: "huge.log", name: "huge.log", kind: "file" });
+    });
+
+    await waitFor(() => expect(result.current.state.errorKey).toBe("errors.tooLarge"));
+    expect(result.current.state.errorParams).toEqual({ size: "411.5 MB", limit: "16 MB" });
+    expect(result.current.state.file).toBeNull();
+  });
+
+  // A refusal that carries nothing must clear whatever the last one left behind, or the banner
+  // interpolates one file's size into another file's message.
+  it("clears the parameters of an earlier failure", async () => {
+    let refusal: ReadResult = {
+      ok: false,
+      reason: "too-large",
+      sizeBytes: 20 * 1024 * 1024,
+      limitBytes: MAX_TEXT_FILE_BYTES,
+    };
+    const { client } = fakeClient({ readFile: async () => refusal });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile({ id: "huge.log", name: "huge.log", kind: "file" });
+    });
+    await waitFor(() => expect(result.current.state.errorParams).not.toBeNull());
+
+    refusal = { ok: false, reason: "not-text" };
+    await act(async () => {
+      await result.current.actions.openFile({ id: "picture.md", name: "picture.md", kind: "file" });
+    });
+
+    await waitFor(() => expect(result.current.state.errorKey).toBe("errors.notText"));
+    expect(result.current.state.errorParams).toBeNull();
   });
 
   it("explains that the browser preview cannot open folders", async () => {

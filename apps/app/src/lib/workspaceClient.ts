@@ -24,7 +24,12 @@ export type Failure = { ok: false; reason: string };
 
 export type OpenResult = { ok: true; workspace: WorkspaceInfo } | Failure;
 export type ListResult = { ok: true; nodes: RemoteNode[] } | Failure;
-export type ReadResult = { ok: true; content: string; revision: Revision } | Failure;
+export type ReadResult =
+  | { ok: true; content: string; revision: Revision }
+  /// Carries its numbers, so the refusal can name the file's size and the app's limit. Mirrors the
+  /// domain's `ReadResult` - the shell returns that shape and this is where the renderer sees it.
+  | { ok: false; reason: "too-large"; sizeBytes: number; limitBytes: number }
+  | Failure;
 export type WriteResult =
   | { ok: true; revision: Revision }
   | { ok: false; reason: "conflict"; theirs: Revision }

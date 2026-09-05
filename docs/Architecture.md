@@ -57,6 +57,10 @@ both processes and testable without booting either.
   refused rather than tolerated.
 - `chat.ts` - chat profiles. The schema is `strict()` so an `apiKey` reaching a settings file is a
   loud parse failure, not a silently stripped field that gets written back out.
+- `textFile.ts` - whether a file's bytes are text the app can edit, and how to get them back
+  unchanged: the size cap, the binary sniff, a strict UTF-8 decode, and byte order mark handling. In
+  the domain so the shell that enforces the limits and the renderer that explains them cannot
+  disagree about what they are. See "The read boundary".
 - `provider.ts` - the storage contract. A write **returns a revision, never void**, and a conflict is
   a **result, not an exception** - both shaped for GitHub, where a save is a commit, before any cloud
   backend exists.
@@ -229,6 +233,38 @@ realpath check was verified by removing it and watching exactly those tests fail
 Saving is conditional. `write` takes the revision the caller last read, and a mismatch is a
 **`conflict` result**, never an overwrite - in both directions, including "you thought you were
 creating a file that now exists". The revision is mtime plus size, opaque to callers.
+
+### The read boundary
+
+The app decides what it can open from a file's NAME, which is a claim about a file rather than a fact
+about it. `read` therefore checks the file itself, and the checks live in the shell because by the
+time bytes have become a string the harm they guard against is already done. The rules are pure and
+in the domain (`textFile.ts`), so the shell enforces the same limits the renderer explains.
+
+- **Size, before the read.** Above `MAX_TEXT_FILE_BYTES` (16 MB) the file is refused as
+  `too-large` **carrying its size and the limit**, a `ReadResult` variant of its own for the same
+  reason `conflict` is one: the refusal is only useful if it has the numbers. The whole file becomes
+  a string, crosses IPC and reaches CodeMirror, so a large enough file is not slow - it is an
+  unresponsive window.
+- **`not-text`**, from a NUL byte in the leading `BINARY_SNIFF_BYTES` (8 KB).
+- **`unsupported-encoding`**, from a UTF-16 byte order mark or from a **strict** UTF-8 decode
+  failing. `fatal: true` is the point of the whole exercise: without it, invalid bytes become U+FFFD
+  and the corruption is invisible until the save writes the replacement characters over the
+  original. A file the app cannot represent exactly is one it must not open, because the alternative
+  on offer is a lossy copy sitting in an editor with a working Save button.
+
+Order matters and is asserted: **UTF-16 is checked before the NUL sniff**, because UTF-16 ASCII is
+every other byte NUL and the sniff would call a plainly-textual file binary. Unmarked UTF-16 is
+indistinguishable from binary here and falls to the sniff, which is the honest answer.
+
+A **UTF-8 byte order mark** is stripped on read, reported alongside the content, and put back on
+write - read from the file on disk at the moment of writing, never carried by the renderer, which is
+untrusted and has no business asserting a file's encoding. Returning the mark in the content instead
+would put U+FEFF in front of the first heading, which then stops being a heading.
+
+`read` takes its revision from the stat it took **before** reading, deliberately. If the file changed
+in between, that revision is stale - and a stale revision makes the next save report a conflict,
+where a fresh one would accept the save and overwrite whatever arrived.
 
 ## Window chrome
 

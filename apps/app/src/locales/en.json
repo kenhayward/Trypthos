@@ -119,6 +119,9 @@
     "notFound": "That file is no longer there. It may have been moved or deleted.",
     "permissionDenied": "Trypthos is not allowed to open that.",
     "conflict": "This file changed on disk since you opened it. Your edits are still here - save to a new name, or reopen the file to discard them.",
+    "tooLarge": "That file is {{size}}, and Trypthos opens files up to {{limit}}. It has been left alone.",
+    "notText": "That file is not text, so Trypthos has not opened it. Editing and saving it here would write over what is inside it.",
+    "unsupportedEncoding": "Trypthos reads UTF-8 text, and that file is in another encoding. Opening it would replace every character Trypthos could not read, so it has been left alone.",
     "unknown": "Something went wrong."
   },
   "about": {

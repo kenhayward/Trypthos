@@ -2,6 +2,12 @@
 
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const {
+  MAX_TEXT_FILE_BYTES,
+  decodeTextFile,
+  encodeTextFile,
+  hasUtf8Bom,
+} = require("@trypthos/domain");
 
 /// The local filesystem backend.
 ///
@@ -34,6 +40,25 @@ function mapError(error) {
   if (error.code === "EACCES" || error.code === "EPERM") return failure("permission-denied");
   if (error.code === "ENOTDIR") return failure("not-found");
   throw error;
+}
+
+/// Whether the file already on disk begins with a UTF-8 byte order mark.
+///
+/// Three bytes through a handle rather than `readFile`: the file can be megabytes, and all that is
+/// wanted is its first three. A file that cannot be opened has no mark to preserve - and if that is
+/// a real problem it is one the write below reports properly.
+async function existingBom(filePath) {
+  let handle = null;
+  try {
+    handle = await fs.open(filePath, "r");
+    const head = Buffer.alloc(3);
+    const { bytesRead } = await handle.read(head, 0, head.length, 0);
+    return hasUtf8Bom(head.subarray(0, bytesRead));
+  } catch {
+    return false;
+  } finally {
+    if (handle !== null) await handle.close();
+  }
 }
 
 function createLocalWorkspace({ root, guard }) {
@@ -92,19 +117,49 @@ function createLocalWorkspace({ root, guard }) {
       return { ok: true, nodes };
     },
 
+    /// Reads a file, or refuses it.
+    ///
+    /// Three refusals live here rather than in the renderer, because the renderer only ever sees
+    /// what this hands it: by the time bytes have become a string, the damage this is guarding
+    /// against has already been done.
     async read(relativePath) {
       const resolved = await resolve(relativePath, { mustExist: true });
       if (!resolved.ok) return resolved;
 
+      let stats;
       try {
-        const [content, stats] = await Promise.all([
-          fs.readFile(resolved.path, "utf8"),
-          fs.stat(resolved.path),
-        ]);
-        return { ok: true, content, revision: revisionOf(stats) };
+        stats = await fs.stat(resolved.path);
       } catch (error) {
         return mapError(error);
       }
+
+      // BEFORE the read, which is the whole point: a file this large must never become a string,
+      // cross IPC, and reach CodeMirror. Failing afterwards would be failing after the harm.
+      if (stats.size > MAX_TEXT_FILE_BYTES) {
+        return {
+          ok: false,
+          reason: "too-large",
+          sizeBytes: stats.size,
+          limitBytes: MAX_TEXT_FILE_BYTES,
+        };
+      }
+
+      let bytes;
+      try {
+        // No encoding, so node hands over the bytes rather than a lossy decode of them. `utf8` here
+        // was the bug: it substitutes U+FFFD silently, and the next save writes the substitution.
+        bytes = await fs.readFile(resolved.path);
+      } catch (error) {
+        return mapError(error);
+      }
+
+      const decoded = decodeTextFile(bytes);
+      if (!decoded.ok) return failure(decoded.reason);
+
+      // The revision from the stat taken BEFORE the read, deliberately. If the file changed in
+      // between, this one is stale - and a stale revision makes the next save report a conflict,
+      // where a fresh one would accept the save and overwrite whatever arrived.
+      return { ok: true, content: decoded.content, revision: revisionOf(stats) };
     },
 
     async write(relativePath, content, expectedRevision) {
@@ -130,8 +185,13 @@ function createLocalWorkspace({ root, guard }) {
         return { ok: false, reason: "conflict", theirs: current };
       }
 
+      // A mark the editor never showed must not be lost by saving. Read from the file on disk at
+      // the moment of writing, never carried by the renderer: the renderer is untrusted, and it has
+      // no business asserting a file's encoding. A file being created has no mark.
+      const bom = current === null ? false : await existingBom(resolved.path);
+
       try {
-        await fs.writeFile(resolved.path, content, "utf8");
+        await fs.writeFile(resolved.path, encodeTextFile(content, { bom }));
         return { ok: true, revision: revisionOf(await fs.stat(resolved.path)) };
       } catch (error) {
         return mapError(error);

@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.32.1",
+    date: "2026-09-05",
+    pr: 73,
+    headline: "A file Trypthos cannot open safely is now refused rather than mangled",
+    summary:
+      "Trypthos decided whether it could open a file by looking at its name, and nothing else. That was a guess, and when it was wrong it was destructive: rename a picture or a zip file to end in .md, open it, and every byte Trypthos could not read became a question mark on screen. Press Ctrl+S and those question marks were written over the original file, which was then gone. The same went for any file written in an encoding other than UTF-8 - what Windows PowerShell writes by default, for instance - and a very large file could stop the window responding altogether. Trypthos now looks at a file before it opens it. A file that is not text, a file in an encoding it cannot read, and a file larger than 16 MB are each refused with a message saying which of the three it is, and the file is left exactly as it was. A byte order mark - an invisible marker some programs put at the start of a file - now survives being opened and saved, where before it was quietly dropped and showed up as a change to a file you had not changed.",
+    fixed: [
+      "A file that is not text is refused rather than opened as question marks and saved back over the original.",
+      "A file in an encoding other than UTF-8 is refused rather than opened with every unreadable character replaced.",
+      "A file larger than 16 MB is refused, with its size named, rather than taken on until the window stops responding.",
+      "A byte order mark at the start of a file survives opening and saving instead of being dropped.",
+    ],
+  },
+  {
     version: "0.32.0",
     date: "2026-09-05",
     pr: 65,

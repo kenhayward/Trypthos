@@ -3,12 +3,14 @@ import type { DiscardChoice } from "@trypthos/domain";
 import type { DocumentSet, OpenDocument, Revision } from "@trypthos/domain";
 import {
   GUIDE_PATH,
+  MAX_TEXT_FILE_BYTES,
   activateDocument,
   activeDocument,
   anyDirty as anyDocumentDirty,
   closeDocument,
   dirtyPaths as dirtyDocumentPaths,
   emptyDocumentSet,
+  formatBytes,
   isOpen,
   markSaved,
   openDocument,
@@ -64,6 +66,8 @@ export interface WorkspaceState {
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
   errorKey: string | null;
+  /// What that key interpolates, or null when it needs nothing. See `failureParams`.
+  errorParams: Record<string, string> | null;
 }
 
 export interface WorkspaceActions {
@@ -118,6 +122,7 @@ interface Internal {
   scratch: string;
   busy: boolean;
   errorKey: string | null;
+  errorParams: Record<string, string> | null;
 }
 
 const INITIAL: Internal = {
@@ -128,6 +133,7 @@ const INITIAL: Internal = {
   scratch: "",
   busy: false,
   errorKey: null,
+  errorParams: null,
 };
 
 /// The translation key for a failure reason, or null when there is nothing to say.
@@ -151,9 +157,36 @@ export function failureKey(reason: string): string | null {
       return "errors.permissionDenied";
     case "conflict":
       return "errors.conflict";
+    // The read boundary. Three keys rather than one, because they are three different problems and
+    // two of them are the user's to fix - a file they can shrink, and a file they can re-save as
+    // UTF-8 elsewhere.
+    case "too-large":
+      return "errors.tooLarge";
+    case "not-text":
+      return "errors.notText";
+    case "unsupported-encoding":
+      return "errors.unsupportedEncoding";
     default:
       return "errors.unknown";
   }
+}
+
+/// What a failure message interpolates, or null when it needs nothing.
+///
+/// Numbers, not wording, and pure like `failureKey` beside it: the sizes come from the provider,
+/// and the sentence they land in lives in the catalogue. Only one refusal carries anything, and it
+/// is the one where the bare key would say the least - "too large" without a size names neither the
+/// file's problem nor the app's limit.
+export function failureParams(failure: {
+  reason: string;
+  sizeBytes?: number;
+  limitBytes?: number;
+}): Record<string, string> | null {
+  if (failure.reason !== "too-large") return null;
+  return {
+    size: formatBytes(failure.sizeBytes ?? 0),
+    limit: formatBytes(failure.limitBytes ?? MAX_TEXT_FILE_BYTES),
+  };
 }
 
 /// The parent of a workspace-relative directory path. "" is the root and has no parent.
@@ -197,8 +230,17 @@ export function useWorkspace(
     stateRef.current = internal;
   }, [internal]);
 
-  const fail = useCallback((reason: string) => {
-    setInternal((prev) => ({ ...prev, busy: false, errorKey: failureKey(reason) }));
+  /// Records a failure, as a key and whatever that key interpolates.
+  ///
+  /// Takes the whole result rather than its reason, because one refusal carries numbers with it and
+  /// a reason string alone would have thrown them away at the call site.
+  const fail = useCallback((result: { reason: string; sizeBytes?: number; limitBytes?: number }) => {
+    setInternal((prev) => ({
+      ...prev,
+      busy: false,
+      errorKey: failureKey(result.reason),
+      errorParams: failureParams(result),
+    }));
   }, []);
 
   const loadFolder = useCallback(
@@ -207,6 +249,7 @@ export function useWorkspace(
         ...prev,
         folders: { ...prev.folders, [path]: { status: "loading" } },
         errorKey: null,
+        errorParams: null,
       }));
 
       const result = await client.listDirectory(path);
@@ -242,11 +285,11 @@ export function useWorkspace(
       // failed save, for a document the user was never told they could save.
       if (open.readOnly) return false;
 
-      setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
 
       const result = await client.writeFile(open.path, open.content, open.revision);
       if (!result.ok) {
-        fail(result.reason);
+        fail(result);
         // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
         // document away on the strength of it. A conflict that read as a save is how the prompt would
         // destroy the work it exists to protect.
@@ -307,9 +350,9 @@ export function useWorkspace(
   const open = useCallback(async () => {
     if (!(await mayDiscard())) return;
 
-    setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
+    setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
     const result = await client.openWorkspace();
-    if (!result.ok) return fail(result.reason);
+    if (!result.ok) return fail(result);
 
     setInternal((prev) => ({
       ...prev,
@@ -332,12 +375,12 @@ export function useWorkspace(
         return;
       }
 
-      setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
       const result = await client.readFile(path);
       // A link can point at a file that has been renamed, moved or deleted since it was written, and
       // that is ordinary rather than exceptional - it reports through the same banner as any other
       // failed read, which already says "not found" in the user's language.
-      if (!result.ok) return fail(result.reason);
+      if (!result.ok) return fail(result);
 
       setInternal((prev) => ({
         ...prev,
@@ -377,9 +420,9 @@ export function useWorkspace(
       if (stateRef.current.workspace?.root !== root) {
         if (!(await mayDiscard())) return;
 
-        setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
+        setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
         const result = await client.reopenWorkspace(root);
-        if (!result.ok) return fail(result.reason);
+        if (!result.ok) return fail(result);
 
         setInternal((prev) => ({
           ...prev,
@@ -441,6 +484,7 @@ export function useWorkspace(
       readOnly: active?.readOnly ?? false,
       busy: internal.busy,
       errorKey: internal.errorKey,
+      errorParams: internal.errorParams,
     }),
     [internal, active],
   );
@@ -481,7 +525,8 @@ export function useWorkspace(
     // `errorKey`, and named that everywhere. It used to write `error`, a field this state does not
     // have, so the banner's Dismiss button did nothing - and nothing caught it, because an object
     // literal with a spread in it is exempt from TypeScript's excess property check.
-    dismissError: () => setInternal((prev) => ({ ...prev, errorKey: null })),
+    dismissError: () =>
+      setInternal((prev) => ({ ...prev, errorKey: null, errorParams: null })),
   };
 
   return { state, actions };

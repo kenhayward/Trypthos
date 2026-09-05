@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { createPathGuard } = require("@trypthos/domain");
+const { MAX_TEXT_FILE_BYTES, createPathGuard } = require("@trypthos/domain");
 const { createLocalWorkspace } = require("../src/localWorkspace");
 
 /// Builds a real workspace on disk. These tests use the filesystem deliberately: the whole point of
@@ -198,5 +198,113 @@ test("refuses to create a NEW file through a link pointing outside the workspace
     const result = await workspace.write("escape2/planted.md", "planted\n", null);
     assert.equal(result.ok, false);
     assert.equal(result.reason, "permission-denied");
+  });
+});
+
+/// The read boundary.
+///
+/// Every case below is reachable with nothing but a rename, because the app decides what it can open
+/// from an extension and nothing else. The one that matters most is the round trip: a file that is
+/// opened and saved must come back byte for byte, and anything this module cannot promise that for
+/// has to be refused rather than opened lossily next to a working Save button.
+
+test("refuses a file larger than the cap, and says how large it is", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    const size = MAX_TEXT_FILE_BYTES + 1024;
+    await fs.writeFile(path.join(root, "huge.md"), Buffer.alloc(size, 0x61));
+
+    const result = await workspace.read("huge.md");
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "too-large");
+    assert.equal(result.sizeBytes, size);
+    assert.equal(result.limitBytes, MAX_TEXT_FILE_BYTES);
+  });
+});
+
+test("opens a file exactly at the cap", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    await fs.writeFile(path.join(root, "big.md"), Buffer.alloc(MAX_TEXT_FILE_BYTES, 0x61));
+
+    const result = await workspace.read("big.md");
+    assert.equal(result.ok, true);
+    assert.equal(result.content.length, MAX_TEXT_FILE_BYTES);
+  });
+});
+
+test("refuses a binary file even when its name says markdown", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    // PNG magic, then the bytes a header carries. Renaming a picture is all it takes to reach this.
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+    await fs.writeFile(path.join(root, "picture.md"), png);
+
+    const result = await workspace.read("picture.md");
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "not-text");
+  });
+});
+
+test("refuses a UTF-16 file rather than opening it as mojibake", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    // What Windows PowerShell writes by default, so a .log file meets this immediately.
+    const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("# Notes\n", "utf16le")]);
+    await fs.writeFile(path.join(root, "transcript.md"), utf16);
+
+    const result = await workspace.read("transcript.md");
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "unsupported-encoding");
+  });
+});
+
+test("refuses bytes that are not valid UTF-8 rather than substituting replacement characters", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    await fs.writeFile(path.join(root, "latin.md"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+
+    const result = await workspace.read("latin.md");
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "unsupported-encoding");
+  });
+});
+
+test("keeps a byte order mark across a read and a save", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    const file = path.join(root, "bom.md");
+    await fs.writeFile(file, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("# Top\n")]));
+
+    const read = await workspace.read("bom.md");
+    assert.equal(read.ok, true);
+    // The editor never sees the mark: it would sit in front of the first heading, which then stops
+    // being a heading.
+    assert.equal(read.content, "# Top\n");
+
+    const written = await workspace.write("bom.md", "# Top\n\nMore\n", read.revision);
+    assert.equal(written.ok, true);
+
+    // The mark is put back from what was on disk, never from anything the renderer said.
+    const bytes = await fs.readFile(file);
+    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+    assert.equal(bytes.subarray(3).toString("utf8"), "# Top\n\nMore\n");
+  });
+});
+
+test("does not add a byte order mark to a file that had none", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    const read = await workspace.read("top.md");
+    assert.equal(read.ok, true);
+
+    const written = await workspace.write("top.md", "# Top\n\nMore\n", read.revision);
+    assert.equal(written.ok, true);
+
+    const bytes = await fs.readFile(path.join(root, "top.md"));
+    assert.equal(bytes[0], 0x23);
+  });
+});
+
+test("creates a new file without a byte order mark", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    const written = await workspace.write("fresh.md", "# Fresh\n", null);
+    assert.equal(written.ok, true);
+
+    const bytes = await fs.readFile(path.join(root, "fresh.md"));
+    assert.equal(bytes[0], 0x23);
   });
 });

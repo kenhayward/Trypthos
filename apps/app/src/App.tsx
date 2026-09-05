@@ -393,7 +393,7 @@ export default function App() {
           role="alert"
           className="flex items-start justify-between gap-3 border-b border-rule bg-sunken px-3 py-2 text-sm text-ink-2"
         >
-          <span>{t(state.errorKey)}</span>
+          <span>{t(state.errorKey, state.errorParams ?? undefined)}</span>
           <button
             type="button"
             onClick={actions.dismissError}
