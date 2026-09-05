@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { EMPTY_CONTEXT } from "@trypthos/domain";
 import type { ChatContext, ChatEvent } from "@trypthos/domain";
 import { useChat, type ChatBridge } from "./useChat";
 
@@ -361,5 +362,36 @@ describe("useChat and the document", () => {
       attachments: [],
       folder: null,
     });
+  });
+});
+
+/// What the panel records for itself must never reach a provider.
+///
+/// Invisible when broken, and expensive when it is: the files a reply read are the panel's record
+/// of what happened, not part of the conversation, and resending them every turn would spend the
+/// context window on bookkeeping. `ChatTurnSchema` being strict means an unconverted turn is a loud
+/// failure at the IPC boundary - but only if something actually converts, which is what this pins.
+describe("the conversation a provider receives", () => {
+  it("carries no panel bookkeeping", async () => {
+    const { bridge, sent, push } = fakeBridge();
+    const { result } = renderHook(() => useChat(bridge, "one", () => EMPTY_CONTEXT));
+
+    await act(async () => {
+      await result.current.send("What is in there?");
+    });
+    act(() => push({ type: "tool", name: "get_file_contents", detail: "src/main.js" }));
+    act(() => push({ type: "token", text: "Found it." }));
+    act(() => push({ type: "end" }));
+
+    // The read is on the turn the panel shows.
+    expect(result.current.turns.at(-1)?.reads).toEqual(["src/main.js"]);
+
+    await act(async () => {
+      await result.current.send("And the other one?");
+    });
+
+    for (const turn of sent.at(-1)!.turns as Record<string, unknown>[]) {
+      expect(Object.keys(turn).sort()).toEqual(["content", "role"]);
+    }
   });
 });

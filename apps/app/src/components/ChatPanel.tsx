@@ -330,6 +330,22 @@ export default function ChatPanel({
                   ) : (
                     <span className="whitespace-pre-wrap break-words">{turn.content}</span>
                   )}
+
+                  {/* One line for every file this reply read, and only once it has something to
+                      show beside. While the turn is still waiting the bubble already says
+                      "Reading a.js" - the live signal - and saying it again in the past tense is
+                      two controls for one fact. */}
+                  {turn.role === "assistant" && !waiting && (turn.reads?.length ?? 0) > 0 && (
+                    <p
+                      data-testid="turn-reads"
+                      title={turn.reads?.join("\n")}
+                      className="mt-1.5 truncate border-t border-rule pt-1 text-2xs text-ink-4"
+                    >
+                      {t("chat.filesRead", {
+                        files: (turn.reads ?? []).map(fileName).join(", "),
+                      })}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -431,4 +447,13 @@ export default function ChatPanel({
       </div>
     </aside>
   );
+}
+
+/// The last segment of a workspace-relative path.
+///
+/// The panel is narrow, so the name is what is shown and the whole path is on hover - two files
+/// called index.js in different folders are otherwise indistinguishable.
+function fileName(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return cut === -1 ? path : path.slice(cut + 1);
 }

@@ -761,6 +761,26 @@ accumulates it into one string for the reply in flight, and the panel shows it o
 finished with no content at all. So it is lost when a turn produces an answer, and lost again when a
 saved chat is reopened. Showing it for every turn is specified in `docs/specs/reasoning-display.md`.
 
+### The panel's turn is not the wire turn
+
+`lib/conversation.ts`'s `Turn` **extends** `ChatTurn` rather than aliasing it. The panel records
+things a provider must never receive - today `reads`, the files fetched on the model's behalf - so
+the two stopped being one object the moment one grew a field the other must not see.
+
+`wireTurns` is the conversion, applied at the two places a conversation leaves the panel: `sendChat`
+and saving a chat. `ChatTurnSchema` is strict, so an unconverted turn is a loud parse failure at the
+IPC boundary rather than a silent leak - but that only helps if something converts, which is why
+`useChat.test` asserts every turn a provider receives has exactly `role` and `content`. Removing the
+conversion broke no test before that was added.
+
+`reads` sits on the TURN rather than beside it, so scrolling back to an answer still shows what it
+read to get there. A file is named once however often it was asked for. The panel draws one line per
+reply, and only once the reply is past waiting: the bubble already says "Reading a.js" while you
+wait, and saying it again in the past tense is two controls for one fact.
+
+This is also the shape `docs/specs/reasoning-display.md` recommends for reasoning - a second use of
+it, arrived at independently.
+
 ### Which folder chat maps
 
 `selectedFolder` lives in `useWorkspace` ("" being the root) and is chosen by clicking a folder in

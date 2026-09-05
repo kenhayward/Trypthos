@@ -790,3 +790,58 @@ describe("ChatPanel: reading a file", () => {
     expect(screen.getByText("They say")).toBeDefined();
   });
 });
+
+/// What the model read to answer.
+///
+/// One line at the bottom of the reply it belongs to, listing every file: a line per call would
+/// push the answer off screen for a turn that read several, and the interesting fact is the SET
+/// rather than the sequence.
+describe("the files a reply read", () => {
+  const answered = (reads: string[]) => [
+    { role: "user" as const, content: "What is in there?" },
+    { role: "assistant" as const, content: "Here is what I found.", reads },
+  ];
+
+  it("names them, on one line", () => {
+    panel({ turns: answered(["apps/desktop/src/main.js", "apps/desktop/src/appName.js"]) });
+
+    const line = screen.getByTestId("turn-reads");
+    expect(line.textContent).toContain("main.js");
+    expect(line.textContent).toContain("appName.js");
+  });
+
+  // The panel is narrow, so the name is what is shown and the path is what is available on hover -
+  // two files called index.js in different folders are otherwise indistinguishable.
+  it("keeps the whole path reachable", () => {
+    panel({ turns: answered(["apps/desktop/src/main.js"]) });
+    expect(screen.getByTestId("turn-reads").getAttribute("title")).toContain(
+      "apps/desktop/src/main.js",
+    );
+  });
+
+  it("shows nothing for a reply that read nothing", () => {
+    panel({ turns: answered([]) });
+    expect(screen.queryByTestId("turn-reads")).toBeNull();
+  });
+
+  // It stays with the reply. Scrolling back to an answer should still say what it was based on.
+  it("stays after the reply has finished", () => {
+    panel({ turns: answered(["a.js"]), streaming: false });
+    expect(screen.getByTestId("turn-reads")).toBeDefined();
+  });
+
+  // While the reply is still waiting, the bubble already says "Reading a.js" - the live signal.
+  // Saying it twice in two different tenses is two controls for one fact.
+  it("does not double up with the live reading message", () => {
+    panel({
+      turns: [
+        { role: "user", content: "What is in there?" },
+        { role: "assistant", content: "", reads: ["a.js"] },
+      ],
+      streaming: true,
+      activity: "a.js",
+    });
+
+    expect(screen.queryByTestId("turn-reads")).toBeNull();
+  });
+});

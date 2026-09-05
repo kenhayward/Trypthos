@@ -4,6 +4,8 @@ import {
   appendToken,
   beginReply,
   historyWithoutReply,
+  noteRead,
+  wireTurns,
   type Turn,
 } from "../lib/conversation";
 
@@ -86,7 +88,11 @@ export function useChat(
         return;
       }
       if (event.type === "tool") {
+        // Both, and they are not the same fact: `activity` is what is happening NOW and disappears
+        // when the answer starts arriving; the turn's `reads` is what happened, and stays with the
+        // reply somebody scrolls back to.
         setActivity(event.detail);
+        setTurns((current) => noteRead(current, event.detail));
         return;
       }
       if (event.type === "error") {
@@ -116,7 +122,9 @@ export function useChat(
       setTurns(beginReply(history));
       setStreaming(true);
 
-      const result = await bridge.sendChat(profileId, history, latestContext.current());
+      // Converted here, at the one place a conversation leaves the panel. What the panel records
+      // for itself must not reach a provider - see `wireTurns`.
+      const result = await bridge.sendChat(profileId, wireTurns(history), latestContext.current());
       if (!result.ok) {
         // The shell refused before anything was sent - an unconfigured profile, or a malformed
         // request. Nothing will stream, so the turn has to be ended here.

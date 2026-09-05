@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.42.0",
+    date: "2026-09-05",
+    pr: 86,
+    headline: "See which files an answer was based on",
+    summary:
+      "When a model reads a file from the folder you gave it, the reply now says so: one line at the bottom of that answer naming every file it read, with the full paths on hover. One line however many it read, and it stays with the answer - scroll back to something the model told you last week and you can still see what it was looking at. Until now the only sign was a Reading... message that appeared while you waited and vanished the moment the answer started, so a reply that consulted four files looked exactly like one that consulted none. That message is still there while you wait, since it says what is happening now rather than what happened.",
+    added: [
+      "One line at the bottom of a reply naming every file it read, with full paths on hover.",
+    ],
+  },
+  {
     version: "0.41.0",
     date: "2026-09-05",
     pr: 83,
