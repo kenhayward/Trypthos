@@ -47,8 +47,39 @@ export interface WorkspaceClient {
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge {
   platform: string;
   isDesktop: true;
+  explorerIntegration(): Promise<IntegrationStatus>;
+  setExplorerIntegration(enabled: boolean): Promise<IntegrationStatus>;
   readSettings(): Promise<{ ok: true; settings: Settings } | { ok: false; reason: string }>;
   writeSettings(settings: Settings): Promise<unknown>;
+}
+
+/// Trypthos's entries in File Explorer's right-click menu.
+///
+/// Two calls and no state: the registry is the record, and the renderer asks rather than remembering
+/// - a user can take the keys away by hand, which no stored copy of the answer would know about.
+export interface IntegrationStatus {
+  ok: boolean;
+  /// Whether the entries can exist at all: a packaged Windows build, and nothing else.
+  supported: boolean;
+  registered: boolean;
+}
+
+export interface IntegrationBridge {
+  status(): Promise<IntegrationStatus>;
+  set(enabled: boolean): Promise<IntegrationStatus>;
+}
+
+/// The Explorer half of the bridge, or null outside the desktop shell.
+///
+/// Null rather than a stub: a browser tab has no registry to write to, and a switch that reported
+/// success would be one that claims to have changed something on a machine it cannot reach.
+export function integrationBridge(): IntegrationBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.explorerIntegration) return null;
+  return {
+    status: bridge.explorerIntegration,
+    set: bridge.setExplorerIntegration,
+  };
 }
 
 /// The settings half of the bridge, or null outside the desktop shell.

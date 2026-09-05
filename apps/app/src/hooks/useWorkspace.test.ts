@@ -715,6 +715,113 @@ describe("open documents", () => {
   });
 });
 
+/// Being handed a folder or a file from outside the app - a right-click in File Explorer.
+///
+/// The same two acts the user already has, in one call: open this folder, then open this document in
+/// it. A file names both, because every path the app handles is relative to one open folder.
+describe("opening what the app was launched with", () => {
+  it("opens the folder and the document within it", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "D:/Notes", file: "a.md" });
+    });
+
+    expect(result.current.state.workspace?.root).toBe("D:/Notes");
+    expect(result.current.state.folders[""]?.status).toBe("loaded");
+    expect(result.current.state.file?.path).toBe("a.md");
+  });
+
+  it("opens a folder on its own", async () => {
+    const { client, reads } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "D:/Notes", file: null });
+    });
+
+    expect(result.current.state.workspace?.root).toBe("D:/Notes");
+    expect(reads).toEqual([]);
+  });
+
+  // A second file from Explorer, in the folder already open: another tab, and the folder is not
+  // reopened underneath the documents that are already there.
+  it("adds a tab when the folder is already the one open", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "/ws", file: "a.md" });
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "/ws", file: "b.md" });
+    });
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      "a.md",
+      "b.md",
+    ]);
+    // The first document was not disturbed by a folder being reopened around it.
+    expect(result.current.state.documents[0]?.content).toBe("# Mine\n");
+  });
+
+  // Another folder replaces the workspace, so it discards every open document - the same question
+  // opening a folder from the button asks.
+  it("asks about unsaved work before another folder replaces it", async () => {
+    const { client } = fakeClient();
+    const asked: (string | null | undefined)[] = [];
+    const { result } = renderHook(() =>
+      useWorkspace(client, "", async (name) => {
+        asked.push(name);
+        return "cancel";
+      }),
+    );
+
+    await act(async () => {
+      await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "D:/Other", file: "b.md" });
+    });
+
+    expect(asked).toEqual(["a.md"]);
+    expect(result.current.state.workspace).toBeNull();
+    expect(result.current.state.documents.map((document) => document.path)).toEqual(["a.md"]);
+  });
+
+  it("closes the documents of the folder it left", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
+    });
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "D:/Other", file: "b.md" });
+    });
+
+    // "a.md" belonged to the folder that was open. Keeping its tab would leave a path pointing at a
+    // file that is not in this workspace.
+    expect(result.current.state.documents.map((document) => document.path)).toEqual(["b.md"]);
+  });
+
+  it("says so when the folder is no longer there", async () => {
+    const { client } = fakeClient({
+      reopenWorkspace: async () => ({ ok: false, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openTarget({ root: "D:/Gone", file: null });
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.notFound");
+  });
+});
+
 /// Unsaved work, and everything that would throw it away.
 ///
 /// With one document there was one question to ask. With several there is one PER document, and the

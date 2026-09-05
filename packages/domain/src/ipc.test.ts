@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   CloseWindowRequest,
   ConfirmDiscardRequest,
+  OpenTargetSchema,
+  SetIntegrationRequest,
   DiscardChoiceSchema,
   DocumentDirtyRequest,
   IPC_CHANNELS,
@@ -40,6 +42,8 @@ describe("IPC_CHANNELS", () => {
       "document:dirty",
       "document:confirmDiscard",
       "shell:openExternal",
+      "shell:integration",
+      "shell:setIntegration",
     ]);
   });
 
@@ -231,5 +235,37 @@ describe("ConfirmDiscardRequest", () => {
 
   it("refuses a name that is not a string", () => {
     expect(ConfirmDiscardRequest.safeParse({ name: 7 }).success).toBe(false);
+  });
+});
+
+describe("SetIntegrationRequest", () => {
+  it("carries whether the Explorer entries are wanted", () => {
+    const parsed = SetIntegrationRequest.safeParse({ enabled: true });
+
+    expect(parsed.success && parsed.data.enabled).toBe(true);
+  });
+
+  it("refuses anything but a boolean", () => {
+    expect(SetIntegrationRequest.safeParse({ enabled: "yes" }).success).toBe(false);
+    expect(SetIntegrationRequest.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("OpenTargetSchema", () => {
+  it("carries a folder, and a document within it", () => {
+    const parsed = OpenTargetSchema.safeParse({ root: "D:/Notes", file: "todo.md" });
+
+    expect(parsed.success && parsed.data.file).toBe("todo.md");
+  });
+
+  it("carries a folder alone", () => {
+    expect(OpenTargetSchema.safeParse({ root: "D:/Notes", file: null }).success).toBe(true);
+  });
+
+  // Main is trusted, but the schema is what stops the two sides drifting silently - a shape change
+  // would otherwise surface as a launch that quietly opens nothing.
+  it("refuses a shape it does not recognise", () => {
+    expect(OpenTargetSchema.safeParse({ root: "D:/Notes" }).success).toBe(false);
+    expect(OpenTargetSchema.safeParse({ file: "todo.md", root: 7 }).success).toBe(false);
   });
 });

@@ -82,6 +82,9 @@ export interface WorkspaceActions {
   openPath(path: string): Promise<void>;
   /// Puts an open document on screen. No reading, no prompt - the other one is still open.
   activateFile(path: string): void;
+  /// Opens what the app was handed from outside - a folder from File Explorer, or a markdown file
+  /// within one. A file names both, because every path here is relative to one open folder.
+  openTarget(target: { root: string; file: string | null }): Promise<void>;
   /// Closes one document, asking about its unsaved work first. Nothing else is disturbed.
   closeFile(path: string): Promise<void>;
   edit(content: string): void;
@@ -348,6 +351,38 @@ export function useWorkspace(
     [mayDiscardOne],
   );
 
+  /// A folder, and optionally a document in it, handed over from outside the app.
+  ///
+  /// Built from the two acts the user already has rather than a third path of its own: the folder
+  /// goes through the same validation the picker's does, and the document through the same `openPath`
+  /// a click in the tree uses - so the prompt about unsaved work, the error banner and the revision
+  /// cannot behave differently because a file arrived from Explorer.
+  const openTarget = useCallback(
+    async ({ root, file }: { root: string; file: string | null }) => {
+      // Already the open folder: this is another tab, and reopening the workspace around the
+      // documents already in it would close every one of them for nothing.
+      if (stateRef.current.workspace?.root !== root) {
+        if (!(await mayDiscard())) return;
+
+        setInternal((prev) => ({ ...prev, busy: true, errorKey: null }));
+        const result = await client.reopenWorkspace(root);
+        if (!result.ok) return fail(result.reason);
+
+        setInternal((prev) => ({
+          ...prev,
+          workspace: result.workspace,
+          folders: {},
+          documents: emptyDocumentSet(),
+          busy: false,
+        }));
+        await loadFolder("");
+      }
+
+      if (file !== null) await openPath(file);
+    },
+    [client, fail, loadFolder, mayDiscard, openPath],
+  );
+
   const reopen = useCallback(
     async (root: string) => {
       const result = await client.reopenWorkspace(root);
@@ -404,6 +439,7 @@ export function useWorkspace(
     setFilter: (filter: string) => setInternal((prev) => ({ ...prev, filter })),
     openFile,
     openPath,
+    openTarget,
     activateFile: (path: string) =>
       setInternal((prev) => ({ ...prev, documents: activateDocument(prev.documents, path) })),
     closeFile,

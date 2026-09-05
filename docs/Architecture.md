@@ -731,6 +731,29 @@ leaving it to the order of the `if`s in `main.js`: a forced close wins outright;
 and so never asks, because nothing is being discarded; otherwise unsaved work is asked about. A quit
 that is then cancelled clears `quitting`, or the next ordinary close would skip the tray.
 
+## File Explorer integration
+
+Explorer verbs are registry keys, so `apps/desktop/src/explorerIntegration.js` writes them with
+`reg.exe` through an injected runner - no native module, no installer scripting, and the whole shape
+is assertable as data on a machine that is not Windows. Everything lives under **HKCU**: per-user keys
+need no administrator rights and cannot be left behind in somebody else's account.
+
+**The registry is the only record of whether the entries exist.** There is deliberately no setting -
+a stored copy would be a second answer that disagrees the moment a user removes the keys by hand, and
+the switch would then show "on" for a menu entry that is not there. `shell:integration` reads and
+`shell:setIntegration` writes, and both answer with the state that FOLLOWS, read back rather than
+assumed. Registration is refused unless the app is packaged: in development `process.execPath` is
+Electron's own binary, which cannot start Trypthos from a path alone.
+
+A launch carries a path. `launchTarget.js` splits that into two questions - which argument is a path
+(pure text) and what is at the end of it (a `stat`) - so only the second needs a fake. A **file**
+resolves to a folder AND a document, because every path this app handles is relative to one open
+folder. The result is pushed to the renderer (`shell:openTarget`) rather than acted on in the shell:
+the renderer owns the open documents and is the only side that can ask about unsaved work before
+another folder replaces them. A target that arrives before the page has loaded is queued, since a
+message sent to a loading page is a message nobody receives, and `second-instance` carries the
+arguments of the launch that lost the lock so a second right-click reaches the running window.
+
 ## Menus
 
 **A frameless window on Windows has nowhere for a menu bar to go.** The menu bar belongs to the frame

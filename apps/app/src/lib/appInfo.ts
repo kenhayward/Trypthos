@@ -20,6 +20,7 @@ export const CAPABILITIES = `
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
 | Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt and the editor. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
+| File Explorer | On Windows, right-click a folder or a markdown file to open it here. Switched on from Settings. |
 | Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. |
 | Updates | Checks for a newer version on startup, or on demand from the Help menu or the tray icon. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |

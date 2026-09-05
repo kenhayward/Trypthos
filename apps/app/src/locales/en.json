@@ -141,6 +141,9 @@
       "light": "Always light, whatever your system is set to.",
       "dark": "Always dark, whatever your system is set to."
     },
+    "explorerMenu": "Add Trypthos to the File Explorer right-click menu",
+    "explorerMenuHint": "Right-click a folder to open it in Trypthos, or a markdown file to edit it.",
+    "explorerMenuWhere": "On Windows 11 these appear under Show more options.",
     "closeToTray": "Keep running when the window is closed",
     "closeToTrayHint": "Closing hides Trypthos to the notification area. Quit it from the tray icon.",
     "chat": {

@@ -11,7 +11,12 @@ const {
   safeStorage,
   shell,
 } = require("electron");
-const { MENU_ACTION_CHANNEL, PopupMenuRequest, isExternalUrl } = require("@trypthos/domain");
+const {
+  MENU_ACTION_CHANNEL,
+  OPEN_TARGET_CHANNEL,
+  PopupMenuRequest,
+  isExternalUrl,
+} = require("@trypthos/domain");
 const path = require("node:path");
 const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
@@ -31,6 +36,8 @@ const { closeDecision, createCloseGuard } = require("./closeGuard");
 const { createUpdater } = require("./updater");
 const { createTray } = require("./tray");
 const { revealWindow } = require("./revealWindow");
+const { createExplorerIntegration } = require("./explorerIntegration");
+const { pathFromArgv, resolveTarget } = require("./launchTarget");
 const { readCloseToTray, onSettingsWritten } = require("./settingsStore");
 
 let mainWindow = null;
@@ -77,6 +84,28 @@ function loadRenderer(window) {
 /// A holder rather than a value: the window is created before the handlers are built, and the
 /// listener registered on it has to see them once they exist.
 const menuHandlersRef = { current: null };
+
+/// Opens what a launch was pointed at: a folder from Explorer, or a markdown file within one.
+///
+/// Sent to the renderer rather than acted on here, because the renderer owns the open documents and
+/// is the only side that can ask about unsaved work before replacing them. Nothing is sent when the
+/// argument names nothing openable, which is the ordinary case of the app simply being started.
+///
+/// Queued when the window is not ready yet: the first launch resolves this while the renderer is
+/// still loading, and a message sent to a page that has not finished loading is a message nobody
+/// receives.
+let pendingTarget = null;
+
+async function openFromArgv(argv) {
+  const target = await resolveTarget(pathFromArgv(argv, { packaged: app.isPackaged }));
+  if (target === null) return;
+
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send(OPEN_TARGET_CHANNEL, target);
+    return;
+  }
+  pendingTarget = target;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -137,6 +166,12 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     loadAttempt = 0;
+    // Whatever the app was launched with, now that there is a page to receive it. Cleared as it is
+    // sent, so a later reload does not reopen a folder the user has since navigated away from.
+    if (pendingTarget !== null) {
+      mainWindow.webContents.send(OPEN_TARGET_CHANNEL, pendingTarget);
+      pendingTarget = null;
+    }
   });
 
   void loadRenderer(mainWindow);
@@ -226,8 +261,11 @@ if (!gotLock) {
 } else {
   // A second launch hands over to the running instance, which has to come back into view whether
   // it was minimised or hidden to the tray - a hidden window that is merely focused stays hidden.
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
     revealWindow(mainWindow);
+    // The launch that lost the lock still names a folder or a file - it is a right-click in Explorer
+    // - so its arguments come here rather than being dropped with the process that carried them.
+    void openFromArgv(argv);
   });
 
   void app.whenReady().then(async () => {
@@ -250,6 +288,14 @@ if (!gotLock) {
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),
+      // Trypthos's entries in File Explorer's right-click menu, written only when the user asks.
+      // Windows-only and packaged-only: in development `process.execPath` is Electron's own binary,
+      // which cannot start Trypthos from a path alone.
+      explorerIntegration: createExplorerIntegration({
+        platform: process.platform,
+        packaged: app.isPackaged,
+        exePath: process.execPath,
+      }),
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow, guard: closeGuard });
 
@@ -322,6 +368,10 @@ if (!gotLock) {
       closeToTray = settings.window.closeToTray;
     });
     createWindow();
+
+    // What this launch was pointed at, if anything. Resolved after the window exists so it can be
+    // queued for the page that is still loading rather than raced against it.
+    void openFromArgv(process.argv);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.31.0",
+    date: "2026-09-05",
+    pr: 64,
+    headline: "Open a folder or a file straight from File Explorer",
+    summary:
+      "On Windows, Trypthos can add itself to File Explorer's right-click menu: Open folder in Trypthos on a folder or on the space inside one, and Open in Trypthos on a markdown file. It also appears in Explorer's Open with list. Turn it on from the Window page of Settings, and off again the same way - nothing is written outside your own user account, so it needs no administrator rights. On Windows 11 the entries sit under Show more options rather than on the first menu, and Settings says so beside the switch. Opening a folder opens it as your workspace; opening a file opens the folder it lives in and the file itself, because every document Trypthos edits lives inside one open folder. If Trypthos is already running, whatever you open arrives in the window you already have: a file in the folder you are in becomes another tab, and one from elsewhere opens that folder instead, asking about unsaved work first exactly as opening a folder from the button does. macOS has no equivalent yet.",
+    added: [
+      "A switch on the Window page of Settings that adds Trypthos to the File Explorer right-click menu, for folders and for markdown files.",
+      "Trypthos appears in Explorer's Open with list for markdown files.",
+      "Opening a file or folder from Explorer while Trypthos is running uses the window you already have.",
+    ],
+  },
+  {
     version: "0.30.0",
     date: "2026-09-05",
     pr: 63,
