@@ -144,6 +144,11 @@ zone on every list item.
 Fenced code, tables, images and footnotes have no decoration yet and therefore render as source -
 a deliberate floor, and one no two-engine design can offer.
 
+**The editor opens markdown and nothing else.** Widening that - syntax colouring for source, config
+and log files, under a setting naming which types the app takes an interest in - is specified in
+`docs/specs/file-types.md`. None of it is built; the document is the design the work will be measured
+against, not a description of this code.
+
 ## Links
 
 **A link is never followed by navigating the window.** The window is frameless: no address bar, no
