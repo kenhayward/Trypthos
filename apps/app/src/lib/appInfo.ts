@@ -12,7 +12,7 @@ export const CAPABILITIES = `
 | Feature | Description |
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
-| File types | Choose which kinds of file Trypthos shows: markdown, plain text, and thirty-odd data formats and languages, each off until you turn it on. A type that is off is not listed, not opened, and not offered to chat. |
+| File types | Choose which kinds of file Trypthos opens: markdown, plain text, and thirty-odd data formats and languages, all on to begin with. A file no enabled type covers is listed in grey and cannot be opened. |
 | Syntax colouring | Each type is coloured by role, from the same palette as the rest of the app, in both themes. Fenced code is coloured by the language on the fence, in every view and in chat replies. Grammars load only when a file needs one. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. |
 | Formatting toolbar | In Source view, a button for every markdown construct. Headings act on the current line, character formatting wraps your selection, and a second press removes what the first added. |

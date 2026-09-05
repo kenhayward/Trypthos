@@ -16,6 +16,14 @@ export interface TreeRow {
   depth: number;
   expanded: boolean;
   status: FolderState["status"] | null;
+  /// Whether clicking this row does anything.
+  ///
+  /// False for a file no enabled type claims - a picture, an archive, or a type the user has turned
+  /// off. It is LISTED rather than hidden, because a folder should look like what it is: a file
+  /// that simply is not there gives nobody anything to act on, since "Trypthos will not open this"
+  /// and "this does not exist" look identical. Always true for a folder; expanding one always
+  /// works.
+  openable: boolean;
 }
 
 /// Flattens the folder map into the rows to render, in order.
@@ -39,11 +47,16 @@ export function treeRows(
       if (isHidden(node.name)) return [];
 
       if (node.kind === "file") {
-        // A file whose type is off never appears, and neither does one no type describes at all.
-        // The footer says which types are on, and offers the page that changes them.
-        if (!isOpenable(node.name, enabled)) return [];
         if (query !== "" && !node.name.toLowerCase().includes(query)) return [];
-        return [{ node, depth, expanded: false, status: null }];
+        return [
+          {
+            node,
+            depth,
+            expanded: false,
+            status: null,
+            openable: isOpenable(node.name, enabled),
+          },
+        ];
       }
 
       const child = folders[node.id];
@@ -52,7 +65,7 @@ export function treeRows(
       // Folders survive a filter. What is inside an unexpanded one is unknown, so hiding it because
       // nothing visible matches would hide matches nobody has looked for yet.
       return [
-        { node, depth, expanded, status: child?.status ?? null },
+        { node, depth, expanded, status: child?.status ?? null, openable: true },
         ...(child?.status === "loaded" ? rowsFor(node.id, depth + 1) : []),
       ];
     });
@@ -61,11 +74,14 @@ export function treeRows(
   return rowsFor("", 0);
 }
 
-/// Files currently on screen.
+/// Files on screen that can actually be opened.
+///
+/// The openable ones, not every row: the footer names the file types that are on and then counts,
+/// so counting files those types do not cover would make the two halves of one sentence disagree.
 ///
 /// Counts what is shown rather than what exists. A recursive count of a whole workspace is not free:
 /// measured on a home directory it took 40 seconds across 113,000 folders, so a number that claimed
 /// to cover the entire tree would either be a lie or a freeze.
 export function visibleFileCount(rows: readonly TreeRow[]): number {
-  return rows.filter((row) => row.node.kind === "file").length;
+  return rows.filter((row) => row.node.kind === "file" && row.openable).length;
 }

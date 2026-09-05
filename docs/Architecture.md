@@ -311,6 +311,13 @@ deep a row sits and which folder is still loading are all testable without a tre
   hiding it because nothing visible matches would hide matches nobody has looked for yet. That also
   means the row list is never empty while folders exist, so the "no matches" message keys off the
   file count rather than the row count.
+- **Every file is listed; `openable` says whether clicking one does anything.** A file no enabled
+  type covers is drawn dim and inert rather than left out - hiding it made the panel disagree with
+  every other view of the same folder, and a missing file cannot be told from an unopenable one.
+  `FileRow` renders it as a plain `div`, NOT a disabled button: a disabled button is still in the
+  accessibility tree, still announced as something to activate, and still a place a keyboard lands.
+  `visibleFileCount` counts only openable rows, so the footer's count agrees with the types it
+  names in the same sentence.
 - **Counting is lazy, and that is measured rather than assumed.** A recursive markdown count took 5ms
   on this repo, 80ms on Diariz, and **40 seconds across 113,000 folders on a home directory** - which
   is a perfectly plausible workspace. The footer therefore counts what is on screen.
@@ -343,9 +350,12 @@ Four things that are easy to get wrong:
   take the user's panel widths, open folder and every configured model with it. Unknown ids are
   ignored where they are read and carried through untouched where they are written, including by the
   settings page's own toggle - so an upgrade and a downgrade do not each wipe the other's choices.
-- **The default is `["markdown"]` for a fresh install and for the migration alike.** Adding a setting
-  must not change what an existing installation does, and a fresh install disagreeing with a migrated
-  one is a second kind of wrong.
+- **A fresh install and an upgrade deliberately DIFFER.** `DEFAULT_FILE_TYPES` is every id, derived
+  from the catalogue; the version 11 migration still seeds `["markdown"]` and is not revisited. The
+  original reasoning - an app must not change what it shows somebody unasked - holds for an upgrade
+  and not for a first run, which has nobody to surprise and would otherwise ship a folder browser
+  whose usefulness depends on finding a settings page. A type you cannot see is a type you do not
+  know to look for, so the discoverable direction is turning rows off.
 - **Markdown is pinned**, and `enabledFileTypes` honours that whatever the stored list says. A
   hand-edited file must not leave a markdown editor unable to open markdown.
 - **The catalogue invariant is one equality over the whole set**, not a check per type: every type

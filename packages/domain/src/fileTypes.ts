@@ -438,12 +438,21 @@ export const FILE_TYPES: readonly FileType[] = [
 /// "what is markdown" and it cannot drift.
 export const MARKDOWN_FILE_TYPE: FileType = FILE_TYPES.find((type) => type.id === "markdown")!;
 
-/// What a new installation, and an upgraded one, both start with.
+/// What a NEW installation starts with: everything.
 ///
-/// Markdown and nothing else. Adding a setting must not change what an existing installation does,
-/// and a fresh install that disagreed with a migrated one would be a second kind of wrong - so every
-/// type beyond markdown, plain text included, is something the user turns on deliberately.
-export const DEFAULT_FILE_TYPES: readonly FileTypeId[] = ["markdown"];
+/// The setting shipped markdown-only, on the reasoning that an app should not change what it shows
+/// somebody without being asked. That reasoning holds for an UPGRADE and not for a first run: a
+/// fresh installation has nobody to surprise, and a folder browser that shows one file type's worth
+/// of a folder is one whose usefulness depends on finding a settings page first. A type you cannot
+/// see is a type you do not know to look for, so the discoverable direction is turning rows off.
+///
+/// **There is deliberately no migration to match.** An existing installation keeps the list it has,
+/// including the markdown-only seed - changing what somebody's folder browser shows on an upgrade is
+/// exactly what the original default was avoiding, and that has not stopped being true.
+///
+/// Derived from the catalogue rather than written out beside it: a hand-typed list is one that
+/// silently stops covering the type somebody adds next.
+export const DEFAULT_FILE_TYPES: readonly FileTypeId[] = FILE_TYPES.map((type) => type.id);
 
 /// Whether a file of this name is of this type.
 ///

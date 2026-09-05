@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.39.0",
+    date: "2026-09-05",
+    pr: 81,
+    headline: "The folder browser shows your folder as it is",
+    summary:
+      "Two changes to what the left panel lists. Every file type is now on to begin with, so a new installation shows a folder the way the rest of your machine does rather than one file type's worth of it. If you already have Trypthos, nothing changes: the types you have on stay on, because altering what your folder browser shows without being asked is exactly what the old markdown-only default existed to avoid. Turn types off from the File types page whenever you want a narrower list. And files Trypthos cannot open - a picture, an archive, a type you have turned off - are now listed rather than left out, drawn in grey and not clickable. Hiding them meant the panel disagreed with every other way of looking at the same folder, and a missing file tells you nothing: you could not tell whether Trypthos would not open it or whether it was not there. Hovering one says which it is. The count in the footer still counts only the files your types cover, so it continues to match the types named beside it.",
+    changed: [
+      "A new installation starts with every file type on. An existing one keeps the types it has.",
+      "Files no enabled type covers are listed in grey rather than hidden, and cannot be clicked.",
+      "The footer counts only the files your enabled types can open, as it did before.",
+    ],
+  },
+  {
     version: "0.38.0",
     date: "2026-09-05",
     pr: 80,
