@@ -382,3 +382,51 @@ describe("the views a document offers", () => {
     expect(screen.getByText("Markdown")).toBeDefined();
   });
 });
+
+/// An image, which the editor draws rather than edits.
+///
+/// Everything the panel normally shows is a question about text - a caret position, a word count,
+/// three views to switch between - and for a picture all of them would be answers about a file with
+/// no lines in it.
+describe("EditorPanel: an image", () => {
+  const PNG = "data:image/png;base64,AAAA";
+
+  const withImage = () =>
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["shot.png"]}
+        activePath="shot.png"
+        dirty={false}
+        value=""
+        readOnly
+        media={PNG}
+        fileTypes={["markdown", "image"]}
+        onChange={vi.fn()}
+      />,
+    );
+
+  it("draws the picture", () => {
+    withImage();
+    expect(screen.getByRole("img", { name: "shot.png" }).getAttribute("src")).toBe(PNG);
+  });
+
+  it("offers no view to switch to", () => {
+    withImage();
+
+    for (const view of ["Live", "Source", "Preview"]) {
+      expect(screen.queryByRole("button", { name: view })).toBeNull();
+    }
+  });
+
+  // The caret, the word count and the line ending are all answers about text.
+  it("says nothing about lines or words", () => {
+    withImage();
+    expect(screen.queryByText(/words/)).toBeNull();
+  });
+
+  it("puts no editing surface on screen", () => {
+    withImage();
+    expect(document.querySelector(".cm-content")).toBeNull();
+  });
+});

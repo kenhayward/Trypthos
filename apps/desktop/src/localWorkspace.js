@@ -162,6 +162,37 @@ function createLocalWorkspace({ root, guard }) {
       return { ok: true, content: decoded.content, revision: revisionOf(stats) };
     },
 
+    /// Reads a file as BYTES, without deciding what they mean.
+    ///
+    /// Separate from `read` because `read` decodes: it refuses anything binary, which is exactly
+    /// right for a document and exactly wrong for a picture. This one has no opinion about the
+    /// contents at all, so its caller has to be the one that knows what it is asking for - which is
+    /// why the only caller is the image handler, which decides from the file's NAME.
+    ///
+    /// The boundary is unchanged. Same `resolve`, same lexical guard, same realpath check.
+    async readBytes(relativePath, limitBytes) {
+      const resolved = await resolve(relativePath, { mustExist: true });
+      if (!resolved.ok) return resolved;
+
+      let stats;
+      try {
+        stats = await fs.stat(resolved.path);
+      } catch (error) {
+        return mapError(error);
+      }
+
+      // BEFORE the read, as with text: a file this large must never become a string and cross IPC.
+      if (stats.size > limitBytes) {
+        return { ok: false, reason: "too-large", sizeBytes: stats.size, limitBytes };
+      }
+
+      try {
+        return { ok: true, bytes: await fs.readFile(resolved.path) };
+      } catch (error) {
+        return mapError(error);
+      }
+    },
+
     /// Writes a file, refusing anything that would overwrite a change the caller has not seen.
     ///
     /// `overwrite` is the one way past that, and it means "the user has already been asked". A

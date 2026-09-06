@@ -400,3 +400,32 @@ describe("a draft", () => {
     expect(activeDocument(withFiles("a.md"))?.draft).toBe(false);
   });
 });
+
+/// An image: a document that is looked at rather than read.
+describe("a document with media", () => {
+  const picture = () =>
+    openDocument(emptyDocumentSet(), {
+      path: "shot.png",
+      content: "",
+      revision: rev("r1"),
+      readOnly: true,
+      media: "data:image/png;base64,AAAA",
+    });
+
+  it("carries the data URL, and no content", () => {
+    const document = activeDocument(picture());
+
+    expect(document?.media).toBe("data:image/png;base64,AAAA");
+    expect(document?.content).toBe("");
+  });
+
+  // `content` is what the chat panel sends and what the editor holds. Twenty megabytes of base64 in
+  // either would be a disaster in a different direction each time, which is why they are separate.
+  it("is read-only, so nothing ever writes it back", () => {
+    expect(activeDocument(picture())?.readOnly).toBe(true);
+  });
+
+  it("is not media, for an ordinary document", () => {
+    expect(activeDocument(withFiles("a.md"))?.media).toBeNull();
+  });
+});

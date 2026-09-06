@@ -34,6 +34,10 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       reads.push(path);
       return { ok: true, content: "# On disk\n", revision: { id: "r1" } };
     },
+    readImage: async (path) => {
+      reads.push(path);
+      return { ok: true as const, dataUrl: `data:image/png;base64,${path}` };
+    },
     writeFile: async (path, content, expectedRevision): Promise<WriteResult> => {
       writes.push({ path, content, revision: expectedRevision?.id ?? null });
       return { ok: true, revision: { id: "r2" } };
@@ -1566,5 +1570,62 @@ describe("a new document", () => {
     expect(result.current.state.file?.name).toBe("notes.md");
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.content).toBe("# Notes");
+  });
+});
+
+/// Opening an image, which is read by a different call and held in a different field.
+describe("opening an image", () => {
+  const PNG = { id: "shot.png", name: "shot.png", kind: "file" as const };
+
+  it("reads it as an image and holds the data URL", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(PNG);
+    });
+
+    expect(result.current.state.media).toBe("data:image/png;base64,shot.png");
+    expect(result.current.state.file?.path).toBe("shot.png");
+  });
+
+  // `content` is what the chat panel sends and what the editor holds. An image's bytes belong in
+  // neither, and an empty string is what both should see.
+  it("keeps the bytes out of the document content", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(PNG);
+    });
+
+    expect(result.current.state.content).toBe("");
+    expect(result.current.state.readOnly).toBe(true);
+  });
+
+  it("says so when the image cannot be read", async () => {
+    const { client } = fakeClient({
+      readImage: async () => ({ ok: false as const, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(PNG);
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.notFound");
+    expect(result.current.state.documents).toHaveLength(0);
+  });
+
+  it("reads an ordinary document the ordinary way", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
+    });
+
+    expect(result.current.state.media).toBeNull();
+    expect(result.current.state.content).toBe("# On disk\n");
   });
 });

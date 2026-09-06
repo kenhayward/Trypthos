@@ -22,6 +22,7 @@ export const IPC_CHANNELS = [
   "file:read",
   "file:write",
   "file:saveAs",
+  "file:readImage",
   "window:minimize",
   "window:toggleMaximize",
   "window:close",
@@ -165,6 +166,14 @@ export const OutlineRequest = z.object({ path: relativePath }).strict();
 
 export const ReadRequest = z.object({ path: relativePath.min(1) }).strict();
 
+/// Reading an image, which does not go through `file:read`.
+///
+/// The same shape, and a different channel on purpose: `file:read` DECODES, and an image must not
+/// be decoded as text - the read boundary refuses anything binary, which is right for a document
+/// and wrong for a picture. Two channels rather than a flag, so neither can be answered by the
+/// wrong half of the shell.
+export const ReadImageRequest = z.object({ path: relativePath.min(1) }).strict();
+
 export const WriteRequest = z
   .object({
     path: relativePath.min(1),
@@ -301,6 +310,7 @@ export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
 export type OutlineRequest = z.infer<typeof OutlineRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
+export type ReadImageRequest = z.infer<typeof ReadImageRequest>;
 export type SaveAsRequest = z.infer<typeof SaveAsRequest>;
 export type WriteRequest = z.infer<typeof WriteRequest>;
 

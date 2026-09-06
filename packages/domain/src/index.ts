@@ -138,6 +138,12 @@ export {
 } from "./recentFiles";
 export type { RecentFile } from "./recentFiles";
 
+export {
+  IMAGE_TYPE_ID,
+  MAX_IMAGE_FILE_BYTES,
+  imageMediaType,
+  isImageName,
+} from "./imageFiles";
 export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes } from "./newFile";
 export type { NewFileType } from "./newFile";
 
@@ -217,6 +223,7 @@ export {
   OutlineRequest,
   OpenExternalRequest,
   SendChatRequest,
+  ReadImageRequest,
   ReadRequest,
   SaveAsRequest,
   RevisionSchema,

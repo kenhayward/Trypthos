@@ -30,6 +30,7 @@ export type FileTypeId =
   | "shell"
   | "powershell"
   | "batch"
+  | "image"
   | "sql"
   | "rust"
   | "go"
@@ -51,14 +52,19 @@ export type FileTypeId =
 
 /// How the settings page arranges its rows. Groups are added as types arrive rather than declared
 /// ahead of them: a heading with nothing under it is a page that looks broken.
-export type FileTypeGroup = "documents" | "data" | "languages" | "utility";
+export type FileTypeGroup = "documents" | "data" | "images" | "languages" | "utility";
 
 /// What editing a file of this type is like, and therefore how the surface behaves.
 ///
 /// One flag rather than three, because wrapping, spellchecking and bracket-closing all follow from
 /// the same question. `prose` wraps and spellchecks; `plain` does neither, which is why a log is not
 /// prose - wrapping a log is wrong; `code` adds the editing affordances a source file wants.
-export type FileTypeKind = "prose" | "plain" | "code";
+///
+/// `image` is the odd one and says so: it is not an editing behaviour at all, but the absence of
+/// editing. A file of this kind never reaches CodeMirror, is never written, and takes a different
+/// route out of the shell - the read boundary refuses binary, which is right for a document and
+/// wrong for a picture.
+export type FileTypeKind = "prose" | "plain" | "code" | "image";
 
 export interface FileType {
   /// Also the key of the renderer's language loader, and what a settings file stores.
@@ -89,6 +95,7 @@ export interface FileType {
 export const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = [
   "documents",
   "data",
+  "images",
   "languages",
   "utility",
 ];
@@ -114,6 +121,21 @@ export const FILE_TYPES: readonly FileType[] = [
     // Source alone: there is no markdown syntax to hide in Live, and nothing to render in Preview.
     modes: ["source"],
     kind: "prose",
+    pinned: false,
+  },
+  {
+    id: "image",
+    labelKey: "fileTypes.image",
+    group: "images",
+    // The formats a window can draw without help. Deliberately NOT svg: that is a picture and a text
+    // file both, and the catalogue cannot let two rows claim one extension - so it stays with XML,
+    // where it can be edited, which is the more useful of the two answers.
+    extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "ico"],
+    filenames: [],
+    // Nothing to switch between. Live and Preview are markdown constructs and Source is text; a
+    // photograph is none of the three, and a header offering them would be buttons that do nothing.
+    modes: [],
+    kind: "image",
     pinned: false,
   },
   {

@@ -197,7 +197,10 @@ export default function App() {
     () => ({
       selection: selection.current.text,
       file:
-        state.file === null
+        // A picture is not a document to answer about, and it has no text to send: `content` is
+        // empty for one by design. Treated as nothing open rather than as an empty file, which would
+        // tell the model something untrue about it.
+        state.file === null || state.media !== null
           ? null
           : {
               path: state.file.path,
@@ -207,7 +210,7 @@ export default function App() {
               fileType: fileTypeFor(state.file.name, settings.fileTypes.enabled)?.id ?? null,
             },
     }),
-    [state.file, state.content, settings.fileTypes.enabled],
+    [state.file, state.content, state.media, settings.fileTypes.enabled],
   );
 
   /// The shell calls chat needs for scope. Built once: `client` is chosen at module scope and does
@@ -490,6 +493,7 @@ export default function App() {
           dirty={state.dirty}
           value={state.content}
           readOnly={state.readOnly}
+          media={state.media}
           defaultMode={settings.editor.defaultViewMode}
           fileTypes={settings.fileTypes.enabled}
           onActivateFile={actions.activateFile}

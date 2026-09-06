@@ -412,6 +412,34 @@ Where a real Lezer grammar exists this file uses it; the long tail comes from
 grammar, so it produces no syntax tree and colours by token name alone - the accepted floor, since
 the alternative for those languages is nothing at all.
 
+### Images, the first thing the app opens and does not edit
+
+Everything else in the catalogue is text on its way into CodeMirror. An image forced three things
+apart that had been one:
+
+- **`file:readImage` is its own channel, not a flag on `file:read`.** The two do opposite things with
+  the same bytes - one decodes them as text and refuses anything binary, and the other does not look
+  at them at all. Two channels mean neither can be answered by the wrong half of the shell. The
+  provider gained `readBytes`, which has no opinion about contents; the boundary is untouched (same
+  `resolve`, same lexical guard, same realpath check), and the size check still happens before the
+  read rather than after the harm.
+- **The media type is decided in the main process, from the name.** A data URL's type is an
+  instruction to the browser about how to interpret what follows, so it is not a field to accept from
+  the renderer, and a name that is not an image this app draws is refused rather than guessed at.
+- **`media` is a field of its own on `OpenDocument`, and `content` stays empty.** `content` is what
+  the chat panel sends and what the editor holds, and twenty megabytes of base64 in either would be a
+  disaster in a different direction each time. `scopeSource` treats a media document as **nothing
+  open** rather than as an empty file - an empty file would tell the model something untrue about it,
+  and the picture is not something to send.
+
+`MAX_IMAGE_FILE_BYTES` is its own limit for its own reason: a data URL is a third larger than the
+file and crosses IPC as one string. The alternative - a custom protocol so `<img src>` loads without
+IPC at all - is the right answer for very large images and is not built.
+
+`isImageName` decides which of the two reads to make, from the **name** rather than the settings:
+whether the type is turned on is already answered by the tree that offered the file, and by
+`linkAction` for a link.
+
 **Batch is the one grammar this app writes itself.** Nothing ships a mode for `.bat` and `.cmd`, and
 a type with no colouring at all would fail the one thing the file-types spec asks of a type, so
 `lib/batchGrammar.ts` holds rules for `simpleMode` - the same machinery the legacy modes are built
@@ -1358,7 +1386,7 @@ no corrections while the chat box and settings fields had them, and nothing woul
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`), files (`file:read`,
-`file:write`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
+`file:readImage`, `file:write`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
 conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and

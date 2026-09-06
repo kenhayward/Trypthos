@@ -68,6 +68,7 @@
       "others": "Close Others",
       "saved": "Close Saved"
     },
+    "imageAlt": "{{name}}",
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
     "encoding": "UTF-8",
@@ -162,6 +163,7 @@
     "ini": "INI and properties",
     "python": "Python",
     "shell": "Shell",
+    "image": "Images",
     "powershell": "PowerShell",
     "batch": "Batch",
     "sql": "SQL",
@@ -291,6 +293,7 @@
       "group": {
         "documents": "Documents",
         "data": "Markup and data",
+        "images": "Images",
         "languages": "Programming languages",
         "utility": "Utility"
       }

@@ -41,6 +41,13 @@ export type WriteResult =
 /// "cancelled" is an ordinary answer rather than a failure, and "outside-workspace" is its own
 /// reason: the folder the user picked is a real folder they can write to, and the app is the thing
 /// declining, so it has to say which of the two it means.
+/// An image, as a data URL the window can draw. Its own result because its own channel: `readFile`
+/// decodes text and refuses anything binary, which is right for a document and wrong for a picture.
+export type ImageResult =
+  | { ok: true; dataUrl: string }
+  | { ok: false; reason: "too-large"; sizeBytes: number; limitBytes: number }
+  | Failure;
+
 export type SaveAsResult = { ok: true; path: string; revision: Revision } | Failure;
 
 export interface WorkspaceClient {
@@ -57,6 +64,8 @@ export interface WorkspaceClient {
   reopenWorkspace(root: string): Promise<OpenResult>;
   listDirectory(path: string): Promise<ListResult>;
   readFile(path: string): Promise<ReadResult>;
+  /// Reads an image, which does not go through `readFile` - see `ImageResult`.
+  readImage(path: string): Promise<ImageResult>;
   writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
   /// Asks the shell for a save dialog and writes the document wherever it landed.
   ///
@@ -182,6 +191,7 @@ export const browserClient: WorkspaceClient = {
   reopenWorkspace: async () => unavailable(),
   listDirectory: async () => unavailable(),
   readFile: async () => unavailable(),
+  readImage: async () => unavailable(),
   writeFile: async () => unavailable(),
   saveFileAs: async () => unavailable(),
 };

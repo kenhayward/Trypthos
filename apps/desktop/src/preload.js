@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   openWorkspace: () => ipcRenderer.invoke("workspace:open"),
   listDirectory: (path) => ipcRenderer.invoke("workspace:list", { path }),
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
+  /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
+  /// refuses anything binary - see the handler.
+  readImage: (path) => ipcRenderer.invoke("file:readImage", { path }),
   writeFile: (path, content, expectedRevision) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision }),
 

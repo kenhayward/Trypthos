@@ -36,6 +36,9 @@ interface Props {
   /// It takes the toolbar away as well as the caret: a row of buttons that write into a document
   /// nothing can be written to is a row of buttons that do nothing.
   readOnly?: boolean;
+  /// A data URL when the document is looked at rather than read - an image. Null otherwise, which
+  /// is nearly always, and which is what makes every branch below read as "unless it is a picture".
+  media?: string | null;
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
@@ -87,6 +90,7 @@ export default function EditorPanel({
   dirty,
   value,
   readOnly = false,
+  media = null,
   onChange,
   onActivateFile,
   onCloseFile,
@@ -125,7 +129,10 @@ export default function EditorPanel({
 
   // The configured default applies only where the type has it. Live is the default and a JSON file
   // has no Live, so honouring it blindly would open the centre panel on a view that cannot be drawn.
-  const preferred = fileType.modes.includes(defaultMode) ? defaultMode : fileType.modes[0]!;
+  // An image has no modes at all, so there is nothing to prefer. Every use of `mode` below is inside
+  // a branch that a media document does not take, and this keeps the fallback honest rather than
+  // asserting an element that is not there.
+  const preferred = fileType.modes.includes(defaultMode) ? defaultMode : (fileType.modes[0] ?? "source");
   const mode = chosen[key] ?? preferred;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
   const [caret, setCaret] = useState({ line: 1, column: 1 });
@@ -177,17 +184,32 @@ export default function EditorPanel({
           dirtyPaths={dirtyPaths}
           onActivate={(path) => onActivateFile?.(path)}
         />
-        <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
+        {/* Nothing to switch between for an image, and a header offering three views of a
+            photograph would be three buttons that do nothing. */}
+        {media === null && (
+          <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
+        )}
       </div>
 
       {/* Source only. Live hides the markers a press writes, so the same button in that view would
           insert punctuation that disappears as it lands, and Preview has nothing to write into. */}
-      {mode === "source" && !readOnly && fileType.id === "markdown" && (
+      {media === null && mode === "source" && !readOnly && fileType.id === "markdown" && (
         <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
       )}
 
       <div className="min-h-0 grow">
-        {isEditable(mode) ? (
+        {media !== null ? (
+          // A picture, drawn rather than edited. It scrolls within the panel at its own size rather
+          // than being scaled to fit, because a screenshot shrunk to a panel is a screenshot you
+          // cannot read - and there is no zoom yet to get it back.
+          <div className="h-full overflow-auto bg-sunken p-4">
+            <img
+              src={media}
+              alt={t("editor.imageAlt", { name: activePath ?? "" })}
+              className="mx-auto max-w-full"
+            />
+          </div>
+        ) : isEditable(mode) ? (
           <DocumentEditor
             documentId={activePath}
             value={value}
@@ -207,12 +229,16 @@ export default function EditorPanel({
         )}
       </div>
 
-      <EditorStatusBar
-        mode={mode}
-        fileTypeKey={fileType.labelKey}
-        lineEnding={lineEnding}
-        stats={stats}
-      />
+      {/* A word count and a caret position are questions about text. For a picture the status bar
+          would be four fields, three of which are lies about a file with no lines in it. */}
+      {media === null && (
+        <EditorStatusBar
+          mode={mode}
+          fileTypeKey={fileType.labelKey}
+          lineEnding={lineEnding}
+          stats={stats}
+        />
+      )}
     </main>
   );
 }
