@@ -446,3 +446,72 @@ describe("App", () => {
     });
   });
 });
+
+/// Slash commands, from typing one to the table it produces.
+///
+/// The parsing and the tables are tested on their own; this is the wiring, and the one thing that
+/// matters most about it: a command must not reach a provider.
+describe("slash commands", () => {
+  function shellWithChat(): { sent: unknown[] } {
+    const sent: unknown[] = [];
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] } },
+      }),
+      writeSettings: async () => {},
+      sendChat: async (...args: unknown[]) => {
+        sent.push(args);
+        return { ok: true as const, streamId: "s1" };
+      },
+      cancelChat: async () => {},
+      onChatEvent: () => () => {},
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+    return { sent };
+  }
+
+  async function ask(question: string) {
+    const user = userEvent.setup();
+    const box = await screen.findByRole("textbox", { name: "Message" });
+    await user.type(box, question);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+  }
+
+  it("answers /tools without asking a model", async () => {
+    const { sent } = shellWithChat();
+    render(<App />);
+
+    await ask("/tools");
+
+    expect(await screen.findByText(/Model tools/)).toBeDefined();
+    expect(screen.getByText(/get_file_contents/)).toBeDefined();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("answers /help with the list of commands", async () => {
+    shellWithChat();
+    render(<App />);
+
+    await ask("/help");
+
+    expect(await screen.findByText(/Commands/)).toBeDefined();
+    expect(screen.getByText(/tools/)).toBeDefined();
+  });
+
+  // The guard that keeps this from swallowing somebody's question. A leading slash is an ordinary
+  // way to start a sentence.
+  it("sends a question that merely begins with a slash", async () => {
+    const { sent } = shellWithChat();
+    render(<App />);
+
+    await ask("/usr/local/bin - what lives there?");
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+  });
+});

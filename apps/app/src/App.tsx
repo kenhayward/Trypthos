@@ -9,6 +9,7 @@ import {
   effectiveSystemPrompt,
   fileTypeFor,
   noteRecentFile,
+  parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
   type ProposedEdit,
@@ -30,6 +31,7 @@ import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { builtInTitleKey } from "./lib/builtInDocuments";
+import { answerFor } from "./lib/commandAnswers";
 import { openExternal } from "./lib/externalLinks";
 import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
 
@@ -526,7 +528,15 @@ export default function App() {
                 error={chat.error}
                 activity={chat.activity}
                 context={{ tokens: carried, limit: activeModel?.contextWindow ?? null }}
-              onSend={(text) => void chat.send(text)}
+                onSend={(text) => {
+                  // A slash command is answered here rather than sent. The check is deliberately
+                  // strict - see `parseChatCommand` - so a question that merely begins with a slash
+                  // still reaches the model rather than being quietly swallowed.
+                  const command = parseChatCommand(text);
+                  const answer = command === null ? null : answerFor(command, t);
+                  if (answer !== null) chat.answerLocally(text.trim(), answer);
+                  else void chat.send(text);
+                }}
                 onStop={() => void chat.stop()}
                 onClear={() => {
                   // A cleared thread is a new conversation: the next save must make a new chat rather

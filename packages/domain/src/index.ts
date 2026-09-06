@@ -138,6 +138,9 @@ export {
 } from "./recentFiles";
 export type { RecentFile } from "./recentFiles";
 
+export { CHAT_COMMANDS, CHAT_TOOLS, parseChatCommand } from "./chatCommands";
+export type { ChatCommand, ChatToolSummary } from "./chatCommands";
+
 export { INLINE_ACTIONS, TOOLBAR_ACTIONS, lineSpan, toolbarEdit } from "./markdownToolbar";
 export type { TextRange, ToolbarAction, ToolbarEdit } from "./markdownToolbar";
 

@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.48.0",
+    date: "2026-09-06",
+    pr: 99,
+    headline: "Ask the chat box what it can do",
+    summary:
+      "Two commands you can type into the chat box instead of a question. /commands - or /help - lists what you can type, and /tools lists what the model can be given beyond your question, with a line about which of them it actually gets. Both are answered by Trypthos rather than by a model: they say something about this app, which no endpoint can be expected to know and none should be paid to guess at. Neither the command nor its answer is ever sent to a provider, including in later questions, so asking what the tools are does not become part of what the model thinks it can do. A message counts as a command only when it is nothing but the command, so a question that merely begins with a slash - a path, a fraction, a date - still reaches the model as you wrote it.",
+    added: [
+      "/commands and /help list what you can type into the chat box.",
+      "/tools lists what the model can be given beyond your question.",
+    ],
+  },
+  {
     version: "0.47.0",
     date: "2026-09-06",
     pr: 98,

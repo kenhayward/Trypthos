@@ -1066,6 +1066,32 @@ checks that the format the prompt teaches is the format the parser accepts, and 
 only downstream symptoms: the model does exactly as instructed and the panel renders an inert code
 block.
 
+### Slash commands, and turns the app wrote
+
+`/commands` (and `/help`) and `/tools` are answered by the app. They say something about Trypthos,
+which no endpoint can be expected to know and none should be paid to guess at.
+
+**`parseChatCommand` matches only a message that is nothing but the command**, and that strictness is
+the whole guard rather than a nicety: a leading slash is an ordinary way to start a sentence - a path,
+a fraction, a date - so anything looser would quietly swallow a question and answer a different one.
+
+The answers are markdown tables built by `lib/commandAnswers.ts` from `CHAT_COMMANDS` and
+`CHAT_TOOLS` in the domain, with `t` passed in rather than imported - this is the edge where keys
+become wording, and a module that reached for i18next would need it booted to be tested at all. Its
+test uses the **real catalogue** and throws on a key that is not there: i18next answers a missing key
+with the key itself, so a fake `t` would have hidden exactly the failure worth catching.
+
+`CHAT_TOOLS` describes the tools **for the person reading `/tools`**, which is deliberately different
+text from the descriptions in `editTools` - those are written for the model and are part of the
+request it receives. What must not drift is which tools exist, and that is asserted against the
+definitions themselves.
+
+**Both turns are marked `local`, and `wireTurns` drops them.** A table of this app's own commands is
+not part of the conversation, and sending it with every later request would be paying to confuse the
+model about what it can do. They stay in the thread and are saved with the chat, because that is what
+the panel showed - which is why `SessionTurnSchema` gained the flag at **version 3**, for the same
+downgrade reason as version 2.
+
 ### Saved conversations
 
 Plain JSON files in the app-data directory, one per chat, pretty-printed - inspectable and greppable

@@ -193,3 +193,32 @@ describe("noteReasoning", () => {
     expect(wireTurns(turns)).toEqual([{ role: "assistant", content: "Hi" }]);
   });
 });
+
+/// A turn the app wrote rather than the model - the answer to a slash command.
+///
+/// It is in the thread because that is where the user asked, and it is saved with the chat because
+/// that is what the panel showed. What it must never do is go BACK to a provider: a table of this
+/// app's own commands is not part of the conversation, and paying for it in every later request
+/// would be paying to confuse the model about what it can do.
+describe("local turns", () => {
+  const turns: Turn[] = [
+    { role: "user", content: "What does this do?" },
+    { role: "assistant", content: "It edits markdown." },
+    { role: "user", content: "/tools", local: true },
+    { role: "assistant", content: "| Tool | What it does |", local: true },
+    { role: "user", content: "And now?" },
+  ];
+
+  it("keeps them out of what is sent to the provider", () => {
+    expect(wireTurns(turns)).toEqual([
+      { role: "user", content: "What does this do?" },
+      { role: "assistant", content: "It edits markdown." },
+      { role: "user", content: "And now?" },
+    ]);
+  });
+
+  it("sends an ordinary conversation unchanged", () => {
+    const ordinary: Turn[] = [{ role: "user", content: "Hello" }];
+    expect(wireTurns(ordinary)).toEqual([{ role: "user", content: "Hello" }]);
+  });
+});
