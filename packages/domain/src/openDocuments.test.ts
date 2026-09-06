@@ -362,3 +362,41 @@ describe("tabsToClose", () => {
     expect(tabsToClose("close-others", paths, [], "gone.md")).toEqual([]);
   });
 });
+
+/// A document made by File > New, which has a name and nowhere to be.
+describe("a draft", () => {
+  const draft = () =>
+    openDocument(emptyDocumentSet(), {
+      path: "trypthos:draft/1/notes.md",
+      content: "",
+      revision: rev("unsaved"),
+      draft: true,
+    });
+
+  it("opens as an editable tab like any other document", () => {
+    const set = draft();
+
+    expect(activeDocument(set)?.draft).toBe(true);
+    expect(activeDocument(set)?.readOnly).toBe(false);
+  });
+
+  // What it lacks is a place, not permission - so it goes dirty when typed into, and closing it
+  // asks about the work the way it would for any other document.
+  it("goes dirty when it is typed into", () => {
+    const set = updateContent(draft(), "trypthos:draft/1/notes.md", "# Notes");
+
+    expect(anyDirty(set)).toBe(true);
+    expect(activeDocument(set)?.content).toBe("# Notes");
+  });
+
+  it("stops being a draft once it has been saved somewhere", () => {
+    const set = renameDocument(draft(), "trypthos:draft/1/notes.md", "notes.md", rev("r1"));
+
+    expect(activeDocument(set)?.draft).toBe(false);
+    expect(openPaths(set)).toEqual(["notes.md"]);
+  });
+
+  it("is not a draft, for an ordinary document", () => {
+    expect(activeDocument(withFiles("a.md"))?.draft).toBe(false);
+  });
+});

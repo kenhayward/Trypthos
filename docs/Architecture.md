@@ -1418,6 +1418,27 @@ background tab has to write that tab rather than the one on screen. And **openin
 every tab**: the paths are workspace-relative, so carrying them across would leave them pointing at
 files that are not in the new folder.
 
+**A document made by File > New is a DRAFT**: a real tab with a name and no place. `draft` is a flag
+on `OpenDocument`, distinct from `readOnly` - what a draft lacks is a place, not permission, so it is
+editable, goes dirty when typed into, and asks about its work when closed like anything else.
+
+Its `path` is an identity rather than a location (`trypthos:draft/<n>/<name>`, the same trick the
+built-in guide uses so nothing on disk can collide with it). The serial is what tells two drafts
+apart, since nothing stops somebody making a second "notes.md".
+
+**`save` routes a draft to `saveAs`**, so Ctrl+S, the menu and closing a tab all reach the same
+question rather than three call sites deciding separately. That is why `saveAs` is declared *above*
+`save` in the file: a reference the other way round would be a use-before-declaration in `save`'s
+dependency array. And `saveAs` sends a draft's **name** rather than its path, because the path is not
+a place - a dialog opened at `trypthos:draft/1/notes.md` would start nowhere useful, while the name
+opens at the workspace root with the file already called what the user called it. `renameDocument`
+clears the flag, which is the moment a draft becomes an ordinary file.
+
+**The naming dialog does not ask where the file goes.** Two dialogs asking the same question would be
+two answers that can disagree, and the one that decided first would be the one with the least
+information. It is drawn in the renderer rather than popped natively for a plainer reason: a native
+dialog cannot offer a dropdown of file types, and that list is the useful half.
+
 **Save As splits on whether there is a file to move.** `renameDocument` moves an open document to the
 path the shell returned, keeping its place in the strip and its text, taking the new revision and
 going clean - and dropping any OTHER tab that was showing the file just written over, because two

@@ -44,6 +44,16 @@ test("File carries the open and save operations", () => {
 // Save As is on the File menu of both platforms, and nowhere else. The scratch buffer and the
 // built-in guide both have text and no file, so this is also the only way either of them reaches
 // disk at all.
+test("File offers New, on both platforms", () => {
+  const windows = popupTemplate("file", { platform: "win32", on: handlers() });
+  assert.ok(find(windows, "New..."));
+  assert.equal(find(windows, "New...").accelerator, "CmdOrCtrl+N");
+
+  const mac = appMenuTemplate({ appName: "Trypthos", on: handlers() });
+  const file = mac.find((item) => item.label === "File");
+  assert.ok(find(file.submenu, "New..."));
+});
+
 test("File offers Save As, on both platforms", () => {
   const windows = popupTemplate("file", { platform: "win32", on: handlers() });
   assert.ok(find(windows, "Save As..."));
@@ -162,6 +172,7 @@ test("choosing an item tells the renderer what was chosen", () => {
   const chosen = [];
   const on = { ...handlers(), action: (name) => chosen.push(name) };
 
+  find(popupTemplate("file", { platform: "win32", on }), "New...").click();
   find(popupTemplate("file", { platform: "win32", on }), "Open Folder...").click();
   find(popupTemplate("file", { platform: "win32", on }), "Save").click();
   find(popupTemplate("file", { platform: "win32", on }), "Save As...").click();
@@ -170,6 +181,7 @@ test("choosing an item tells the renderer what was chosen", () => {
   find(popupTemplate("help", { platform: "win32", on }), "Markdown Syntax Guide").click();
 
   assert.deepEqual(chosen, [
+    "new-file",
     "open-folder",
     "save",
     "save-as",

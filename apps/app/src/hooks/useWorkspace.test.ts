@@ -1488,3 +1488,83 @@ describe("closing several documents", () => {
     expect(result.current.state.documents).toHaveLength(3);
   });
 });
+
+/// File > New: a document with a name and nowhere to be.
+describe("a new document", () => {
+  it("opens as a tab named what the user called it", () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.newDocument("notes.md"));
+
+    expect(result.current.state.file?.name).toBe("notes.md");
+    expect(result.current.state.content).toBe("");
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.readOnly).toBe(false);
+  });
+
+  it("tells two new documents of the same name apart", () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.newDocument("notes.md"));
+    act(() => result.current.actions.newDocument("notes.md"));
+
+    expect(result.current.state.documents).toHaveLength(2);
+  });
+
+  // The whole point of the draft. Ctrl+S on a document that has never been anywhere cannot write to
+  // a path it does not have, so it asks where to put it - and the tab follows the file it lands in.
+  it("asks where to put it the first time it is saved", async () => {
+    const { client, saveAsCalls, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.newDocument("notes.md"));
+    act(() => result.current.actions.edit("# Notes"));
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(saveAsCalls).toEqual([{ path: "notes.md", content: "# Notes" }]);
+    expect(writes).toEqual([]);
+    expect(result.current.state.file?.path).toBe("chosen.md");
+    expect(result.current.state.dirty).toBe(false);
+  });
+
+  // Once it has landed it is an ordinary file, and Ctrl+S writes to it without asking again.
+  it("saves straight to its file every time after that", async () => {
+    const { client, saveAsCalls, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.newDocument("notes.md"));
+    await act(async () => {
+      await result.current.actions.save();
+    });
+    act(() => result.current.actions.edit("# More"));
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(saveAsCalls).toHaveLength(1);
+    expect(writes).toEqual([{ path: "chosen.md", content: "# More", revision: "r-saved-as" }]);
+  });
+
+  // The dialog is where the folder is chosen, so cancelling it leaves the document exactly where it
+  // was: still a draft, still unsaved, still holding the work.
+  it("stays a draft when the save dialog is cancelled", async () => {
+    const { client } = fakeClient({
+      saveFileAs: async () => ({ ok: false as const, reason: "cancelled" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.newDocument("notes.md"));
+    act(() => result.current.actions.edit("# Notes"));
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(result.current.state.file?.name).toBe("notes.md");
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.content).toBe("# Notes");
+  });
+});

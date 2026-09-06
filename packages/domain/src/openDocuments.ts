@@ -23,6 +23,11 @@ export interface OpenDocument {
   readonly content: string;
   /// True when `content` differs from what was last read or written.
   readonly dirty: boolean;
+  /// True for a document that has never been saved - one made by File > New.
+  ///
+  /// Editable and saveable, unlike `readOnly`: what it lacks is a PLACE, not permission. Saving one
+  /// asks where it should go, and it stops being a draft the moment it lands there.
+  readonly draft: boolean;
   /// True for a document with no file behind it - the built-in markdown guide.
   ///
   /// One flag for the whole of what that means: it is never written anywhere, and so it must never
@@ -44,6 +49,8 @@ export interface DocumentSource {
   readonly revision: Revision;
   /// Opens a document that is not a file. Defaults to false, so every ordinary read is unchanged.
   readonly readOnly?: boolean;
+  /// Opens a document that has never been saved. Defaults to false, as above.
+  readonly draft?: boolean;
 }
 
 /// The path of the built-in markdown guide.
@@ -100,6 +107,7 @@ export function openDocument(set: DocumentSet, source: DocumentSource): Document
     content: source.content,
     dirty: false,
     readOnly: source.readOnly ?? false,
+    draft: source.draft ?? false,
   };
   // Appended, never inserted beside the active tab. One rule the user can predict: new files arrive
   // at the end, and the order is the order they were opened in.
@@ -155,6 +163,9 @@ export function renameDocument(
     name: documentName(to),
     revision,
     dirty: false,
+    // It has a place now, so it is not a draft any more. This is the moment File > New's document
+    // becomes an ordinary file, and Ctrl+S stops asking where to put it.
+    draft: false,
   };
 
   // Saving over a file that is also open leaves two tabs naming one file, each with its own idea of

@@ -138,6 +138,9 @@ export {
 } from "./recentFiles";
 export type { RecentFile } from "./recentFiles";
 
+export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes } from "./newFile";
+export type { NewFileType } from "./newFile";
+
 export { CHAT_COMMANDS, CHAT_TOOLS, parseChatCommand } from "./chatCommands";
 export type { ChatCommand, ChatToolSummary } from "./chatCommands";
 

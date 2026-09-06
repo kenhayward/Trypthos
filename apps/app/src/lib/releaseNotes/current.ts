@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.50.0",
+    date: "2026-09-06",
+    pr: 102,
+    headline: "Start a file from the File menu",
+    summary:
+      "File > New, or Ctrl+N, asks for a name and a type and opens a tab for it. The type is a dropdown of everything you have turned on, so making a .py does not mean knowing that Trypthos calls that Python - and if you type an extension yourself, that is the one that is used. It does NOT ask where the file goes: that question is asked by the save dialog the first time you save, when you know more about where you want it. Until then it is a real tab you can type into, and closing it asks about the work in it like any other. Save it and the tab follows the file to wherever you put it, and from then on Ctrl+S writes straight to it.",
+    added: [
+      "File > New (Ctrl+N): name a file, pick its type, and start writing before deciding where it goes.",
+    ],
+  },
+  {
     version: "0.49.0",
     date: "2026-09-06",
     pr: 101,
