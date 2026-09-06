@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.51.0",
+    date: "2026-09-06",
+    pr: 103,
+    headline: "Look at the pictures in your folder",
+    summary:
+      "Images are a file type now - PNG, JPEG, GIF, WebP, BMP, AVIF and ICO - so they are listed in the browser rather than greyed out, and clicking one opens it in a tab. It is a picture, not a document: there are no view buttons, no word count and no editing surface, and it is never written back. It is shown at its own size and scrolls within the panel rather than being shrunk to fit, because a screenshot scaled down to a side panel is a screenshot you cannot read. SVG is deliberately left where it was, with XML, because it is a picture and a text file both and being able to edit it is the more useful of the two answers. Two things worth knowing. An image is not sent to a chat model - asking about a folder still lists it, but the picture itself stays on your machine. And like every file type added after you installed, Images starts switched off in an existing installation: turn it on in Settings, File types.",
+    added: [
+      "Image files open in a tab: PNG, JPEG, GIF, WebP, BMP, AVIF and ICO.",
+    ],
+  },
+  {
     version: "0.50.0",
     date: "2026-09-06",
     pr: 102,

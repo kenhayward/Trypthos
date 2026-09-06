@@ -24,6 +24,7 @@ describe("IPC_CHANNELS", () => {
       "file:read",
       "file:write",
       "file:saveAs",
+      "file:readImage",
       "window:minimize",
       "window:toggleMaximize",
       "window:close",

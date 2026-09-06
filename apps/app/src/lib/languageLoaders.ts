@@ -58,6 +58,10 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
       m.markdown({ codeLanguages: fenceLanguages(fileTypes) }),
     ),
   text: null,
+  // Not a grammar's absence but a document's: an image never reaches CodeMirror at all, so there is
+  // nothing here for it to load. `text` above is null for the other reason - plain text needs no
+  // highlighting, and CodeMirror's default is already exactly that.
+  image: null,
   json: () => import("@codemirror/lang-json").then((m) => m.json()),
   yaml: () => import("@codemirror/lang-yaml").then((m) => m.yaml()),
   xml: () => import("@codemirror/lang-xml").then((m) => m.xml()),

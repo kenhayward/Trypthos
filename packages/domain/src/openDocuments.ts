@@ -28,6 +28,12 @@ export interface OpenDocument {
   /// Editable and saveable, unlike `readOnly`: what it lacks is a PLACE, not permission. Saving one
   /// asks where it should go, and it stops being a draft the moment it lands there.
   readonly draft: boolean;
+  /// A data URL for a document that is looked at rather than read - an image.
+  ///
+  /// Separate from `content`, and `content` stays empty, which is the point: `content` is what the
+  /// chat panel sends and what the editor holds, and twenty megabytes of base64 in either would be
+  /// a disaster in a different direction each time.
+  readonly media: string | null;
   /// True for a document with no file behind it - the built-in markdown guide.
   ///
   /// One flag for the whole of what that means: it is never written anywhere, and so it must never
@@ -51,6 +57,8 @@ export interface DocumentSource {
   readonly readOnly?: boolean;
   /// Opens a document that has never been saved. Defaults to false, as above.
   readonly draft?: boolean;
+  /// Opens a document that is looked at rather than read. Defaults to null - not an image.
+  readonly media?: string | null;
 }
 
 /// The path of the built-in markdown guide.
@@ -108,6 +116,7 @@ export function openDocument(set: DocumentSet, source: DocumentSource): Document
     dirty: false,
     readOnly: source.readOnly ?? false,
     draft: source.draft ?? false,
+    media: source.media ?? null,
   };
   // Appended, never inserted beside the active tab. One rule the user can predict: new files arrive
   // at the end, and the order is the order they were opened in.

@@ -17,8 +17,11 @@ const {
   SetIntegrationRequest,
   SetSecretRequest,
   createPathGuard,
+  imageMediaType,
   ListRequest,
   OutlineRequest,
+  MAX_IMAGE_FILE_BYTES,
+  ReadImageRequest,
   ReadRequest,
   SaveAsRequest,
   WriteRequest,
@@ -476,6 +479,28 @@ function registerIpcHandlers({
         overwrite: true,
       });
       return written.ok ? { ok: true, path: relative, revision: written.revision } : written;
+    }),
+  );
+
+  /// An image, as a data URL the window can draw.
+  ///
+  /// Its own channel rather than a flag on `file:read`, because the two do opposite things with the
+  /// same bytes: one decodes them as text and refuses anything binary, and this one does not look at
+  /// them at all. Neither can then be answered by the wrong half of the shell.
+  ///
+  /// **The media type is decided HERE, from the file's name.** A data URL's type is an instruction
+  /// to the browser about how to read what follows, so it is not something to accept from the
+  /// renderer - and a name that is not an image this app draws is refused rather than guessed at.
+  ipcMain.handle(
+    "file:readImage",
+    guarded(getWorkspace, ReadImageRequest, async (request, workspace) => {
+      const mediaType = imageMediaType(request.path);
+      if (mediaType === null) return { ok: false, reason: "not-an-image" };
+
+      const read = await workspace.provider.readBytes(request.path, MAX_IMAGE_FILE_BYTES);
+      if (!read.ok) return read;
+
+      return { ok: true, dataUrl: `data:${mediaType};base64,${read.bytes.toString("base64")}` };
     }),
   );
 

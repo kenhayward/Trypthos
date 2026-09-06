@@ -170,9 +170,12 @@ describe("the catalogue", () => {
     expect(unmatchable).toEqual([]);
   });
 
-  // A type with no modes is a file that opens into a panel with no view to draw it in.
-  it("gives every type at least one view, and only markdown all three", () => {
-    expect(FILE_TYPES.filter((type) => type.modes.length === 0)).toEqual([]);
+  // A type with no modes is a file that opens into a panel with no view to draw it in - unless it is
+  // not drawn by the editor at all. An image has nothing to switch between: Live and Preview are
+  // markdown constructs and Source is text, and a photograph is none of the three.
+  it("gives every type at least one view, unless it is not text", () => {
+    const viewless = FILE_TYPES.filter((type) => type.modes.length === 0);
+    expect(viewless.every((type) => type.kind === "image")).toBe(true);
     expect(FILE_TYPES.filter((type) => type.modes.length === 3).map((type) => type.id)).toEqual([
       "markdown",
     ]);

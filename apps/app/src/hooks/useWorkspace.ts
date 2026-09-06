@@ -11,6 +11,7 @@ import {
   dirtyPaths as dirtyDocumentPaths,
   emptyDocumentSet,
   formatBytes,
+  isImageName,
   isOpen,
   markSaved,
   draftPath,
@@ -71,6 +72,9 @@ export interface WorkspaceState {
   dirty: boolean;
   /// True when the document on screen has no file behind it, and so cannot be edited or saved.
   readOnly: boolean;
+  /// A data URL when the document on screen is looked at rather than read - an image. Null
+  /// otherwise, which is nearly always.
+  media: string | null;
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
   errorKey: string | null;
@@ -473,6 +477,34 @@ export function useWorkspace(
       }
 
       setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+
+      // An image goes down a different channel, because `readFile` decodes and would refuse it -
+      // which is right for a document and wrong for a picture. Decided from the NAME rather than
+      // from the settings: whether the type is turned on is already answered by the tree that
+      // offered the file and by `linkAction` for a link, and this only needs to know which of two
+      // reads to make.
+      if (isImageName(path)) {
+        const image = await client.readImage(path);
+        if (!image.ok) return fail(image);
+
+        setInternal((prev) => ({
+          ...prev,
+          documents: openDocument(prev.documents, {
+            path,
+            // Nothing in it, deliberately: `content` is what chat sends and what the editor holds.
+            content: "",
+            revision: { id: "image" },
+            readOnly: true,
+            media: image.dataUrl,
+          }),
+          busy: false,
+        }));
+
+        const imageRoot = stateRef.current.workspace?.root;
+        if (imageRoot !== undefined) reportOpened?.({ root: imageRoot, path });
+        return;
+      }
+
       const result = await client.readFile(path);
       // A link can point at a file that has been renamed, moved or deleted since it was written, and
       // that is ordinary rather than exceptional - it reports through the same banner as any other
@@ -595,6 +627,7 @@ export function useWorkspace(
       content: active?.content ?? internal.scratch,
       dirty: active?.dirty ?? false,
       readOnly: active?.readOnly ?? false,
+      media: active?.media ?? null,
       busy: internal.busy,
       errorKey: internal.errorKey,
       errorParams: internal.errorParams,

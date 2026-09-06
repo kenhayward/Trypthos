@@ -11,6 +11,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | --- | --- |
 | Workspace browser | Open a local folder and browse it. OneDrive, Google Drive, Dropbox and GitHub follow. |
 | File types | Choose which kinds of file Trypthos takes an interest in - markdown, plain text and thirty-odd data formats and languages, grouped, and all on to begin with. Shell, PowerShell and batch scripts are covered, down to the shell configuration files that have no extension. Turn a type off and its files grey out: still listed, not opened, not offered to chat. |
+| Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab and are shown at their own size. A picture, not a document: nothing to edit, nothing written back, and never sent to a chat model. |
 | Syntax colouring | Every type is coloured by role - keywords, strings, comments, numbers, types and names - from the same palette as the rest of the app, in light and dark. Fenced code blocks inside a markdown document are coloured by the language on the fence, in all three views and in chat replies. Grammars load only when a file needs one. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. A mode is a view, never a transform. |
 | Formatting toolbar | Source view has a button for every markdown construct Trypthos renders. Headings toggle on the line you are on; bold, italic and the rest wrap what you have selected, and press again to remove. |

@@ -65,6 +65,7 @@ you want a narrower list:
 | --- | --- |
 | Documents | Markdown (always on), Plain text |
 | Markup and data | JSON, YAML, TOML, INI and properties, XML and SVG, HTML, CSS and preprocessors |
+| Images | PNG, JPEG, GIF, WebP, BMP, AVIF, ICO |
 | Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, Batch, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
 | Utility | Diff and patch, Dockerfile, Makefile, LaTeX, R, Lua, Perl, Swift, Scala, Dart |
 
@@ -80,6 +81,18 @@ cover both. Trypthos works out which from the file's name.
 Trypthos writes itself: no batch grammar exists to use, so there is one in the app - comments in both
 spellings, labels, `%VAR%` and `!VAR!` expansion, the control-flow words and the commands `cmd.exe`
 carries.
+
+**An image is the one type Trypthos does not edit.** Click a picture and it opens in a tab, drawn at
+its own size and scrolling within the panel rather than shrunk to fit - a screenshot scaled down to a
+side panel is a screenshot you cannot read. There are no view buttons, no word count and no editing
+surface, because all three are questions about text, and nothing is ever written back.
+
+**SVG is deliberately not an image here.** It is a picture and a text file both, and the catalogue
+cannot let two rows claim one extension - so it stays with XML, where you can edit it, which is the
+more useful of the two answers.
+
+**An image is not sent to a chat model.** Asking about a folder still lists it by name, and the
+picture itself stays on your machine.
 
 **Dockerfile and Makefile are matched by name**, not by extension, because neither has one. Makefile
 is the only type Trypthos does not colour: no grammar for it exists. It has a row anyway, because
