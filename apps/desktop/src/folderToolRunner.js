@@ -1,17 +1,22 @@
 "use strict";
 
 const {
+  CREATE_CHARACTER_LIMIT,
+  CREATE_TOOL_NAME,
   DIFF_LINE_LIMIT,
   DIFF_TOOL_NAME,
   LIST_ENTRY_LIMIT,
   LIST_TOOL_NAME,
+  OPEN_TOOL_NAME,
   SEARCH_LINE_LIMIT,
   SEARCH_MATCH_LIMIT,
   SEARCH_TOOL_NAME,
+  createArguments,
   diffArguments,
   diffLines,
   isOpenable,
   listArguments,
+  openArguments,
   searchArguments,
   searchExpression,
   withinFolder,
@@ -180,16 +185,94 @@ async function diff(provider, folder, argumentsJson) {
   return refuse(`--- ${args.left}\n+++ ${args.right}\n${result.text}${cut}`);
 }
 
+/// Whether a file exists, asked without reading it.
+///
+/// The parent's listing rather than a read: a read would pull a whole file off disk to answer a
+/// question about its name, and would fail for an image, which is not a reason to say a file is not
+/// there.
+async function exists(provider, target) {
+  const cut = target.lastIndexOf("/");
+  const parent = cut === -1 ? "" : target.slice(0, cut);
+  const result = await provider.list(parent);
+  return result.ok && result.nodes.some((node) => node.id === target && node.kind === "file");
+}
+
+/// Puts a file the model found on the user's screen.
+///
+/// It shows a file; it reaches nothing the model could not already read. The fences are the same
+/// two, and the file type check is the third thing that matters: opening a type the user has turned
+/// off would put a tab on screen for a file their own browser will not show them.
+async function open(provider, folder, fileTypes, openInTab, argumentsJson) {
+  if (openInTab === null) return refuse("Files cannot be opened from here.");
+
+  const args = openArguments(argumentsJson);
+  if (args === null) return refuse("That call could not be read. Send the path as a string.");
+  if (!withinFolder(folder, args.path)) {
+    return refuse(`${args.path} is outside the folder attached to this conversation.`);
+  }
+  if (!isOpenable(args.path, fileTypes)) {
+    return refuse(`${args.path} is not a kind of file Trypthos opens.`);
+  }
+  if (!(await exists(provider, args.path))) return refuse(`${args.path} is not there.`);
+
+  openInTab(args.path);
+  return refuse(`${args.path} is open in a tab.`);
+}
+
+/// Creates a file, and cannot replace one.
+///
+/// **This is the only thing a model does to a user's disk without them pressing Apply**, and it is
+/// bounded four ways: inside the attached folder, a file type they have turned on, a size limit,
+/// and - the one that matters - it can only CREATE.
+///
+/// That last one is enforced by the write itself rather than by a check before it. Presenting no
+/// revision is how this app says "there should be nothing here", and the provider answers a conflict
+/// when there is. A check-then-write would be a race; this cannot be.
+async function create(provider, folder, fileTypes, openInTab, argumentsJson) {
+  const args = createArguments(argumentsJson);
+  if (args === null) {
+    return refuse("That call could not be read. Send a path and the file's contents as strings.");
+  }
+  if (!withinFolder(folder, args.path)) {
+    return refuse(`${args.path} is outside the folder attached to this conversation.`);
+  }
+  if (!isOpenable(args.path, fileTypes)) {
+    return refuse(`${args.path} is not a kind of file Trypthos makes.`);
+  }
+  if (args.content.length > CREATE_CHARACTER_LIMIT) {
+    return refuse(`That is longer than the ${CREATE_CHARACTER_LIMIT} characters a new file may be.`);
+  }
+
+  const written = await provider.write(args.path, args.content, null);
+  if (!written.ok) {
+    // A conflict here means the file is already there, which is the one thing this tool will not do.
+    return refuse(
+      written.reason === "conflict"
+        ? `${args.path} already exists. Propose an edit to change a file that is there.`
+        : `${args.path} could not be created.`,
+    );
+  }
+
+  if (args.open && openInTab !== null) openInTab(args.path);
+  return refuse(`${args.path} has been created.`);
+}
+
 /// The tools, bound to one conversation's folder.
 ///
 /// Returns null for a name it does not carry out, which is how the caller tells "this is not one of
 /// mine" from "this failed" - the read tool is answered elsewhere, and an unknown name from a model
 /// is a thing to report rather than to guess at.
-function createFolderToolRunner({ provider, folder, fileTypes }) {
+function createFolderToolRunner({ provider, folder, fileTypes, openInTab = null }) {
   return async (name, argumentsJson) => {
     if (name === LIST_TOOL_NAME) return await list(provider, folder, argumentsJson);
     if (name === SEARCH_TOOL_NAME) return await search(provider, folder, fileTypes, argumentsJson);
     if (name === DIFF_TOOL_NAME) return await diff(provider, folder, argumentsJson);
+    if (name === OPEN_TOOL_NAME) {
+      return await open(provider, folder, fileTypes, openInTab, argumentsJson);
+    }
+    if (name === CREATE_TOOL_NAME) {
+      return await create(provider, folder, fileTypes, openInTab, argumentsJson);
+    }
     return null;
   };
 }

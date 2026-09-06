@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  CREATE_TOOL_NAME,
   DIFF_TOOL_NAME,
   LIST_TOOL_NAME,
+  OPEN_TOOL_NAME,
   SEARCH_TOOL_NAME,
+  actingTools,
+  createArguments,
   diffArguments,
   folderTools,
   listArguments,
+  openArguments,
   searchArguments,
   searchExpression,
   withinFolder,
@@ -144,5 +149,55 @@ describe("searchExpression", () => {
     const expression = searchExpression("a")!;
     expect(expression.test("a")).toBe(true);
     expect(expression.test("a")).toBe(true);
+  });
+});
+
+/// The two tools that DO something rather than answer something.
+describe("actingTools", () => {
+  it("offers opening and creating", () => {
+    expect(actingTools().map((tool) => tool.function.name)).toEqual([
+      OPEN_TOOL_NAME,
+      CREATE_TOOL_NAME,
+    ]);
+  });
+
+  // The description is part of the request. A model that does not know it cannot replace a file will
+  // try, and spend a turn finding out.
+  it("tells the model that creating cannot replace a file", () => {
+    const create = actingTools().find((tool) => tool.function.name === CREATE_TOOL_NAME);
+    expect(create?.function.description).toMatch(/cannot replace/i);
+  });
+});
+
+describe("reading the acting arguments", () => {
+  it("reads a file to open", () => {
+    expect(openArguments('{"path":"docs/plan.md"}')).toEqual({ path: "docs/plan.md" });
+    expect(openArguments('{"path":"  "}')).toBeNull();
+    expect(openArguments("{}")).toBeNull();
+  });
+
+  it("reads a file to create", () => {
+    expect(createArguments('{"path":"a.md","content":"hi"}')).toEqual({
+      path: "a.md",
+      content: "hi",
+      open: true,
+    });
+  });
+
+  // A file made on a model's say-so that the user never sees is the version of this nobody wants.
+  it("opens what it made unless told not to", () => {
+    expect(createArguments('{"path":"a.md","content":"hi","open":false}')?.open).toBe(false);
+  });
+
+  // Empty is a legitimate thing to create. No path is not.
+  it("takes an empty file, and refuses a nameless one", () => {
+    expect(createArguments('{"path":"a.md","content":""}')?.content).toBe("");
+    expect(createArguments('{"path":"","content":"hi"}')).toBeNull();
+    expect(createArguments('{"content":"hi"}')).toBeNull();
+  });
+
+  it("has no answer for a call that never finished", () => {
+    expect(openArguments('{"path":"do')).toBeNull();
+    expect(createArguments("not json")).toBeNull();
   });
 });

@@ -526,7 +526,9 @@ Attaching a folder gives the model more than a list of names. It can:
 | `list_directory` | List what is in a directory of that folder, or one below it. |
 | `search_contents` | Search the text of those files for a word or a pattern, and say which file and line each match is on. |
 | `diff_files` | Compare two of those files line by line. |
+| `open_file` | Open one of those files in a tab, so you can see it. |
 | `propose_edit` | Suggest a change to your open document, as a card you can apply or ignore. |
+| `create_file` | Make a **new** file in that folder. It cannot replace one that already exists. |
 
 `/tools` in the chat box shows the same list.
 
@@ -538,7 +540,18 @@ workspace guard that stops any path leaving your open folder still applies under
 folder is the moment you decide this, which is why the tools are not offered until you do.
 
 Only the file types you have turned on are searched, so a search never mentions a file the browser
-would not show you. **None of these three writes anything.**
+would not show you.
+
+**One of these writes to your disk, and it is worth being clear about which.** Everything a model
+suggests about a file you already have arrives as a card you press Apply on - that has not changed.
+`create_file` is the exception: it makes a **new** file without asking. It is bounded four ways -
+inside the folder you attached, a file type you have turned on, a size a person can read through,
+and it can only ever create. **It cannot replace a file that already exists**, and that is enforced
+by the write itself rather than by a check that could be raced: the write says "there should be
+nothing here", and the app refuses when there is.
+
+A file it makes is opened in a tab unless the model says otherwise, so you see what was made rather
+than finding it later.
 
 Every answer is capped - so many entries in a listing, so many matching lines, so many lines of
 difference - and a capped answer **says so**. A model told it has everything when it has the first

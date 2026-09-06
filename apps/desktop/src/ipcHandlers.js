@@ -106,6 +106,9 @@ function registerIpcHandlers({
   ipcMain,
   dialog,
   getWindow,
+  /// Puts a file on the user's screen. Passed in rather than reached for, because the channel and
+  /// the window belong to `main.js` - and because a test can then watch what would have opened.
+  openInWindow = () => {},
   userDataDir,
   secrets,
   chat,
@@ -301,6 +304,10 @@ function registerIpcHandlers({
               provider: workspace.provider,
               folder: parsed.data.context.folder.path,
               fileTypes: settings.fileTypes.enabled,
+              // Down the channel a launch from File Explorer already uses, so the renderer opens it
+              // the one way - asking about unsaved work, reporting a file that is not there. There
+              // is deliberately no second implementation of opening a file.
+              openInTab: (file) => openInWindow({ root: workspace.root, file }),
             });
             return await run(name, argumentsJson);
           };

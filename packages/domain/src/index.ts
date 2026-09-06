@@ -139,16 +139,22 @@ export {
 export type { RecentFile } from "./recentFiles";
 
 export {
+  CREATE_CHARACTER_LIMIT,
+  CREATE_TOOL_NAME,
   DIFF_LINE_LIMIT,
   DIFF_TOOL_NAME,
   LIST_ENTRY_LIMIT,
   LIST_TOOL_NAME,
+  OPEN_TOOL_NAME,
   SEARCH_LINE_LIMIT,
   SEARCH_MATCH_LIMIT,
   SEARCH_TOOL_NAME,
+  actingTools,
+  createArguments,
   diffArguments,
   folderTools,
   listArguments,
+  openArguments,
   searchArguments,
   searchExpression,
   withinFolder,

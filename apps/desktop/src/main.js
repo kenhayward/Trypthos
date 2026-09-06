@@ -280,6 +280,11 @@ if (!gotLock) {
       ipcMain,
       dialog,
       getWindow: () => mainWindow,
+      // A file the model asked to show the user, down the same channel a launch from Explorer uses.
+      openInWindow: (target) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send(OPEN_TARGET_CHANNEL, target);
+      },
       userDataDir: app.getPath("userData"),
       secrets,
       // The provider call lives here and only here. The renderer never opens a socket to a provider

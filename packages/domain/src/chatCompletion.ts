@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ChatProfile } from "./chat";
 import { normaliseEndpoint } from "./endpoints";
 import { editTools, readTools } from "./editTools";
-import { folderTools } from "./folderTools";
+import { actingTools, folderTools } from "./folderTools";
 
 /// Talking to an OpenAI-compatible chat endpoint.
 ///
@@ -95,6 +95,7 @@ export interface ChatRequestBody {
     | ReturnType<typeof editTools>[number]
     | ReturnType<typeof readTools>[number]
     | ReturnType<typeof folderTools>[number]
+    | ReturnType<typeof actingTools>[number]
   )[];
   tool_choice?: "auto";
   /// How hard the model should think before answering, for models that have levels of it.
@@ -120,6 +121,10 @@ export function buildChatRequest(
     /// Whether the model may look around the attached folder - list, search, compare. True only
     /// when a folder was attached, for the same reason as `canReadFiles`.
     canExploreFolder = false,
+    /// Whether the model may open a tab and create a NEW file. Its own flag rather than part of
+    /// exploring, because it is the one capability here that changes something: a switch for it, if
+    /// one is ever wanted, is then a change to what is passed rather than an unpicking.
+    canActOnFolder = false,
   } = {},
 ): ChatRequestBody {
   return {
@@ -141,6 +146,7 @@ export function buildChatRequest(
             ...editTools(),
             ...(canReadFiles ? readTools() : []),
             ...(canExploreFolder ? folderTools() : []),
+            ...(canActOnFolder ? actingTools() : []),
           ],
           tool_choice: "auto" as const,
         }

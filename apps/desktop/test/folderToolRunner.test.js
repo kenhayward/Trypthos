@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { createPathGuard } = require("@trypthos/domain");
+const { CREATE_CHARACTER_LIMIT, createPathGuard } = require("@trypthos/domain");
 const { createLocalWorkspace } = require("../src/localWorkspace");
 const { createFolderToolRunner } = require("../src/folderToolRunner");
 
@@ -196,5 +196,127 @@ test("answers rather than throwing on a call it cannot read", async () => {
       assert.equal(result.ok, true);
       assert.match(result.content, /could not be read/);
     }
+  });
+});
+
+/// The two tools that DO something rather than answer something.
+///
+/// `create_file` is the only thing a model does to a user's disk without them pressing Apply, so its
+/// bounds are the ones worth being sure of.
+async function withActing(files, body) {
+  await withFolder(files, async ({ root }) => {
+    const provider = createLocalWorkspace({
+      root,
+      guard: createPathGuard({ root, caseInsensitive: process.platform !== "linux" }),
+    });
+    const opened = [];
+
+    await body({
+      opened,
+      run: (folder, name, args) =>
+        createFolderToolRunner({
+          provider,
+          folder,
+          fileTypes: TYPES,
+          openInTab: (file) => opened.push(file),
+        })(name, JSON.stringify(args)),
+      read: (file) => fs.readFile(path.join(root, file), "utf8"),
+      root,
+    });
+  });
+}
+
+test("opens a file the user can then see", async () => {
+  await withActing(TREE, async ({ run, opened }) => {
+    const result = await run("docs", "open_file", { path: "docs/plan.md" });
+
+    assert.match(result.content, /open in a tab/);
+    assert.deepEqual(opened, ["docs/plan.md"]);
+  });
+});
+
+test("refuses to open a file outside the attached folder", async () => {
+  await withActing(TREE, async ({ run, opened }) => {
+    assert.match((await run("docs", "open_file", { path: "other/secret.md" })).content, /outside/);
+    assert.deepEqual(opened, []);
+  });
+});
+
+// A tab for a file the user's own browser will not show them is a tab about a file they cannot open.
+test("refuses to open a file type that is turned off", async () => {
+  await withActing({ "docs/a.py": "x = 1\n" }, async ({ run, opened }) => {
+    assert.match((await run("docs", "open_file", { path: "docs/a.py" })).content, /not a kind/);
+    assert.deepEqual(opened, []);
+  });
+});
+
+test("says so rather than opening a file that is not there", async () => {
+  await withActing(TREE, async ({ run, opened }) => {
+    assert.match((await run("docs", "open_file", { path: "docs/gone.md" })).content, /not there/);
+    assert.deepEqual(opened, []);
+  });
+});
+
+test("creates a new file, and opens it", async () => {
+  await withActing(TREE, async ({ run, opened, read }) => {
+    const result = await run("docs", "create_file", {
+      path: "docs/new.md",
+      content: "# New\n",
+    });
+
+    assert.match(result.content, /has been created/);
+    assert.equal(await read("docs/new.md"), "# New\n");
+    assert.deepEqual(opened, ["docs/new.md"]);
+  });
+});
+
+test("creates without opening when asked not to", async () => {
+  await withActing(TREE, async ({ run, opened }) => {
+    await run("docs", "create_file", { path: "docs/new.md", content: "x", open: false });
+    assert.deepEqual(opened, []);
+  });
+});
+
+/// The bound that matters most. Enforced by the write itself - presenting no revision is how this
+/// app says "there should be nothing here" - rather than by a check that could race it.
+test("cannot replace a file that already exists", async () => {
+  await withActing(TREE, async ({ run, read }) => {
+    const result = await run("docs", "create_file", {
+      path: "docs/plan.md",
+      content: "REPLACED",
+    });
+
+    assert.match(result.content, /already exists/);
+    assert.match(await read("docs/plan.md"), /# Plan/);
+  });
+});
+
+test("cannot create outside the attached folder", async () => {
+  await withActing(TREE, async ({ run, root }) => {
+    const result = await run("docs", "create_file", { path: "other/planted.md", content: "x" });
+
+    assert.match(result.content, /outside/);
+    await assert.rejects(() => fs.stat(path.join(root, "other", "planted.md")));
+  });
+});
+
+test("cannot create a file type the user has turned off", async () => {
+  await withActing(TREE, async ({ run, root }) => {
+    const result = await run("docs", "create_file", { path: "docs/run.sh", content: "rm -rf /" });
+
+    assert.match(result.content, /not a kind/);
+    await assert.rejects(() => fs.stat(path.join(root, "docs", "run.sh")));
+  });
+});
+
+test("refuses a file longer than a person would read through", async () => {
+  await withActing(TREE, async ({ run, root }) => {
+    const result = await run("docs", "create_file", {
+      path: "docs/huge.md",
+      content: "x".repeat(CREATE_CHARACTER_LIMIT + 1),
+    });
+
+    assert.match(result.content, /longer than/);
+    await assert.rejects(() => fs.stat(path.join(root, "docs", "huge.md")));
   });
 });

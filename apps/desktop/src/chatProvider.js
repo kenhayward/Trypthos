@@ -120,6 +120,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
           buildChatRequest(profile, messages, {
             canReadFiles: readFile !== null,
             canExploreFolder: callTool !== null,
+            canActOnFolder: callTool !== null,
           }),
         ),
         signal,
