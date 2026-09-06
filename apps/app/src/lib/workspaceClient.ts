@@ -35,6 +35,14 @@ export type WriteResult =
   | { ok: false; reason: "conflict"; theirs: Revision }
   | Failure;
 
+/// What came back from Save As. The path is where the file ACTUALLY went, in workspace terms - the
+/// renderer asked for a dialog and is told what the user chose, having had no say in it.
+///
+/// "cancelled" is an ordinary answer rather than a failure, and "outside-workspace" is its own
+/// reason: the folder the user picked is a real folder they can write to, and the app is the thing
+/// declining, so it has to say which of the two it means.
+export type SaveAsResult = { ok: true; path: string; revision: Revision } | Failure;
+
 export interface WorkspaceClient {
   /// The files in ONE folder of the workspace, for chat to use as a map. Paths only.
   ///
@@ -50,6 +58,13 @@ export interface WorkspaceClient {
   listDirectory(path: string): Promise<ListResult>;
   readFile(path: string): Promise<ReadResult>;
   writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
+  /// Asks the shell for a save dialog and writes the document wherever it landed.
+  ///
+  /// **There is no destination argument, and there must never be one.** The path comes from the
+  /// native dialog on the main process's side and is checked against the open workspace there;
+  /// `path` is only where the dialog should open, and null for a document that has never been
+  /// anywhere. A renderer that could name a target could write a file anywhere on the machine.
+  saveFileAs(path: string | null, content: string): Promise<SaveAsResult>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge {
@@ -168,6 +183,7 @@ export const browserClient: WorkspaceClient = {
   listDirectory: async () => unavailable(),
   readFile: async () => unavailable(),
   writeFile: async () => unavailable(),
+  saveFileAs: async () => unavailable(),
 };
 
 export function workspaceClient(): WorkspaceClient {

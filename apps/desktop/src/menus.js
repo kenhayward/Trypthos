@@ -27,6 +27,7 @@ const { APP_NAME } = require("./appName");
 /// drift into calling the same thing two different names.
 const OPEN_FOLDER = "Open Folder...";
 const SAVE = "Save";
+const SAVE_AS = "Save As...";
 const SETTINGS = "Settings";
 const ABOUT = `About ${APP_NAME}`;
 const CHECK_FOR_UPDATES = "Check for Updates...";
@@ -52,6 +53,10 @@ function fileItems(on) {
     { label: OPEN_FOLDER, accelerator: "CmdOrCtrl+O", click: () => on.action("open-folder") },
     separator,
     { label: SAVE, accelerator: "CmdOrCtrl+S", click: () => on.action("save") },
+    // Where the dialog goes is decided in the main process, not here: this only says the user asked
+    // for one. The scratch buffer and the built-in guide both have text and no file, so this is the
+    // only route either of them has to disk.
+    { label: SAVE_AS, accelerator: "CmdOrCtrl+Shift+S", click: () => on.action("save-as") },
   ];
 }
 

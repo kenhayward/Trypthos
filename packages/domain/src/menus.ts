@@ -26,6 +26,7 @@ export type MenuName = (typeof MENU_NAMES)[number];
 export const MENU_ACTIONS = [
   "open-folder",
   "save",
+  "save-as",
   "preferences",
   "about",
   "markdown-guide",

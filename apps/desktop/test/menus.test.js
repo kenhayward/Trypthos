@@ -40,6 +40,18 @@ test("File carries the open and save operations", () => {
   assert.ok(find(template, "Save"));
 });
 
+// Save As is on the File menu of both platforms, and nowhere else. The scratch buffer and the
+// built-in guide both have text and no file, so this is also the only way either of them reaches
+// disk at all.
+test("File offers Save As, on both platforms", () => {
+  const windows = popupTemplate("file", { platform: "win32", on: handlers() });
+  assert.ok(find(windows, "Save As..."));
+
+  const mac = appMenuTemplate({ appName: "Trypthos", on: handlers() });
+  const file = mac.find((item) => item.label === "File");
+  assert.ok(find(file.submenu, "Save As..."));
+});
+
 test("File offers the ways out of the app", () => {
   const template = popupTemplate("file", { platform: "win32", on: handlers() });
   assert.ok(find(template, "Close Window"));
@@ -86,11 +98,19 @@ test("choosing an item tells the renderer what was chosen", () => {
 
   find(popupTemplate("file", { platform: "win32", on }), "Open Folder...").click();
   find(popupTemplate("file", { platform: "win32", on }), "Save").click();
+  find(popupTemplate("file", { platform: "win32", on }), "Save As...").click();
   find(popupTemplate("tools", { platform: "win32", on }), "Settings").click();
   find(popupTemplate("help", { platform: "win32", on }), "About Trypthos").click();
   find(popupTemplate("help", { platform: "win32", on }), "Markdown Syntax Guide").click();
 
-  assert.deepEqual(chosen, ["open-folder", "save", "preferences", "about", "markdown-guide"]);
+  assert.deepEqual(chosen, [
+    "open-folder",
+    "save",
+    "save-as",
+    "preferences",
+    "about",
+    "markdown-guide",
+  ]);
 });
 
 // Handled where they belong: quitting is not something the renderer should be asked to arrange.
@@ -118,6 +138,7 @@ test("the shortcuts named on the menu are the ones the app already uses", () => 
   const file = popupTemplate("file", { platform: "win32", on: handlers() });
   assert.equal(find(file, "Save").accelerator, "CmdOrCtrl+S");
   assert.equal(find(file, "Open Folder...").accelerator, "CmdOrCtrl+O");
+  assert.equal(find(file, "Save As...").accelerator, "CmdOrCtrl+Shift+S");
 });
 
 /// The macOS application menu.

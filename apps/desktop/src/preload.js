@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("trypthos", {
   writeFile: (path, content, expectedRevision) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision }),
 
+  /// Save As. Note what is NOT sent: a destination. The dialog runs in the main process and the path
+  /// it answers with is checked against the open workspace there - `path` here is only where the
+  /// dialog should open, and null for a document that has never been anywhere.
+  saveFileAs: (path, content) => ipcRenderer.invoke("file:saveAs", { path, content }),
+
   /// API keys, write-only by construction.
   ///
   /// `listKeyedEndpoints` returns endpoints, never keys - it is how the settings UI shows whether a

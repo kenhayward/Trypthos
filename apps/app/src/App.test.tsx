@@ -142,9 +142,16 @@ describe("App", () => {
   /// The parts are tested on their own; this is the wiring between them, which is the thing that can
   /// be right in every component and still wrong in the window.
   describe("open files", () => {
-    function shellWithFiles(): { reads: string[]; asked: (string | null)[] } {
+    function shellWithFiles(): {
+      reads: string[];
+      asked: (string | null)[];
+      savedAs: { path: string | null; content: string }[];
+      menu: { push: ((action: string) => void) | null };
+    } {
       const reads: string[] = [];
       const asked: (string | null)[] = [];
+      const savedAs: { path: string | null; content: string }[] = [];
+      const menu: { push: ((action: string) => void) | null } = { push: null };
       window.trypthos = {
         ...browserClient,
         isDesktop: true,
@@ -177,10 +184,19 @@ describe("App", () => {
         // uses its browser fallbacks, which ask nobody anything.
         onWindowState: () => () => {},
         onCloseRequested: () => () => {},
-        onMenuAction: () => () => {},
+        onMenuAction: (listener: (message: { action: string }) => void) => {
+          menu.push = (action: string) => listener({ action });
+          return () => {};
+        },
         setDocumentDirty: async () => {},
+        // The dialog is the shell's, so the fake stands in for the whole of it - what comes back is
+        // what the user picked. Note there is no destination to pass in.
+        saveFileAs: async (path: string | null, content: string) => {
+          savedAs.push({ path, content });
+          return { ok: true as const, path: "elsewhere.md", revision: { id: "r-saved-as" } };
+        },
       } as unknown as typeof window.trypthos;
-      return { reads, asked };
+      return { reads, asked, savedAs, menu };
     }
 
     /// A row in the TREE, not a tab - the file name appears in both, and the close button on a tab
@@ -227,6 +243,42 @@ describe("App", () => {
       await user.keyboard("{Control>}w{/Control}");
 
       expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["one.md"]);
+    });
+
+    /// Save As, from the File menu down to the tab strip.
+    ///
+    /// The menu item, the shortcut and the shell's dialog are each tested on their own; this is the
+    /// wiring, which is what can be right in every part and still wrong in the window.
+    it("saves the open document somewhere else, and the tab follows it", async () => {
+      const user = userEvent.setup();
+      const { savedAs, menu } = shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      act(() => menu.push?.("save-as"));
+
+      await waitFor(() =>
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["elsewhere.md"]),
+      );
+      expect(savedAs).toEqual([{ path: "one.md", content: "# one.md\n" }]);
+    });
+
+    // Ctrl+Shift+S, and it must not be read as Ctrl+S: the two write to different places, and the
+    // one that silently overwrote the original would be the expensive mistake.
+    it("saves somewhere else from the keyboard, without saving over the original", async () => {
+      const user = userEvent.setup();
+      const { savedAs } = shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      await user.keyboard("{Control>}{Shift>}s{/Shift}{/Control}");
+
+      await waitFor(() => expect(savedAs).toHaveLength(1));
+      await waitFor(() =>
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["elsewhere.md"]),
+      );
     });
 
     // The whole point of the Explorer entries: the shell pushes what it was launched with, and the

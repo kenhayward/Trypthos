@@ -320,9 +320,9 @@ export default function App() {
     [actions],
   );
 
-  // Ctrl+S / Cmd+S, and Ctrl+W / Cmd+W. Bound on the window rather than inside the editor so they
-  // work wherever focus is, and preventDefault matters: the browser's own save dialog, and its close
-  // of the whole tab, would otherwise happen over the app.
+  // Ctrl+S / Cmd+S, Ctrl+Shift+S / Cmd+Shift+S, and Ctrl+W / Cmd+W. Bound on the window rather than
+  // inside the editor so they work wherever focus is, and preventDefault matters: the browser's own
+  // save dialog, and its close of the whole tab, would otherwise happen over the app.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -330,7 +330,10 @@ export default function App() {
       const key = event.key.toLowerCase();
       if (key === "s") {
         event.preventDefault();
-        void actions.save();
+        // Shift decides which, and the two write to different places: a Save As read as a Save would
+        // put the document over the file the user was trying to keep.
+        if (event.shiftKey) void actions.saveAs();
+        else void actions.save();
       } else if (key === "w" && state.activePath !== null) {
         // Only with a document open. Otherwise this is the shell's own "close the window", and
         // swallowing it would leave the shortcut doing nothing at all.
@@ -361,6 +364,7 @@ export default function App() {
       windowControls().onMenuAction((action) => {
         if (action === "open-folder") void actions.open();
         else if (action === "save") void actions.save();
+        else if (action === "save-as") void actions.saveAs();
         else if (action === "preferences") setSettingsOn("appearance");
         else if (action === "about") setSettingsOn("about");
         else if (action === "markdown-guide") actions.openGuide(MARKDOWN_GUIDE);

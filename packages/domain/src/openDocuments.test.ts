@@ -11,6 +11,7 @@ import {
   markSaved,
   openDocument,
   openPaths,
+  renameDocument,
   tabLabels,
   updateContent,
   type DocumentSet,
@@ -239,5 +240,68 @@ describe("a read-only document", () => {
     // A workspace path is relative and forward-slashed; this one is neither, so no file on disk can
     // shadow the guide and the guide can shadow no file.
     expect(GUIDE_PATH.startsWith("trypthos:")).toBe(true);
+  });
+});
+
+/// What Save As does to the tab it was invoked from.
+///
+/// A rename rather than a second tab: the user asked for this document to live somewhere else, and
+/// leaving the old tab open beside the new one would give them two views of text that is now in two
+/// files, with no way to tell which one they are typing into.
+describe("renameDocument", () => {
+  it("moves the document to its new path, keeping its text and its place in the strip", () => {
+    const set = renameDocument(withFiles("a.md", "b.md", "c.md"), "b.md", "notes/b.md", rev("new"));
+
+    expect(openPaths(set)).toEqual(["a.md", "notes/b.md", "c.md"]);
+    expect(set.documents[1]?.content).toBe("# b.md\n");
+    expect(set.documents[1]?.name).toBe("b.md");
+  });
+
+  it("takes the revision the write returned, and is no longer dirty", () => {
+    const edited = updateContent(withFiles("a.md"), "a.md", "changed");
+    const set = renameDocument(edited, "a.md", "copy.md", rev("saved"));
+
+    expect(set.documents[0]?.revision).toEqual(rev("saved"));
+    expect(anyDirty(set)).toBe(false);
+  });
+
+  // The tab the user is looking at has to follow, or Save As leaves them staring at a document they
+  // did not save while the one they did is somewhere behind it.
+  it("follows the selection when the renamed document was on screen", () => {
+    const set = renameDocument(withFiles("a.md", "b.md"), "b.md", "b2.md", rev("new"));
+    expect(set.activePath).toBe("b2.md");
+  });
+
+  it("leaves the selection alone when some other document was on screen", () => {
+    const set = renameDocument(withFiles("a.md", "b.md"), "a.md", "a2.md", rev("new"));
+    expect(set.activePath).toBe("b.md");
+  });
+
+  // Saving over a file that is ALSO open would leave two tabs naming one file, each with its own
+  // idea of what is in it. The stale one goes: what was just written is what is on disk.
+  it("closes another tab that was already showing the file written over", () => {
+    const set = renameDocument(withFiles("a.md", "b.md"), "b.md", "a.md", rev("new"));
+
+    expect(openPaths(set)).toEqual(["a.md"]);
+    expect(activeDocument(set)?.content).toBe("# b.md\n");
+    expect(set.activePath).toBe("a.md");
+  });
+
+  // A read-only document has no file behind it, so there is nothing to move. Save As on the guide is
+  // a copy - a new document at the new path - and that is the caller's business, not this one's.
+  it("refuses to move a read-only document", () => {
+    const set = openDocument(emptyDocumentSet(), {
+      path: GUIDE_PATH,
+      content: "# Guide\n",
+      revision: rev("built-in"),
+      readOnly: true,
+    });
+
+    expect(renameDocument(set, GUIDE_PATH, "guide.md", rev("new"))).toBe(set);
+  });
+
+  it("does nothing for a path that is not open", () => {
+    const set = withFiles("a.md");
+    expect(renameDocument(set, "missing.md", "x.md", rev("new"))).toBe(set);
   });
 });

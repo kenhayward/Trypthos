@@ -1234,6 +1234,21 @@ Three properties do the work:
 - **The renderer cannot name a workspace root.** It can only ask the user to choose one; the main
   process holds the result. A renderer that could name its own root could name any directory on the
   machine.
+- **`file:saveAs` extends that rule to a destination.** `SaveAsRequest` carries the document and where
+  the document currently lives, and has no field for where it should go: the native save dialog runs
+  in the main process, and the absolute path it answers with is turned into a workspace-relative one
+  and checked against the open root there (`workspaceRelative` in `ipcHandlers.js`, which runs
+  `path.relative` and then the lexical guard - `path.relative` alone answers `../elsewhere/x.md` for a
+  target beside the workspace, which looks exactly like an ordinary relative path). Outside the
+  workspace is its own reason, `outside-workspace`, because the user picked a real folder they can
+  write to and the app is the thing declining.
+
+  The write goes through `provider.write(path, content, null, { overwrite: true })`. **`overwrite` is
+  the one way past the conflict check, and it means "the user has already been asked"** - the dialog's
+  own offer to replace the file IS the answer the revision comparison exists to obtain, so asking
+  again would be putting the same question twice and refusing the second answer. Nothing the renderer
+  sends can set it: `WriteRequest` has no such field. What it does not waive is the boundary - where a
+  file may be written is not the user's to answer in a file picker.
 - **`shell:openExternal` is an allow-list, checked in the main process.** `OpenExternalRequest`
   accepts `http:`, `https:` and `mailto:` and refuses everything else, using the same `isExternalUrl`
   the renderer used - one function, so the two answers cannot drift. What is on the other side of that
@@ -1261,6 +1276,14 @@ Two consequences worth stating. **A save names its document** (`save(path?)`), b
 background tab has to write that tab rather than the one on screen. And **opening a workspace closes
 every tab**: the paths are workspace-relative, so carrying them across would leave them pointing at
 files that are not in the new folder.
+
+**Save As splits on whether there is a file to move.** `renameDocument` moves an open document to the
+path the shell returned, keeping its place in the strip and its text, taking the new revision and
+going clean - and dropping any OTHER tab that was showing the file just written over, because two
+tabs naming one file would each hold their own idea of what is in it. It refuses a read-only
+document. So the hook copies instead for the two documents with no file behind them, the scratch
+buffer and the built-in guide: a new document opens at the chosen path and the original stays where
+it is. That is also the only route either of them has to disk at all.
 
 The first three share a shape: OAuth, a mutable file at a stable id, delta sync, last-writer-wins.
 GitHub does not - there is no mutable path, and a save is a commit on a branch with history and merge

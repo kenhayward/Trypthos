@@ -14,6 +14,7 @@ import {
   isOpen,
   markSaved,
   openDocument,
+  renameDocument,
   updateContent,
 } from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
@@ -112,6 +113,14 @@ export interface WorkspaceActions {
   /// True when the file is on disk as the editor shows it. False on a failed save, and on no file
   /// open at all - the caller may be about to discard the document on the strength of the answer.
   save(path?: string): Promise<boolean>;
+  /// Writes the document on screen somewhere the user chooses, and reports whether it landed.
+  ///
+  /// The choosing happens in the shell - see `saveFileAs`, which is deliberately unable to take a
+  /// destination. What is decided here is what happens to the TAB afterwards, and that differs by
+  /// what was being saved: a file MOVES, because the user asked for this document to live somewhere
+  /// else. The scratch buffer and the built-in guide have no file to move, so they are copied out
+  /// and stay where they are - which is also how either of them reaches disk at all.
+  saveAs(): Promise<boolean>;
   /// Whether EVERY open document may be thrown away, asking about each unsaved one in turn. Used by
   /// the shell before closing the window, and before another folder replaces them all.
   mayDiscard(): Promise<boolean>;
@@ -167,6 +176,10 @@ export function failureKey(reason: string): string | null {
       return "errors.permissionDenied";
     case "conflict":
       return "errors.conflict";
+    // Its own key rather than "permission denied". The user picked a real folder they can write to;
+    // the app is the thing declining, so it has to say which of the two it means.
+    case "outside-workspace":
+      return "errors.outsideWorkspace";
     // The read boundary. Three keys rather than one, because they are three different problems and
     // two of them are the user's to fix - a file they can shrink, and a file they can re-save as
     // UTF-8 elsewhere.
@@ -318,6 +331,39 @@ export function useWorkspace(
     },
     [client, fail],
   );
+
+  const saveAs = useCallback(async () => {
+    const active = activeDocument(stateRef.current.documents);
+    // The scratch buffer has never been anywhere, so the dialog is told nothing about where to
+    // start. Its text is still a document worth saving - it is why Save As can be reached with
+    // nothing open at all.
+    const content = active?.content ?? stateRef.current.scratch;
+
+    setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+    const result = await client.saveFileAs(active?.path ?? null, content);
+
+    if (!result.ok) {
+      // Cancelling is not a failure and raises nothing - `failureKey` answers null for it - but the
+      // busy flag still has to come down, which is what routing it through `fail` does.
+      fail(result);
+      return false;
+    }
+
+    setInternal((prev) => {
+      const moved = active === null || active.readOnly ? null : active.path;
+      return {
+        ...prev,
+        documents:
+          moved === null
+            ? // A copy: there was no file to move. Both the scratch buffer and the guide stay
+              // exactly where they are, and the copy opens as an ordinary editable document.
+              openDocument(prev.documents, { path: result.path, content, revision: result.revision })
+            : renameDocument(prev.documents, moved, result.path, result.revision),
+        busy: false,
+      };
+    });
+    return true;
+  }, [client, fail]);
 
   /// May this one document be thrown away?
   ///
@@ -536,6 +582,7 @@ export function useWorkspace(
         return { ...prev, documents: updateContent(prev.documents, path, content) };
       }),
     save,
+    saveAs,
     mayDiscard,
     // `errorKey`, and named that everywhere. It used to write `error`, a field this state does not
     // have, so the banner's Dismiss button did nothing - and nothing caught it, because an object

@@ -126,6 +126,43 @@ test("refuses to create over a file that already exists", async () => {
   });
 });
 
+/// Save As, where the user has already been asked.
+///
+/// The conflict check exists to catch a change the user did not know about. A native save dialog
+/// that just asked "replace it?" is the user knowing about it - so `overwrite` is what that answer
+/// looks like on this side, and nothing else may set it: it is unreachable from the renderer, which
+/// has no way to name a destination in the first place.
+test("replaces an existing file when the write was already confirmed", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    const result = await workspace.write("top.md", "chosen\n", null, { overwrite: true });
+
+    assert.equal(result.ok, true);
+    assert.equal((await workspace.read("top.md")).content, "chosen\n");
+  });
+});
+
+test("creates a file the confirmed write named that was not there", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    const result = await workspace.write("notes/new.md", "chosen\n", null, { overwrite: true });
+
+    assert.equal(result.ok, true);
+    assert.equal((await workspace.read("notes/new.md")).content, "chosen\n");
+  });
+});
+
+// The confirmation is about replacing a file, never about where. The boundary is the one check no
+// answer of the user's can waive.
+test("a confirmed write still cannot leave the workspace", async () => {
+  await withWorkspace(async ({ workspace, outside }) => {
+    const result = await workspace.write("../outside/secret.md", "clobber\n", null, {
+      overwrite: true,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(await fs.readFile(path.join(outside, "secret.md"), "utf8"), "SECRET\n");
+  });
+});
+
 test("refuses to update a file that has since been deleted", async () => {
   await withWorkspace(async ({ workspace, root }) => {
     const opened = await workspace.read("top.md");

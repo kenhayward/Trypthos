@@ -20,6 +20,7 @@ const {
   ListRequest,
   OutlineRequest,
   ReadRequest,
+  SaveAsRequest,
   WriteRequest,
   WriteSettingsRequest,
 } = require("@trypthos/domain");
@@ -43,20 +44,33 @@ const { outlineWorkspace } = require("./workspaceOutline");
 let current = null;
 
 function openWorkspace(root) {
-  current = {
+  const guard = createPathGuard({
     root,
-    name: path.basename(root) || root,
-    provider: createLocalWorkspace({
-      root,
-      guard: createPathGuard({
-        root,
-        // Windows and default macOS volumes compare names case-insensitively; Linux does not. Getting
-        // this wrong in the permissive direction would let "/WS/../etc" read as inside "/ws".
-        caseInsensitive: process.platform !== "linux",
-      }),
-    }),
-  };
+    // Windows and default macOS volumes compare names case-insensitively; Linux does not. Getting
+    // this wrong in the permissive direction would let "/WS/../etc" read as inside "/ws".
+    caseInsensitive: process.platform !== "linux",
+  });
+
+  // The guard is kept beside the provider rather than only inside it, because Save As has a path to
+  // check BEFORE it has anything to write: the dialog answers with an absolute path, and whether
+  // that is a place in this workspace is the question asked first.
+  current = { root, name: path.basename(root) || root, guard, provider: createLocalWorkspace({ root, guard }) };
   return { root, name: current.name };
+}
+
+/// An absolute path the save dialog returned, as a workspace-relative one - or null when it is not
+/// in the workspace at all.
+///
+/// Forward-slashed, because that is what a path IS everywhere else in the app: the tab strip, the
+/// tree, a markdown link and a saved chat all name a file this way, and a backslash arriving from a
+/// Windows dialog would make one path look like two.
+///
+/// The lexical guard has the last word. `path.relative` alone answers "../elsewhere/notes.md" for a
+/// target beside the workspace, which is a string that looks perfectly like a relative path.
+function workspaceRelative(workspace, absolute) {
+  const relative = path.relative(workspace.root, absolute).split(path.sep).join("/");
+  if (relative === "" || !workspace.guard.resolve(relative).ok) return null;
+  return relative;
 }
 
 /// Wraps a handler so a schema failure or a missing workspace becomes a result rather than an
@@ -425,6 +439,44 @@ function registerIpcHandlers({
   ipcMain.handle(
     "file:read",
     guarded(getWorkspace, ReadRequest, (request, workspace) => workspace.provider.read(request.path)),
+  );
+
+  /// Save As: a native dialog, then a write to wherever it landed.
+  ///
+  /// **Every decision about WHERE is on this side.** The renderer sends the document and where the
+  /// document currently lives; it has no way to name a destination, and the path it gets back is
+  /// already workspace-relative. That is the same rule as the workspace root itself - a renderer
+  /// that could name a target could write a file anywhere on the machine.
+  ///
+  /// The dialog's own "replace it?" is the answer the conflict check exists to obtain, so the write
+  /// is made with `overwrite` and does not ask again. What the dialog cannot waive is the boundary:
+  /// where a file may be written is not the user's to answer in a file picker.
+  ipcMain.handle(
+    "file:saveAs",
+    guarded(getWorkspace, SaveAsRequest, async (request, workspace) => {
+      const window = getWindow();
+      const result = await dialog.showSaveDialog(window, {
+        title: "Save As",
+        // Where the dialog OPENS, and the only thing the renderer's path is for. A Save As from a
+        // file deep in the tree that opened at the root would make the user navigate back to where
+        // they already were.
+        defaultPath:
+          request.path === null ? workspace.root : path.join(workspace.root, request.path),
+      });
+
+      // Cancelling is not a failure, and must not raise anything: see `failureKey`.
+      if (result.canceled || !result.filePath) return { ok: false, reason: "cancelled" };
+
+      const relative = workspaceRelative(workspace, result.filePath);
+      // Its own reason rather than "permission-denied". The user picked a real folder they can write
+      // to, and the app is the thing declining - so it has to say which of the two it means.
+      if (relative === null) return { ok: false, reason: "outside-workspace" };
+
+      const written = await workspace.provider.write(relative, request.content, null, {
+        overwrite: true,
+      });
+      return written.ok ? { ok: true, path: relative, revision: written.revision } : written;
+    }),
   );
 
   ipcMain.handle(
