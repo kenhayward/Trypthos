@@ -24,6 +24,7 @@ export type MenuName = (typeof MENU_NAMES)[number];
 /// the main process handles itself (quit, close, check for updates) are not actions: they never
 /// reach the renderer.
 export const MENU_ACTIONS = [
+  "new-file",
   "open-folder",
   "save",
   "save-as",

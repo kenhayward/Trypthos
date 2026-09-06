@@ -24,6 +24,18 @@ there is something unsaved. If the file changed on disk since you opened it - an
 another window - the save is **refused** rather than applied, and your edits stay exactly where they
 are. Trypthos will not decide for you which version wins.
 
+**File > New** (Ctrl+N, Cmd+N on macOS) asks for a name and a type and opens a tab for the file. The
+type is a dropdown of everything you have turned on in **File types**, so making a `.py` does not
+mean knowing that Trypthos calls that Python - and if you type an extension into the name yourself,
+that is the one used, because the name is the more specific of the two answers. The name it will
+have is shown before you press Create.
+
+**It does not ask where the file goes.** That question is asked by the save dialog the first time you
+save, when you know more about where you want it than you did when you named it. Until then the file
+is a real tab you can type into, and closing it asks about the work in it exactly as it would for any
+other document. Save it and the tab follows the file to wherever you put it; from then on Ctrl+S
+writes straight to it, and cancelling the save dialog leaves it exactly as it was.
+
 **Save As** writes the document somewhere else: File > Save As, or Ctrl+Shift+S (Cmd+Shift+S on
 macOS). The usual save dialog opens beside the file you are editing, and once it is written the tab
 follows - you are editing the new file from then on, and the original is left exactly as it was.
@@ -291,7 +303,7 @@ bar. They open real native menus: native rendering, the platform's own accelerat
 platform's own cut, copy and paste. On macOS the same commands appear where they belong, in the
 system menu bar at the top of the screen, and the window draws no menu labels of its own.
 
-- **File** opens a folder, saves the current file, saves it somewhere else, reopens a recent file, closes the window and quits.
+- **File** makes a new file, opens a folder, saves the current file, saves it somewhere else, reopens a recent file, closes the window and quits.
 - **Edit** carries undo, redo, cut, copy, paste and select all.
 - **Tools** carries Settings. On macOS this lives in the application menu instead, which is where
   that platform expects it.

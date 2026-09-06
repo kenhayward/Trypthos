@@ -20,6 +20,7 @@ export const CAPABILITIES = `
 | Links | A link to a markdown file in your folder opens it here; a web address opens in your browser. Hover to see where a link goes. |
 | AI chat | Appears once you configure a model, and can be switched off. Ask about your document, a selection, attached files or a folder you pick in the browser, apply proposed changes, and watch how full the context is. The model is told what kind of file it is looking at, and a model with a reasoning mode can be asked to think first. A reply says which files it read, and shows the model's thinking behind a fold. Reading a file works with or without tool calling. Type /commands or /tools in the chat box to see what it can do. A file path a reply mentions is a link that opens it. |
 | Editing files | Open a file, edit it, and save with Ctrl+S. A save is refused if the file changed on disk, and unsaved changes are never discarded without asking. |
+| New file | File > New, or Ctrl+N: name a file, pick its type from what you have turned on, and start writing. Where it goes is asked the first time you save. |
 | Save As | Save the document somewhere else, from the File menu or Ctrl+Shift+S. The tab follows the new file, and the original is left as it was. Inside the folder you have open. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
 | Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and file types. |

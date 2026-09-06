@@ -73,6 +73,14 @@
     "encoding": "UTF-8",
     "stats": "{{caret}} · {{words}} words"
   },
+  "newFile": {
+    "title": "New file",
+    "name": "Name",
+    "type": "Type",
+    "needsName": "Type a name for the file.",
+    "cancel": "Cancel",
+    "create": "Create"
+  },
   "chat": {
     "title": "Chat",
     "slash": {

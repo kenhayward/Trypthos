@@ -13,6 +13,7 @@ import {
   formatBytes,
   isOpen,
   markSaved,
+  draftPath,
   openDocument,
   renameDocument,
   updateContent,
@@ -104,6 +105,12 @@ export interface WorkspaceActions {
   /// workspace, and nothing here should have to know how to find it. Read-only and never written,
   /// which is what keeps it out of the save path and out of the prompt about unsaved work.
   openGuide(content: string): void;
+  /// Opens a document that has never been saved - File > New.
+  ///
+  /// It has a name and nowhere to be. Where it goes is answered by the save dialog the first time it
+  /// is saved, not here: two dialogs asking the same question would be two answers that can
+  /// disagree, and the one that decided first would be the one with the least information.
+  newDocument(name: string): void;
   /// Opens what the app was handed from outside - a folder from File Explorer, or a markdown file
   /// within one. A file names both, because every path here is relative to one open folder.
   openTarget(target: { root: string; file: string | null }): Promise<void>;
@@ -144,6 +151,9 @@ interface Internal {
   /// The buffer shown when no file is open. Kept while files are open rather than discarded: it is
   /// text somebody typed, and closing the last tab brings them back to it.
   scratch: string;
+  /// How many drafts this session has made. Only ever used to tell two of them apart: nothing stops
+  /// somebody making a second "notes.md", and the tab strip tells documents apart by path.
+  drafts: number;
   busy: boolean;
   errorKey: string | null;
   errorParams: Record<string, string> | null;
@@ -156,6 +166,7 @@ const INITIAL: Internal = {
   selectedFolder: "",
   documents: emptyDocumentSet(),
   scratch: "",
+  drafts: 0,
   busy: false,
   errorKey: null,
   errorParams: null,
@@ -307,46 +318,6 @@ export function useWorkspace(
     [client],
   );
 
-  /// Writes one document out, named rather than assumed.
-  ///
-  /// A named document rather than "the one on screen", because closing a background tab has to save
-  /// that tab: the two are only the same until there is more than one.
-  const save = useCallback(
-    async (path?: string) => {
-      const target = path ?? stateRef.current.documents.activePath;
-      const open = stateRef.current.documents.documents.find(
-        (document) => document.path === target,
-      );
-      if (!open) return false;
-      // A read-only document has no file to be written to. Refused HERE rather than left to the
-      // path guard in the main process, which would refuse it too - as an error banner about a
-      // failed save, for a document the user was never told they could save.
-      if (open.readOnly) return false;
-
-      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
-
-      const result = await client.writeFile(open.path, open.content, open.revision);
-      if (!result.ok) {
-        fail(result);
-        // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
-        // document away on the strength of it. A conflict that read as a save is how the prompt would
-        // destroy the work it exists to protect.
-        return false;
-      }
-
-      // The editor keeps the user's text either way. On success the revision advances so the next save
-      // compares against what was just written; on a conflict nothing here changes, which is precisely
-      // what leaves their work intact for them to decide about.
-      setInternal((prev) => ({
-        ...prev,
-        documents: markSaved(prev.documents, open.path, result.revision),
-        busy: false,
-      }));
-      return true;
-    },
-    [client, fail],
-  );
-
   const saveAs = useCallback(async () => {
     const active = activeDocument(stateRef.current.documents);
     // The scratch buffer has never been anywhere, so the dialog is told nothing about where to
@@ -355,7 +326,12 @@ export function useWorkspace(
     const content = active?.content ?? stateRef.current.scratch;
 
     setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
-    const result = await client.saveFileAs(active?.path ?? null, content);
+    // A DRAFT sends its name rather than its path: its path is an identity, not a place, and a
+    // dialog opened at "trypthos:draft/1/notes.md" would start nowhere useful. The name is exactly
+    // what the dialog wants - the workspace root, with the file already called what the user called
+    // it. A read-only document has no path worth offering either.
+    const openAt = active === null || active.draft ? (active?.name ?? null) : active.path;
+    const result = await client.saveFileAs(openAt, content);
 
     if (!result.ok) {
       // Cancelling is not a failure and raises nothing - `failureKey` answers null for it - but the
@@ -384,6 +360,49 @@ export function useWorkspace(
     if (root !== undefined) reportOpened?.({ root, path: result.path });
     return true;
   }, [client, fail, reportOpened]);
+
+  /// Writes one document out, named rather than assumed.
+  ///
+  /// A named document rather than "the one on screen", because closing a background tab has to save
+  /// that tab: the two are only the same until there is more than one.
+  const save = useCallback(
+    async (path?: string) => {
+      const target = path ?? stateRef.current.documents.activePath;
+      const open = stateRef.current.documents.documents.find(
+        (document) => document.path === target,
+      );
+      if (!open) return false;
+      // A read-only document has no file to be written to. Refused HERE rather than left to the
+      // path guard in the main process, which would refuse it too - as an error banner about a
+      // failed save, for a document the user was never told they could save.
+      if (open.readOnly) return false;
+      // A draft has no path to write to, so saving one asks where it should go. Routed here rather
+      // than at each call site, so Ctrl+S, the menu and closing a tab all reach the same question.
+      if (open.draft) return await saveAs();
+
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+
+      const result = await client.writeFile(open.path, open.content, open.revision);
+      if (!result.ok) {
+        fail(result);
+        // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
+        // document away on the strength of it. A conflict that read as a save is how the prompt would
+        // destroy the work it exists to protect.
+        return false;
+      }
+
+      // The editor keeps the user's text either way. On success the revision advances so the next save
+      // compares against what was just written; on a conflict nothing here changes, which is precisely
+      // what leaves their work intact for them to decide about.
+      setInternal((prev) => ({
+        ...prev,
+        documents: markSaved(prev.documents, open.path, result.revision),
+        busy: false,
+      }));
+      return true;
+    },
+    [client, fail, saveAs],
+  );
 
   /// May this one document be thrown away?
   ///
@@ -595,6 +614,22 @@ export function useWorkspace(
     openTarget,
     activateFile: (path: string) =>
       setInternal((prev) => ({ ...prev, documents: activateDocument(prev.documents, path) })),
+    newDocument: (name: string) =>
+      setInternal((prev) => {
+        const serial = prev.drafts + 1;
+        return {
+          ...prev,
+          drafts: serial,
+          documents: openDocument(prev.documents, {
+            path: draftPath(serial, name),
+            content: "",
+            // A revision nothing will ever present: a draft is never read from disk, and the first
+            // write it makes is a Save As, which creates the file rather than replacing one.
+            revision: { id: "unsaved" },
+            draft: true,
+          }),
+        };
+      }),
     openGuide: (content: string) =>
       setInternal((prev) => ({
         ...prev,

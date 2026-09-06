@@ -15,6 +15,7 @@ import {
   type ProposedEdit,
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
+import NewFileDialog from "./components/NewFileDialog";
 import EditorPanel from "./components/EditorPanel";
 import type { EditorHandle, EditorSelection } from "./components/DocumentEditor";
 import PanelDivider from "./components/PanelDivider";
@@ -77,6 +78,8 @@ export default function App() {
   /// Appearance, the Help menu on About, the chat panel's Configure on the models. Mounting only
   /// while open is what makes `openOn` mean "open here" rather than "opened here once".
   const [settingsOn, setSettingsOn] = useState<SettingsSection | null>(null);
+  /// True while File > New is asking for a name. Nothing is created until it answers.
+  const [namingFile, setNamingFile] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
@@ -377,7 +380,8 @@ export default function App() {
   useEffect(
     () =>
       windowControls().onMenuAction((action) => {
-        if (action === "open-folder") void actions.open();
+        if (action === "new-file") setNamingFile(true);
+        else if (action === "open-folder") void actions.open();
         else if (action === "save") void actions.save();
         else if (action === "save-as") void actions.saveAs();
         else if (action === "preferences") setSettingsOn("appearance");
@@ -592,6 +596,17 @@ export default function App() {
           onSaveKey={saveKey}
           onDeleteKey={deleteKey}
           explorer={explorer}
+        />
+      )}
+
+      {namingFile && (
+        <NewFileDialog
+          fileTypes={settings.fileTypes.enabled}
+          onCancel={() => setNamingFile(false)}
+          onCreate={(name) => {
+            setNamingFile(false);
+            actions.newDocument(name);
+          }}
         />
       )}
     </div>

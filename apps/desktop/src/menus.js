@@ -26,6 +26,7 @@ const { recentFileLabel } = require("@trypthos/domain");
 
 /// Labels are shared where the same command appears on both platforms, so Windows and macOS cannot
 /// drift into calling the same thing two different names.
+const NEW_FILE = "New...";
 const OPEN_FOLDER = "Open Folder...";
 const SAVE = "Save";
 const SAVE_AS = "Save As...";
@@ -76,6 +77,10 @@ function recentItems(on, recent) {
 
 function fileItems(on, recent = []) {
   return [
+    // A name and a type, asked for by the renderer: a native dialog cannot offer a dropdown of file
+    // types, and where the file GOES is a different question, asked by the save dialog the first
+    // time it is saved.
+    { label: NEW_FILE, accelerator: "CmdOrCtrl+N", click: () => on.action("new-file") },
     { label: OPEN_FOLDER, accelerator: "CmdOrCtrl+O", click: () => on.action("open-folder") },
     separator,
     { label: SAVE, accelerator: "CmdOrCtrl+S", click: () => on.action("save") },

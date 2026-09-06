@@ -515,3 +515,60 @@ describe("slash commands", () => {
     await waitFor(() => expect(sent).toHaveLength(1));
   });
 });
+
+/// File > New, from the menu to a tab with a name and nowhere to be.
+describe("making a new file", () => {
+  function shell(): { menu: { push: ((action: string) => void) | null }; savedAs: unknown[] } {
+    const menu: { push: ((action: string) => void) | null } = { push: null };
+    const savedAs: unknown[] = [];
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+      writeSettings: async () => {},
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: (listener: (message: { action: string }) => void) => {
+        menu.push = (action: string) => listener({ action });
+        return () => {};
+      },
+      setDocumentDirty: async () => {},
+      saveFileAs: async (path: string | null, content: string) => {
+        savedAs.push({ path, content });
+        return { ok: true as const, path: "notes.md", revision: { id: "r1" } };
+      },
+    } as unknown as typeof window.trypthos;
+    return { menu, savedAs };
+  }
+
+  it("opens a tab for a file that does not exist yet", async () => {
+    const user = userEvent.setup();
+    const { menu } = shell();
+    render(<App />);
+
+    await waitFor(() => expect(menu.push).not.toBeNull());
+    act(() => menu.push?.("new-file"));
+
+    await user.type(await screen.findByLabelText("Name"), "notes");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByRole("tab", { name: /notes\.md/ })).toBeDefined();
+  });
+
+  // The whole point of it being a draft: it has a name and no place, and saving asks for the place.
+  it("asks where to put it the first time it is saved", async () => {
+    const user = userEvent.setup();
+    const { menu, savedAs } = shell();
+    render(<App />);
+
+    await waitFor(() => expect(menu.push).not.toBeNull());
+    act(() => menu.push?.("new-file"));
+
+    await user.type(await screen.findByLabelText("Name"), "notes");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    act(() => menu.push?.("save"));
+
+    // The dialog opens at the name the file was given, not at the identity it holds a tab with.
+    await waitFor(() => expect(savedAs).toEqual([{ path: "notes.md", content: "" }]));
+  });
+});
