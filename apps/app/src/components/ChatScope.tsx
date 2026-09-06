@@ -80,7 +80,14 @@ export default function ChatScope({
         disabled={disabled || !canUseFolder}
         aria-pressed={includeFolder}
         onClick={() => onToggleFolder(!includeFolder)}
-        title={t("chat.scope.folderHint")}
+        // The whole path on hover, because the button only has room for the folder's NAME - and
+        // "Folder: drafts" is two folders away from saying which drafts. Length costs nothing here.
+        // At the root there is no path beyond the folder itself, so the hint stands alone.
+        title={
+          folderPath === ""
+            ? t("chat.scope.folderHint")
+            : `${folderPath}\n\n${t("chat.scope.folderHint")}`
+        }
         className={
           includeFolder
             ? "rounded bg-sunken px-2 py-0.5 text-xs font-semibold text-ink"

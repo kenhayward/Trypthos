@@ -1324,3 +1324,92 @@ describe("saving somewhere else", () => {
     expect(landed).toBe(true);
   });
 });
+
+/// What the File menu's recent list is built from.
+///
+/// The hook reports an open rather than writing anything: it holds no settings, and a hook that did
+/// would be two things. Which files it reports is the whole question - a chat attachment goes
+/// through the same read, and a list that collected those would fill with files nobody opened.
+describe("reporting an opened file", () => {
+  const A = { id: "notes/a.md", name: "a.md", kind: "file" as const };
+
+  function withReporter(overrides = {}) {
+    const opened: { root: string; path: string }[] = [];
+    const { client, saveAsCalls } = fakeClient(overrides);
+    const rendered = renderHook(() =>
+      useWorkspace(client, "", null, (file) => opened.push(file)),
+    );
+    return { ...rendered, opened, saveAsCalls };
+  }
+
+  it("names the file and the workspace it was opened in", async () => {
+    const { result, opened } = withReporter();
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+
+    expect(opened).toEqual([{ root: "/ws", path: "notes/a.md" }]);
+  });
+
+  // Going back to a tab is not opening a file: nothing is read, and the list already has it.
+  it("says nothing when a file that is already open is switched to", async () => {
+    const { result, opened } = withReporter();
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it("says nothing when the file could not be read", async () => {
+    const { result, opened } = withReporter({
+      readFile: async () => ({ ok: false as const, reason: "not-found" }),
+    });
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+
+    expect(opened).toEqual([]);
+  });
+
+  // Save As leaves you editing a file you have never opened. Leaving it off the list would put the
+  // original there and not the one you are actually working in.
+  it("reports a file saved somewhere else", async () => {
+    const { result, opened } = withReporter();
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(opened).toEqual([{ root: "/ws", path: "chosen.md" }]);
+  });
+
+  // Nothing is relative to nothing. Every path here belongs to one open folder.
+  it("says nothing with no folder open at all", async () => {
+    const { result, opened } = withReporter();
+
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(opened).toEqual([]);
+  });
+});

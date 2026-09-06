@@ -625,3 +625,32 @@ describe("thinking on a profile", () => {
     expect(loadSettings(chosen).chat.profiles[0]?.thinking).toBe(true);
   });
 });
+
+/// The files the File menu offers to reopen.
+///
+/// Stored with everything else the app remembers, because it is the same kind of thing: a
+/// convenience, none of it the user's work, and worth losing rather than stopping the app over.
+describe("recent files", () => {
+  it("starts empty, because nothing has been opened yet", () => {
+    expect(DEFAULT_SETTINGS.recentFiles).toEqual([]);
+  });
+
+  it("keeps what was written", () => {
+    const settings = loadSettings({
+      ...DEFAULT_SETTINGS,
+      recentFiles: [{ root: "/ws", path: "notes/plan.md" }],
+    });
+    expect(settings.recentFiles).toEqual([{ root: "/ws", path: "notes/plan.md" }]);
+  });
+
+  // An existing installation has opened plenty of files and remembered none of them, which is
+  // exactly the state a new one is in.
+  it("migrates a file written before it existed to an empty list", () => {
+    const older: Record<string, unknown> = { ...DEFAULT_SETTINGS, schemaVersion: 12 };
+    delete older.recentFiles;
+
+    const settings = loadSettings(older);
+    expect(settings.recentFiles).toEqual([]);
+    expect(settings.schemaVersion).toBe(SETTINGS_VERSION);
+  });
+});

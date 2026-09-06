@@ -667,6 +667,26 @@ describe("ChatPanel: scope", () => {
     expect(screen.getByRole("button", { name: "Folder" }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  /// The button has room for a name, and a deep folder has more than a name.
+  ///
+  /// "Folder: docs" is two folders away from telling you which docs. The full path is on hover,
+  /// where length costs nothing - the button stays short and the answer is still reachable.
+  it("shows the whole path on hover, not just the folder's name", () => {
+    withScope({ folderPath: "notes/2026/drafts" });
+    const button = screen.getByRole("button", { name: "Folder: drafts" });
+
+    expect(button.getAttribute("title")).toContain("notes/2026/drafts");
+  });
+
+  // At the root there is no path to show beyond the folder itself, so the hover is the explanation
+  // it has always been.
+  it("explains what the folder does when it is the workspace root", () => {
+    withScope({ folderPath: "" });
+    const button = screen.getByRole("button", { name: "Folder" });
+
+    expect(button.getAttribute("title")).toContain("files in the folder");
+  });
+
   // Nothing to include, so nothing to offer.
   it("cannot use the folder when none is open", () => {
     withScope({ canUseFolder: false });

@@ -4,6 +4,7 @@ import { DEFAULT_EDITOR_MODE, EditorModeSchema } from "./editorMode";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
 import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
 import { loadPersisted, type Migration } from "./persisted";
+import { RecentFileSchema } from "./recentFiles";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 
 /// Everything Trypthos remembers between launches, in one file.
@@ -15,7 +16,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 12;
+export const SETTINGS_VERSION = 13;
 
 export const SettingsSchema = z
   .object({
@@ -30,6 +31,12 @@ export const SettingsSchema = z
       .strict(),
     /// Absolute path to the folder open when the app last closed, reopened on launch.
     lastWorkspace: z.string().nullable(),
+    /// The files the File menu offers to reopen, newest first.
+    ///
+    /// Each names a workspace as well as a path, because a relative path means nothing without the
+    /// folder it is relative to - see `recentFiles.ts`. An entry may name a file that has since been
+    /// renamed, moved or deleted; reopening it goes through the ordinary open, which says so.
+    recentFiles: z.array(RecentFileSchema),
     appearance: z
       .object({
         /// "system" follows the OS and keeps following it while the app is open. The other two are
@@ -123,6 +130,7 @@ export const DEFAULT_SETTINGS: Settings = {
     chatCollapsed: false,
   },
   lastWorkspace: null,
+  recentFiles: [],
   appearance: { theme: "system" },
   window: { closeToTray: false },
   chat: {
@@ -141,6 +149,12 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 13,
+    // Version 13 added the recent files list. Empty, which is exactly the state an existing
+    // installation is in: it has opened plenty of files and remembered none of them.
+    migrate: (input) => ({ ...input, recentFiles: [] }),
+  },
   {
     to: 2,
     // Version 2 added appearance and window behaviour.

@@ -17,6 +17,7 @@ const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("../src/
 const noop = () => {};
 const handlers = () => ({
   action: noop,
+  openRecent: noop,
   quit: noop,
   closeWindow: noop,
   checkForUpdates: noop,
@@ -50,6 +51,71 @@ test("File offers Save As, on both platforms", () => {
   const mac = appMenuTemplate({ appName: "Trypthos", on: handlers() });
   const file = mac.find((item) => item.label === "File");
   assert.ok(find(file.submenu, "Save As..."));
+});
+
+/// Recent files.
+///
+/// A recent entry is a folder AND a file, so choosing one is exactly the act the app already has -
+/// the same thing File Explorer hands over on launch. The main process sends it down the same
+/// channel, so the renderer asks about unsaved work and reports a missing file the way it always
+/// does. There is deliberately no second way to open a file here.
+test("File lists recent files, on both platforms", () => {
+  const recent = [
+    { root: "D:/Notes", path: "plan.md" },
+    { root: "D:/Work", path: "docs/spec.md" },
+  ];
+
+  const windows = popupTemplate("file", { platform: "win32", on: handlers(), recent });
+  const submenu = find(windows, "Open Recent").submenu;
+  assert.deepEqual(labels(submenu).slice(0, 2), ["plan.md - Notes", "docs/spec.md - Work"]);
+
+  const mac = appMenuTemplate({ appName: "Trypthos", on: handlers(), recent });
+  const file = mac.find((item) => item.label === "File");
+  assert.ok(find(file.submenu, "Open Recent"));
+});
+
+// Choosing one opens the folder and the file inside it, in one act.
+test("choosing a recent file hands the folder and the file to the renderer", () => {
+  const opened = [];
+  const on = { ...handlers(), openRecent: (target) => opened.push(target) };
+  const recent = [{ root: "D:/Notes", path: "plan.md" }];
+
+  const template = popupTemplate("file", { platform: "win32", on, recent });
+  find(find(template, "Open Recent").submenu, "plan.md - Notes").click();
+
+  assert.deepEqual(opened, [{ root: "D:/Notes", file: "plan.md" }]);
+});
+
+// A menu of nothing is worse than a disabled line saying there is nothing: the second tells the user
+// the feature exists and is simply empty.
+test("says the list is empty rather than opening a menu with nothing in it", () => {
+  const template = popupTemplate("file", { platform: "win32", on: handlers(), recent: [] });
+  const submenu = find(template, "Open Recent").submenu;
+
+  assert.equal(submenu.length, 1);
+  assert.equal(submenu[0].enabled, false);
+});
+
+// The escape hatch for an entry that no longer opens anything - a file since deleted stays on the
+// list, because nothing walks the disk to check.
+test("offers to clear the list, and only when there is something to clear", () => {
+  const recent = [{ root: "D:/Notes", path: "plan.md" }];
+  const cleared = [];
+  const on = { ...handlers(), action: (name) => cleared.push(name) };
+
+  const withEntries = popupTemplate("file", { platform: "win32", on, recent });
+  find(find(withEntries, "Open Recent").submenu, "Clear Recent Files").click();
+  assert.deepEqual(cleared, ["clear-recent"]);
+
+  const empty = popupTemplate("file", { platform: "win32", on, recent: [] });
+  assert.equal(find(find(empty, "Open Recent").submenu, "Clear Recent Files"), undefined);
+});
+
+// Nothing passes a list until the app has read settings, and a menu that threw then would be a File
+// menu that could not open at all.
+test("draws the menu with no list at all", () => {
+  const template = popupTemplate("file", { platform: "win32", on: handlers() });
+  assert.ok(find(template, "Open Recent"));
 });
 
 test("File offers the ways out of the app", () => {

@@ -52,9 +52,21 @@ export function useSettings(bridge: SettingsBridge | null) {
     };
   }, [settings, loaded, bridge]);
 
-  const update = useCallback((change: Partial<Settings>) => {
-    setSettings((prev) => ({ ...prev, ...change }));
-  }, []);
+  /// A change, or a function that works one out from what is already stored.
+  ///
+  /// The function form is for a change that DEPENDS on the current settings - noting a recent file
+  /// prepends to a list. Passing the list from a render closure would be passing whatever it was
+  /// when that closure was made, and two files opened in quick succession would leave the second
+  /// overwriting the first.
+  const update = useCallback(
+    (change: Partial<Settings> | ((prev: Settings) => Partial<Settings>)) => {
+      setSettings((prev) => ({
+        ...prev,
+        ...(typeof change === "function" ? change(prev) : change),
+      }));
+    },
+    [],
+  );
 
   const updatePanels = useCallback((change: Partial<Settings["panels"]>) => {
     setSettings((prev) => ({ ...prev, panels: { ...prev.panels, ...change } }));

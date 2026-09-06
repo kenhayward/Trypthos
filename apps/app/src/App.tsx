@@ -8,6 +8,7 @@ import {
   cappedForSaving,
   effectiveSystemPrompt,
   fileTypeFor,
+  noteRecentFile,
   resolveEdit,
   resolvePanelWidths,
   type ProposedEdit,
@@ -141,7 +142,19 @@ export default function App() {
         : null,
     [],
   );
-  const { state, actions } = useWorkspace(client, SCRATCH, confirmDiscard);
+  /// Records a file the user opened, for the File menu's recent list.
+  ///
+  /// Written into settings because that is where everything the app remembers between launches
+  /// lives, and because the main process - which draws the menu - is already told when settings are
+  /// written. The functional form matters: two files opened in quick succession would otherwise both
+  /// prepend to the list as it was before either.
+  const noteRecent = useCallback(
+    (file: { root: string; path: string }) =>
+      update((prev) => ({ recentFiles: noteRecentFile(prev.recentFiles, file) })),
+    [update],
+  );
+
+  const { state, actions } = useWorkspace(client, SCRATCH, confirmDiscard, noteRecent);
 
   /// The open documents as paths, which is what both the tab strip and the tree ask for. Memoised
   /// rather than mapped inline: a fresh array on every render re-renders both panels on every
@@ -368,8 +381,11 @@ export default function App() {
         else if (action === "preferences") setSettingsOn("appearance");
         else if (action === "about") setSettingsOn("about");
         else if (action === "markdown-guide") actions.openGuide(MARKDOWN_GUIDE);
+        // The escape hatch for a list full of files that have since moved. Nothing walks the disk to
+        // check, so an entry stays until it falls off the end or this is chosen.
+        else if (action === "clear-recent") update({ recentFiles: [] });
       }),
-    [actions],
+    [actions, update],
   );
 
   /// Clicking a link in rendered markdown - Preview mode, a chat reply, the About box.

@@ -25,6 +25,7 @@ export const CAPABILITIES = `
 | Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and file types. |
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it here. Switched on from Settings. |
+| Recent files | Open Recent on the File menu lists the last ten files you opened, each with the folder it was in. Choosing one opens both, asking about unsaved work first. |
 | Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. |
 | Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct Trypthos renders, with examples, and the flavour of markdown named. |
 | Updates | Checks for a newer version on startup, or on demand from the Help menu or the tray icon. |
