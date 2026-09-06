@@ -516,6 +516,34 @@ other missing file does.
 **Replies only.** Your own documents are rendered exactly as you wrote them; turning their code spans
 into links would change how your prose reads.
 
+### What a model can do with the folder you attached
+
+Attaching a folder gives the model more than a list of names. It can:
+
+| Tool | What it does |
+| --- | --- |
+| `get_file_contents` | Read one of the files on the list. |
+| `list_directory` | List what is in a directory of that folder, or one below it. |
+| `search_contents` | Search the text of those files for a word or a pattern, and say which file and line each match is on. |
+| `diff_files` | Compare two of those files line by line. |
+| `propose_edit` | Suggest a change to your open document, as a card you can apply or ignore. |
+
+`/tools` in the chat box shows the same list.
+
+**How far this reaches, plainly.** Until listing and searching existed, a model could read only the
+files named in the list your folder produced - ten of them by default. Now it can find and read
+anything **inside the folder you attached, and below it**. Not the rest of your workspace, and
+nothing outside it: the folder you attach is the boundary, it is checked on every call, and the
+workspace guard that stops any path leaving your open folder still applies underneath. Attaching a
+folder is the moment you decide this, which is why the tools are not offered until you do.
+
+Only the file types you have turned on are searched, so a search never mentions a file the browser
+would not show you. **None of these three writes anything.**
+
+Every answer is capped - so many entries in a listing, so many matching lines, so many lines of
+difference - and a capped answer **says so**. A model told it has everything when it has the first
+sixty matches will answer confidently and wrongly.
+
 ### Commands you can type instead of a question
 
 Two, so far:

@@ -2,6 +2,7 @@
 
 const { randomUUID } = require("node:crypto");
 const {
+  EDIT_TOOL_NAME,
   READ_TOOL_NAME,
   buildChatRequest,
   completionsUrl,
@@ -68,14 +69,14 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
   /// Two bounds hold that in place. `readFile` decides what may be read, and it answers only for
   /// paths the outline named - so the model's own path never reaches the filesystem unchecked. And
   /// `MAX_READS_PER_TURN` caps how many times round: an unbounded loop is an unbounded bill.
-  async function run({ profile, turns, onEvent, signal, readFile = null }) {
+  async function run({ profile, turns, onEvent, signal, readFile = null, callTool = null }) {
     /// The conversation as the provider sees it, which grows as the loop runs. Never returned: the
     /// tool-call and tool-result messages exist for this turn only and are never stored, resent as
     /// history, or shown in the panel.
     const messages = [...turns];
 
     for (let round = 0; ; round += 1) {
-      const reads = await runOnce({ profile, messages, onEvent, signal, readFile });
+      const reads = await runOnce({ profile, messages, onEvent, signal, readFile, callTool });
       if (reads === null) return; // the turn ended, one way or another
 
       // Told plainly rather than silently stopping: a model that thinks it is still gathering will
@@ -89,7 +90,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
             ? { role: "tool", tool_call_id: reads.id, content: enough }
             : { role: "user", content: enough },
         );
-        await runOnce({ profile, messages, onEvent, signal, readFile: null });
+        await runOnce({ profile, messages, onEvent, signal, readFile: null, callTool: null });
         return;
       }
     }
@@ -99,7 +100,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
   ///
   /// Returns null when the turn is over, or the tool call that has already been answered and needs
   /// another round.
-  async function runOnce({ profile, messages, onEvent, signal, readFile }) {
+  async function runOnce({ profile, messages, onEvent, signal, readFile, callTool }) {
     // Read here, used here, and never returned. The renderer asked for a profile by id; it has no
     // idea whether a key exists beyond the boolean the settings UI shows.
     const key = await secrets.getKey(profile.endpoint);
@@ -116,7 +117,10 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
         method: "POST",
         headers,
         body: JSON.stringify(
-          buildChatRequest(profile, messages, { canReadFiles: readFile !== null }),
+          buildChatRequest(profile, messages, {
+            canReadFiles: readFile !== null,
+            canExploreFolder: callTool !== null,
+          }),
         ),
         signal,
       });
@@ -170,9 +174,10 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     /// argument object is not something to offer anybody.
     function flushToolCalls() {
       for (const [index, json] of toolArguments) {
-        // Reads are handled separately, and only after the stream has finished: this turns the
-        // proposals into text.
-        if (toolNames.get(index) === READ_TOOL_NAME) continue;
+        // Only proposals become text. Anything the app CARRIES OUT - reading a file, listing a
+        // folder, searching, comparing - is answered after the stream has finished and fed back as
+        // a tool result, so it must not be flushed as an edit here.
+        if (toolNames.get(index) !== EDIT_TOOL_NAME) continue;
 
         const edit = editFromToolArguments(json);
         if (edit === null) {
@@ -187,41 +192,66 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     ///
     /// One at a time. A model that asked for three files in one message would have them served in
     /// order across the next rounds, and serving them all at once would make the cap meaningless.
-    async function answerRead() {
-      if (readFile === null) return null;
-
+    /// The first tool call the app CARRIES OUT, answered and appended to the conversation.
+    ///
+    /// One at a time. A model that asked for three things in one message has them served in order
+    /// across the next rounds, and serving them all at once would make `MAX_READS_PER_TURN`
+    /// meaningless - which is the bound on how much one question can cost.
+    ///
+    /// `propose_edit` is deliberately not here: it is structured OUTPUT, the call IS the proposal,
+    /// and nothing is carried out. These are the other kind - the app does the thing and sends the
+    /// result back, which is what makes a turn a loop.
+    async function answerToolCall() {
       for (const [index, json] of toolArguments) {
-        if (toolNames.get(index) !== READ_TOOL_NAME) continue;
+        const name = toolNames.get(index);
+        if (name === undefined || name === EDIT_TOOL_NAME) continue;
 
-        const wanted = pathFromToolArguments(json);
+        const result = await carryOut(name, json);
+        // A name nothing carries out. Told to the model rather than ignored: a tool call that
+        // vanishes leaves it waiting for an answer that is never coming.
+        if (result === null) continue;
+
         const id = `call_${randomUUID()}`;
-        // Shown in the panel: a turn that pauses for several seconds while a file is read should
-        // say what it is doing rather than look stuck.
-        onEvent({ type: "tool", name: READ_TOOL_NAME, detail: wanted ?? "" });
-
-        // The allowlist lives in `readFile`, which answers only for paths the outline named. A
-        // refusal is told to the model rather than ending the turn: it can pick another file.
-        const result = wanted === null ? { ok: false, reason: "bad-path" } : await readFile(wanted);
-
         messages.push({
           role: "assistant",
           content: null,
-          tool_calls: [
-            { id, type: "function", function: { name: READ_TOOL_NAME, arguments: json } },
-          ],
+          tool_calls: [{ id, type: "function", function: { name, arguments: json } }],
         });
-        messages.push({
-          role: "tool",
-          tool_call_id: id,
-          content: result.ok
-            ? result.content
-            : `That file cannot be read. Only the files listed for this folder are available.`,
-        });
+        messages.push({ role: "tool", tool_call_id: id, content: result });
 
         return { kind: "tool", id };
       }
 
       return null;
+    }
+
+    /// Does one thing the model asked for, and answers with what to tell it.
+    ///
+    /// Null means "nothing here carries out that name", which is different from a refusal: a
+    /// refusal is an answer the model can act on, and this is the app not recognising the request.
+    async function carryOut(name, json) {
+      if (name === READ_TOOL_NAME) {
+        if (readFile === null) return null;
+
+        const wanted = pathFromToolArguments(json);
+        // Shown in the panel: a turn that pauses for several seconds should say what it is doing
+        // rather than look stuck.
+        onEvent({ type: "tool", name, detail: wanted ?? "" });
+
+        // The allowlist lives in `readFile`, which answers only for paths the outline named. A
+        // refusal is told to the model rather than ending the turn: it can pick another file.
+        const result = wanted === null ? { ok: false } : await readFile(wanted);
+        return result.ok
+          ? result.content
+          : "That file cannot be read. Only the files listed for this folder are available.";
+      }
+
+      if (callTool === null) return null;
+      const done = await callTool(name, json);
+      if (done === null) return null;
+
+      onEvent({ type: "tool", name, detail: "" });
+      return done.content;
     }
 
     /// A file the model asked for in a fenced block, answered and appended to the conversation.
@@ -283,7 +313,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
           }
           if (event.type === "done") {
             flushToolCalls();
-            const read = await answerRead();
+            const read = await answerToolCall();
             if (read !== null) return read;
 
             const fenced = await answerFencedRead(replyText);
@@ -321,7 +351,7 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     // provider that does not send one. The panel has to be told the turn ended, or the stop button
     // stays up for ever.
     flushToolCalls();
-    const read = await answerRead();
+    const read = await answerToolCall();
     if (read !== null) return read;
 
     onEvent({ type: "end" });

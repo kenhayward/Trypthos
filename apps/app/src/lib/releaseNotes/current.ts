@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.52.0",
+    date: "2026-09-06",
+    pr: 104,
+    headline: "Let the model look around the folder you attached",
+    summary:
+      "Three new things a model can do when you attach a folder: list what is in a directory, search the text of the files for a word or a pattern, and compare two files line by line. Type /tools in the chat box to see them. Search is the useful one - ask which file mentions something and you get the file and the line number rather than a guess. This widens what a model can see, and it is worth being clear about how far: until now it could read only the files named in the list your folder produced, and now it can find and read anything inside that folder and below it. Not the rest of your workspace, and nothing outside it - the folder you attach is the boundary, checked on every call, and the workspace guard still applies underneath it. Nothing is written: these three only look. Every answer is capped, and a capped answer says so rather than pretending to be complete.",
+    added: [
+      "list_directory: what is in a directory of the folder you attached.",
+      "search_contents: which file and line contains a word or a pattern.",
+      "diff_files: the line-by-line difference between two files.",
+    ],
+  },
+  {
     version: "0.51.0",
     date: "2026-09-06",
     pr: 103,

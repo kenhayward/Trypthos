@@ -139,6 +139,24 @@ export {
 export type { RecentFile } from "./recentFiles";
 
 export {
+  DIFF_LINE_LIMIT,
+  DIFF_TOOL_NAME,
+  LIST_ENTRY_LIMIT,
+  LIST_TOOL_NAME,
+  SEARCH_LINE_LIMIT,
+  SEARCH_MATCH_LIMIT,
+  SEARCH_TOOL_NAME,
+  diffArguments,
+  folderTools,
+  listArguments,
+  searchArguments,
+  searchExpression,
+  withinFolder,
+} from "./folderTools";
+export { diffLines } from "./lineDiff";
+export type { DiffResult } from "./lineDiff";
+
+export {
   IMAGE_TYPE_ID,
   MAX_IMAGE_FILE_BYTES,
   imageMediaType,
