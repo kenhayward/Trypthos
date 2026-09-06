@@ -182,3 +182,94 @@ export function searchExpression(pattern: string): RegExp | null {
     return null;
   }
 }
+
+export const OPEN_TOOL_NAME = "open_file";
+export const CREATE_TOOL_NAME = "create_file";
+
+/// The largest file a model may create, in characters.
+///
+/// A bound on a capability rather than on a format: whatever a model is writing, a file this app
+/// made on its say-so should be something a person can read through before deciding to keep it.
+export const CREATE_CHARACTER_LIMIT = 40_000;
+
+/// The two tools that DO something rather than answer something.
+///
+/// **`create_file` is the first time a model can put a file on disk without the user pressing
+/// Apply**, and it is bounded four ways: inside the attached folder, a file type the user has turned
+/// on, a size limit, and - the one that matters most - it can only ever CREATE. The write presents
+/// no revision, which the provider already answers with a conflict when anything is there, so
+/// "cannot overwrite" is enforced by the write itself rather than by a check that could race it.
+///
+/// `open_file` only puts a tab on screen. It reaches nothing the model could not already read.
+export function actingTools() {
+  return [
+    {
+      type: "function" as const,
+      function: {
+        name: OPEN_TOOL_NAME,
+        description:
+          "Open a file from the attached folder in a tab, so the user can see it. Use it after " +
+          "finding the file that answers their question. It shows the file; it does not change it.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            path: {
+              type: "string" as const,
+              description: "The file to open, workspace-relative, as the folder outline writes paths.",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: CREATE_TOOL_NAME,
+        description:
+          "Create a NEW file in the attached folder. It cannot replace a file that already " +
+          "exists - to change one, propose an edit instead. Say what the file should contain in " +
+          "full; there is no way to append to it afterwards.",
+        parameters: {
+          type: "object" as const,
+          properties: {
+            path: {
+              type: "string" as const,
+              description: "Where the new file should go, workspace-relative.",
+            },
+            content: { type: "string" as const, description: "The whole contents of the file." },
+            open: {
+              type: "boolean" as const,
+              description: "Whether to open it in a tab once it is made. Defaults to true.",
+            },
+          },
+          required: ["path", "content"],
+        },
+      },
+    },
+  ];
+}
+
+export function openArguments(json: string): { path: string } | null {
+  const args = parse(json, z.looseObject({ path: z.string() }));
+  if (args === null) return null;
+
+  const path = args.path.trim();
+  return path === "" ? null : { path };
+}
+
+export function createArguments(
+  json: string,
+): { path: string; content: string; open: boolean } | null {
+  const args = parse(
+    json,
+    z.looseObject({ path: z.string(), content: z.string(), open: z.boolean().optional() }),
+  );
+  if (args === null) return null;
+
+  const path = args.path.trim();
+  if (path === "") return null;
+  // Defaults to opening it. A file made on a model's say-so that the user never sees is the version
+  // of this feature nobody wants: the point is that they look at what was made.
+  return { path, content: args.content, open: args.open ?? true };
+}

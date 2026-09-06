@@ -100,7 +100,9 @@
       "list_directory": "List what is in a directory of the folder you attached, or one below it. Names only.",
       "search_contents": "Search the text of the files in the folder you attached for a word or a pattern, and say which file and line each match is on.",
       "diff_files": "Compare two files in the folder you attached, line by line.",
-      "propose_edit": "Suggest a change to the open document. It appears as a card you can apply or ignore - nothing is written until you do."
+      "open_file": "Open a file from the folder you attached in a tab, so you can see it. It shows a file; it does not change one.",
+      "propose_edit": "Suggest a change to the open document. It appears as a card you can apply or ignore - nothing is written until you do.",
+      "create_file": "Make a NEW file in the folder you attached. It cannot replace a file that already exists, and it is the one tool here that writes without you pressing Apply."
     },
     "notConfigured": "No chat model is configured yet.",
     "intro": "Ask a question about what you are working on.",

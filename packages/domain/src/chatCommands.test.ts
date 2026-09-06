@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_COMMANDS, CHAT_TOOLS, parseChatCommand } from "./chatCommands";
 import { EDIT_TOOL_NAME, READ_TOOL_NAME, editTools, readTools } from "./editTools";
-import { folderTools } from "./folderTools";
+import { actingTools, folderTools } from "./folderTools";
 
 describe("parseChatCommand", () => {
   it("recognises a command", () => {
@@ -67,7 +67,7 @@ describe("CHAT_COMMANDS", () => {
 /// is which tools exist.
 describe("CHAT_TOOLS", () => {
   it("describes every tool the app actually offers", () => {
-    const offered = [...readTools(), ...folderTools(), ...editTools()]
+    const offered = [...readTools(), ...folderTools(), ...actingTools(), ...editTools()]
       .map((tool) => tool.function.name)
       .sort();
     const described = CHAT_TOOLS.map((tool) => tool.name).sort();
@@ -81,7 +81,9 @@ describe("CHAT_TOOLS", () => {
       "list_directory",
       "search_contents",
       "diff_files",
+      "open_file",
       EDIT_TOOL_NAME,
+      "create_file",
     ]);
   });
 

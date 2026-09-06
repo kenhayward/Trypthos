@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.53.0",
+    date: "2026-09-06",
+    pr: 105,
+    headline: "The model can show you a file, and make a new one",
+    summary:
+      "Two more things a model can do when you attach a folder. It can open a file in a tab, which is what you want after asking which file mentions something - it finds it and puts it on your screen. And it can create a NEW file in that folder. That second one is a change worth knowing about: until now nothing a model suggested reached your disk until you pressed Apply, and this is the one exception. It is bounded four ways - inside the folder you attached, a file type you have turned on, a size a person can read through, and it can only ever create. It cannot replace a file that already exists, and that is enforced by the write itself rather than by a check that could be raced. A file it makes is opened in a tab unless it says otherwise, so you see what was made rather than finding it later. Type /tools in the chat box for the full list of what a model can be given.",
+    added: [
+      "open_file: the model can put a file it found on your screen.",
+      "create_file: the model can make a new file in the folder you attached. It cannot replace an existing one.",
+    ],
+  },
+  {
     version: "0.52.0",
     date: "2026-09-06",
     pr: 104,

@@ -1152,6 +1152,36 @@ block.
 `MAX_READS_PER_TURN` bounds the whole loop rather than reads alone, which is what keeps one question
 from becoming an unbounded bill.
 
+### The two tools that act, and the invariant one of them changes
+
+`open_file` puts a tab on screen. It reaches nothing the model could not already read, and it goes
+down `shell:openTarget` - the channel a launch from File Explorer already uses - so the renderer
+opens it the one way, asking about unsaved work and reporting a missing file as it always does.
+There is deliberately no second implementation of opening a file. It also refuses a file type the
+user has turned off: a tab for a file their own browser will not show them is a tab about a file they
+cannot open.
+
+**`create_file` is the first time a model puts a file on a user's disk without them pressing Apply**,
+and that sentence used to be an invariant in this document. It is now bounded rather than absent:
+
+- **Inside the folder the user attached**, by the same `withinFolder` fence as everything else here,
+  with the workspace guard underneath it.
+- **A file type the user has turned on**, so it cannot invent a `.sh` in a markdown folder.
+- **A size a person could read through** (`CREATE_CHARACTER_LIMIT`). A bound on the capability rather
+  than on a format: whatever is being written, a file made on a model's say-so should be something
+  somebody can check.
+- **Create only.** This is the one that matters, and it is enforced **by the write itself rather than
+  by a check before it**. Presenting no revision is how this app already says "there should be
+  nothing here", and the provider answers a conflict when there is. A check-then-write would be a
+  race; this cannot be.
+
+`canActOnFolder` is its own flag on `buildChatRequest` rather than part of `canExploreFolder`,
+because it is the one capability here that changes something. If a switch for it is ever wanted, it
+is a change to what is passed rather than an unpicking.
+
+A created file is opened in a tab unless the call says otherwise. A file made on a model's say-so
+that the user never sees is the version of this feature nobody wants.
+
 ### Slash commands, and turns the app wrote
 
 `/commands` (and `/help`) and `/tools` are answered by the app. They say something about Trypthos,
@@ -1269,8 +1299,9 @@ produces the same menu twice running: without that, which files the model could 
 between turns with nothing having changed. `settings.chat.folderFileLimit` sets how many it names,
 defaulting to ten, because every entry is a file the model might ask for.
 
-**What chat does not do yet:** it cannot write to any file without the user pressing Apply.
-Reading files in subfolders arrived with the folder tools above.
+**What chat does not do yet:** it cannot CHANGE a file without the user pressing Apply. Reading files
+in subfolders arrived with the folder tools above, and `create_file` is the one exception to the
+write rule - see below.
 
 ## Unsaved changes, across the process boundary
 
