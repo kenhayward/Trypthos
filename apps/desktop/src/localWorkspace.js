@@ -162,7 +162,18 @@ function createLocalWorkspace({ root, guard }) {
       return { ok: true, content: decoded.content, revision: revisionOf(stats) };
     },
 
-    async write(relativePath, content, expectedRevision) {
+    /// Writes a file, refusing anything that would overwrite a change the caller has not seen.
+    ///
+    /// `overwrite` is the one way past that, and it means "the user has already been asked". A
+    /// native save dialog that offered to replace a file and was told yes IS the answer the conflict
+    /// check exists to obtain, so demanding it again would be asking the same question twice and
+    /// refusing the second answer. Nothing the renderer sends can set it: `WriteRequest` has no such
+    /// field, and the only caller that passes it is the Save As handler, on this side of the
+    /// boundary, holding a path that came from the dialog rather than from a page.
+    ///
+    /// The boundary check is NOT waived by it. Where a file may be written is not the user's to
+    /// answer in a dialog.
+    async write(relativePath, content, expectedRevision, { overwrite = false } = {}) {
       const resolved = await resolve(relativePath, { mustExist: false });
       if (!resolved.ok) return resolved;
 
@@ -175,14 +186,16 @@ function createLocalWorkspace({ root, guard }) {
 
       // Both directions are conflicts, and both are reported rather than resolved. The editor must
       // never report a save that did not happen, and which version wins is the user's decision.
-      if (current === null && expectedRevision !== null) {
-        return failure("not-found");
-      }
-      if (current !== null && expectedRevision === null) {
-        return { ok: false, reason: "conflict", theirs: current };
-      }
-      if (current !== null && expectedRevision !== null && current.id !== expectedRevision.id) {
-        return { ok: false, reason: "conflict", theirs: current };
+      if (!overwrite) {
+        if (current === null && expectedRevision !== null) {
+          return failure("not-found");
+        }
+        if (current !== null && expectedRevision === null) {
+          return { ok: false, reason: "conflict", theirs: current };
+        }
+        if (current !== null && expectedRevision !== null && current.id !== expectedRevision.id) {
+          return { ok: false, reason: "conflict", theirs: current };
+        }
       }
 
       // A mark the editor never showed must not be lost by saving. Read from the file on disk at

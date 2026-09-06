@@ -122,6 +122,7 @@ export {
   markSaved,
   openDocument,
   openPaths,
+  renameDocument,
   tabLabels,
   updateContent,
 } from "./openDocuments";
@@ -201,6 +202,7 @@ export {
   OpenExternalRequest,
   SendChatRequest,
   ReadRequest,
+  SaveAsRequest,
   RevisionSchema,
   SetSecretRequest,
   WINDOW_STATE_CHANNEL,

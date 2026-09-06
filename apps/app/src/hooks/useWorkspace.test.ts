@@ -10,6 +10,7 @@ import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceC
 function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
   const writes: { path: string; content: string; revision: string | null }[] = [];
   const reads: string[] = [];
+  const saveAsCalls: { path: string | null; content: string }[] = [];
 
   const client: WorkspaceClient = {
     // Chat's map of the folder. Nothing in this hook asks for it; it is here because the client is
@@ -36,10 +37,16 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       writes.push({ path, content, revision: expectedRevision?.id ?? null });
       return { ok: true, revision: { id: "r2" } };
     },
+    // The dialog lives in the shell, so the fake stands in for the whole of it: what came back is
+    // what the user picked. Note there is no destination to pass in - see `SaveAsRequest`.
+    saveFileAs: async (path, content) => {
+      saveAsCalls.push({ path, content });
+      return { ok: true, path: "chosen.md", revision: { id: "r-saved-as" } };
+    },
     ...overrides,
   };
 
-  return { client, writes, reads };
+  return { client, writes, reads, saveAsCalls };
 }
 
 describe("parentOf", () => {
@@ -1187,5 +1194,133 @@ describe("the selected folder", () => {
     });
 
     expect(result.current.state.selectedFolder).toBe("");
+  });
+});
+
+/// Save As, from the hook's side.
+///
+/// The shell decides where the file goes; what is left here is what happens to the TAB afterwards,
+/// and it differs by what was being saved. A file moves. The scratch buffer and the built-in guide
+/// have no file to move, so they are copied out and stay where they are.
+describe("saving somewhere else", () => {
+  const A = { id: "a.md", name: "a.md", kind: "file" as const };
+
+  it("sends the document and where it currently lives, and nothing about where it should go", async () => {
+    const { client, saveAsCalls } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(saveAsCalls).toEqual([{ path: "a.md", content: "# Mine\n" }]);
+  });
+
+  it("moves the tab to the file that was written, clean and at its new revision", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(result.current.state.activePath).toBe("chosen.md");
+    expect(result.current.state.file?.revision).toEqual({ id: "r-saved-as" });
+    expect(result.current.state.content).toBe("# Mine\n");
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.documents.map((document) => document.path)).toEqual(["chosen.md"]);
+  });
+
+  // The scratch buffer is the reason Save As can be reached with nothing open at all. It has never
+  // been anywhere, so the dialog is told nothing about where to start.
+  it("gives the scratch buffer somewhere to live, and leaves it there too", async () => {
+    const { client, saveAsCalls } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client, "typed into the scratch buffer"));
+
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(saveAsCalls).toEqual([{ path: null, content: "typed into the scratch buffer" }]);
+    expect(result.current.state.activePath).toBe("chosen.md");
+    expect(result.current.state.content).toBe("typed into the scratch buffer");
+    expect(result.current.state.dirty).toBe(false);
+  });
+
+  // The guide has no file behind it, so there is nothing to move: this is a copy, and the guide
+  // stays open and stays read-only.
+  it("copies a read-only document out rather than moving it", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openGuide("# Guide\n"));
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      GUIDE_PATH,
+      "chosen.md",
+    ]);
+    expect(result.current.state.activePath).toBe("chosen.md");
+    expect(result.current.state.readOnly).toBe(false);
+  });
+
+  it("changes nothing when the dialog is cancelled, and raises no error", async () => {
+    const { client } = fakeClient({
+      saveFileAs: async () => ({ ok: false, reason: "cancelled" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    act(() => result.current.actions.edit("# Mine\n"));
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(result.current.state.activePath).toBe("a.md");
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  // A folder outside the workspace is a real folder the user can write to, and the app is the thing
+  // declining - so it says so in its own words rather than borrowing "permission denied".
+  it("says so when the chosen folder is outside the open workspace", async () => {
+    const { client } = fakeClient({
+      saveFileAs: async () => ({ ok: false, reason: "outside-workspace" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openFile(A);
+    });
+    await act(async () => {
+      await result.current.actions.saveAs();
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.outsideWorkspace");
+    expect(result.current.state.activePath).toBe("a.md");
+  });
+
+  // The caller may be about to act on the answer, exactly as it may with `save`.
+  it("reports whether the file actually landed", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    let landed: boolean | undefined;
+    await act(async () => {
+      landed = await result.current.actions.saveAs();
+    });
+    expect(landed).toBe(true);
   });
 });

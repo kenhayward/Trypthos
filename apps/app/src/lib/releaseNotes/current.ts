@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.44.0",
+    date: "2026-09-06",
+    pr: 89,
+    headline: "Save a document somewhere else",
+    summary:
+      "Save As is on the File menu, and on Ctrl+Shift+S (Cmd+Shift+S on a Mac). It opens the usual save dialog beside the file you are editing, writes the document wherever you point it, and the tab follows - so from then on you are editing the new file and the original is left exactly as it was. It also gives two documents that never had anywhere to go a first home: the scratch buffer you start in, and the built-in markdown guide, both of which are copied out rather than moved, so they stay where they are. Saving over a file the dialog already offered to replace goes through without a second question, since you have just answered it. One limit worth knowing: Trypthos saves inside the folder you have open, so a place outside it is declined with a message saying so rather than a puzzling permissions error.",
+    added: [
+      "Save As on the File menu and on Ctrl+Shift+S, writing the document wherever you choose.",
+      "The scratch buffer and the markdown guide can be saved out as real files.",
+    ],
+  },
+  {
     version: "0.43.0",
     date: "2026-09-06",
     pr: 88,

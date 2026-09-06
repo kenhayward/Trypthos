@@ -10,6 +10,7 @@ import {
   OpenExternalRequest,
   ListRequest,
   ReadRequest,
+  SaveAsRequest,
   SetSecretRequest,
   WindowStateSchema,
   WriteRequest,
@@ -22,6 +23,7 @@ describe("IPC_CHANNELS", () => {
       "workspace:list",
       "file:read",
       "file:write",
+      "file:saveAs",
       "window:minimize",
       "window:toggleMaximize",
       "window:close",
@@ -267,5 +269,36 @@ describe("OpenTargetSchema", () => {
   it("refuses a shape it does not recognise", () => {
     expect(OpenTargetSchema.safeParse({ root: "D:/Notes" }).success).toBe(false);
     expect(OpenTargetSchema.safeParse({ file: "todo.md", root: 7 }).success).toBe(false);
+  });
+});
+
+/// Save As: the renderer asks for a dialog, and the main process decides where the file may go.
+///
+/// Note what the renderer does NOT send - a destination. It cannot: the path comes from the native
+/// dialog, on the main process's side of the boundary, and is checked against the open workspace
+/// there. `path` is only where the dialog starts, so a Save As from a file deep in the tree opens in
+/// that folder rather than at the root.
+describe("SaveAsRequest", () => {
+  it("takes the document being saved and where it currently lives", () => {
+    const parsed = SaveAsRequest.safeParse({ path: "notes/plan.md", content: "# Plan" });
+    expect(parsed.success).toBe(true);
+  });
+
+  // The scratch buffer has never been anywhere, and Save As is how it gets somewhere.
+  it("accepts a document with no path yet", () => {
+    expect(SaveAsRequest.safeParse({ path: null, content: "" }).success).toBe(true);
+  });
+
+  it("has no way to name a destination", () => {
+    const parsed = SaveAsRequest.safeParse({
+      path: "a.md",
+      content: "x",
+      target: "C:/Windows/System32/notes.md",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("refuses a request with no content, which is not a save", () => {
+    expect(SaveAsRequest.safeParse({ path: "a.md" }).success).toBe(false);
   });
 });

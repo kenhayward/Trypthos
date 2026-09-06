@@ -24,6 +24,20 @@ there is something unsaved. If the file changed on disk since you opened it - an
 another window - the save is **refused** rather than applied, and your edits stay exactly where they
 are. Trypthos will not decide for you which version wins.
 
+**Save As** writes the document somewhere else: File > Save As, or Ctrl+Shift+S (Cmd+Shift+S on
+macOS). The usual save dialog opens beside the file you are editing, and once it is written the tab
+follows - you are editing the new file from then on, and the original is left exactly as it was.
+Replacing a file the dialog already offered to replace goes through without a second question, since
+you have just answered it.
+
+Two documents have nowhere to be saved until you do this: the scratch buffer you start in, and the
+built-in markdown guide. Both are **copied** out rather than moved, so they stay where they are and
+the copy opens as an ordinary file you can edit.
+
+Trypthos saves inside the folder you have open, and nowhere else. Pick a place outside it and the
+save is declined with a message saying so - it is the same boundary everything else in the app
+respects, and it is not a permissions problem with the folder you picked.
+
 Local and cloud look like one tree to you, but they behave differently underneath: cloud listings are
 paged, slow, and can fail part-way through. Trypthos shows that on the node it affects rather than
 blanking the whole panel, so a directory that is still loading, or that failed, says so in place.
@@ -261,7 +275,7 @@ bar. They open real native menus: native rendering, the platform's own accelerat
 platform's own cut, copy and paste. On macOS the same commands appear where they belong, in the
 system menu bar at the top of the screen, and the window draws no menu labels of its own.
 
-- **File** opens a folder, saves the current file, closes the window and quits.
+- **File** opens a folder, saves the current file, saves it somewhere else, closes the window and quits.
 - **Edit** carries undo, redo, cut, copy, paste and select all.
 - **Tools** carries Settings. On macOS this lives in the application menu instead, which is where
   that platform expects it.

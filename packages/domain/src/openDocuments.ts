@@ -127,6 +127,42 @@ export function closeDocument(set: DocumentSet, path: string): DocumentSet {
   return { documents, activePath: next?.path ?? null };
 }
 
+/// Moves one document to another path - what Save As does to the tab it was invoked from.
+///
+/// A rename rather than a second tab. The user asked for this document to live somewhere else, and
+/// two tabs would be two views of text that is now in two files, with no way to tell which one is
+/// being typed into. The document keeps its place in the strip and its text; only where it lives,
+/// what it is called and which revision it is measured against change - and it is clean, because the
+/// write that prompted this is what put it on disk.
+///
+/// **A read-only document is refused.** It has no file behind it, so there is nothing to move -
+/// Save As on the built-in guide is a copy, which is the caller's business rather than this one's.
+export function renameDocument(
+  set: DocumentSet,
+  from: string,
+  to: string,
+  revision: Revision,
+): DocumentSet {
+  const document = set.documents.find((open) => open.path === from);
+  if (document === undefined || document.readOnly) return set;
+
+  const moved: OpenDocument = {
+    ...document,
+    path: to,
+    name: documentName(to),
+    revision,
+    dirty: false,
+  };
+
+  // Saving over a file that is also open leaves two tabs naming one file, each with its own idea of
+  // what is in it. The stale one goes: what was just written is what is on disk.
+  const documents = set.documents
+    .filter((open) => open.path === from || open.path !== to)
+    .map((open) => (open.path === from ? moved : open));
+
+  return { documents, activePath: set.activePath === from ? to : set.activePath };
+}
+
 /// Records an edit to one document. Dirty is measured against the text, not set by the act of
 /// typing: retyping a character back to what it was leaves the file unmodified, and an indicator
 /// that says otherwise is telling the user something untrue about their file.

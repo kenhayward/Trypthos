@@ -21,6 +21,7 @@ export const IPC_CHANNELS = [
   "workspace:list",
   "file:read",
   "file:write",
+  "file:saveAs",
   "window:minimize",
   "window:toggleMaximize",
   "window:close",
@@ -177,6 +178,20 @@ export const WriteRequest = z
   })
   .strict();
 
+/// Save As: a dialog, and then a write to wherever it landed.
+///
+/// **The renderer cannot name a destination, and that is the whole shape of this.** It sends the
+/// document and where the document currently lives; the path comes back from the native dialog on
+/// the main process's side, and is checked against the open workspace there. A renderer that could
+/// name a target could write a file anywhere on the machine, which is the same reason it cannot name
+/// a workspace root.
+///
+/// `path` is only where the dialog starts - null for the scratch buffer, which has never been
+/// anywhere.
+export const SaveAsRequest = z
+  .object({ path: relativePath.min(1).nullable(), content: z.string() })
+  .strict();
+
 /// One turn of a conversation, on the way to the provider.
 ///
 /// The renderer names a **profile id**, never an endpoint. The main process looks the profile up in
@@ -286,6 +301,7 @@ export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
 export type OutlineRequest = z.infer<typeof OutlineRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
+export type SaveAsRequest = z.infer<typeof SaveAsRequest>;
 export type WriteRequest = z.infer<typeof WriteRequest>;
 
 // No `Revision` type is exported here on purpose: provider.ts already defines it, and a second
