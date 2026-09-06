@@ -1,8 +1,8 @@
 # Trypthos
 
-A desktop markdown editor for Windows and macOS, with a folder browser and an AI chat panel.
+A **desktop file editor** for Windows and macOS, with a folder browser and an AI chat panel. Native Markdown editing with source , live and preview mode. Syntax highlighted editor for many other file types (see in app for the list)
 
-Trypthos is **wholly local**. There is no server and no account: your files stay on your machine,
+The app is **wholly local**. There is no server and no account: your files stay on your machine,
 chat talks directly to an endpoint you configure, and chats are stored locally.
 
 ## Features
