@@ -8,6 +8,7 @@ import {
   type ProposedEdit,
 } from "@trypthos/domain";
 import { useCodeHighlighting } from "../hooks/useCodeHighlighting";
+import { linkifyPaths } from "../lib/replyLinks";
 import { renderMarkdown } from "../lib/markdown";
 import { contextUsage } from "@trypthos/domain";
 import type { Turn } from "../lib/conversation";
@@ -122,6 +123,16 @@ export default function ChatPanel({
   // A reply arrives a token at a time, so this runs often. It is cheap when it does: a coloured
   // block is marked, and a pass over an unchanged thread is one query.
   useCodeHighlighting(threadRef, fileTypes, turns);
+
+  // The file paths a reply names, made clickable. Runs after every token like the highlighting
+  // beside it, and is cheap for the same reason: a span it has already looked at is marked, so a
+  // pass over an unchanged thread walks the spans and does nothing.
+  //
+  // The chat panel only. Preview renders what the USER wrote, and turning their code spans into
+  // links would change how their own prose reads.
+  useEffect(() => {
+    if (threadRef.current !== null) linkifyPaths(threadRef.current, fileTypes);
+  }, [fileTypes, turns]);
 
   /// Whether the thread should keep following the newest message.
   ///
@@ -346,7 +357,7 @@ export default function ChatPanel({
                           ) : (
                             <div
                               key={at}
-                              className="chat-md break-words [&_a]:underline [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_pre]:overflow-x-auto"
+                              className="chat-md break-words [&_a]:text-leaf [&_a]:underline [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_pre]:overflow-x-auto"
                               // Sanitised in renderMarkdown (DOMPurify) before injection. This is a
                               // model's output: text the app did not write, and treated as data
                               // rather than markup for the same reason a workspace file is.

@@ -951,3 +951,32 @@ describe("the thinking behind a reply", () => {
     expect(screen.getByTestId("turn-reasoning")).toBeDefined();
   });
 });
+
+/// The paths a reply names, made clickable.
+///
+/// The rule and the DOM pass are tested in `replyLinks.test`; this is the wiring, and the one thing
+/// that only shows up in the panel - that it happens at all, and that it is marked in the way the
+/// window's own click handler looks for.
+describe("ChatPanel: links in a reply", () => {
+  const reply = (content: string) =>
+    panel({
+      fileTypes: ["markdown", "python"],
+      turns: [
+        { role: "user" as const, content: "Where is it?" },
+        { role: "assistant" as const, content },
+      ],
+    });
+
+  it("makes a file path in a reply a link the window will open", () => {
+    reply("It is in `notes/plan.md`, near the top.");
+
+    const anchor = document.querySelector("a[data-md-link]");
+    expect(anchor?.getAttribute("href")).toBe("notes/plan.md");
+    expect(anchor?.textContent).toBe("notes/plan.md");
+  });
+
+  it("leaves a command in backticks as text", () => {
+    reply("Run `npm run build` first.");
+    expect(document.querySelector("a[data-md-link]")).toBeNull();
+  });
+});
