@@ -123,15 +123,52 @@ export default function ChatPanel({
   // block is marked, and a pass over an unchanged thread is one query.
   useCodeHighlighting(threadRef, fileTypes, turns);
 
-  // Keep the thread pinned to the newest message as tokens stream in.
+  /// Whether the thread should keep following the newest message.
+  ///
+  /// True while the user is reading the end of the conversation, which is nearly always. It goes
+  /// false the moment they scroll away from the bottom, and that is the whole point: a thread that
+  /// jumps to the newest token every time one arrives cannot be read while it is being written, and
+  /// a long answer arrives at several tokens a second. The part they were looking at was being
+  /// snatched away before they could finish the sentence.
+  ///
+  /// A ref rather than state: it changes on every scroll event, and nothing renders differently for
+  /// it.
+  const following = useRef(true);
+
+  /// How close to the bottom still counts as being at it.
+  ///
+  /// Not zero. Sub-pixel rounding leaves a fraction of a pixel behind after a programmatic scroll,
+  /// and a threshold of exactly zero would turn the panel's own scroll into the user scrolling away.
+  const FOLLOW_SLACK = 24;
+
+  const onThreadScroll = () => {
+    const thread = threadRef.current;
+    if (thread === null) return;
+    following.current =
+      thread.scrollHeight - thread.scrollTop - thread.clientHeight <= FOLLOW_SLACK;
+  };
+
+  // Keep the thread on the newest message as tokens stream in - unless the user has scrolled away
+  // to read something, in which case they stay where they put themselves.
   useEffect(() => {
     const thread = threadRef.current;
-    if (thread !== null) thread.scrollTop = thread.scrollHeight;
+    if (thread === null) return;
+
+    if (!following.current) return;
+
+    thread.scrollTop = thread.scrollHeight;
   }, [turns]);
 
   const send = () => {
     const prompt = input.trim();
     if (prompt === "" || streaming) return;
+
+    // Asking is not reading. Somebody who scrolled up to re-read an answer and then typed a question
+    // wants to see the reply to it, so their own question brings the thread back to the bottom.
+    // Decided here rather than by looking at the turns, because the turn that follows a question is
+    // the empty assistant one being waited on - the question is not the last thing in the thread by
+    // the time the effect runs.
+    following.current = true;
     onSend(prompt);
     setInput("");
   };
@@ -230,7 +267,12 @@ export default function ChatPanel({
         </span>
       </h2>
 
-      <div ref={threadRef} data-testid="chat-thread" className="min-h-0 grow space-y-3 overflow-y-auto p-3">
+      <div
+        ref={threadRef}
+        data-testid="chat-thread"
+        onScroll={onThreadScroll}
+        className="min-h-0 grow space-y-3 overflow-y-auto p-3"
+      >
         {models.length === 0 ? (
           <div className="text-ui text-ink-4">
             <p>{t("chat.notConfigured")}</p>

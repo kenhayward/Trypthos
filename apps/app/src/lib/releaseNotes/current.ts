@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.45.1",
+    date: "2026-09-06",
+    pr: 93,
+    headline: "Read a long answer while it is still arriving",
+    summary:
+      "Two fixes in the chat panel. Scrolling up during a long reply no longer snatches you back to the bottom: until now the thread jumped to the newest token every time one arrived - several times a second - so a long answer could not be read until it had finished, and the scrollbar seemed to refuse to go where you put it. The thread still follows the answer down on its own if you have not scrolled away, and asking a new question always brings you back to the bottom. Second, the Folder button no longer names a folder it is not sending: with the button off it reads Folder, as its unpressed state already said, and the folder it would send is on hover.",
+    fixed: [
+      "Scrolling up while a reply streams stays where you put it.",
+      "The chat Folder button names a folder only when that folder is actually being sent.",
+    ],
+  },
+  {
     version: "0.45.0",
     date: "2026-09-06",
     pr: 90,
