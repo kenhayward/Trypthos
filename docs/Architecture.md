@@ -1066,6 +1066,26 @@ checks that the format the prompt teaches is the format the parser accepts, and 
 only downstream symptoms: the model does exactly as instructed and the panel renders an inert code
 block.
 
+### Making a reply's paths clickable
+
+`lib/replyLinks.ts` walks the rendered thread and wraps an inline `<code>` in an anchor when its text
+is something the app could open. Applied by the chat panel and **nowhere else**: Preview renders what
+the user wrote, and turning their code spans into links would change how their own prose reads.
+
+Three things make it small enough to trust:
+
+- **The decision is `linkAction`'s** - the same function a markdown link goes through, so the
+  workspace boundary, the enabled file types and the external-scheme rule are answered in one place.
+  A path that climbs out, a type that is off, and `npm run build` are all "not a link" for reasons
+  already written down. `fromPath` is null, because the paths a model has came from the folder
+  outline and those are workspace-relative.
+- **The anchor carries `data-md-link`**, which is what the window's delegated click handler already
+  matches on, and its `href` is the text as written. So the handler resolves it exactly as it
+  resolves a link somebody typed, rather than this deciding once and the handler deciding again.
+- **It moves the node, it does not rebuild it.** The text is the model's and has to survive exactly,
+  which is the same reason `codeHighlight` works over the DOM. A `data-reply-link` mark makes a pass
+  over an already-walked thread do nothing, which matters because this runs on every streamed token.
+
 ### Slash commands, and turns the app wrote
 
 `/commands` (and `/help`) and `/tools` are answered by the app. They say something about Trypthos,

@@ -476,6 +476,21 @@ thinking and written no answer. Trypthos says so, and offers to unfold what the 
 rather than showing you an empty message. Asking again usually works; it is a habit of the model
 rather than a fault in the request.
 
+### Following a reply to the file it names
+
+A model names a file in backticks - it is how every model names one - and those are **links**. Click
+one and the file opens in a tab, exactly as a link you had typed yourself would. A web address in
+backticks opens in your browser, as one written as a link already did.
+
+What becomes a link is decided by the same rule the rest of the app uses for a link, so the answer is
+the same wherever you click it: a path outside your folder is not a link, a file type you have turned
+off is not a link, and anything that is not a file at all stays as text - `npm run build`, `and/or`,
+`--force`. A path to a file that has since moved is still a link, and clicking it says so the way any
+other missing file does.
+
+**Replies only.** Your own documents are rendered exactly as you wrote them; turning their code spans
+into links would change how your prose reads.
+
 ### Commands you can type instead of a question
 
 Two, so far:

@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.49.0",
+    date: "2026-09-06",
+    pr: 101,
+    headline: "Open a file a reply mentions by clicking it",
+    summary:
+      "When a model names a file in backticks - which is how a model names one - it is now a link. Click it and the file opens in a tab, exactly as a link you had typed yourself would. A web address in backticks opens in your browser, as one written as a link already did. What becomes a link is decided by the same rule the rest of the app uses, so a path outside your folder is not one, nor is a file type you have turned off, nor is anything that is not a file at all - `npm run build` and `and/or` stay as text. Links in replies are also coloured now rather than only underlined, so they read as links before you hover them. Only in replies: your own documents are rendered exactly as you wrote them.",
+    added: [
+      "File paths a reply names are links that open the file in a tab.",
+    ],
+    changed: [
+      "Links in a chat reply are coloured, not only underlined.",
+    ],
+  },
+  {
     version: "0.48.0",
     date: "2026-09-06",
     pr: 100,
