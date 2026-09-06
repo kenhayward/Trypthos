@@ -1,6 +1,7 @@
 "use strict";
 
 const { APP_NAME } = require("./appName");
+const { recentFileLabel } = require("@trypthos/domain");
 
 /// The application menus, as templates.
 ///
@@ -32,6 +33,7 @@ const SETTINGS = "Settings";
 const ABOUT = `About ${APP_NAME}`;
 const CHECK_FOR_UPDATES = "Check for Updates...";
 const MARKDOWN_GUIDE = "Markdown Syntax Guide";
+const OPEN_RECENT = "Open Recent";
 
 const separator = { type: "separator" };
 
@@ -48,7 +50,31 @@ function clipboardRoles(editFlags) {
   ];
 }
 
-function fileItems(on) {
+/// The files the File menu offers to reopen.
+///
+/// A recent entry names a FOLDER and a file, so choosing one is exactly the act the app already has:
+/// the folder, and a document inside it, which is what File Explorer hands over on launch. It goes
+/// down that same channel, so the renderer asks about unsaved work and reports a file that has since
+/// been deleted the way it reports any other. There is deliberately no second way to open a file.
+///
+/// An empty list gets a disabled line rather than an empty menu. The second says nothing; the first
+/// says the feature is there and you have not opened anything yet.
+function recentItems(on, recent) {
+  if (recent.length === 0) return [{ label: "Nothing opened yet", enabled: false }];
+
+  return [
+    ...recent.map((file) => ({
+      label: recentFileLabel(file),
+      click: () => on.openRecent({ root: file.root, file: file.path }),
+    })),
+    separator,
+    // The escape hatch for an entry that no longer opens anything. Nothing walks the disk to check,
+    // so a file since deleted stays on the list until it falls off the end or this is used.
+    { label: "Clear Recent Files", click: () => on.action("clear-recent") },
+  ];
+}
+
+function fileItems(on, recent = []) {
   return [
     { label: OPEN_FOLDER, accelerator: "CmdOrCtrl+O", click: () => on.action("open-folder") },
     separator,
@@ -57,6 +83,8 @@ function fileItems(on) {
     // for one. The scratch buffer and the built-in guide both have text and no file, so this is the
     // only route either of them has to disk.
     { label: SAVE_AS, accelerator: "CmdOrCtrl+Shift+S", click: () => on.action("save-as") },
+    separator,
+    { label: OPEN_RECENT, submenu: recentItems(on, recent) },
   ];
 }
 
@@ -88,10 +116,10 @@ function helpItems(on) {
 }
 
 /// One menu, for the labels the renderer draws in its own title bar.
-function popupTemplate(name, { on }) {
+function popupTemplate(name, { on, recent = [] }) {
   if (name === "file") {
     return [
-      ...fileItems(on),
+      ...fileItems(on, recent),
       separator,
       // Closing the window is not the same as quitting when close-to-tray is on, so both are here.
       { label: "Close Window", click: () => on.closeWindow() },
@@ -110,7 +138,7 @@ function popupTemplate(name, { on }) {
 /// A different shape rather than a translation of the same one. The platform expects an app menu
 /// named after the app, carrying About, Settings and Quit - so Tools, which exists on Windows only
 /// to hold Settings, has nothing left to hold and is not built.
-function appMenuTemplate({ appName = APP_NAME, on }) {
+function appMenuTemplate({ appName = APP_NAME, on, recent = [] }) {
   return [
     {
       label: appName,
@@ -127,7 +155,7 @@ function appMenuTemplate({ appName = APP_NAME, on }) {
         { role: "quit" },
       ],
     },
-    { label: "File", submenu: [...fileItems(on), separator, { role: "close" }] },
+    { label: "File", submenu: [...fileItems(on, recent), separator, { role: "close" }] },
     { label: "Edit", submenu: editItems() },
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }] },
     {

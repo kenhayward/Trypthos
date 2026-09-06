@@ -128,6 +128,14 @@ export {
 } from "./openDocuments";
 export type { DocumentSet, DocumentSource, OpenDocument } from "./openDocuments";
 
+export {
+  RECENT_FILES_LIMIT,
+  RecentFileSchema,
+  noteRecentFile,
+  recentFileLabel,
+} from "./recentFiles";
+export type { RecentFile } from "./recentFiles";
+
 export { INLINE_ACTIONS, TOOLBAR_ACTIONS, lineSpan, toolbarEdit } from "./markdownToolbar";
 export type { TextRange, ToolbarAction, ToolbarEdit } from "./markdownToolbar";
 

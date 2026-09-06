@@ -236,10 +236,19 @@ export function withoutSubtree(
 /// shell, where there is nowhere to save to and so nothing to protect.
 export type ConfirmDiscard = ((name?: string | null) => Promise<DiscardChoice>) | null;
 
+/// Told when a file has actually been opened, so the File menu's recent list can record it.
+///
+/// A report rather than a write: this hook holds no settings, and one that did would be two things.
+/// It fires where a file is READ - not where one is switched to, which reads nothing, and not for a
+/// chat attachment, which goes through the same client call for a different reason. A list that
+/// collected those would fill with files nobody opened.
+export type ReportOpened = ((file: { root: string; path: string }) => void) | null;
+
 export function useWorkspace(
   client: WorkspaceClient,
   initialContent = "",
   confirmDiscard: ConfirmDiscard = null,
+  reportOpened: ReportOpened = null,
 ) {
   const [internal, setInternal] = useState<Internal>({ ...INITIAL, scratch: initialContent });
 
@@ -362,8 +371,13 @@ export function useWorkspace(
         busy: false,
       };
     });
+
+    // Save As leaves the user editing a file they have never opened. Leaving it off the list would
+    // put the original there and not the one they are actually working in.
+    const root = stateRef.current.workspace?.root;
+    if (root !== undefined) reportOpened?.({ root, path: result.path });
     return true;
-  }, [client, fail]);
+  }, [client, fail, reportOpened]);
 
   /// May this one document be thrown away?
   ///
@@ -449,8 +463,14 @@ export function useWorkspace(
         }),
         busy: false,
       }));
+
+      // After the read, so a file that could not be opened is not remembered as one that was. The
+      // root comes from here rather than from the caller: a path is relative to one open folder, and
+      // this is the side that knows which.
+      const root = stateRef.current.workspace?.root;
+      if (root !== undefined) reportOpened?.({ root, path });
     },
-    [client, fail],
+    [client, fail, reportOpened],
   );
 
   /// Clicking a row in the tree. The node's id IS its workspace-relative path, and its name is the

@@ -30,6 +30,7 @@ export const MENU_ACTIONS = [
   "preferences",
   "about",
   "markdown-guide",
+  "clear-recent",
 ] as const;
 
 export type MenuAction = (typeof MENU_ACTIONS)[number];

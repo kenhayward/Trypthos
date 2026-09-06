@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.45.0",
+    date: "2026-09-06",
+    pr: 90,
+    headline: "Get back to a file you had open",
+    summary:
+      "The File menu has an Open Recent list of the last ten files you opened, newest first. Each entry names the folder as well as the file, because the same file name in two folders is two different files - and choosing one opens the folder and the file together, exactly as a right-click in File Explorer does, so it still asks about unsaved work first. A file saved somewhere else goes on the list too, since that is the file you are working in from then on. Nothing checks the disk when the menu opens, so an entry for a file you have since deleted stays until it falls off the end; Clear Recent Files at the bottom of the list is there for that. Separately, the chat Folder button now shows the folder's whole path on hover - the button only has room for the last part of it, and \"Folder: drafts\" does not tell you which drafts.",
+    added: [
+      "Open Recent on the File menu: the last ten files, each with the folder it was in.",
+      "Clear Recent Files, for entries that no longer open anything.",
+    ],
+    changed: [
+      "The chat Folder button shows the folder's whole path on hover.",
+    ],
+  },
+  {
     version: "0.44.0",
     date: "2026-09-06",
     pr: 89,

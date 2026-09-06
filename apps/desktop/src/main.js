@@ -38,7 +38,7 @@ const { createTray } = require("./tray");
 const { revealWindow } = require("./revealWindow");
 const { createExplorerIntegration } = require("./explorerIntegration");
 const { pathFromArgv, resolveTarget } = require("./launchTarget");
-const { readCloseToTray, onSettingsWritten } = require("./settingsStore");
+const { readCloseToTray, onSettingsWritten, readSettings } = require("./settingsStore");
 
 let mainWindow = null;
 
@@ -299,6 +299,13 @@ if (!gotLock) {
     });
     registerWindowHandlers({ ipcMain, getWindow: () => mainWindow, guard: closeGuard });
 
+    /// The recent files list, as the menus need it.
+    ///
+    /// Held here rather than read on every popup, and kept current from the settings write the
+    /// renderer already makes - `onSettingsWritten` exists for exactly this. Read once at startup so
+    /// the first menu opened is not empty.
+    let recentFiles = (await readSettings(app.getPath("userData"))).recentFiles;
+
     /// What a menu item does.
     ///
     /// Renderer actions go over IPC and drive the paths the user already has - the same open, save,
@@ -309,6 +316,14 @@ if (!gotLock) {
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send(MENU_ACTION_CHANNEL, { action: name });
       },
+      // A recent file is a FOLDER and a document in it, which is the same thing a launch from
+      // Explorer carries - so it goes down the same channel and the renderer handles it the one way.
+      // The alternative, opening it here, would be a second implementation with its own idea of
+      // whether to ask about unsaved work.
+      openRecent: (target) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send(OPEN_TARGET_CHANNEL, target);
+      },
       quit: () => app.quit(),
       closeWindow: () => mainWindow?.close(),
       checkForUpdates: () => void updater?.check("manual"),
@@ -318,21 +333,35 @@ if (!gotLock) {
     });
 
     // macOS shows the application menu in the system menu bar whether or not the window has a
-    // frame, so it is set once. Windows and Linux get NO application menu: the window is frameless,
-    // Electron has nowhere to draw one, and leaving a menu set there only produces stray Alt-key
-    // behaviour for a bar nobody can see.
-    Menu.setApplicationMenu(
-      process.platform === "darwin"
-        ? Menu.buildFromTemplate(appMenuTemplate({ appName: APP_NAME, on: menuHandlers }))
-        : null,
-    );
+    // frame, so it is set once - and rebuilt whenever the recent list changes, because a menu bar
+    // that is already on screen does not re-read its template. Windows and Linux get NO application
+    // menu: the window is frameless, Electron has nowhere to draw one, and leaving a menu set there
+    // only produces stray Alt-key behaviour for a bar nobody can see. Their File menu is popped
+    // fresh on every click, so it picks the list up without any of this.
+    const setApplicationMenu = () => {
+      Menu.setApplicationMenu(
+        process.platform === "darwin"
+          ? Menu.buildFromTemplate(
+              appMenuTemplate({ appName: APP_NAME, on: menuHandlers, recent: recentFiles }),
+            )
+          : null,
+      );
+    };
+    setApplicationMenu();
+
+    onSettingsWritten((settings) => {
+      recentFiles = settings.recentFiles;
+      setApplicationMenu();
+    });
 
     ipcMain.handle("menu:popup", async (_event, payload) => {
       const parsed = PopupMenuRequest.safeParse(payload);
       if (!parsed.success) return { ok: false, reason: "bad-request" };
       if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, reason: "no-window" };
 
-      Menu.buildFromTemplate(popupTemplate(parsed.data.menu, { on: menuHandlers })).popup({
+      Menu.buildFromTemplate(
+        popupTemplate(parsed.data.menu, { on: menuHandlers, recent: recentFiles }),
+      ).popup({
         window: mainWindow,
         x: parsed.data.x,
         y: parsed.data.y,

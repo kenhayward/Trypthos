@@ -275,7 +275,7 @@ bar. They open real native menus: native rendering, the platform's own accelerat
 platform's own cut, copy and paste. On macOS the same commands appear where they belong, in the
 system menu bar at the top of the screen, and the window draws no menu labels of its own.
 
-- **File** opens a folder, saves the current file, saves it somewhere else, closes the window and quits.
+- **File** opens a folder, saves the current file, saves it somewhere else, reopens a recent file, closes the window and quits.
 - **Edit** carries undo, redo, cut, copy, paste and select all.
 - **Tools** carries Settings. On macOS this lives in the application menu instead, which is where
   that platform expects it.
@@ -283,6 +283,17 @@ system menu bar at the top of the screen, and the window draws no menu labels of
 
 Nothing on a menu is a separate implementation: each item drives the same thing its button or
 shortcut does, so they cannot drift apart.
+
+**Open Recent**, under File, lists the last ten files you opened, newest first. Each entry names the
+folder as well as the file, because the same file name in two folders is two different files.
+Choosing one opens the folder and the file together - the same act as a right-click in File Explorer,
+so it asks about unsaved work first, and reports a file that is no longer there the way any other
+open does. A file you saved somewhere else goes on the list too, since that is the file you are
+working in from then on.
+
+Nothing checks the disk when the menu opens, so an entry for a file you have since deleted or moved
+stays on the list until it falls off the end. **Clear Recent Files**, at the bottom of the same
+submenu, is there for that.
 
 Right-clicking text opens a menu suited to what you clicked, in every field you can type in - the
 document, the chat box, the system prompt, a settings field. In an editable field that is undo, redo,
@@ -503,8 +514,10 @@ changes is the answer.
 
 **Folder** sends the *list* of files in the folder **you selected in the browser** - the names, never
 the contents, and only the file types you have turned on. Click a folder on the left and it becomes
-the selected one, shown highlighted; the same click still opens and closes it. The Folder button says
-which folder it would send, and the selection stays where you put it as you move between files:
+the selected one, shown highlighted; the same click still opens and closes it. The Folder button names
+which folder it would send - the last part of the path, with the whole path on hover, since the button
+sits beside the composer where width is scarce. The selection stays where you put it as you move
+between files:
 which document you are reading and which folder your question is about are different questions.
 Opening a different workspace puts it back to the top level. A notes folder can hold a great many files; sending them all would bury the document
 your question was actually about, and on a hosted endpoint it would cost real money.

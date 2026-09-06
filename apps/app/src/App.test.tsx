@@ -147,10 +147,12 @@ describe("App", () => {
       asked: (string | null)[];
       savedAs: { path: string | null; content: string }[];
       menu: { push: ((action: string) => void) | null };
+      written: Settings[];
     } {
       const reads: string[] = [];
       const asked: (string | null)[] = [];
       const savedAs: { path: string | null; content: string }[] = [];
+      const written: Settings[] = [];
       const menu: { push: ((action: string) => void) | null } = { push: null };
       window.trypthos = {
         ...browserClient,
@@ -159,7 +161,9 @@ describe("App", () => {
           ok: true as const,
           settings: { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" },
         }),
-        writeSettings: async () => {},
+        writeSettings: async (settings: Settings) => {
+          written.push(settings);
+        },
         reopenWorkspace: async (root: string) => ({
           ok: true as const,
           workspace: { root, name: "Notes" },
@@ -196,7 +200,7 @@ describe("App", () => {
           return { ok: true as const, path: "elsewhere.md", revision: { id: "r-saved-as" } };
         },
       } as unknown as typeof window.trypthos;
-      return { reads, asked, savedAs, menu };
+      return { reads, asked, savedAs, menu, written };
     }
 
     /// A row in the TREE, not a tab - the file name appears in both, and the close button on a tab
@@ -279,6 +283,37 @@ describe("App", () => {
       await waitFor(() =>
         expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["elsewhere.md"]),
       );
+    });
+
+    /// The File menu's recent list, from opening a file to what is written down.
+    ///
+    /// The menu itself is drawn in the main process from these settings, so this is the half the
+    /// window owns: an entry naming the folder as well as the file, because a relative path means
+    /// nothing without the folder it is relative to.
+    it("remembers a file it opened, with the folder it was in", async () => {
+      const user = userEvent.setup();
+      const { written } = shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+
+      await waitFor(() =>
+        expect(written.at(-1)?.recentFiles).toEqual([{ root: "D:/Notes", path: "one.md" }]),
+      );
+    });
+
+    it("clears the list when the menu asks", async () => {
+      const user = userEvent.setup();
+      const { written, menu } = shellWithFiles();
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.click(row("one.md"));
+      await waitFor(() => expect(written.at(-1)?.recentFiles).toHaveLength(1));
+
+      act(() => menu.push?.("clear-recent"));
+      await waitFor(() => expect(written.at(-1)?.recentFiles).toEqual([]));
     });
 
     // The whole point of the Explorer entries: the shell pushes what it was launched with, and the

@@ -513,15 +513,35 @@ in the user's workspace.
 - **Nothing is written before the file has been read.** Until then the state is the DEFAULTS, and
   saving would overwrite a real settings file with defaults on every launch.
 
-Settings are at **version 5**. A migration adds only what its own version introduced and touches
+Settings are at **version 13**. A migration adds only what its own version introduced and touches
 nothing else: a file written by 0.9.0 must arrive intact, because somebody's panel widths and open
 folder are not worth losing over fields that did not exist yet. The chain runs end to end, so a
 version 1 file passes through version 2's migration on its way forward - a file that skipped straight
 to the current version would miss whatever version 2 added, which is the exact failure migrations
 exist to prevent. Version 2 added appearance and window behaviour, version 3 added chat models, version 4 added the
 system prompt, version 5 made that prompt nullable, version 6 added per-profile tool calling,
-version 7 added the folder outline size, version 8 added the chat panel switch, and version 9 added
-the editor's default view mode.
+version 7 added the folder outline size, version 8 added the chat panel switch, version 9 added
+the editor's default view mode, version 10 added each profile's context window, version 11 added the
+file types, version 12 added thinking and its level, and version 13 added the recent files list.
+
+**The recent files list lives here** (`packages/domain/src/recentFiles.ts`) rather than in a file of
+its own, for the reasons above: it is a convenience, none of it is the user's work, and a failure to
+read it should cost a menu rather than stop the app. An entry names a **workspace root as well as a
+path**, because a relative path means nothing without the folder it is relative to - and that makes
+reopening one exactly the act the app already has, the folder plus a document inside it, which is
+what File Explorer hands over on launch. So the File menu's recent items go down `shell:openTarget`,
+and the renderer asks about unsaved work and reports a missing file the way it always does. There is
+deliberately no second way to open a file.
+
+Two consequences. The renderer records an open by writing settings, which is also how the main
+process learns of it - `onSettingsWritten` already exists, so nothing new flows between them. And the
+**macOS application menu is rebuilt on that notification**, because a menu bar already on screen does
+not re-read its template; the Windows and Linux File menu is popped fresh on every click and needs
+none of that.
+
+Nothing walks the disk to check an entry still resolves, so a file since deleted stays on the list
+until it falls off the end or Clear Recent Files is used. Checking would mean a stat per entry every
+time the menu opens, to prevent a failure the ordinary open already reports clearly.
 
 **Version 5 is worth reading as a warning.** Version 4 stored the default prompt's TEXT, which meant
 every later improvement to it was invisible to anyone who already had a settings file - and the
