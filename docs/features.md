@@ -476,6 +476,27 @@ thinking and written no answer. Trypthos says so, and offers to unfold what the 
 rather than showing you an empty message. Asking again usually works; it is a habit of the model
 rather than a fault in the request.
 
+### Commands you can type instead of a question
+
+Two, so far:
+
+| Command | What it does |
+| --- | --- |
+| `/commands`, `/help` | Lists what you can type into the chat box. |
+| `/tools` | Lists what the model can be given beyond your question, and says which of them it actually gets. |
+
+Both are answered by Trypthos rather than by a model. They say something about this app, which no
+endpoint can be expected to know and none should be paid to guess at - so nothing is sent, nothing
+streams, and there is no wait.
+
+**Neither the command nor its answer ever reaches a provider**, including in the questions that
+follow. Asking what the tools are does not become part of what the model thinks it can do. They stay
+in the thread and are kept when you save the chat, because that is what you were shown.
+
+A message counts as a command only when it is **nothing but** the command. A leading slash is an
+ordinary way to start a sentence - a path, a fraction, a date - so `/usr/local/bin - what lives
+there?` reaches the model exactly as you wrote it.
+
 ### Keeping a conversation
 
 Save a chat from the button at the top of the panel and it is kept between launches. It is named

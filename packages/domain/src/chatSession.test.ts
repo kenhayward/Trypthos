@@ -207,3 +207,48 @@ describe("cappedForSaving", () => {
     expect(turn?.reasoningTruncated).toBeUndefined();
   });
 });
+
+/// A chat containing the answer to a slash command.
+///
+/// The panel showed it, so the saved chat keeps it - a conversation that read one way while open and
+/// another when reopened is one the user cannot trust as a record. The flag travels with the turn so
+/// reopening the chat does not start sending this app's own command tables to a provider.
+describe("a locally answered turn", () => {
+  const base = {
+    schemaVersion: CHAT_SESSION_VERSION,
+    id: "abc",
+    title: "A chat",
+    createdAt: "2026-09-06T10:00:00.000Z",
+    updatedAt: "2026-09-06T10:00:00.000Z",
+    workspaceRoot: null,
+    filePath: null,
+    profileId: null,
+  };
+
+  it("is saved and read back as local", () => {
+    const loaded = loadChatSession({
+      ...base,
+      turns: [
+        { role: "user", content: "/tools", local: true },
+        { role: "assistant", content: "| Tool |", local: true },
+      ],
+    });
+
+    expect(loaded?.turns[0]?.local).toBe(true);
+    expect(loaded?.turns[1]?.local).toBe(true);
+  });
+
+  // Every turn in a chat saved before this existed was one the model actually saw.
+  it("loads a chat saved before local turns existed", () => {
+    const older = {
+      ...base,
+      schemaVersion: 2,
+      turns: [{ role: "user", content: "Hello" }],
+    };
+    const loaded = loadChatSession(older);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.turns[0]?.local).toBeUndefined();
+    expect(loaded?.schemaVersion).toBe(CHAT_SESSION_VERSION);
+  });
+});

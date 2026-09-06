@@ -23,6 +23,14 @@ export interface Turn extends ChatTurn {
   /// still show its thinking when somebody scrolls back to it. Kept OUT of `content` because the
   /// two are read very differently - and because content is split into edit cards, and a model
   /// reasoning about whether to propose an edit writes something that looks exactly like one.
+  /// True for a turn the APP wrote rather than the model - the answer to a slash command, and the
+  /// command that asked for it.
+  ///
+  /// It belongs in the thread, because that is where the user asked, and it is saved with the chat,
+  /// because that is what the panel showed. What it must never do is go back to a provider: a table
+  /// of this app's own commands is not part of the conversation, and sending it with every later
+  /// request would be paying to confuse the model about what it can do.
+  local?: boolean;
   reasoning?: string;
   /// True when the thinking above was shortened on the way to disk. Set only by loading a saved
   /// chat - a live reply is never shortened.
@@ -36,7 +44,9 @@ export interface Turn extends ChatTurn {
 
 /// The conversation as a provider receives it.
 export function wireTurns(turns: readonly Turn[]): ChatTurn[] {
-  return turns.map(({ role, content }) => ({ role, content }));
+  return turns
+    .filter((turn) => turn.local !== true)
+    .map(({ role, content }) => ({ role, content }));
 }
 
 /// Adds the empty assistant turn that arriving tokens fill.

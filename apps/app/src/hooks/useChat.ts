@@ -195,5 +195,29 @@ export function useChat(
     setStreaming(false);
   }, []);
 
-  return { turns, streaming, error, activity, send, retry, stop, clear, replace };
+  /// Puts a question and the app's own answer to it in the thread, sending nothing.
+  ///
+  /// For a slash command: it says something about Trypthos, which no endpoint can be expected to
+  /// know and none should be paid to guess at. Both turns are marked `local`, so `wireTurns` keeps
+  /// them out of every later request - see the note on that flag.
+  const answerLocally = useCallback((question: string, answer: string) => {
+    setTurns((current) => [
+      ...current,
+      { role: "user", content: question, local: true },
+      { role: "assistant", content: answer, local: true },
+    ]);
+  }, []);
+
+  return {
+    turns,
+    streaming,
+    error,
+    activity,
+    send,
+    answerLocally,
+    retry,
+    stop,
+    clear,
+    replace,
+  };
 }

@@ -75,6 +75,21 @@
   },
   "chat": {
     "title": "Chat",
+    "slash": {
+      "title": "Commands",
+      "column": "Command",
+      "descriptionColumn": "What it does",
+      "commands": "Show this list of commands.",
+      "tools": "Show what the model can be given beyond your question."
+    },
+    "tools": {
+      "title": "Model tools",
+      "column": "Tool",
+      "descriptionColumn": "What it does",
+      "hint": "Which of these a model is offered depends on the model and on what is attached to your question. Nothing is written to a file without you pressing Apply.",
+      "get_file_contents": "Read one of the files listed for the folder you attached. Only those files can be read.",
+      "propose_edit": "Suggest a change to the open document. It appears as a card you can apply or ignore - nothing is written until you do."
+    },
     "notConfigured": "No chat model is configured yet.",
     "intro": "Ask a question about what you are working on.",
     "message": "Message",

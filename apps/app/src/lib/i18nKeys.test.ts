@@ -70,6 +70,12 @@ const DYNAMIC_PREFIXES = [
   "fileTypes.",
   // Built from FILE_TYPE_GROUPS as the settings page draws its headings.
   "settings.fileTypes.group.",
+  // Built from CHAT_COMMANDS and CHAT_TOOLS as `commandAnswers` writes the tables `/commands` and
+  // `/tools` produce. Both lists live in the domain because the tool names come from the definitions
+  // the model receives, so the sets are iterated rather than written out. `commandAnswers.test`
+  // checks the other direction against the real catalogue, and throws on a key that is not there.
+  "chat.slash.",
+  "chat.tools.",
   // Built from TAB_CLOSE_ACTIONS as a tab's right-click menu draws its entries, so the order on the
   // menu and the function that answers for each entry read one list. `EditorTabs.test` checks the
   // other direction by asserting the five labels verbatim - a missing key renders as itself, so the

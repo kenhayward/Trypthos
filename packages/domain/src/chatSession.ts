@@ -19,7 +19,7 @@ import { loadPersisted, type Migration } from "./persisted";
 /// conversation: replacing an unreadable chat with an empty one would look exactly like a chat that
 /// had been lost, so it reports failure instead and the caller can say so.
 
-export const CHAT_SESSION_VERSION = 2;
+export const CHAT_SESSION_VERSION = 3;
 
 /// How much of a reply's thinking a saved chat keeps, in characters.
 ///
@@ -43,6 +43,10 @@ const SessionTurnSchema = z
     /// showing a train of thought that appears to stop mid-sentence.
     reasoningTruncated: z.boolean().optional(),
     reads: z.array(z.string()).optional(),
+    /// True for a turn the APP wrote - the answer to a slash command, and the command that asked
+    /// for it. Kept, because the panel showed it; carried, because reopening the chat must not
+    /// start sending this app's own command tables to a provider.
+    local: z.boolean().optional(),
   })
   .strict();
 
@@ -98,6 +102,14 @@ export interface ChatSessionSummary {
 
 /// No migrations yet. The first shape change writes one here, in the PR that makes it.
 export const CHAT_SESSION_MIGRATIONS: Migration[] = [
+  {
+    to: 3,
+    // Version 3 lets a turn say the app wrote it rather than the model. Optional in the schema, so
+    // a version 2 file loads either way - the version exists for the OTHER direction, as version 2
+    // did: a chat written here and read by the previous build would fail its strict turn schema and
+    // take the conversation with it.
+    migrate: (input) => input,
+  },
   {
     to: 2,
     // Version 2 lets a turn carry what the panel recorded for itself - the model's thinking, and the
