@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.47.0",
+    date: "2026-09-06",
+    pr: 98,
+    headline: "Open the scripts on your machine",
+    summary:
+      "Batch files are a file type now - .bat and .cmd - which means they open, they are listed in the browser rather than greyed out, and chat can be asked about them. Nothing ships syntax colouring for batch, so Trypthos has its own: comments in both spellings, labels, %VAR% and !VAR! expansion, the control-flow words and the commands cmd.exe carries. Shell gained the extensions it was missing - .fish, and the .command scripts you can double-click on a Mac - and, more usefully, the shell configuration files that have no extension at all: .bashrc, .bash_profile, .zshrc, .profile and their neighbours. PowerShell already covered .ps1, .psm1 and .psd1. As with every other type, the grammar is downloaded only when you open a file that needs it, so none of this costs anything until it is used.",
+    added: [
+      "Batch files (.bat, .cmd) open and are syntax coloured.",
+      "Shell covers .fish and .command, and the shell configuration files that have no extension.",
+    ],
+  },
+  {
     version: "0.46.0",
     date: "2026-09-06",
     pr: 97,

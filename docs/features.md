@@ -53,13 +53,21 @@ you want a narrower list:
 | --- | --- |
 | Documents | Markdown (always on), Plain text |
 | Markup and data | JSON, YAML, TOML, INI and properties, XML and SVG, HTML, CSS and preprocessors |
-| Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
+| Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, Batch, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
 | Utility | Diff and patch, Dockerfile, Makefile, LaTeX, R, Lua, Perl, Swift, Scala, Dart |
 
 Some rows carry more than one language, where the difference is not one you would want to tick a box
 about. **JavaScript and TypeScript** is one choice covering `.js`, `.ts`, `.jsx` and `.tsx`;
 **CSS and preprocessors** covers SCSS, Sass and LESS; **Java and Kotlin** and **C and C++** each
 cover both. Trypthos works out which from the file's name.
+
+**The scripts on your machine are covered by three rows.** **Shell** takes `.sh`, `.bash`, `.zsh`,
+`.ksh`, `.fish` and `.command`, and also the configuration files that have no extension at all -
+`.bashrc`, `.bash_profile`, `.zshrc`, `.profile` and their neighbours. **PowerShell** takes `.ps1`,
+`.psm1` and `.psd1`. **Batch** takes `.bat` and `.cmd`, and is the one type here whose colouring
+Trypthos writes itself: no batch grammar exists to use, so there is one in the app - comments in both
+spellings, labels, `%VAR%` and `!VAR!` expansion, the control-flow words and the commands `cmd.exe`
+carries.
 
 **Dockerfile and Makefile are matched by name**, not by extension, because neither has one. Makefile
 is the only type Trypthos does not colour: no grammar for it exists. It has a row anyway, because

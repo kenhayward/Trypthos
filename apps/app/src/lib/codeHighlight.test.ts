@@ -5,7 +5,7 @@ import { TOKEN_ROLES } from "./editorTheme";
 import { highlightCodeBlocks } from "./codeHighlight";
 import { renderMarkdown } from "./markdown";
 
-const ALL = ["markdown", "python", "json", "javascript"];
+const ALL = ["markdown", "python", "json", "javascript", "batch"];
 
 /// Renders markdown the way a surface does, then highlights it the way the effect does.
 async function rendered(source: string, fileTypes: readonly string[] = ALL) {
@@ -128,5 +128,61 @@ describe("the token classes", () => {
   it("has no rule for a role the table does not name", () => {
     const named = new Set<string>(roles);
     expect([...styled].filter((role) => !named.has(role))).toEqual([]);
+  });
+});
+
+/// The batch grammar, which is ours rather than CodeMirror's - nothing ships a mode for `.bat`, so
+/// `batchGrammar.ts` is rules for `simpleMode` and this is what proves they colour anything.
+///
+/// Asserted through the same path Preview and a chat reply take, so a fenced batch block and a `.bat`
+/// file in the editor cannot come out differently coloured.
+describe("a batch file", () => {
+  const BATCH = [
+    "```bat",
+    "@echo off",
+    "REM build the thing",
+    ":setup",
+    'set "TARGET=%~dp0out"',
+    "if not exist %TARGET% mkdir %TARGET%",
+    "goto :eof",
+    "```",
+    "",
+  ].join("\n");
+
+  it("colours what a batch script is made of", async () => {
+    const classes = classesIn(await rendered(BATCH));
+
+    expect(classes).toContain("tp-tok-comment");
+    expect(classes).toContain("tp-tok-keyword");
+    expect(classes).toContain("tp-tok-string");
+    // `%~dp0`, `%TARGET%` - a batch file is mostly variable expansion, so this is the one that
+    // decides whether the colouring is worth having.
+    expect(classes).toContain("tp-tok-func");
+  });
+
+  // `::` is a label that can never be jumped to, which is exactly why it is used as a comment. Two
+  // things in the grammar keep it one, and either alone would do - so this asserts the OUTCOME
+  // rather than the mechanism, and stays true whichever of them somebody removes.
+  it("reads a :: line as a comment rather than a label", async () => {
+    const container = await rendered("```cmd\n:: not a label\n```\n");
+    const spans = [...block(container).querySelectorAll("span")];
+
+    expect(spans.some((span) => span.className === "tp-tok-comment")).toBe(true);
+  });
+
+  // `rem` is a comment only where a command may start. Colouring it inside an echo would hide half
+  // of what that line says.
+  it("does not read rem inside a message as a comment", async () => {
+    const container = await rendered("```bat\necho remember to build\n```\n");
+    const spans = [...block(container).querySelectorAll("span")];
+
+    expect(spans.some((span) => span.className === "tp-tok-comment")).toBe(false);
+    expect(block(container).textContent).toBe("echo remember to build\n");
+  });
+
+  // The control, as everywhere else: the setting decides, and a type that is off colours nothing.
+  it("leaves a batch block alone when the type is turned off", async () => {
+    const container = await rendered(BATCH, ["markdown"]);
+    expect(block(container).querySelectorAll("span")).toHaveLength(0);
   });
 });

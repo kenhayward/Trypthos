@@ -140,6 +140,7 @@
     "python": "Python",
     "shell": "Shell",
     "powershell": "PowerShell",
+    "batch": "Batch",
     "sql": "SQL",
     "rust": "Rust",
     "go": "Go",
