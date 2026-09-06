@@ -1,6 +1,6 @@
 import { useEffect, useImperativeHandle, useRef } from "react";
 import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { closeBrackets } from "@codemirror/autocomplete";
 import { indentOnInput } from "@codemirror/language";
@@ -254,6 +254,13 @@ export default function DocumentEditor({
         doc: value,
         extensions: [
           lineNumbers(),
+          // The selection is drawn by CodeMirror rather than by the browser, and the reason is the
+          // chat panel: a question about a selection sends the selection instead of the whole file,
+          // so the highlight is the only thing saying which of the two the model will get. The
+          // browser stops painting a contenteditable's selection the moment it loses focus, which
+          // took the highlight away at exactly the moment somebody was typing the question. This
+          // layer keeps it, and `editorTheme` colours it one step quieter while the caret is away.
+          drawSelection(),
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           // No language in the base configuration. Every one of them is loaded on demand, so a

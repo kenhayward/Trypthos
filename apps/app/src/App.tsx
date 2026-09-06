@@ -488,6 +488,7 @@ export default function App() {
           fileTypes={settings.fileTypes.enabled}
           onActivateFile={actions.activateFile}
           onCloseFile={(path) => void actions.closeFile(path)}
+          onCloseFiles={(paths) => void actions.closeFiles(paths)}
           onSelectionChange={(next) => (selection.current = next)}
           // The same rule the rendered surfaces get, reached the other way: CodeMirror draws link
           // text as a decorated span rather than an anchor, so the delegated handler above cannot

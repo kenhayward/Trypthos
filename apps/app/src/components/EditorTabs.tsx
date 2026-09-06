@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { documentName, tabLabels } from "@trypthos/domain";
+import { TAB_CLOSE_ACTIONS, documentName, tabLabels, tabsToClose } from "@trypthos/domain";
+import type { TabCloseAction } from "@trypthos/domain";
 import { builtInTitleKey } from "../lib/builtInDocuments";
 
 interface Props {
@@ -14,7 +15,21 @@ interface Props {
   dirtyPaths: readonly string[];
   onActivate: (path: string) => void;
   onClose: (path: string) => void;
+  /// Closes several tabs, in the order given, asking about each unsaved one in turn.
+  onCloseMany: (paths: readonly string[]) => void;
 }
+
+/// What each entry of the tab menu is called. Keys, not wording - the component translates.
+///
+/// Beside `TAB_CLOSE_ACTIONS` rather than derived from it, because the order on the menu is the
+/// order in that list and a map keyed by action cannot express one.
+const MENU_LABELS: Record<TabCloseAction, string> = {
+  close: "editor.closeTabs.this",
+  "close-right": "editor.closeTabs.right",
+  "close-all": "editor.closeTabs.all",
+  "close-others": "editor.closeTabs.others",
+  "close-saved": "editor.closeTabs.saved",
+};
 
 /// The strip of open files above the editor.
 ///
@@ -29,11 +44,38 @@ export default function EditorTabs({
   dirtyPaths,
   onActivate,
   onClose,
+  onCloseMany,
 }: Props) {
   const { t } = useTranslation();
+  /// The tab the right-click menu is about, and where to draw it. Null when it is closed.
+  ///
+  /// The PATH rather than an index, so a strip that changes while the menu is open - a file closed
+  /// from elsewhere, a Save As - cannot leave the menu acting on whatever moved into that position.
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   /// Short names, lengthened only where two open files would otherwise read the same.
   const labels = useMemo(() => tabLabels(paths), [paths]);
   const strip = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Dismissed the way every other popover in the app is - a click outside, or Escape. Registered
+  // only while it is open, so there are no listeners on the document for a menu nobody opened.
+  useEffect(() => {
+    if (menu === null) return;
+
+    function onDocument(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenu(null);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenu(null);
+    }
+
+    document.addEventListener("mousedown", onDocument);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocument);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
 
   // The active tab can be off the end of the strip - opened from a link, or reached by keyboard with
   // twenty files open. Scrolled into view rather than left for the user to find.
@@ -107,6 +149,12 @@ export default function EditorTabs({
             }
             onClick={() => onActivate(path)}
             onKeyDown={(event) => onKeyDown(event, index)}
+            // Right-clicking asks about a tab; it does not go to it. Opening the file as well would
+            // mean reading the options costs you the document you were in.
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenu({ path, x: event.clientX, y: event.clientY });
+            }}
             // Middle-click closes, as it does in every editor and every browser. `auxclick` rather
             // than `mousedown`, so the button has to be released over the tab it started on.
             onAuxClick={(event) => {
@@ -166,6 +214,44 @@ export default function EditorTabs({
           </div>
         );
       })}
+
+      {/* A tab that has gone takes its menu with it - closing everything from the menu would
+          otherwise leave it open over a strip that no longer has the tab it is about. Derived here
+          rather than cleared from an effect on `paths`, which is a cascading render expressing
+          something the data can say itself. */}
+      {menu !== null && paths.includes(menu.path) && (
+        // Fixed to the pointer, like a menu rather than a dropdown: it is about the tab under the
+        // cursor, and anchoring it to the strip would put it somewhere else entirely on a tab that
+        // has scrolled.
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label={t("editor.tabMenu")}
+          style={{ left: menu.x, top: menu.y }}
+          className="fixed z-50 min-w-44 rounded-md border border-rule bg-app p-1 shadow-menu"
+        >
+          {TAB_CLOSE_ACTIONS.map((action) => {
+            const targets = tabsToClose(action, paths, dirtyPaths, menu.path);
+            return (
+              <button
+                key={action}
+                type="button"
+                role="menuitem"
+                // Greyed from the same function that does the work, so "would close nothing" and
+                // "does nothing" cannot come to mean different things.
+                disabled={targets.length === 0}
+                onClick={() => {
+                  setMenu(null);
+                  onCloseMany(targets);
+                }}
+                className="block w-full rounded px-2 py-1 text-left text-ui text-ink hover:bg-hover disabled:text-ink-4 disabled:hover:bg-transparent"
+              >
+                {t(MENU_LABELS[action])}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

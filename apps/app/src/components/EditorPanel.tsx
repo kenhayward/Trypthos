@@ -39,6 +39,8 @@ interface Props {
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
+  /// Closes several documents, in the order given - what the tab menu asks for.
+  onCloseFiles?: (paths: readonly string[]) => void;
   /// Reports the editor selection, so the chat panel can ask about a passage rather than the whole
   /// file. Empty when nothing is selected.
   ///
@@ -88,6 +90,7 @@ export default function EditorPanel({
   onChange,
   onActivateFile,
   onCloseFile,
+  onCloseFiles,
   onSelectionChange,
   onFollowLink,
   defaultMode = DEFAULT_EDITOR_MODE,
@@ -165,6 +168,7 @@ export default function EditorPanel({
           dirtyPaths={dirtyPaths}
           onActivate={(path) => onActivateFile?.(path)}
           onClose={(path) => onCloseFile?.(path)}
+          onCloseMany={(paths) => onCloseFiles?.(paths)}
         />
         <OpenFilesMenu
           workspaceName={workspaceName}

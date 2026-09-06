@@ -216,6 +216,14 @@ one is unsaved: closing the window asks about each in turn, and cancelling any o
 close. A file with unsaved changes that you are not looking at shows a dot on its tab, since the pill
 in the header speaks only for the file on screen.
 
+**Right-click a tab** for the five ways of closing: **Close**, **Close Tabs to the Right**, **Close
+All**, **Close Others** and **Close Saved** - saved meaning any tab with nothing unsaved in it,
+including the one you right-clicked. Each of them asks about unsaved work one document at a time, and
+cancelling stops the rest, so a Close Others cannot shut tabs you were never asked about; whatever
+closed before the cancel stays closed, because you agreed to each of those. An entry that would close
+nothing is greyed rather than offered - Close Tabs to the Right on the last tab, Close Others when
+there is only one.
+
 Coming back to a tab puts you back where you were - the same caret position, and the same place in
 the document, rather than the top of it. Each file also keeps the view you were reading it in, so a
 file you switched to Source stays in Source while you work in Live elsewhere. The folder browser
@@ -381,6 +389,11 @@ it as data rather than as instructions.
 
 Selection is read from the editor, so Preview mode reports none and chat falls back to the whole
 file - which is the right answer for a mode you cannot edit in.
+
+**A selection stays visible while you type the question about it.** Click into the chat box and the
+highlight is still there, drawn a shade quieter to show the caret is elsewhere. It is the only thing
+on screen saying whether the model will get the passage or the whole file, so it is the last thing
+that should vanish at the moment you are asking.
 
 ### The system prompt
 

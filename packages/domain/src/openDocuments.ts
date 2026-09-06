@@ -121,7 +121,10 @@ export function closeDocument(set: DocumentSet, path: string): DocumentSet {
   if (index === -1) return set;
 
   const documents = set.documents.filter((document) => document.path !== path);
-  if (set.activePath !== path) return { ...set, activePath: set.activePath };
+  // `documents`, not `...set`. Spreading the original set here put the ORIGINAL list back, so every
+  // close of a tab that was not the one on screen quietly did nothing - and the test beside this
+  // asserted only the selection, which was correct all along.
+  if (set.activePath !== path) return { ...set, documents };
 
   const next = documents[index] ?? documents[index - 1] ?? null;
   return { documents, activePath: next?.path ?? null };
@@ -197,6 +200,59 @@ function mapDocument(
       document.path === path ? change(document) : document,
     ),
   };
+}
+
+/// The entries of a tab's right-click menu, in the order they appear on it.
+///
+/// A closed list rather than free strings, so the menu, its translations and the function that
+/// answers for each one cannot drift apart.
+export const TAB_CLOSE_ACTIONS = [
+  "close",
+  "close-right",
+  "close-all",
+  "close-others",
+  "close-saved",
+] as const;
+
+export type TabCloseAction = (typeof TAB_CLOSE_ACTIONS)[number];
+
+/// Which tabs one entry of that menu would close, in strip order.
+///
+/// Expressed over the strip - the paths, which of them have unsaved work, and the one that was
+/// clicked - rather than over a `DocumentSet`, because the strip is what the component holds and
+/// what a person is looking at when they right-click.
+///
+/// **An empty answer is how the menu greys an entry.** "Close Tabs to the Right" on the last tab and
+/// "Close Others" with one tab open both close nothing, and an entry that would do nothing is one
+/// there is no point offering. That keeps the enabled state derived from the same function that does
+/// the work, rather than being a second set of conditions that can disagree with it.
+///
+/// Order matters because the caller asks about unsaved work one tab at a time and a cancel stops the
+/// rest: the tabs are dealt with left to right, which is the order they are being looked at in.
+export function tabsToClose(
+  action: TabCloseAction,
+  paths: readonly string[],
+  dirtyPaths: readonly string[],
+  path: string,
+): string[] {
+  // The strip can change under a menu that is already open. A path that is no longer there closes
+  // nothing rather than closing something else by index.
+  const index = paths.indexOf(path);
+
+  switch (action) {
+    case "close":
+      return index === -1 ? [] : [path];
+    case "close-right":
+      return index === -1 ? [] : paths.slice(index + 1);
+    case "close-all":
+      return [...paths];
+    case "close-others":
+      return index === -1 ? [] : paths.filter((open) => open !== path);
+    // Deliberately including the clicked tab: the entry says what it closes, and a "Close Saved"
+    // that quietly spared the one under the pointer would be answering a different question.
+    case "close-saved":
+      return paths.filter((open) => !dirtyPaths.includes(open));
+  }
 }
 
 /// What each tab is called, in the order the paths were given.

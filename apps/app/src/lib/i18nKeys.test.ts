@@ -70,6 +70,11 @@ const DYNAMIC_PREFIXES = [
   "fileTypes.",
   // Built from FILE_TYPE_GROUPS as the settings page draws its headings.
   "settings.fileTypes.group.",
+  // Built from TAB_CLOSE_ACTIONS as a tab's right-click menu draws its entries, so the order on the
+  // menu and the function that answers for each entry read one list. `EditorTabs.test` checks the
+  // other direction by asserting the five labels verbatim - a missing key renders as itself, so the
+  // assertion fails on the key rather than on the wording.
+  "editor.closeTabs.",
   // Built from REASONING_LEVELS as the model form draws its three radios. The levels are the
   // model's own vocabulary - low, medium, high - and iterating them keeps the control and the
   // schema's enum from drifting into different sets.

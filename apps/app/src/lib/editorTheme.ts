@@ -153,6 +153,22 @@ export const editorChrome = EditorView.theme({
   "&.cm-focused": {
     outline: "none",
   },
+
+  /// The selection, which `drawSelection` paints as rectangles rather than leaving to the browser.
+  ///
+  /// Two states, and the second is the point: a selection is the chat panel's context, so it has to
+  /// stay on the screen while the question about it is being typed somewhere else. The browser's own
+  /// highlight stops being drawn the moment a contenteditable loses focus, which took the highlight
+  /// away at exactly the moment it was telling the user what the model would be sent.
+  ///
+  /// Quieter rather than gone when the caret is elsewhere - still unmistakably a selection, while
+  /// saying that the editor is not where you are typing.
+  ".cm-selectionBackground": {
+    background: "var(--color-text-selection-idle)",
+  },
+  "&.cm-focused .cm-selectionBackground": {
+    background: "var(--color-text-selection)",
+  },
 });
 
 export const editorTheme: Extension = [editorChrome, syntaxHighlighting(markdownHighlighting)];

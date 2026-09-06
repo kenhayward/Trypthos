@@ -60,6 +60,14 @@
     "openFiles": "All open files",
     "tabClose": "Close {{name}}",
     "tabDirty": "{{name}} has unsaved changes",
+    "tabMenu": "What to close",
+    "closeTabs": {
+      "this": "Close",
+      "right": "Close Tabs to the Right",
+      "all": "Close All",
+      "others": "Close Others",
+      "saved": "Close Saved"
+    },
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
     "encoding": "UTF-8",
