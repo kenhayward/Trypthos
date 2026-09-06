@@ -34,7 +34,13 @@ export interface ContextTokensInput {
 /// explanations around a file are real tokens the user pays for, and a dial that counted different
 /// text from the request would be worse than no dial.
 export function contextTokens({ systemPrompt, context, turns }: ContextTokensInput): number {
-  const framed = contextTurns(context).reduce((total, turn) => total + estimateTokens(turn.content), 0);
+  // The tool transport, whichever the model actually has. The dial is an estimate to within a
+  // rounding error either way, and threading the model's transport into a token count would tie a
+  // number the panel shows to a setting it has no other reason to know about.
+  const framed = contextTurns(context, { reads: "tool" }).reduce(
+    (total, turn) => total + estimateTokens(turn.content),
+    0,
+  );
   const conversation = turns.reduce((total, turn) => total + estimateTokens(turn.content), 0);
   return estimateTokens(systemPrompt) + framed + conversation;
 }

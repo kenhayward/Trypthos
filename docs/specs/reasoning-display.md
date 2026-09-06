@@ -1,7 +1,9 @@
 # Spec: showing what the model thought
 
-**Status: specified, not built.** Nothing here describes code that exists today, except where it says
-what already does.
+**Status: built in 0.43.0.** Kept as the record of the decisions rather than rewritten as
+description - `docs/Architecture.md` describes what exists. Two things landed differently and are
+noted where they occur below: the panel's own turn type arrived earlier than this spec, in the
+tool-call work, and the persisted cap is marked with a flag rather than a note in the text.
 
 Trypthos can ask a model to reason before answering (0.41.0, the Thinking switch). What it cannot do
 is show that reasoning back, except in one narrow case. This specifies showing it for every reply

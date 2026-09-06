@@ -6,6 +6,12 @@ import {
   type ContextSource,
 } from "./chatContext";
 
+/// Most cases here say nothing about how a file is fetched, so they run against the tool transport -
+/// what a model with tool calling on is told. The cases that ARE about it pass their own.
+const turnsFor = (context: Parameters<typeof contextTurns>[0]) =>
+  contextTurns(context, { reads: "tool" });
+import { READ_FENCE_TAG } from "./readBlocks";
+
 /// What the model is told about the user's files, and how that is decided.
 ///
 /// Pure, because the rule is small and the consequences are not: the difference between sending a
@@ -19,7 +25,7 @@ const file = {
 };
 
 const document = (source: ContextSource) => resolveChatContext(source).document;
-const turns = (source: ContextSource) => contextTurns(resolveChatContext(source));
+const turns = (source: ContextSource) => turnsFor(resolveChatContext(source));
 /// The document turn is always last: the question follows it.
 const documentTurn = (source: ContextSource) => turns(source).at(-1) ?? null;
 
@@ -110,7 +116,7 @@ describe("the size cap", () => {
 
 describe("the document turn", () => {
   it("has nothing to send when there is nothing open", () => {
-    expect(contextTurns({ document: { kind: "none" }, attachments: [], folder: null })).toEqual([]);
+    expect(turnsFor({ document: { kind: "none" }, attachments: [], folder: null })).toEqual([]);
   });
 
   it("names the file, so the model can refer to it", () => {
@@ -282,7 +288,7 @@ describe("the document's file type", () => {
   });
 
   it("names the type when the document is not markdown", () => {
-    const [turn] = contextTurns(resolveChatContext(source("main.py", "python")));
+    const [turn] = turnsFor(resolveChatContext(source("main.py", "python")));
     expect(turn?.content).toContain("main.py");
     expect(turn?.content).toContain("python");
   });
@@ -290,12 +296,12 @@ describe("the document's file type", () => {
   // Markdown is the app's own default and the whole system prompt already assumes it. Saying so
   // again on every turn is tokens spent to tell the model something it was told twice already.
   it("says nothing extra for markdown", () => {
-    const [turn] = contextTurns(resolveChatContext(source("notes.md", "markdown")));
+    const [turn] = turnsFor(resolveChatContext(source("notes.md", "markdown")));
     expect(turn?.content).not.toContain("markdown file");
   });
 
   it("says nothing extra when the type is unknown", () => {
-    const [turn] = contextTurns(resolveChatContext(source("scratch", null)));
+    const [turn] = turnsFor(resolveChatContext(source("scratch", null)));
     expect(turn?.content).toContain("scratch");
     expect(turn?.content).not.toContain("recognises");
   });
@@ -307,7 +313,7 @@ describe("the document's file type", () => {
       selection: "def greet():",
       file: { path: "main.py", content: "def greet():\n    pass\n", fileType: "python" },
     });
-    const [turn] = contextTurns(context);
+    const [turn] = turnsFor(context);
     expect(turn?.content).toContain("python");
   });
 });
@@ -321,8 +327,47 @@ describe("what the outline turn calls its list", () => {
       file: null,
       folder: { path: "", paths: ["main.py", "notes.md"], truncated: false },
     });
-    const [turn] = contextTurns(context);
+    const [turn] = turnsFor(context);
     expect(turn?.content).toContain("main.py");
     expect(turn?.content).not.toContain("markdown files");
+  });
+});
+
+/// What the outline turn tells the model to DO with the list.
+///
+/// It used to say "call get_file_contents" always, including to models that were never sent a tool -
+/// so a list of paths arrived with an instruction the model could not follow, and it reported that
+/// it could only see the open document. The turn now describes the mechanism that exists.
+describe("how the outline says to read a file", () => {
+  const folder = (reads: "tool" | "fenced") =>
+    contextTurns(
+      resolveChatContext({
+        selection: "",
+        file: null,
+        folder: { path: "notes", paths: ["notes/plan.md"], truncated: false },
+      }),
+      { reads },
+    )[0]?.content ?? "";
+
+  it("names the tool when the model was sent one", () => {
+    expect(folder("tool")).toContain("get_file_contents");
+    expect(folder("tool")).not.toContain(READ_FENCE_TAG);
+  });
+
+  it("describes the fenced block when it was not", () => {
+    expect(folder("fenced")).toContain(READ_FENCE_TAG);
+    expect(folder("fenced")).not.toContain("get_file_contents");
+  });
+
+  // The path in the example has to be one from the list, or the first thing the model copies is a
+  // path that will be refused.
+  it("shows the fenced form using a path the model was actually offered", () => {
+    expect(folder("fenced")).toContain("notes/plan.md");
+  });
+
+  it("says either way that only the listed paths can be read", () => {
+    for (const reads of ["tool", "fenced"] as const) {
+      expect(folder(reads)).toMatch(/only these paths/i);
+    }
   });
 });

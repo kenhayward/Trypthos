@@ -5,6 +5,7 @@ import {
   chatPanelVisible,
   contextTokens,
   defaultChatProfile,
+  cappedForSaving,
   effectiveSystemPrompt,
   fileTypeFor,
   resolveEdit,
@@ -30,7 +31,7 @@ import { useWorkspace } from "./hooks/useWorkspace";
 import { builtInTitleKey } from "./lib/builtInDocuments";
 import { openExternal } from "./lib/externalLinks";
 import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
-import { wireTurns } from "./lib/conversation";
+
 import { followLink, markdownLinkHandler } from "./lib/markdownLinks";
 import type { SettingsSection } from "./lib/settingsSections";
 import {
@@ -502,7 +503,6 @@ export default function App() {
           fileTypes={settings.fileTypes.enabled}
                 streaming={chat.streaming}
                 error={chat.error}
-                reasoning={chat.reasoning}
                 activity={chat.activity}
                 context={{ tokens: carried, limit: activeModel?.contextWindow ?? null }}
               onSend={(text) => void chat.send(text)}
@@ -534,10 +534,11 @@ export default function App() {
                   onDetach: scope.detach,
                 }}
                 onSaveChat={() =>
-                  // Wire turns, not the panel's: a saved chat is read back through
-                  // ChatSessionSchema, which is built on the strict wire turn.
+                  // The panel's turns, not the wire ones: a saved chat is a record of what was
+                  // shown, so it keeps the thinking and the files each reply read. Capped on the
+                  // way, because chain of thought is often longer than the answer.
                   void history.save(
-                    wireTurns(chat.turns),
+                    cappedForSaving(chat.turns),
                     activeModel?.id ?? null,
                     state.file?.path ?? null,
                   )

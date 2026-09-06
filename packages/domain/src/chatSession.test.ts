@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   CHAT_SESSION_VERSION,
+  SAVED_REASONING_LIMIT,
+  cappedForSaving,
   chatTitleFrom,
   loadChatSession,
   summariseSession,
@@ -126,5 +128,82 @@ describe("chatTitleFrom", () => {
 
   it("has a name for a question that is only whitespace", () => {
     expect(chatTitleFrom([{ role: "user", content: "   " }]).length).toBeGreaterThan(0);
+  });
+});
+
+/// What a saved chat keeps of the model's own working.
+///
+/// A chat that looked one way while it was open and another when reopened is a chat the user cannot
+/// trust as a record - which is why reasoning is saved rather than dropped, and why what is dropped
+/// says so.
+describe("saved reasoning", () => {
+  const base = {
+    schemaVersion: CHAT_SESSION_VERSION,
+    id: "abc",
+    title: "A chat",
+    createdAt: "2026-09-06T10:00:00.000Z",
+    updatedAt: "2026-09-06T10:00:00.000Z",
+    workspaceRoot: null,
+    filePath: null,
+    profileId: null,
+  };
+
+  it("keeps the thinking and the files a reply read", () => {
+    const session = {
+      ...base,
+      turns: [
+        { role: "assistant", content: "Hi", reasoning: "I thought about it", reads: ["a.md"] },
+      ],
+    };
+    const loaded = loadChatSession(session);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.turns[0]?.reasoning).toBe("I thought about it");
+    expect(loaded?.turns[0]?.reads).toEqual(["a.md"]);
+  });
+
+  // A version 1 file has neither, which is exactly what it had.
+  it("loads a chat saved before any of this existed", () => {
+    const old = {
+      ...base,
+      schemaVersion: 1,
+      turns: [{ role: "user", content: "Hello" }, { role: "assistant", content: "Hi" }],
+    };
+    const loaded = loadChatSession(old);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.turns[1]?.reasoning).toBeUndefined();
+    expect(loaded?.schemaVersion).toBe(CHAT_SESSION_VERSION);
+  });
+});
+
+/// Chain of thought is frequently longer than the answer, and a chat file that is mostly discarded
+/// thinking is a poor trade. Capped on the way to disk, and marked so the panel can say so.
+describe("cappedForSaving", () => {
+  it("leaves a short reply alone", () => {
+    const turns = [{ role: "assistant" as const, content: "Hi", reasoning: "Brief." }];
+    expect(cappedForSaving(turns)).toEqual(turns);
+  });
+
+  it("shortens thinking that is too long, and says it did", () => {
+    const long = "x".repeat(SAVED_REASONING_LIMIT + 500);
+    const [turn] = cappedForSaving([{ role: "assistant", content: "Hi", reasoning: long }]);
+
+    expect(turn?.reasoning?.length).toBe(SAVED_REASONING_LIMIT);
+    expect(turn?.reasoningTruncated).toBe(true);
+  });
+
+  // The beginning, as everywhere else in this app: reasoning says what it is about in its first
+  // lines, and an arbitrary middle is worth less than an opening.
+  it("keeps the beginning", () => {
+    const long = "START" + "x".repeat(SAVED_REASONING_LIMIT);
+    const [turn] = cappedForSaving([{ role: "assistant", content: "Hi", reasoning: long }]);
+
+    expect(turn?.reasoning?.startsWith("START")).toBe(true);
+  });
+
+  it("never marks a reply it did not shorten", () => {
+    const [turn] = cappedForSaving([{ role: "assistant", content: "Hi", reasoning: "Brief." }]);
+    expect(turn?.reasoningTruncated).toBeUndefined();
   });
 });

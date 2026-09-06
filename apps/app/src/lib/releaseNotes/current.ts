@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.43.0",
+    date: "2026-09-06",
+    pr: 88,
+    headline: "See what the model thought, and let it read files on any endpoint",
+    summary:
+      "Three things, all about chat being straight with you. A model with a reasoning mode now shows its thinking under every reply that has any - folded away, so you open it only when you are interested, and it stays with that reply when you scroll back or reopen a saved chat. It used to appear only when a reply produced no answer at all, so a reply that thought and then answered lost its thinking the moment it answered. Second, reading a file from the folder no longer needs an endpoint that supports tool calling: where it does not, the model asks by writing a small fenced block and Trypthos hands the file over, so the folder is useful everywhere rather than only on some endpoints. Third, the instructions sent with the folder now describe whichever of those two the model actually has - they used to always name the tool, including to models that were never given one, which meant a list of files arrived with an instruction that could not be followed. What may be read has not changed: only the files on the list, and only inside the folder you chose.",
+    added: [
+      "A reply shows what the model thought, folded away and kept with that reply.",
+      "Thinking is saved with a chat, and shortened rather than dropped if it is very long.",
+      "Models without tool calling can read a file from the folder by asking for it in a fenced block.",
+    ],
+    fixed: [
+      "The folder instructions describe the way the model can actually ask for a file.",
+    ],
+  },
+  {
     version: "0.42.1",
     date: "2026-09-05",
     pr: 87,

@@ -26,7 +26,6 @@ function panel(overrides: Partial<React.ComponentProps<typeof ChatPanel>> = {}) 
     fileTypes: ["markdown"] as readonly string[],
     streaming: false,
     error: null,
-    reasoning: "",
     activity: null,
     onSend: vi.fn(),
     onStop: vi.fn(),
@@ -463,13 +462,20 @@ describe("ChatPanel: a reply with no answer", () => {
     { role: "assistant" as const, content: "" },
   ];
 
+  /// The same reply, having thought before it stopped. Reasoning travels on the turn now, so it is
+  /// part of the reply rather than a prop beside it.
+  const thinkingReply = (reasoning: string) => [
+    empty[0]!,
+    { ...empty[1]!, reasoning },
+  ];
+
   it("says the model wrote nothing, rather than showing an empty bubble", () => {
     panel({ turns: empty, streaming: false });
     expect(screen.getByText(/finished without writing an answer/)).toBeDefined();
   });
 
   it("offers the model's thinking when there is some", () => {
-    panel({ turns: empty, streaming: false, reasoning: "Working out the summary." });
+    panel({ turns: thinkingReply("Working out the summary."), streaming: false });
     expect(screen.getByText("Show what the model was thinking")).toBeDefined();
   });
 
@@ -478,7 +484,7 @@ describe("ChatPanel: a reply with no answer", () => {
   // children mounted, so a presence check would pass whether it was folded or not.
   it("keeps the thinking behind a disclosure rather than in the thread", async () => {
     const user = userEvent.setup();
-    panel({ turns: empty, streaming: false, reasoning: "Working out the summary." });
+    panel({ turns: thinkingReply("Working out the summary."), streaming: false });
 
     const disclosure = screen.getByText("Show what the model was thinking").closest("details")!;
     expect(disclosure.open).toBe(false);
@@ -489,7 +495,7 @@ describe("ChatPanel: a reply with no answer", () => {
   });
 
   it("offers nothing to show when the model did not think out loud either", () => {
-    panel({ turns: empty, streaming: false, reasoning: "" });
+    panel({ turns: empty, streaming: false });
     expect(screen.queryByText("Show what the model was thinking")).toBeNull();
   });
 
@@ -843,5 +849,58 @@ describe("the files a reply read", () => {
     });
 
     expect(screen.queryByTestId("turn-reads")).toBeNull();
+  });
+});
+
+/// What the model thought, shown per reply and collapsed.
+///
+/// It used to appear only when a reply produced no answer at all. A reply that thought and then
+/// answered lost its thinking the moment it answered.
+describe("the thinking behind a reply", () => {
+  const thought = (reasoning: string, content = "Here is the answer.") => [
+    { role: "user" as const, content: "Why?" },
+    { role: "assistant" as const, content, reasoning },
+  ];
+
+  it("offers it on a reply that answered", () => {
+    panel({ turns: thought("Because of that.") });
+    expect(screen.getByText("Show what the model was thinking")).toBeDefined();
+  });
+
+  // Collapsed, per the request, and per reply: expanding one says nothing about the next.
+  it("starts closed", () => {
+    panel({ turns: thought("Because of that.") });
+    expect(screen.getByTestId("turn-reasoning").hasAttribute("open")).toBe(false);
+  });
+
+  it("shows the thinking once opened", async () => {
+    panel({ turns: thought("Because of that.") });
+    await userEvent.click(screen.getByText("Show what the model was thinking"));
+    expect(screen.getByTestId("turn-reasoning").textContent).toContain("Because of that.");
+  });
+
+  it("offers nothing on a reply that thought nothing", () => {
+    panel({ turns: thought("") });
+    expect(screen.queryByTestId("turn-reasoning")).toBeNull();
+  });
+
+  // THE ONE THAT MATTERS. A reply's content is split into edit cards with an Apply button, and a
+  // model reasoning about whether to propose an edit writes something that looks exactly like one.
+  // Reasoning is text and never goes near that splitter, or the user is offered Apply for a change
+  // the model never proposed and may have decided against.
+  it("never turns thinking into an apply card", async () => {
+    const block = ["```trypthos-edit append", "Some content", "```"].join("\n");
+    panel({ turns: thought(`Maybe I should write:\n\n${block}`) });
+
+    await userEvent.click(screen.getByText("Show what the model was thinking"));
+    expect(screen.queryByRole("button", { name: /Apply/ })).toBeNull();
+    expect(screen.getByTestId("turn-reasoning").textContent).toContain("trypthos-edit");
+  });
+
+  // The case that already worked: a reply that thought and then stopped.
+  it("still explains a reply that produced no answer", () => {
+    panel({ turns: thought("I thought about it.", ""), streaming: false });
+    expect(screen.getByText("The model finished without writing an answer. Try asking again.")).toBeDefined();
+    expect(screen.getByTestId("turn-reasoning")).toBeDefined();
   });
 });

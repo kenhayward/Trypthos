@@ -761,6 +761,55 @@ accumulates it into one string for the reply in flight, and the panel shows it o
 finished with no content at all. So it is lost when a turn produces an answer, and lost again when a
 saved chat is reopened. Showing it for every turn is specified in `docs/specs/reasoning-display.md`.
 
+### Asking for a file, two ways
+
+The folder outline is a menu, and an endpoint without tool calling could not order from it. Two
+transports now, and `contextTurns` is told which so the turn describes the one that exists:
+
+- **`tool`** - `get_file_contents`, where `profile.supportsTools` is on.
+- **`fenced`** - the model writes a ```` ```trypthos-read ```` block and `chatProvider` carries it
+  out, the same reasoning that made the edit transport fenced: the fenced one works everywhere.
+
+`ReadTransport` is a required argument rather than a defaulted one. The turn used to promise the
+tool unconditionally, so a list of paths reached models that had been sent nothing to call it with -
+and a default here would let that return by omission.
+
+`readBlocks.ts` parses the request. Two details are load-bearing: it matches **three** backticks
+only, because the edit format uses four to nest a fence and a read found inside an edit block would
+carry out something the user was meant to approve; and the block must hold a **path and nothing
+else**, because guessing which word of a sentence is the path is how a chat reads a file nobody
+asked for.
+
+**What may be read is unchanged.** `readFile` still answers only for paths the outline named, and
+the outline is still rebuilt in the main process. This changes how a request is written, never what
+it can reach. The fenced round is tried after the tool round and independently of it: a model that
+writes a block despite having the tool is asking for a file either way.
+
+The partial reply that held the request is discarded by a `reset` event - what streamed was
+bookkeeping, not an answer.
+
+### What the model thought
+
+Reasoning lives on the turn (`noteReasoning`), not on the hook, so it stays with the reply somebody
+scrolls back to - it used to be one string, cleared each send, shown only when a reply produced no
+answer. The panel draws a closed `<details>` per reply, and expansion is view state that is not
+persisted.
+
+**It is plain text and never goes near `splitReply`.** A reply's content becomes edit cards with an
+Apply button, and a model reasoning about whether to propose an edit writes something that looks
+exactly like one - so routing thinking through that would offer Apply for a change the model never
+proposed and may have decided against. `ChatPanel.test` asserts no Apply card appears for reasoning
+containing an edit block, and that test has been watched to fail.
+
+Saved chats keep it. `ChatSessionSchema.turns` is no longer `ChatTurnSchema` - that one is strict
+and describes what a PROVIDER receives - and `CHAT_SESSION_VERSION` is 2 with the first entry in
+`CHAT_SESSION_MIGRATIONS`, which existed only as an empty array. `cappedForSaving` trims reasoning
+to `SAVED_REASONING_LIMIT` and marks what it trimmed, because a chat file that is mostly discarded
+working is a poor trade and a train of thought that appears to stop mid-sentence is worse.
+
+Reasoning is never sent back: `wireTurns` strips it, gpt-oss's own format drops prior reasoning
+between turns, and it is frequently longer than the answer.
+
 ### The panel's turn is not the wire turn
 
 `lib/conversation.ts`'s `Turn` **extends** `ChatTurn` rather than aliasing it. The panel records

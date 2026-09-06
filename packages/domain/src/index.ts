@@ -56,6 +56,8 @@ export {
 
 export {
   CHAT_SESSION_VERSION,
+  SAVED_REASONING_LIMIT,
+  cappedForSaving,
   ChatSessionSchema,
   chatTitleFrom,
   loadChatSession,
@@ -127,6 +129,8 @@ export type { DocumentSet, DocumentSource, OpenDocument } from "./openDocuments"
 
 export { INLINE_ACTIONS, TOOLBAR_ACTIONS, lineSpan, toolbarEdit } from "./markdownToolbar";
 export type { TextRange, ToolbarAction, ToolbarEdit } from "./markdownToolbar";
+
+export { READ_FENCE_TAG, readRequestIn } from "./readBlocks";
 
 export { isHidden, sortNodes } from "./workspaceTree";
 

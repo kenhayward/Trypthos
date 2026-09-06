@@ -637,3 +637,132 @@ test("a proposed edit still arrives when a read happened first", async () => {
   const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
   assert.match(text, /trypthos-edit append/);
 });
+
+/// Reading a file without provider tool calling.
+///
+/// The folder outline is a menu, and an endpoint with no tool calling could not order from it: the
+/// model was handed a list of paths and no way to ask for one. It now writes a fenced block, and
+/// this carries it out and hands the contents back.
+///
+/// What may be read is decided by `readFile` exactly as it is for the tool. This changes how a
+/// request is written, never what it can reach.
+const READ_BLOCK = ["```trypthos-read", "notes/plan.md", "```"].join("\n");
+
+/// A fetch that answers differently each call, so a loop can be watched going round.
+function roundsFetch(rounds, { calls = [] } = {}) {
+  let at = 0;
+  return async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    const frames = rounds[Math.min(at, rounds.length - 1)];
+    at += 1;
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        getReader() {
+          const queue = [...frames];
+          return {
+            read: async () =>
+              queue.length === 0
+                ? { done: true, value: undefined }
+                : { done: false, value: new TextEncoder().encode(queue.shift()) },
+          };
+        },
+      },
+    };
+  };
+}
+
+const say = (text) => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+
+test("serves a file the model asked for in a fenced block", async () => {
+  const { events, onEvent } = collect();
+  const calls = [];
+  const fetchImpl = roundsFetch(
+    [
+      [say(READ_BLOCK), "data: [DONE]\n\n"],
+      [say("The plan says hello."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: async (path) => ({ ok: true, content: `# Plan for ${path}` }),
+  });
+
+  // The same event the tool path emits, so the panel's line of files reads the same either way.
+  assert.deepEqual(
+    events.filter((e) => e.type === "tool"),
+    [{ type: "tool", name: "get_file_contents", detail: "notes/plan.md" }],
+  );
+
+  // The request that streamed was not an answer, so the panel is told to drop it.
+  assert.ok(
+    events.some((e) => e.type === "reset"),
+    "expected the partial reply to be discarded",
+  );
+
+  assert.deepEqual(events.at(-2), { type: "token", text: "The plan says hello." });
+  assert.deepEqual(events.at(-1), { type: "end" });
+
+  // The file went back as an ordinary message: this transport exists because there is no tool role.
+  const second = calls[1].body.messages;
+  assert.equal(second.at(-1).role, "user");
+  assert.ok(second.at(-1).content.includes("# Plan for notes/plan.md"));
+});
+
+test("tells the model when the file it asked for cannot be read", async () => {
+  const { onEvent } = collect();
+  const calls = [];
+  const fetchImpl = roundsFetch(
+    [
+      [say(READ_BLOCK), "data: [DONE]\n\n"],
+      [say("I could not read it."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: async () => ({ ok: false, reason: "not-allowed" }),
+  });
+
+  const second = calls[1].body.messages;
+  assert.match(second.at(-1).content, /cannot be read/i);
+});
+
+// Without a folder there is nothing to read from, so a block is just text the model wrote.
+test("ignores a fenced request when no folder was sent", async () => {
+  const { events, onEvent } = collect();
+  const fetchImpl = roundsFetch([[say(READ_BLOCK), "data: [DONE]\n\n"]]);
+
+  await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent, readFile: null });
+
+  assert.ok(!events.some((e) => e.type === "reset"), "expected no reset");
+  assert.deepEqual(events.at(-1), { type: "end" });
+});
+
+// An unbounded loop is an unbounded bill. The cap is told to the model in the shape it has been
+// speaking - an ordinary message, since this endpoint never sent a tool call.
+test("stops after the read cap, and says so in a message the model understands", async () => {
+  const { events, onEvent } = collect();
+  const calls = [];
+  const fetchImpl = roundsFetch([[say(READ_BLOCK), "data: [DONE]\n\n"]], { calls });
+
+  await provider(fetchImpl).run({
+    profile: PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: async () => ({ ok: true, content: "x" }),
+  });
+
+  const last = calls.at(-1).body.messages.at(-1);
+  assert.equal(last.role, "user");
+  assert.match(last.content, /no more files/i);
+  assert.deepEqual(events.at(-1), { type: "end" });
+});
