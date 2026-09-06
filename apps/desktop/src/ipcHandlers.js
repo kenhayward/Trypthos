@@ -31,6 +31,7 @@ const { readSettings, writeSettings, notifySettingsWritten } = require("./settin
 const { createLocalWorkspace } = require("./localWorkspace");
 const chatStore = require("./chatStore");
 const { outlineWorkspace } = require("./workspaceOutline");
+const { createFolderToolRunner } = require("./folderToolRunner");
 
 /// The main-process side of the IPC surface.
 ///
@@ -278,6 +279,32 @@ function registerIpcHandlers({
             return result.ok ? { ok: true, content: result.content } : { ok: false, reason: "unreadable" };
           };
 
+    /// The tools that let the model look around the attached folder - list, search, compare.
+    ///
+    /// **Bound to the folder the user attached, and to nothing wider.** Attaching a folder is the
+    /// consent gesture this app has; honouring it is the difference between "you showed me this
+    /// folder" and "you opened this app". The workspace guard still applies underneath, so the
+    /// folder bound is a second fence inside the first rather than instead of it.
+    ///
+    /// Null with no folder, for the same reason the read tool is: with nothing attached there is
+    /// nothing to look around, and offering a tool that can only be refused wastes a turn.
+    const exploreFolder =
+      parsed.data.context.folder === null
+        ? null
+        : async (name, argumentsJson) => {
+            const workspace = getWorkspace();
+            if (!workspace) return null;
+
+            // Built per call rather than held, so a folder or a file-types change between turns is
+            // picked up rather than remembered from whenever the conversation started.
+            const run = createFolderToolRunner({
+              provider: workspace.provider,
+              folder: parsed.data.context.folder.path,
+              fileTypes: settings.fileTypes.enabled,
+            });
+            return await run(name, argumentsJson);
+          };
+
     // Composed here, not in the renderer: the system prompt is settings the renderer has no reason
     // to hold, and keeping the document's wording in one place means the panel cannot drift from
     // what the model is actually told.
@@ -298,6 +325,7 @@ function registerIpcHandlers({
         profile,
         turns: messages,
         readFile: readForModel,
+        callTool: exploreFolder,
         signal: controller.signal,
         onEvent: (event) => pushChatEvent(streamId, event),
       })

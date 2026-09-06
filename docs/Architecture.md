@@ -1114,6 +1114,44 @@ Three things make it small enough to trust:
   which is the same reason `codeHighlight` works over the DOM. A `data-reply-link` mark makes a pass
   over an already-walked thread do nothing, which matters because this runs on every streamed token.
 
+### The folder tools, and how far they reach
+
+`list_directory`, `search_contents` and `diff_files` are the first tools that let a model reach a
+file **it was not given**. Until them the allowlist was the outline - ten paths from one level of the
+attached folder - and `get_file_contents` answered for those and nothing else.
+
+**The bound is the folder the user attached, not the workspace.** Attaching a folder is the consent
+gesture this app has, and honouring it is the difference between "you showed me this folder" and
+"you opened this app". `withinFolder` is a whole-segment check, so `docs` does not contain
+`docs-archive` - the same prefix trap the path guard has, and the same answer.
+
+**It is a second fence inside the first, not instead of it.** Every path still goes through the
+workspace provider, which applies the lexical guard and the realpath check. There is a test that
+takes the folder bound out of the picture (by attaching the workspace root) and shows the guard
+underneath refusing a climbing path on its own.
+
+Three more properties, each with a test:
+
+- **Only the enabled file types are searched.** A search that returned files the browser will not
+  show would be telling the model about files the user cannot open.
+- **Every answer is capped, and every cap is announced.** A model told it has everything when it has
+  the first sixty matches will answer confidently and wrongly, which is worse than being told the
+  answer was cut short. `SEARCH_FILE_LIMIT` is a cap on EFFORT rather than output - a search is the
+  one tool here that can touch a whole tree, and a folder of fifty thousand files would otherwise
+  hold a turn open with the user watching a spinner.
+- **A pattern that is not a valid expression is refused, not softened into a literal search.** The
+  second would quietly answer a different question from the one asked.
+
+**`chatProvider` gained one path for every tool the app carries out.** `answerToolCall` replaces the
+bespoke `answerRead`, and `carryOut` dispatches by name; `propose_edit` is deliberately not among
+them, because it is structured OUTPUT - the call IS the proposal and nothing is executed. The
+consequence worth knowing is in `flushToolCalls`, which now turns **only** `propose_edit` into text:
+it used to skip the read tool by name, which would have turned every new tool call into an edit
+block.
+
+`MAX_READS_PER_TURN` bounds the whole loop rather than reads alone, which is what keeps one question
+from becoming an unbounded bill.
+
 ### Slash commands, and turns the app wrote
 
 `/commands` (and `/help`) and `/tools` are answered by the app. They say something about Trypthos,
@@ -1231,8 +1269,8 @@ produces the same menu twice running: without that, which files the model could 
 between turns with nothing having changed. `settings.chat.folderFileLimit` sets how many it names,
 defaulting to ten, because every entry is a file the model might ask for.
 
-**What chat does not do yet:** it cannot read files in subfolders, and cannot write to any file
-without the user pressing Apply.
+**What chat does not do yet:** it cannot write to any file without the user pressing Apply.
+Reading files in subfolders arrived with the folder tools above.
 
 ## Unsaved changes, across the process boundary
 

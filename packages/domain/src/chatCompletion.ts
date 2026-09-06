@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ChatProfile } from "./chat";
 import { normaliseEndpoint } from "./endpoints";
 import { editTools, readTools } from "./editTools";
+import { folderTools } from "./folderTools";
 
 /// Talking to an OpenAI-compatible chat endpoint.
 ///
@@ -88,9 +89,13 @@ export interface ChatRequestBody {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
-  /// Either the edit tool alone, or that plus the read tool. Typed as the union of both rather than
-  /// one of them, because which is offered depends on whether a folder outline was sent.
-  tools?: (ReturnType<typeof editTools>[number] | ReturnType<typeof readTools>[number])[];
+  /// Whichever tools this request offers. The union of every kind rather than one of them, because
+  /// which are offered depends on the profile and on whether a folder was attached.
+  tools?: (
+    | ReturnType<typeof editTools>[number]
+    | ReturnType<typeof readTools>[number]
+    | ReturnType<typeof folderTools>[number]
+  )[];
   tool_choice?: "auto";
   /// How hard the model should think before answering, for models that have levels of it.
   ///
@@ -110,7 +115,12 @@ export function buildChatRequest(
   turns: readonly RequestMessage[],
   /// Whether the model may read files. True only when a folder outline was sent - there is nothing
   /// to read from otherwise, and offering the tool would invite calls that can only be refused.
-  { canReadFiles = false } = {},
+  {
+    canReadFiles = false,
+    /// Whether the model may look around the attached folder - list, search, compare. True only
+    /// when a folder was attached, for the same reason as `canReadFiles`.
+    canExploreFolder = false,
+  } = {},
 ): ChatRequestBody {
   return {
     // The slug, never the label. They are separate fields precisely so this cannot go wrong.
@@ -127,7 +137,11 @@ export function buildChatRequest(
     ...(profile.thinking ? { reasoning_effort: profile.reasoningEffort } : {}),
     ...(profile.supportsTools
       ? {
-          tools: canReadFiles ? [...editTools(), ...readTools()] : editTools(),
+          tools: [
+            ...editTools(),
+            ...(canReadFiles ? readTools() : []),
+            ...(canExploreFolder ? folderTools() : []),
+          ],
           tool_choice: "auto" as const,
         }
       : {}),

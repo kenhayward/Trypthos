@@ -1,4 +1,5 @@
 import { EDIT_TOOL_NAME, READ_TOOL_NAME } from "./editTools";
+import { DIFF_TOOL_NAME, LIST_TOOL_NAME, SEARCH_TOOL_NAME } from "./folderTools";
 
 /// The commands you can type into the chat box instead of a question.
 ///
@@ -52,5 +53,8 @@ export interface ChatToolSummary {
 
 export const CHAT_TOOLS: readonly ChatToolSummary[] = [
   { name: READ_TOOL_NAME, descriptionKey: "chat.tools.get_file_contents" },
+  { name: LIST_TOOL_NAME, descriptionKey: "chat.tools.list_directory" },
+  { name: SEARCH_TOOL_NAME, descriptionKey: "chat.tools.search_contents" },
+  { name: DIFF_TOOL_NAME, descriptionKey: "chat.tools.diff_files" },
   { name: EDIT_TOOL_NAME, descriptionKey: "chat.tools.propose_edit" },
 ];
