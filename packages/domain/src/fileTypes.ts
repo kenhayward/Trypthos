@@ -29,6 +29,7 @@ export type FileTypeId =
   | "python"
   | "shell"
   | "powershell"
+  | "batch"
   | "sql"
   | "rust"
   | "go"
@@ -219,11 +220,39 @@ export const FILE_TYPES: readonly FileType[] = [
     id: "shell",
     labelKey: "fileTypes.shell",
     group: "languages",
-    extensions: ["sh", "bash", "zsh", "ksh"],
-    filenames: [],
+    // `command` is a macOS shell script you can double-click, and its extension says nothing about
+    // the shell - which is exactly why it would otherwise be left out.
+    extensions: ["sh", "bash", "zsh", "ksh", "fish", "command"],
+    // Shell configuration has no extension at all: the whole name is the name. These are among the
+    // files most likely to be opened from a home directory, and a type that could not open them
+    // would be a shell type that misses the shell files people actually edit.
+    filenames: [
+      ".bashrc",
+      ".bash_profile",
+      ".bash_aliases",
+      ".bash_logout",
+      ".zshrc",
+      ".zprofile",
+      ".zshenv",
+      ".profile",
+      ".inputrc",
+    ],
     modes: ["source"],
     kind: "code",
     fenceAliases: { console: "sh", "shell-session": "sh" },
+    pinned: false,
+  },
+  {
+    id: "batch",
+    labelKey: "fileTypes.batch",
+    group: "languages",
+    // The other half of "the scripts on a Windows machine", beside PowerShell. `.cmd` and `.bat` are
+    // the same language; `.cmd` is the one written since NT and the one a modern script uses.
+    extensions: ["bat", "cmd"],
+    filenames: [],
+    modes: ["source"],
+    kind: "code",
+    fenceAliases: { bat: "bat", cmd: "bat", dosbatch: "bat" },
     pinned: false,
   },
   {

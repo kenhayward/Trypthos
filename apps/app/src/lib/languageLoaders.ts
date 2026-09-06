@@ -84,6 +84,14 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
   shell: () => import("@codemirror/legacy-modes/mode/shell").then((m) => legacy(m.shell)),
   powershell: () =>
     import("@codemirror/legacy-modes/mode/powershell").then((m) => legacy(m.powerShell)),
+  // The one language here with no grammar to import: nothing ships a batch mode, so the rules are
+  // ours (`batchGrammar.ts`) and `simpleMode` is the machinery the legacy modes are built on. Both
+  // halves are still loaded on demand, so a user who never opens a .bat file never downloads either.
+  batch: () =>
+    Promise.all([
+      import("@codemirror/legacy-modes/mode/simple-mode"),
+      import("./batchGrammar"),
+    ]).then(([{ simpleMode }, { BATCH_RULES }]) => legacy(simpleMode(BATCH_RULES))),
   sql: () => import("@codemirror/lang-sql").then((m) => m.sql()),
   rust: () => import("@codemirror/lang-rust").then((m) => m.rust()),
   go: () => import("@codemirror/lang-go").then((m) => m.go()),

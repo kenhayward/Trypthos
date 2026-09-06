@@ -230,3 +230,47 @@ describe("MARKDOWN_FILE_TYPE", () => {
     expect(MARKDOWN_FILE_TYPE.modes).toEqual(["live", "source", "preview"]);
   });
 });
+
+/// The command-line files, which are the ones a Windows-first app is most likely to be pointed at.
+///
+/// Grouped as one describe because the question a user asks is not "is there a batch type" but
+/// "will it open the script I just double-clicked".
+describe("scripts and shells", () => {
+  const openedAs = (name: string) => fileTypeFor(name, DEFAULT_FILE_TYPES)?.id ?? null;
+
+  it("opens a Windows batch file", () => {
+    expect(openedAs("build.bat")).toBe("batch");
+    expect(openedAs("deploy.cmd")).toBe("batch");
+  });
+
+  it("opens a PowerShell script", () => {
+    expect(openedAs("Build.ps1")).toBe("powershell");
+  });
+
+  it("opens a shell script, whichever shell wrote it", () => {
+    for (const name of ["build.sh", "build.bash", "build.zsh", "build.ksh", "build.fish"]) {
+      expect(openedAs(name)).toBe("shell");
+    }
+  });
+
+  // A macOS shell script you can double-click. Its extension says nothing about the shell, which is
+  // exactly why it would otherwise be left out.
+  it("opens a double-clickable macOS script", () => {
+    expect(openedAs("start.command")).toBe("shell");
+  });
+
+  // Shell configuration has no extension at all - the whole name is the name. These are the files
+  // most likely to be opened from a home directory, and matching is case-insensitive like the rest.
+  it("opens the shell configuration files, which have no extension", () => {
+    for (const name of [".bashrc", ".bash_profile", ".bash_aliases", ".zshrc", ".zprofile", ".profile"]) {
+      expect(openedAs(name)).toBe("shell");
+    }
+  });
+
+  // The fence tags a model writes when it proposes a script, which is how a reply about one gets
+  // coloured at all.
+  it("colours a fenced batch block however the model tagged it", () => {
+    const batch = FILE_TYPES.find((type) => type.id === "batch");
+    expect(Object.keys(batch?.fenceAliases ?? {}).sort()).toEqual(["bat", "cmd", "dosbatch"]);
+  });
+});

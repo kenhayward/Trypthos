@@ -390,6 +390,7 @@ file that needs it. Measured across the phases that built this, all figures unco
 | Before any of it | 1,019 KB | none |
 | Six languages (phase 3) | 825 KB | 8, ~238 KB |
 | Thirty-one types (phase 4) | 839 KB | 17, ~682 KB |
+| Thirty-two types (batch) | 859 KB | 19, ~685 KB |
 
 So twenty-two more languages cost **~14 KB at startup** and ~444 KB that is never fetched unless a
 file needs it - and the app still starts with 180 KB less than before any of this, because markdown
@@ -410,6 +411,20 @@ Where a real Lezer grammar exists this file uses it; the long tail comes from
 `@codemirror/legacy-modes`, wrapped by `legacy()`. A `StreamParser` is a tokeniser rather than a
 grammar, so it produces no syntax tree and colours by token name alone - the accepted floor, since
 the alternative for those languages is nothing at all.
+
+**Batch is the one grammar this app writes itself.** Nothing ships a mode for `.bat` and `.cmd`, and
+a type with no colouring at all would fail the one thing the file-types spec asks of a type, so
+`lib/batchGrammar.ts` holds rules for `simpleMode` - the same machinery the legacy modes are built
+on. It is **rules as data, with no CodeMirror import**: the loader combines them with `simpleMode`,
+which keeps the grammar packages out of a module the graph guard does not cover, and leaves the rules
+readable as what they are - an ordered list where the first match wins. Both halves stay lazy, so
+somebody who never opens a batch file downloads neither (0.8 KB and 2.3 KB when they do).
+
+Its token names are CodeMirror 5's, because that is what `simpleMode` speaks, and they are chosen to
+match what shell and PowerShell use for the same things - `builtin` for a command, `comment`,
+`string`, `keyword`. The one departure is `attribute` for `%VAR%` and `!VAR!` where shell uses `def`
+for `$var`: `def` resolves to a tag this app gives no colour, and a batch file is mostly variable
+expansion, so the expansions would have been the one thing not picked out.
 
 A loader is handed a `LanguageRequest`, not a bare name, because **one** of them needs more than the
 filename: `markdown` builds its `codeLanguages` from the rest of the catalogue. Every loader is
