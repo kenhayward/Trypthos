@@ -268,7 +268,11 @@ function registerIpcHandlers({
       // Resolved here rather than stored: null means "the current default", so improving the
       // default reaches everyone who has not written their own.
       systemPrompt: effectiveSystemPrompt(settings.chat.systemPrompt),
-      context: contextTurns(parsed.data.context),
+      // The transport the model actually has. Promising the tool to an endpoint that was never
+      // sent one is what made the folder look empty for two releases.
+      context: contextTurns(parsed.data.context, {
+        reads: profile.supportsTools ? "tool" : "fenced",
+      }),
       turns: parsed.data.turns,
     });
 

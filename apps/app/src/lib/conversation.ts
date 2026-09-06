@@ -17,11 +17,21 @@ import type { ChatTurn } from "@trypthos/domain";
 /// a turn that skipped it would be a loud parse failure at the IPC boundary and at save rather than
 /// a silent leak. That is the property worth keeping, and the reason the conversion is explicit.
 export interface Turn extends ChatTurn {
+  /// What the model thought before answering, for a model with a reasoning mode.
+  ///
+  /// On the turn for the same reason `reads` is: a reply that thought and then answered should
+  /// still show its thinking when somebody scrolls back to it. Kept OUT of `content` because the
+  /// two are read very differently - and because content is split into edit cards, and a model
+  /// reasoning about whether to propose an edit writes something that looks exactly like one.
+  reasoning?: string;
+  /// True when the thinking above was shortened on the way to disk. Set only by loading a saved
+  /// chat - a live reply is never shortened.
+  reasoningTruncated?: boolean;
   /// Files read on the model's behalf while this reply was produced, in the order asked for.
   ///
   /// On the TURN rather than beside it, so scrolling back to an answer still shows what it read to
   /// get there - a fact about that reply, not about whichever reply is on screen now.
-  reads?: readonly string[];
+  reads?: string[];
 }
 
 /// The conversation as a provider receives it.
@@ -62,6 +72,14 @@ export function noteRead(turns: readonly Turn[], path: string): Turn[] {
   if (last.reads?.includes(path) === true) return [...turns];
 
   return [...turns.slice(0, -1), { ...last, reads: [...(last.reads ?? []), path] }];
+}
+
+/// Collects a fragment of the model's thinking, against the reply in progress.
+export function noteReasoning(turns: readonly Turn[], text: string): Turn[] {
+  const last = turns.at(-1);
+  if (last === undefined || last.role !== "assistant") return [...turns];
+
+  return [...turns.slice(0, -1), { ...last, reasoning: (last.reasoning ?? "") + text }];
 }
 
 /// Replaces the reply in progress - used to show an error in the place the answer would have been.

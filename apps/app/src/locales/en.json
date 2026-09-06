@@ -92,6 +92,7 @@
     },
     "noAnswer": "The model finished without writing an answer. Try asking again.",
     "showThinking": "Show what the model was thinking",
+    "thinkingShortened": "This thinking was shortened when the chat was saved.",
     "history": {
       "open": "Saved conversations",
       "save": "Save this conversation",

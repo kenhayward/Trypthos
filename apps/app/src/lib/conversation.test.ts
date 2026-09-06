@@ -3,6 +3,7 @@ import { ChatTurnSchema } from "@trypthos/domain";
 import {
   appendToken,
   noteRead,
+  noteReasoning,
   wireTurns,
   askedBy,
   beginReply,
@@ -155,5 +156,40 @@ describe("wireTurns", () => {
     for (const turn of wireTurns(turns)) {
       expect(() => ChatTurnSchema.parse(turn)).not.toThrow();
     }
+  });
+});
+
+/// What the model thought, kept with the reply it thought for.
+///
+/// It used to be one string on the hook, cleared on the next send and shown only when a reply
+/// produced no answer at all - so a reply that thought and then answered lost its thinking the
+/// moment it answered.
+describe("noteReasoning", () => {
+  const replying = [
+    { role: "user" as const, content: "Why?" },
+    { role: "assistant" as const, content: "" },
+  ];
+
+  it("collects it against the reply in progress", () => {
+    const after = noteReasoning(noteReasoning(replying, "Because "), "of that.");
+    expect(after.at(-1)?.reasoning).toBe("Because of that.");
+  });
+
+  it("leaves the reply's text alone", () => {
+    const withText = [{ role: "assistant" as const, content: "Half an answer" }];
+    expect(noteReasoning(withText, "hmm").at(-1)?.content).toBe("Half an answer");
+  });
+
+  it("drops it when the last turn is not a reply", () => {
+    const user = [{ role: "user" as const, content: "Hello" }];
+    expect(noteReasoning(user, "hmm")).toEqual(user);
+  });
+
+  // Reasoning is the model's own working, and the wire turn is what a provider receives. gpt-oss's
+  // own format says prior reasoning is dropped between turns, and resending it would spend the
+  // context window on it besides.
+  it("is stripped by wireTurns like everything else the panel records", () => {
+    const turns = [{ role: "assistant" as const, content: "Hi", reasoning: "I thought about it" }];
+    expect(wireTurns(turns)).toEqual([{ role: "assistant", content: "Hi" }]);
   });
 });

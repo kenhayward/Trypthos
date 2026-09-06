@@ -28,8 +28,6 @@ interface Props {
   fileTypes: readonly string[];
   streaming: boolean;
   error: string | null;
-  /// What the model thought, when it produced no answer. See the empty-reply branch below.
-  reasoning: string;
   /// A file being read on the model's behalf, if one is.
   activity: string | null;
   /// What the next request will already carry, and the window it has to fit in.
@@ -96,7 +94,6 @@ export default function ChatPanel({
   fileTypes,
   streaming,
   error,
-  reasoning,
   activity,
   context,
   onSend,
@@ -281,17 +278,7 @@ export default function ChatPanel({
                       // A turn that finished having produced nothing. Reasoning models do this:
                       // they think, and then stop. An empty bubble tells the user nothing at all,
                       // so say what happened and show the thinking if there is any.
-                      <div className="space-y-2">
-                        <p className="text-ui text-ink-4">{t("chat.noAnswer")}</p>
-                        {reasoning !== "" && (
-                          <details className="text-xs text-ink-4">
-                            <summary className="cursor-pointer">{t("chat.showThinking")}</summary>
-                            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap">
-                              {reasoning}
-                            </pre>
-                          </details>
-                        )}
-                      </div>
+                      <p className="text-ui text-ink-4">{t("chat.noAnswer")}</p>
                     ) : streaming && index === turns.length - 1 ? (
                       // Still arriving. Rendered as plain text rather than split into cards: a
                       // half-written block can transiently look complete, and a card that appears
@@ -329,6 +316,29 @@ export default function ChatPanel({
                     )
                   ) : (
                     <span className="whitespace-pre-wrap break-words">{turn.content}</span>
+                  )}
+
+                  {/* What the model thought, per reply and closed. `details` rather than a
+                      hand-rolled toggle: it brings keyboard behaviour and the open state to
+                      assistive technology for free, and the panel already used one here.
+
+                      PLAIN TEXT, and deliberately not through the renderer or the part splitter. A
+                      reply's content becomes edit cards with an Apply button, and a model reasoning
+                      about whether to propose an edit writes something that looks exactly like one -
+                      so routing thinking through that would offer Apply for a change the model
+                      never proposed. */}
+                  {turn.role === "assistant" && (turn.reasoning ?? "") !== "" && (
+                    <details data-testid="turn-reasoning" className="mt-1.5 text-xs text-ink-4">
+                      <summary className="cursor-pointer">{t("chat.showThinking")}</summary>
+                      <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap">
+                        {turn.reasoning}
+                      </pre>
+                      {/* Said rather than left to look like a train of thought that stops
+                          mid-sentence, which is what a silent truncation reads as. */}
+                      {turn.reasoningTruncated === true && (
+                        <p className="mt-1 text-2xs text-faint">{t("chat.thinkingShortened")}</p>
+                      )}
+                    </details>
                   )}
 
                   {/* One line for every file this reply read, and only once it has something to

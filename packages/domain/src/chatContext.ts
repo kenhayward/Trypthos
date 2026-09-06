@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { ChatTurn } from "./chatCompletion";
+import { READ_TOOL_NAME } from "./editTools";
+import { READ_FENCE_TAG } from "./readBlocks";
 
 /// What the model is told about the user's files.
 ///
@@ -216,6 +218,37 @@ function fenced(heading: string, body: string, note: string): ChatTurn {
   };
 }
 
+/// How the model may ask for one of the files the outline named.
+///
+/// `tool` where the endpoint supports tool calling and `get_file_contents` was sent; `fenced`
+/// otherwise, where the model writes a block and the app carries it out.
+///
+/// Required rather than defaulted. The turn used to promise the tool unconditionally, including to
+/// models that were never sent one - so a list of paths arrived with an instruction that could not
+/// be followed, and the model reported it could only see the open document. A default here would
+/// let that happen again by omission.
+export type ReadTransport = "tool" | "fenced";
+
+/// How to ask for one of those files, in the terms the model actually has.
+///
+/// The example uses a path from the LIST rather than a placeholder, so the first thing a model
+/// copies is a path that will be accepted rather than one that will be refused.
+function howToRead(reads: ReadTransport, example: string): string {
+  if (reads === "tool") {
+    return `To read one, call ${READ_TOOL_NAME} with its path exactly as written here.`;
+  }
+
+  return [
+    "To read one, reply with only a fenced block naming it and nothing else, like this:",
+    "",
+    "```" + READ_FENCE_TAG,
+    example,
+    "```",
+    "",
+    "The file will be given to you and you can carry on. Ask for one at a time.",
+  ].join("\n");
+}
+
 /// The messages carrying the context, in the order they should be sent.
 ///
 /// Each is a **user** turn, not a system one. System messages are where instructions live, and a
@@ -223,7 +256,10 @@ function fenced(heading: string, body: string, note: string): ChatTurn {
 /// prompts, a pasted email, a deliberate injection - so each is labelled as reference material and
 /// fenced. The system prompt says the same thing from the other side. Neither alone is a guarantee,
 /// and both together are what the app can honestly do.
-export function contextTurns(context: ChatContext): ChatTurn[] {
+export function contextTurns(
+  context: ChatContext,
+  { reads }: { reads: ReadTransport },
+): ChatTurn[] {
   const turns: ChatTurn[] = [];
 
   // The outline first: it is the map, and the things it names come after it.
@@ -234,8 +270,9 @@ export function contextTurns(context: ChatContext): ChatTurn[] {
     turns.push(
       fenced(
         `Here are the files in ${context.folder.path === "" ? "the folder the user is working in" : context.folder.path}. This ` +
-          "is a list of paths only - you have not been shown their contents. To read one, call " +
-          "get_file_contents with its path exactly as written here. Only these paths can be read.",
+          "is a list of paths only - you have not been shown their contents. " +
+          howToRead(reads, context.folder.paths[0] ?? "path/to/file") +
+          " Only these paths can be read.",
         context.folder.paths.join("\n"),
         note,
       ),

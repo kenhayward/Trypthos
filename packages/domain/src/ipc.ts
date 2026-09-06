@@ -235,6 +235,12 @@ export const ChatIdRequest = z.object({ id: z.string().min(1) }).strict();
 export const ChatEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("token"), text: z.string() }).strict(),
   z.object({ type: z.literal("reasoning"), text: z.string() }).strict(),
+  /// Discard what has streamed for this reply; more is coming in its place.
+  ///
+  /// Sent when a reply turned out to be a request for a file rather than an answer - the fenced
+  /// read transport, for endpoints with no tool calling. The panel empties the reply and the next
+  /// round writes the real one, so the user is not left reading the model's own bookkeeping.
+  z.object({ type: z.literal("reset") }).strict(),
   /// Something the app is doing on the model's behalf - reading a file it asked for. Shown in the
   /// panel so a turn that pauses for several seconds says what it is doing rather than look stuck.
   z.object({ type: z.literal("tool"), name: z.string(), detail: z.string() }).strict(),

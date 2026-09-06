@@ -459,6 +459,19 @@ A reply that quietly consulted five files, or quietly did not, is one you cannot
 without pasting one into the other. Attachments are read when you attach them, so editing a file
 afterwards does not silently change what an earlier answer was about.
 
+A model with a **reasoning mode** shows its thinking under any reply that has some, **folded away**:
+open it when you are interested, and it stays closed otherwise. It belongs to that reply, so it is
+still there when you scroll back, and it is kept when you save the chat - shortened rather than
+dropped if it ran very long, and the fold says when it was. Thinking is shown as plain text and is
+never turned into a change you can apply: a model working out *whether* to propose an edit writes
+something that looks exactly like one, and offering Apply for a change it never proposed would be
+worse than not showing the thinking at all.
+
+Reading a file works **whether or not your endpoint supports tool calling**. Where it does, the model
+calls for the file; where it does not, it asks by writing a small fenced block and Trypthos hands the
+file over and lets it carry on. Either way it can only read the files on the list, from the folder
+you chose. The instructions sent with the folder describe whichever of the two your model has.
+
 When the model reads a file from the folder you gave it, the reply says so: **one line at the bottom
 of that answer** naming every file it read, with the full paths on hover. One line however many it
 read, and it stays with the answer - scroll back to something from last week and you can still see

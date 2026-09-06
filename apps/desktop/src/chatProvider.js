@@ -10,6 +10,7 @@ const {
   formatEditBlock,
   parseStreamPayload,
   pathFromToolArguments,
+  readRequestIn,
 } = require("@trypthos/domain");
 
 /// How many times the model may ask to read a file in one turn.
@@ -80,11 +81,14 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       // Told plainly rather than silently stopping: a model that thinks it is still gathering will
       // otherwise answer as though it had read everything it asked for.
       if (round + 1 >= MAX_READS_PER_TURN) {
-        messages.push({
-          role: "tool",
-          tool_call_id: reads.id,
-          content: "No more files can be read for this question. Answer with what you have.",
-        });
+        const enough = "No more files can be read for this question. Answer with what you have.";
+        // Said in whichever shape the model has been speaking. A `tool` message to an endpoint
+        // that never sent a tool call is a message it has no idea what to do with.
+        messages.push(
+          reads.kind === "tool"
+            ? { role: "tool", tool_call_id: reads.id, content: enough }
+            : { role: "user", content: enough },
+        );
         await runOnce({ profile, messages, onEvent, signal, readFile: null });
         return;
       }
@@ -152,6 +156,9 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     /// streamed as a string, so every prefix of one is invalid JSON and only the last is not.
     const toolArguments = new Map();
 
+    /// Everything the model has said this round, for the fenced read transport to look through.
+    let replyText = "";
+
     /// Turns finished tool calls into the same block the fenced transport produces.
     ///
     /// Emitted as ordinary tokens, which is the point: downstream there is one representation of a
@@ -211,10 +218,46 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
             : `That file cannot be read. Only the files listed for this folder are available.`,
         });
 
-        return { id };
+        return { kind: "tool", id };
       }
 
       return null;
+    }
+
+    /// A file the model asked for in a fenced block, answered and appended to the conversation.
+    ///
+    /// The fallback for endpoints with no tool calling, where the outline would otherwise be a menu
+    /// nobody can order from. Tried after the tool path, and independently of it: a model that
+    /// writes a block despite having the tool is asking for a file either way, and refusing on a
+    /// technicality would be refusing the thing it plainly meant.
+    ///
+    /// **What may be read is still decided by `readFile`**, which answers only for paths the
+    /// outline named. This transport changes how a request is written, never what it may reach.
+    async function answerFencedRead(reply) {
+      if (readFile === null) return null;
+
+      const wanted = readRequestIn(reply);
+      if (wanted === null) return null;
+
+      // The same event the tool path emits, so the panel's line of files reads the same however the
+      // model asked.
+      onEvent({ type: "tool", name: READ_TOOL_NAME, detail: wanted });
+      const result = await readFile(wanted);
+
+      // Ordinary roles, not tool roles: this exists precisely because the endpoint has no tool
+      // calling, so a `tool` message would be the one shape it cannot take.
+      messages.push({ role: "assistant", content: reply });
+      messages.push({
+        role: "user",
+        content: result.ok
+          ? `Here is ${wanted}:\n\n${result.content}`
+          : "That file cannot be read. Only the files listed for this folder are available.",
+      });
+
+      // What streamed was a request, not an answer. The panel drops it and the next round writes the
+      // real reply in its place - otherwise the user reads the model's bookkeeping.
+      onEvent({ type: "reset" });
+      return { kind: "fenced" };
     }
 
     try {
@@ -243,6 +286,9 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
             const read = await answerRead();
             if (read !== null) return read;
 
+            const fenced = await answerFencedRead(replyText);
+            if (fenced !== null) return fenced;
+
             onEvent({ type: "end" });
             return null;
           }
@@ -255,6 +301,9 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
             onEvent({ type: "end" });
             return null;
           }
+          // Kept so a reply can be re-read at the end: the fenced transport asks for a file by
+          // writing one, and nothing else here has the whole text.
+          if (event.type === "token") replyText += event.text;
           onEvent(event);
         }
       }

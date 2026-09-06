@@ -5,6 +5,8 @@ import {
   beginReply,
   historyWithoutReply,
   noteRead,
+  noteReasoning,
+  setReply,
   wireTurns,
   type Turn,
 } from "../lib/conversation";
@@ -38,13 +40,6 @@ export function useChat(
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /// What the model thought, for the turn in flight.
-  ///
-  /// Kept apart from `turns` on purpose: turns are the wire format, resent to the provider every
-  /// message, and a model's own reasoning is not part of the conversation. It exists only so the
-  /// panel has something to show when a turn ends having produced reasoning and no answer, which is
-  /// how gpt-oss and DeepSeek-R1 sometimes finish.
-  const [reasoning, setReasoning] = useState("");
   /// The file being read on the model's behalf, if one is.
   ///
   /// A turn that pauses for several seconds while a file is read should say what it is doing rather
@@ -84,7 +79,13 @@ export function useChat(
         return;
       }
       if (event.type === "reasoning") {
-        setReasoning((current) => current + event.text);
+        setTurns((current) => noteReasoning(current, event.text));
+        return;
+      }
+      if (event.type === "reset") {
+        // What streamed was a request for a file, not an answer. The text goes; the reads and the
+        // thinking recorded against this reply stay, because they did happen.
+        setTurns((current) => setReply(current, ""));
         return;
       }
       if (event.type === "tool") {
@@ -117,8 +118,7 @@ export function useChat(
       if (bridge === null || profileId === null) return;
 
       setError(null);
-      setReasoning("");
-      setActivity(null);
+        setActivity(null);
       setTurns(beginReply(history));
       setStreaming(true);
 
@@ -182,7 +182,6 @@ export function useChat(
     activeStream.current = null;
     setTurns(loaded);
     setError(null);
-    setReasoning("");
     setActivity(null);
     setStreaming(false);
   }, []);
@@ -192,10 +191,9 @@ export function useChat(
     activeStream.current = null;
     setTurns([]);
     setError(null);
-    setReasoning("");
     setActivity(null);
     setStreaming(false);
   }, []);
 
-  return { turns, streaming, error, reasoning, activity, send, retry, stop, clear, replace };
+  return { turns, streaming, error, activity, send, retry, stop, clear, replace };
 }
