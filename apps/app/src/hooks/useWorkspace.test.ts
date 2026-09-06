@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
 import { failureKey, failureParams, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
+import type { ConfirmDiscard } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
 /// A hand-written fake, not a mocking library. It records what it was asked to do, which is what most
@@ -1411,5 +1412,79 @@ describe("reporting an opened file", () => {
     });
 
     expect(opened).toEqual([]);
+  });
+});
+
+/// Closing several tabs at once, which is what a tab's right-click menu asks for.
+///
+/// The rule that matters is the one it shares with closing the window: each unsaved document is
+/// asked about in turn, and the first cancel stops the rest. A "Close Others" that carried on past a
+/// cancel would shut tabs nobody had been asked about yet.
+describe("closing several documents", () => {
+  const nodes = ["a.md", "b.md", "c.md"].map((id) => ({ id, name: id, kind: "file" as const }));
+
+  async function withOpen(confirm?: ConfirmDiscard) {
+    const { client } = fakeClient();
+    const rendered = renderHook(() => useWorkspace(client, "", confirm ?? null));
+    for (const node of nodes) {
+      await act(async () => {
+        await rendered.result.current.actions.openFile(node);
+      });
+    }
+    return rendered;
+  }
+
+  it("closes every tab it was given, and leaves the rest", async () => {
+    const { result } = await withOpen();
+
+    await act(async () => {
+      await result.current.actions.closeFiles(["a.md", "c.md"]);
+    });
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual(["b.md"]);
+  });
+
+  it("asks about each unsaved document by name", async () => {
+    const asked: (string | null | undefined)[] = [];
+    const { result } = await withOpen(async (name) => {
+      asked.push(name);
+      return "discard";
+    });
+
+    act(() => result.current.actions.edit("# Mine"));
+    await act(async () => {
+      await result.current.actions.closeFiles(["a.md", "b.md", "c.md"]);
+    });
+
+    // Only the one with unsaved work in it: a clean document is discardable and asks nothing.
+    expect(asked).toEqual(["c.md"]);
+    expect(result.current.state.documents).toHaveLength(0);
+  });
+
+  // The whole point of doing this one at a time.
+  it("stops at the first cancel, leaving that tab and everything after it", async () => {
+    const { result } = await withOpen(async () => "cancel");
+
+    act(() => result.current.actions.activateFile("b.md"));
+    act(() => result.current.actions.edit("# Mine"));
+
+    await act(async () => {
+      await result.current.actions.closeFiles(["a.md", "b.md", "c.md"]);
+    });
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      "b.md",
+      "c.md",
+    ]);
+  });
+
+  it("does nothing when there is nothing to close", async () => {
+    const { result } = await withOpen();
+
+    await act(async () => {
+      await result.current.actions.closeFiles([]);
+    });
+
+    expect(result.current.state.documents).toHaveLength(3);
   });
 });

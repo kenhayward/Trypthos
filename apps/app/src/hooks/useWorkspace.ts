@@ -109,6 +109,12 @@ export interface WorkspaceActions {
   openTarget(target: { root: string; file: string | null }): Promise<void>;
   /// Closes one document, asking about its unsaved work first. Nothing else is disturbed.
   closeFile(path: string): Promise<void>;
+  /// Closes several, in the order given, asking about each unsaved one in turn.
+  ///
+  /// **The first cancel stops the rest.** Same rule as closing the window: a "Close Others" that
+  /// carried on past a cancel would shut tabs nobody had been asked about yet. What closed before
+  /// the cancel stays closed - the user agreed to each of those.
+  closeFiles(paths: readonly string[]): Promise<void>;
   edit(content: string): void;
   /// True when the file is on disk as the editor shows it. False on a failed save, and on no file
   /// open at all - the caller may be about to discard the document on the strength of the answer.
@@ -477,13 +483,21 @@ export function useWorkspace(
   /// last segment of that path, so there is nothing here the path does not already say.
   const openFile = useCallback(async (node: RemoteNode) => await openPath(node.id), [openPath]);
 
-  const closeFile = useCallback(
-    async (path: string) => {
-      if (!(await mayDiscardOne(path))) return;
-      setInternal((prev) => ({ ...prev, documents: closeDocument(prev.documents, path) }));
+  const closeFiles = useCallback(
+    async (paths: readonly string[]) => {
+      // One at a time, and in the order given. Asking about them all first and closing afterwards
+      // would leave the user answering three prompts before seeing any of them take effect.
+      for (const path of paths) {
+        if (!(await mayDiscardOne(path))) return;
+        setInternal((prev) => ({ ...prev, documents: closeDocument(prev.documents, path) }));
+      }
     },
     [mayDiscardOne],
   );
+
+  /// Closing one tab is closing a list of one. Written that way rather than beside it, so the prompt
+  /// and the order cannot behave differently depending on how the close was reached.
+  const closeFile = useCallback(async (path: string) => await closeFiles([path]), [closeFiles]);
 
   /// A folder, and optionally a document in it, handed over from outside the app.
   ///
@@ -594,6 +608,7 @@ export function useWorkspace(
         }),
       })),
     closeFile,
+    closeFiles,
     edit: (content: string) =>
       setInternal((prev) => {
         const path = prev.documents.activePath;

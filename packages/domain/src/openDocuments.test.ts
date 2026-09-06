@@ -13,6 +13,7 @@ import {
   openPaths,
   renameDocument,
   tabLabels,
+  tabsToClose,
   updateContent,
   type DocumentSet,
 } from "./openDocuments";
@@ -96,9 +97,13 @@ describe("closeDocument", () => {
     expect(set.activePath).toBe("b.md");
   });
 
+  // This one asserted only the SELECTION, and so said nothing about whether the tab went. It did
+  // not: the branch for closing a tab other than the one on screen built the list without it and
+  // then returned the original set, so every close of a background tab was silently a no-op.
   it("leaves the selection alone when another tab is closed", () => {
     const set = closeDocument(activateDocument(withFiles("a.md", "b.md", "c.md"), "c.md"), "a.md");
 
+    expect(openPaths(set)).toEqual(["b.md", "c.md"]);
     expect(set.activePath).toBe("c.md");
   });
 
@@ -303,5 +308,57 @@ describe("renameDocument", () => {
   it("does nothing for a path that is not open", () => {
     const set = withFiles("a.md");
     expect(renameDocument(set, "missing.md", "x.md", rev("new"))).toBe(set);
+  });
+});
+
+/// What each entry of a tab's right-click menu would close.
+///
+/// Expressed over the tab strip rather than over a `DocumentSet`, because that is what the strip
+/// itself holds - and it makes every one of these answerable without a document set to build.
+describe("tabsToClose", () => {
+  const paths = ["a.md", "b.md", "c.md", "d.md"];
+
+  it("closes the tab that was clicked", () => {
+    expect(tabsToClose("close", paths, [], "b.md")).toEqual(["b.md"]);
+  });
+
+  it("closes everything after the clicked tab, in strip order", () => {
+    expect(tabsToClose("close-right", paths, [], "b.md")).toEqual(["c.md", "d.md"]);
+  });
+
+  it("closes everything", () => {
+    expect(tabsToClose("close-all", paths, [], "b.md")).toEqual(paths);
+  });
+
+  it("closes everything but the clicked tab", () => {
+    expect(tabsToClose("close-others", paths, [], "b.md")).toEqual(["a.md", "c.md", "d.md"]);
+  });
+
+  // "Saved" is the tab strip's own word for it: a tab with no unsaved work, dot or no dot. It
+  // deliberately includes the clicked one - the entry says what it closes.
+  it("closes the tabs with nothing unsaved in them", () => {
+    expect(tabsToClose("close-saved", paths, ["b.md", "d.md"], "b.md")).toEqual(["a.md", "c.md"]);
+  });
+
+  // What "nothing to do" looks like, and how the menu greys an entry: an entry that would close
+  // nothing is an entry there is no point offering.
+  it("has nothing to close to the right of the last tab", () => {
+    expect(tabsToClose("close-right", paths, [], "d.md")).toEqual([]);
+  });
+
+  it("has no others to close when there is one tab", () => {
+    expect(tabsToClose("close-others", ["a.md"], [], "a.md")).toEqual([]);
+  });
+
+  it("has nothing saved to close when every tab is unsaved", () => {
+    expect(tabsToClose("close-saved", paths, paths, "b.md")).toEqual([]);
+  });
+
+  // The strip can change under a menu that is already open - a save lands, another window is used.
+  // A path that is no longer there closes nothing rather than throwing.
+  it("closes nothing for a tab that is no longer open", () => {
+    expect(tabsToClose("close", paths, [], "gone.md")).toEqual([]);
+    expect(tabsToClose("close-right", paths, [], "gone.md")).toEqual([]);
+    expect(tabsToClose("close-others", paths, [], "gone.md")).toEqual([]);
   });
 });

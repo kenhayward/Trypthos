@@ -40,6 +40,8 @@
   --color-accent: var(--tp-accent);
   --color-accent-strong: var(--tp-accent-strong);
   --color-selected: var(--tp-selected);
+  --color-text-selection: var(--tp-text-selection);
+  --color-text-selection-idle: var(--tp-text-selection-idle);
   --color-selected-ink: var(--tp-selected-ink);
   --color-leaf: var(--tp-leaf);
   --color-danger: var(--tp-danger);
@@ -105,6 +107,12 @@
   --tp-selected: rgba(47, 107, 237, 0.1);
   --tp-selected-ink: #1e40af;
 
+  /* Selected TEXT, which is not the same as a selected row. Two values, because the editor keeps
+     drawing its selection after focus goes to the chat box - that selection IS the context for the
+     question being typed, so it stays visible, one step quieter to say where the caret is not. */
+  --tp-text-selection: rgba(47, 107, 237, 0.28);
+  --tp-text-selection-idle: rgba(47, 107, 237, 0.16);
+
   /* Diariz green: folders and links. */
   --tp-leaf: #2e7d6b;
 
@@ -159,6 +167,9 @@
     --tp-selected: rgba(47, 107, 237, 0.14);
     --tp-selected-ink: #cfe0ff;
 
+    --tp-text-selection: rgba(96, 145, 255, 0.34);
+    --tp-text-selection-idle: rgba(96, 145, 255, 0.2);
+
     /* The repo's CSS only ever defined the light green, so the dark one is new here. */
     --tp-leaf: #5fc3ab;
 
@@ -209,6 +220,9 @@
   --tp-accent-strong: #2563eb;
   --tp-selected: rgba(47, 107, 237, 0.14);
   --tp-selected-ink: #cfe0ff;
+
+  --tp-text-selection: rgba(96, 145, 255, 0.34);
+  --tp-text-selection-idle: rgba(96, 145, 255, 0.2);
 
   --tp-leaf: #5fc3ab;
 

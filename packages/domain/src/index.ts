@@ -122,11 +122,13 @@ export {
   markSaved,
   openDocument,
   openPaths,
+  TAB_CLOSE_ACTIONS,
   renameDocument,
   tabLabels,
+  tabsToClose,
   updateContent,
 } from "./openDocuments";
-export type { DocumentSet, DocumentSource, OpenDocument } from "./openDocuments";
+export type { DocumentSet, DocumentSource, OpenDocument, TabCloseAction } from "./openDocuments";
 
 export {
   RECENT_FILES_LIMIT,

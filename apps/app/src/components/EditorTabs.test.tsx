@@ -19,6 +19,7 @@ function setup(over: Partial<React.ComponentProps<typeof EditorTabs>> = {}) {
     dirtyPaths: [] as readonly string[],
     onActivate: vi.fn(),
     onClose: vi.fn(),
+    onCloseMany: vi.fn(),
     ...over,
   };
   render(<EditorTabs {...props} />);
@@ -142,6 +143,7 @@ describe("a built-in document", () => {
         dirtyPaths={[]}
         onActivate={vi.fn()}
         onClose={vi.fn()}
+        onCloseMany={vi.fn()}
       />,
     );
 
@@ -149,5 +151,101 @@ describe("a built-in document", () => {
     expect(tab.textContent).toContain("Markdown Syntax Guide");
     // And not qualified with the open folder, which it is not in.
     expect(tab.getAttribute("title")).toBe("Markdown Syntax Guide");
+  });
+});
+
+/// The right-click menu on a tab.
+///
+/// Drawn here rather than popped natively, following `OpenFilesMenu` and `ChatHistoryMenu`: what it
+/// closes is entirely the strip's own business, and the shell has nothing to contribute to it.
+///
+/// What each entry closes is `tabsToClose` in the domain, tested there. What is tested here is that
+/// the menu reaches it - the right entries, on the right tab, greyed when they would close nothing.
+describe("EditorTabs: the tab menu", () => {
+  const THREE = ["a.md", "b.md", "c.md"];
+
+  async function openMenuOn(name: string, over: Partial<React.ComponentProps<typeof EditorTabs>> = {}) {
+    const user = userEvent.setup();
+    const props = setup({ paths: THREE, activePath: "a.md", ...over });
+    await user.pointer({ keys: "[MouseRight]", target: tab(name) });
+    return { user, props };
+  }
+
+  const item = (name: string) => screen.getByRole("menuitem", { name });
+
+  it("opens on a right-click, offering the five ways to close", async () => {
+    await openMenuOn("b.md");
+
+    expect(screen.getByRole("menu")).toBeDefined();
+    expect(screen.getAllByRole("menuitem").map((entry) => entry.textContent)).toEqual([
+      "Close",
+      "Close Tabs to the Right",
+      "Close All",
+      "Close Others",
+      "Close Saved",
+    ]);
+  });
+
+  // Right-clicking is not selecting: a menu about a tab must not also open the file, or reading the
+  // options costs you the document you were in.
+  it("does not open the tab it was invoked on", async () => {
+    const { props } = await openMenuOn("b.md");
+    expect(props.onActivate).not.toHaveBeenCalled();
+  });
+
+  it("acts on the tab that was right-clicked, not the one on screen", async () => {
+    const { user, props } = await openMenuOn("b.md");
+    await user.click(item("Close Others"));
+
+    expect(props.onCloseMany).toHaveBeenCalledWith(["a.md", "c.md"]);
+  });
+
+  it("closes the tabs after the one clicked", async () => {
+    const { user, props } = await openMenuOn("a.md");
+    await user.click(item("Close Tabs to the Right"));
+
+    expect(props.onCloseMany).toHaveBeenCalledWith(["b.md", "c.md"]);
+  });
+
+  it("closes every tab", async () => {
+    const { user, props } = await openMenuOn("b.md");
+    await user.click(item("Close All"));
+
+    expect(props.onCloseMany).toHaveBeenCalledWith(THREE);
+  });
+
+  it("closes the tabs with nothing unsaved in them", async () => {
+    const { user, props } = await openMenuOn("b.md", { dirtyPaths: ["b.md"] });
+    await user.click(item("Close Saved"));
+
+    expect(props.onCloseMany).toHaveBeenCalledWith(["a.md", "c.md"]);
+  });
+
+  // An entry that would close nothing is greyed rather than offered. The condition is the same
+  // function that does the work, so the two cannot disagree about what "nothing" means.
+  it("greys the entries that would close nothing", async () => {
+    await openMenuOn("c.md");
+
+    expect(item("Close Tabs to the Right").hasAttribute("disabled")).toBe(true);
+    expect(item("Close Others").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("greys Close Others when there is only one tab", async () => {
+    await openMenuOn("a.md", { paths: ["a.md"] });
+    expect(item("Close Others").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("closes itself once an entry is chosen", async () => {
+    const { user } = await openMenuOn("b.md");
+    await user.click(item("Close"));
+
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("closes itself on Escape", async () => {
+    const { user } = await openMenuOn("b.md");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

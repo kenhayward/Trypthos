@@ -80,6 +80,14 @@ round-trip and nothing that can reformat a user's file behind their back.
 - `components/DocumentEditor.tsx` hosts the CodeMirror view. It is created **once** and then fed
   transactions. Recreating it per render would look correct while discarding undo history, selection
   and scroll position on every keystroke.
+- **The selection is drawn by CodeMirror, not by the browser** (`drawSelection()`), and the reason is
+  the chat panel rather than appearance. A question about a selection sends the selection *instead of*
+  the whole file, so the highlight is the only thing on screen saying which of the two the model will
+  get - and the browser stops painting a contenteditable's selection the moment it loses focus, which
+  took the highlight away at exactly the moment somebody was typing the question. The layer keeps it,
+  and `editorTheme` gives it two colours: `--tp-text-selection` while the editor has the caret,
+  `--tp-text-selection-idle` a step quieter while it does not. Asserted in the browser suite, because
+  whether anything is on the screen is a question about boxes.
 - The documents live **above** `EditorPanel`, which is what makes the mode invariant checkable rather
   than merely intended: mode is local state and has no path to `onChange`, so a mode switch cannot
   alter a document. `EditorPanel.test.tsx` asserts it.
@@ -1143,6 +1151,26 @@ The one thing this app can destroy is somebody's own writing, and the paths that
 that discard a document: closing its tab, opening another folder, and closing the window. **Opening
 another file is no longer one of them** - it opens a tab beside the first, and switching between them
 discards nothing, which is the whole point of the tab strip.
+
+**Closing several tabs is that rule applied one at a time.** `closeFiles(paths)` walks the list in
+strip order, asks `mayDiscardOne` about each, and **stops at the first cancel** - a Close Others that
+carried on past one would shut tabs nobody had been asked about. What closed before the cancel stays
+closed: the user agreed to each of those. `closeFile(path)` is `closeFiles([path])` rather than a
+second implementation beside it, so the prompt cannot behave differently depending on how the close
+was reached.
+
+Which tabs each menu entry closes is `tabsToClose` in the domain - pure, over the strip (the paths,
+which have unsaved work, and the one right-clicked) rather than over a `DocumentSet`, because the
+strip is what the component holds. **An empty answer is how the menu greys an entry**, so "would
+close nothing" and "does nothing" are the same function rather than two sets of conditions that can
+disagree. The menu is drawn in the renderer, following `OpenFilesMenu` and `ChatHistoryMenu`: what it
+closes is entirely the strip's own business and the shell has nothing to contribute to it.
+
+> `closeDocument` had a bug here for a long time, and it is worth knowing the shape of it. The branch
+> for closing a tab that was **not** the active one built the list without that document and then
+> returned `{ ...set, activePath: set.activePath }` - which puts the original list back. Every close
+> of a background tab was silently a no-op. The test beside it asserted only that the selection did
+> not move, which was true throughout.
 
 **`mayDiscardOne` is the single implementation**, and `mayDiscard` is it applied to every unsaved
 document in tab order. `useWorkspace` owns both, every renderer path calls them, and the shell asks

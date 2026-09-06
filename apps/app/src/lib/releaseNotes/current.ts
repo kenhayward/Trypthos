@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.46.0",
+    date: "2026-09-06",
+    pr: 97,
+    headline: "Close a run of tabs, and keep your selection while you ask about it",
+    summary:
+      "Right-click a tab for the five ways of closing: Close, Close Tabs to the Right, Close All, Close Others and Close Saved. Each asks about unsaved work one document at a time, and cancelling stops the rest, so a Close Others cannot shut tabs you were never asked about. An entry that would close nothing - Close Tabs to the Right on the last tab, Close Others with one tab open - is greyed rather than offered. Fixing this turned up something worse: the close button on a tab that was not the one on screen did nothing at all, so a background tab could only be closed by going to it first. That works now. Separately, selecting text in the editor and then clicking into the chat box no longer makes the selection disappear. The selection is what chat sends instead of the whole file, so it stays on screen - a little quieter, to show the caret is elsewhere - while you type the question about it.",
+    added: [
+      "A right-click menu on a tab: Close, Close Tabs to the Right, Close All, Close Others, Close Saved.",
+    ],
+    changed: [
+      "An editor selection stays visible while you type in the chat box.",
+    ],
+    fixed: [
+      "Closing a tab that is not the one on screen works.",
+    ],
+  },
+  {
     version: "0.45.1",
     date: "2026-09-06",
     pr: 93,

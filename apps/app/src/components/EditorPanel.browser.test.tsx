@@ -857,3 +857,51 @@ describe("fenced code inside markdown, rendered", () => {
     await vi.waitFor(() => expect(coloursOn("# Notes").size).toBeGreaterThan(0), { timeout: 3000 });
   });
 });
+
+/// The selection stays visible when focus leaves the editor.
+///
+/// This is the chat panel's context: a question about a selection sends the selection instead of the
+/// whole file, so the highlight is the only thing saying which of the two the model will get. It used
+/// to stop being drawn the moment the caret went to the chat box - at exactly the moment somebody is
+/// typing the question it belongs to.
+///
+/// Only a browser can answer it. The selection is painted by CodeMirror's own layer, and whether
+/// anything is on the screen is a question about boxes.
+describe("the selection, once focus has gone elsewhere", () => {
+  /// The drawn selection: the rectangles CodeMirror paints, not the browser's native highlight.
+  const drawn = () => [...document.querySelectorAll(".cm-selectionBackground")];
+
+  async function selectAWord() {
+    render(<Harness />);
+    // A real double-click, which is what puts a selection there. Synthetic events do not move
+    // CodeMirror's caret at all - see the note on this suite in the architecture doc.
+    await userEvent.dblClick(lineWith("Some **bold** text.") as HTMLElement);
+    await vi.waitFor(() => expect(drawn().length).toBeGreaterThan(0));
+  }
+
+  it("is still drawn after the editor loses focus", async () => {
+    await selectAWord();
+
+    // Somewhere else entirely, as clicking into the chat box would be.
+    const elsewhere = document.createElement("textarea");
+    document.body.append(elsewhere);
+    elsewhere.focus();
+
+    expect(document.activeElement).toBe(elsewhere);
+    const boxes = drawn();
+    expect(boxes.length).toBeGreaterThan(0);
+    // Drawn, not merely present: a rectangle of no size is a selection nobody can see.
+    expect(boxes[0]!.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+
+  it("is still the editor's selection, so it is still what would be sent", async () => {
+    await selectAWord();
+
+    const elsewhere = document.createElement("textarea");
+    document.body.append(elsewhere);
+    elsewhere.focus();
+
+    expect(document.querySelector(".cm-content")?.textContent).toContain("bold");
+    expect(drawn().length).toBeGreaterThan(0);
+  });
+});
