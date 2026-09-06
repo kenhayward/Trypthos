@@ -667,15 +667,42 @@ describe("ChatPanel: scope", () => {
     expect(screen.getByRole("button", { name: "Folder" }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  /// The button says what is being SENT, not what is selected somewhere else.
+  ///
+  /// It used to name the folder either way, so a button that was off still read "Folder: src" - which
+  /// says the folder is going with the question when it is not. Naming it only when it is on makes
+  /// the label and the pressed state say the same thing.
+  it("names the folder only when the folder is actually going", () => {
+    withScope({ folderPath: "notes/2026/drafts", includeFolder: true });
+    expect(screen.getByRole("button", { name: "Folder: drafts" })).toBeDefined();
+  });
+
+  it("does not name a folder it is not sending", () => {
+    withScope({ folderPath: "notes/2026/drafts", includeFolder: false });
+
+    expect(screen.getByRole("button", { name: "Folder" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Folder: drafts" })).toBeNull();
+  });
+
   /// The button has room for a name, and a deep folder has more than a name.
   ///
   /// "Folder: docs" is two folders away from telling you which docs. The full path is on hover,
-  /// where length costs nothing - the button stays short and the answer is still reachable.
+  /// where length costs nothing - the button stays short and the answer is still reachable. It is
+  /// there when the button is off too, which is how you find out what turning it on would send.
   it("shows the whole path on hover, not just the folder's name", () => {
-    withScope({ folderPath: "notes/2026/drafts" });
-    const button = screen.getByRole("button", { name: "Folder: drafts" });
+    withScope({ folderPath: "notes/2026/drafts", includeFolder: true });
 
-    expect(button.getAttribute("title")).toContain("notes/2026/drafts");
+    expect(
+      screen.getByRole("button", { name: "Folder: drafts" }).getAttribute("title"),
+    ).toContain("notes/2026/drafts");
+  });
+
+  it("shows the path on hover even when the folder is not going", () => {
+    withScope({ folderPath: "notes/2026/drafts", includeFolder: false });
+
+    expect(screen.getByRole("button", { name: "Folder" }).getAttribute("title")).toContain(
+      "notes/2026/drafts",
+    );
   });
 
   // At the root there is no path to show beyond the folder itself, so the hover is the explanation

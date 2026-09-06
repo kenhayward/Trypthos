@@ -203,9 +203,15 @@ reports is a polyfill returning zeros. A test asserting Live mode's rendered out
 testing that polyfill.
 
 **What belongs in the browser suite:** anything whose correctness is a rendering question - hidden
-markers, computed font sizes, real caret movement. **What does not:** logic. A rule expressible over
-data belongs in the jsdom suite or as a pure function, because a browser test that fails tells you
-much less about why.
+markers, computed font sizes, real caret movement, **where a scroll container ends up**. **What does
+not:** logic. A rule expressible over data belongs in the jsdom suite or as a pure function, because
+a browser test that fails tells you much less about why.
+
+Two things to know when mounting the whole window in it. The default viewport is **414 wide**, at
+which `resolvePanelWidths` gives the chat panel nothing at all and every measurement is of a panel
+zero pixels across - call `page.viewport(...)` first. And testing-library's own container is an
+unsized `div`, where the app's `h-full` chain resolves to auto and every panel measures zero; render
+into a container of your own that fills the viewport, as `#root` does in the real app.
 
 One trap it is worth knowing: `@testing-library/user-event` dispatches **synthetic** events, and
 CodeMirror does not move its caret for them - it resolves a position from real pointer input. Use
@@ -892,6 +898,32 @@ from settings read there.
 `FolderOutline` carries its `path` so the turn can name the folder, and the picker's file list is
 stored WITH the folder it came from - staleness derived rather than reset, since clearing it from an
 effect on `folderPath` is a cascading render expressing something the data can say itself.
+
+**The button names the folder only while the folder is going.** It named it either way for two
+releases, so an off button read "Folder: src" - a label saying the folder is being sent, beside a
+pressed state saying it is not. Which folder WOULD be sent is on hover, where it costs nothing and
+claims nothing.
+
+### Following a reply without trapping the reader
+
+The thread scrolls to the newest message when the turns change, and a streamed reply changes them on
+every token. Doing that unconditionally made a long answer unreadable while it arrived: scrolling up
+to re-read something was undone several times a second, which from the user's side looks like a
+scrollbar that refuses to go where it is put.
+
+So the panel follows only while the thread is **already** at the bottom, which is nearly always. A
+scroll listener records that in a ref - it changes on every scroll event and nothing renders
+differently for it. The threshold is a couple of dozen pixels rather than zero, because sub-pixel
+rounding leaves a fraction behind after a programmatic scroll and an exact test would read the
+panel's own scrolling as the user scrolling away.
+
+**Sending re-arms it, and that is decided in `send()` rather than from the turns.** Asking is not
+reading: somebody who scrolled up and then typed a question wants the answer to it. It cannot be
+inferred from the last turn, because the turn after a question is the empty assistant one being
+waited on - the question is not the last thing in the thread by the time the effect runs.
+
+This is asserted in `App.browser.test.tsx` and nowhere else. Scroll position is geometry, and jsdom
+answers zero to every measurement it is asked, so the same test there would assert the polyfill.
 
 ### How full the context is, and why it can only be an estimate
 

@@ -94,9 +94,13 @@ export default function ChatScope({
             : "rounded px-2 py-0.5 text-xs text-ink-4 hover:bg-hover hover:text-ink disabled:opacity-40"
         }
       >
-        {folderPath === ""
-          ? t("chat.scope.folder")
-          : t("chat.scope.folderNamed", { name: folderName(folderPath) })}
+        {/* Named only when the folder is actually going with the question. The button used to name
+            it either way, so an OFF button still read "Folder: src" - which says the folder is being
+            sent when it is not, and the label and the pressed state then disagree. Which folder
+            would be sent is on hover, where it costs nothing and claims nothing. */}
+        {includeFolder && folderPath !== ""
+          ? t("chat.scope.folderNamed", { name: folderName(folderPath) })
+          : t("chat.scope.folder")}
       </button>
 
       {attachments.map((path) => (

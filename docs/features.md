@@ -514,10 +514,11 @@ changes is the answer.
 
 **Folder** sends the *list* of files in the folder **you selected in the browser** - the names, never
 the contents, and only the file types you have turned on. Click a folder on the left and it becomes
-the selected one, shown highlighted; the same click still opens and closes it. The Folder button names
-which folder it would send - the last part of the path, with the whole path on hover, since the button
-sits beside the composer where width is scarce. The selection stays where you put it as you move
-between files:
+the selected one, shown highlighted; the same click still opens and closes it. When the button is on
+it names the folder going with your question - the last part of the path, since the button sits beside
+the composer where width is scarce. When it is off it reads simply **Folder**, because nothing about
+that folder is being sent. Either way, hovering shows the whole path, which is how you find out what
+turning it on would send. The selection stays where you put it as you move between files:
 which document you are reading and which folder your question is about are different questions.
 Opening a different workspace puts it back to the top level. A notes folder can hold a great many files; sending them all would bury the document
 your question was actually about, and on a hosted endpoint it would cost real money.
