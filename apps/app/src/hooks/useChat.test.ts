@@ -395,3 +395,35 @@ describe("the conversation a provider receives", () => {
     }
   });
 });
+
+/// A slash command, answered by the app.
+///
+/// Nothing is sent, nothing streams, and neither turn goes back to a provider on the next question -
+/// a table of this app's own commands is not part of the conversation.
+describe("answering locally", () => {
+  it("puts the question and the answer in the thread without sending anything", async () => {
+    const harness = fakeBridge();
+    const { result } = chat(harness.bridge);
+
+    act(() => result.current.answerLocally("/tools", "| Tool | What |"));
+
+    expect(result.current.turns.map((turn) => turn.content)).toEqual([
+      "/tools",
+      "| Tool | What |",
+    ]);
+    expect(harness.sent).toHaveLength(0);
+    expect(result.current.streaming).toBe(false);
+  });
+
+  it("marks both turns local, so neither reaches the provider later", async () => {
+    const harness = fakeBridge();
+    const { result } = chat(harness.bridge);
+
+    act(() => result.current.answerLocally("/tools", "| Tool | What |"));
+    await act(async () => {
+      await result.current.send("And now a real question");
+    });
+
+    expect(harness.sent[0]?.turns).toEqual([{ role: "user", content: "And now a real question" }]);
+  });
+});
