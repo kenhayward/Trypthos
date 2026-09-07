@@ -11,7 +11,8 @@ import {
 const TEXT = "The cat sat on the mat.\nAnother cat, another mat.\n";
 
 describe("findMatches: plain text", () => {
-  const plain = (query: string, text = TEXT) => findMatches(text, query, { regex: false });
+  const plain = (query: string, text = TEXT) =>
+    findMatches(text, query, { regex: false, caseSensitive: false });
 
   it("finds every occurrence, in order", () => {
     expect(plain("cat")).toEqual([
@@ -42,7 +43,7 @@ describe("findMatches: plain text", () => {
 
   // Non-overlapping, which is the only answer a next/previous button can walk.
   it("does not report overlapping matches", () => {
-    expect(findMatches("aaaa", "aa", { regex: false })).toEqual([
+    expect(findMatches("aaaa", "aa", { regex: false, caseSensitive: false })).toEqual([
       { from: 0, to: 2 },
       { from: 2, to: 4 },
     ]);
@@ -50,7 +51,8 @@ describe("findMatches: plain text", () => {
 });
 
 describe("findMatches: regular expressions", () => {
-  const pattern = (query: string, text = TEXT) => findMatches(text, query, { regex: true });
+  const pattern = (query: string, text = TEXT) =>
+    findMatches(text, query, { regex: true, caseSensitive: false });
 
   it("finds what the expression matches", () => {
     expect(pattern("[cm]at")).toHaveLength(4);
@@ -80,16 +82,44 @@ describe("findMatches: regular expressions", () => {
   });
 });
 
+/// Case sensitivity, which is asked for rather than assumed.
+///
+/// Off by default in the dialog, because that is what every other search in the app does - but the
+/// option exists because a case-insensitive search of a source file is nearly useless: `state`,
+/// `State` and `STATE` are three different things in code and one thing in prose.
+describe("findMatches: case", () => {
+  const at = (query: string, caseSensitive: boolean, regex = false) =>
+    findMatches(TEXT, query, { regex, caseSensitive });
+
+  it("matches every casing when it is off", () => {
+    expect(at("the", false)).toHaveLength(4);
+  });
+
+  it("matches only what was typed when it is on", () => {
+    // `The` at the start, and nothing else - not the lowercase `the`, and not the `the` inside
+    // `Another` and `another`.
+    expect(at("The", true)).toEqual([{ from: 0, to: 3 }]);
+    expect(at("THE", true)).toEqual([]);
+  });
+
+  it("applies to an expression as well as to plain text", () => {
+    expect(at("[tT]he", true, true)).toHaveLength(4);
+    expect(at("[T]he", true, true)).toHaveLength(1);
+  });
+});
+
 describe("findMatches: the cap", () => {
   it("stops at the limit rather than walking a whole book", () => {
     const many = "a".repeat(FIND_MATCH_LIMIT + 500);
-    expect(findMatches(many, "a", { regex: false })).toHaveLength(FIND_MATCH_LIMIT);
+    expect(findMatches(many, "a", { regex: false, caseSensitive: false })).toHaveLength(
+      FIND_MATCH_LIMIT,
+    );
   });
 });
 
 describe("fileHits", () => {
   const hits = (text: string, query: string) =>
-    fileHits("docs/notes.md", text, query, { regex: false }, 10);
+    fileHits("docs/notes.md", text, query, { regex: false, caseSensitive: false }, 10);
 
   it("reports where a match is in human terms as well as in offsets", () => {
     const [first, second] = hits(TEXT, "cat") ?? [];
@@ -124,11 +154,15 @@ describe("fileHits", () => {
   });
 
   it("stops at the budget it is given", () => {
-    expect(fileHits("a.md", "cat cat cat cat", "cat", { regex: false }, 2)).toHaveLength(2);
+    expect(
+      fileHits("a.md", "cat cat cat cat", "cat", { regex: false, caseSensitive: false }, 2),
+    ).toHaveLength(2);
   });
 
   it("answers null for an expression that does not compile", () => {
-    expect(fileHits("a.md", TEXT, "[unclosed", { regex: true }, 10)).toBeNull();
+    expect(
+      fileHits("a.md", TEXT, "[unclosed", { regex: true, caseSensitive: false }, 10),
+    ).toBeNull();
   });
 });
 
@@ -166,7 +200,13 @@ describe("searchScopeFolder", () => {
 });
 
 describe("FindRequest", () => {
-  const valid = { path: "docs", pattern: "cat", regex: false, fileTypes: ["markdown"] };
+  const valid = {
+    path: "docs",
+    pattern: "cat",
+    regex: false,
+    caseSensitive: false,
+    fileTypes: ["markdown"],
+  };
 
   it("accepts a well-formed request", () => {
     expect(FindRequest.safeParse(valid).success).toBe(true);
@@ -179,6 +219,16 @@ describe("FindRequest", () => {
   // tests assert the refusal where it actually happens.
   it("accepts a path it cannot itself judge, leaving the boundary to the provider", () => {
     expect(FindRequest.safeParse({ ...valid, path: "../secrets" }).success).toBe(true);
+  });
+
+  // Every option is required on the wire. An option that changes which lines come back must not be
+  // something a caller can leave out and have decided for it.
+  it("requires the search options rather than defaulting them", () => {
+    for (const option of ["regex", "caseSensitive"]) {
+      const without: Record<string, unknown> = { ...valid };
+      delete without[option];
+      expect(FindRequest.safeParse(without).success).toBe(false);
+    }
   });
 
   it("refuses an empty pattern, which would match everything", () => {

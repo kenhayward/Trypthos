@@ -20,6 +20,12 @@ export interface FindOptions {
   /// Told, never guessed at. A query that LOOKS like a pattern is not the same as one meant as one -
   /// somebody searching a document for `a.b` means those three characters.
   regex: boolean;
+  /// Whether `Cat` and `cat` are the same word.
+  ///
+  /// Required rather than defaulted, deliberately. It changes which lines come back, and an option
+  /// like that left to a default is how a caller ends up quietly asking a different question from
+  /// the one it meant. The DIALOG defaults it to off, which is where a default belongs.
+  caseSensitive: boolean;
 }
 
 /// How many matches one search reports, across every file it looks in.
@@ -45,12 +51,13 @@ function literal(query: string): string {
 
 /// Compiles a query, or answers null when it cannot be compiled.
 ///
-/// `g` to walk the whole text, `i` because every other search in this app ignores case, and `m` so
-/// `^` and `$` mean a line rather than the whole document - which is what somebody writing `^import`
-/// against a source file expects.
-function expression(query: string, { regex }: FindOptions): RegExp | null {
+/// `g` to walk the whole text, and `m` so `^` and `$` mean a line rather than the whole document -
+/// which is what somebody writing `^import` against a source file expects. `i` is the caller's
+/// choice: off is what the rest of the app does, and on is what makes a search of a source file
+/// useful, where `state` and `State` are two different things.
+function expression(query: string, { regex, caseSensitive }: FindOptions): RegExp | null {
   try {
-    return new RegExp(regex ? query : literal(query), "gim");
+    return new RegExp(regex ? query : literal(query), caseSensitive ? "gm" : "gim");
   } catch {
     return null;
   }
@@ -175,6 +182,7 @@ export const FindRequest = z
     /// Never empty: an empty query matches every position in every file.
     pattern: z.string().min(1),
     regex: z.boolean(),
+    caseSensitive: z.boolean(),
     /// The file types the user has turned on. A search must not read what the browser will not list.
     fileTypes: z.array(z.string()),
   })

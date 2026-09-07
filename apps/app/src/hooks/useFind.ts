@@ -75,6 +75,16 @@ export function useFind(where: FindSurroundings) {
   const [tab, setTab] = useState<FindTab>("document");
   const [query, setQuery] = useState("");
   const [regex, setRegex] = useState(false);
+  /// Off to begin with, because that is what every other search in the app does. The option exists
+  /// because a case-insensitive search of a source file is nearly useless: `state`, `State` and
+  /// `STATE` are three things in code and one in prose.
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  /// Where the panel has been dragged to, relative to the editor it floats over. Null until it is
+  /// moved, which leaves it wherever the stylesheet puts it.
+  ///
+  /// Held HERE rather than in the dialog, which unmounts when the find closes: a panel moved out of
+  /// the way of the text you were reading would go back to covering it on the next Ctrl+F.
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [status, setStatus] = useState<FindStatus>({ kind: "idle" });
   const [highlight, setHighlight] = useState<FindHighlight>(NOTHING);
 
@@ -130,7 +140,7 @@ export function useFind(where: FindSurroundings) {
   );
 
   const searchDocument = useCallback(() => {
-    const matches = findMatches(where.content, query, { regex });
+    const matches = findMatches(where.content, query, { regex, caseSensitive });
     if (matches === null) {
       setStatus({ kind: "bad-pattern" });
       setHighlight(NOTHING);
@@ -147,7 +157,7 @@ export function useFind(where: FindSurroundings) {
     setHighlight({ path: where.activePath, matches, active: 0 });
     at.current = 0;
     report(matches.length, 0, false);
-  }, [where.content, where.activePath, query, regex]);
+  }, [where.content, where.activePath, query, regex, caseSensitive]);
 
   const searchFiles = useCallback(async () => {
     setStatus({ kind: "searching" });
@@ -155,6 +165,7 @@ export function useFind(where: FindSurroundings) {
       path: scope,
       pattern: query,
       regex,
+      caseSensitive,
       // Copied rather than passed through: the request crosses IPC and is parsed by a schema that
       // describes an array, and the app holds its settings as a readonly one.
       fileTypes: [...where.fileTypes],
@@ -177,7 +188,7 @@ export function useFind(where: FindSurroundings) {
     await goTo(0);
     report(result.hits.length, 0, result.capped);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [where.findInFiles, where.fileTypes, scope, query, regex, goTo]);
+  }, [where.findInFiles, where.fileTypes, scope, query, regex, caseSensitive, goTo]);
 
   const search = useCallback(async () => {
     // Nothing to search for. Guarded here as well as by the disabled button, because Enter in the
@@ -235,6 +246,10 @@ export function useFind(where: FindSurroundings) {
     setQuery,
     regex,
     setRegex,
+    caseSensitive,
+    setCaseSensitive,
+    position,
+    setPosition,
     status,
     highlight,
     /// The folder Find in Files would search, workspace-relative. "" is the whole folder.

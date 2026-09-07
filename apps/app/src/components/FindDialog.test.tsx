@@ -11,6 +11,8 @@ function show(props: Partial<React.ComponentProps<typeof FindDialog>> = {}) {
     onTabChange: vi.fn(),
     onQueryChange: vi.fn(),
     onRegexChange: vi.fn(),
+    onCaseSensitiveChange: vi.fn(),
+    onMove: vi.fn(),
     onSearch: vi.fn(),
     onStep: vi.fn(),
     onClose: vi.fn(),
@@ -20,6 +22,8 @@ function show(props: Partial<React.ComponentProps<typeof FindDialog>> = {}) {
       tab="document"
       query=""
       regex={false}
+      caseSensitive={false}
+      position={null}
       scope=""
       status={idle}
       {...handlers}
@@ -61,6 +65,16 @@ describe("FindDialog", () => {
 
     await user.click(screen.getByLabelText("Regular expression"));
     expect(onRegexChange).toHaveBeenCalledWith(true);
+  });
+
+  // Two independent choices, not a mode. A case-sensitive regular expression is an ordinary thing
+  // to want, and so is a case-sensitive plain search.
+  it("reports whether case matters, separately from whether it is a pattern", async () => {
+    const user = userEvent.setup();
+    const { onCaseSensitiveChange } = show({ regex: true });
+
+    await user.click(screen.getByLabelText("Match case"));
+    expect(onCaseSensitiveChange).toHaveBeenCalledWith(true);
   });
 
   // Nothing to search for is not a search. The hook refuses it too, because Enter reaches it
@@ -166,5 +180,28 @@ describe("FindDialog", () => {
   it("does not take the window over", () => {
     show();
     expect(screen.getByRole("dialog").getAttribute("aria-modal")).toBeNull();
+  });
+});
+
+/// Where the panel sits.
+///
+/// Only the styling half is here. Whether a DRAG moves it is a question about layout - it measures
+/// its own box and the panel it floats over - and jsdom has no layout engine, so `offsetParent` is
+/// null and the gesture cannot start at all. That half is in the browser suite.
+describe("FindDialog: where it sits", () => {
+  it("keeps the corner it was designed for until it is moved", () => {
+    show();
+    expect(screen.getByRole("dialog").style.left).toBe("");
+  });
+
+  // And `right` is cleared with it, or the panel would be pinned to both edges and stretch instead
+  // of moving.
+  it("sits where it was put once it has been", () => {
+    show({ position: { left: 24, top: 96 } });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.style.left).toBe("24px");
+    expect(dialog.style.top).toBe("96px");
+    expect(dialog.style.right).toBe("auto");
   });
 });

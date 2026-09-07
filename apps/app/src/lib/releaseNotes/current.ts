@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.56.0",
+    date: "2026-09-07",
+    pr: 109,
+    headline: "Match case, and a find panel you can move",
+    summary:
+      "Two additions to Find. There is now a Match case option beside Regular expression, and the two are separate choices rather than a mode - a case-sensitive regular expression is an ordinary thing to want, and so is a case-sensitive plain search. It applies to both tabs, so searching a folder for exactly State no longer brings back every state and STATE with it. Off to begin with, which is what the rest of the app does. And the panel can now be dragged: grab the strip the tabs sit on and move it wherever you like. It floats over the document it is reporting on, so it could end up sitting exactly on top of the text you were trying to read, and this is the way out of that. It cannot be dragged off the edge - it has no title bar of its own, so a panel pushed out of sight would be one you could never get back - and where you put it is remembered until you close the app, so it does not go back to covering the same text the next time you press Ctrl+F.",
+    added: [
+      "Match case, on both the Find and Find in Files tabs.",
+      "The find panel can be dragged by the strip its tabs sit on, and stays where you put it.",
+    ],
+  },
+  {
     version: "0.55.0",
     date: "2026-09-07",
     pr: 108,

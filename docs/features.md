@@ -238,8 +238,21 @@ carries straight on into the next file.
 **Both take plain text or a regular expression**, chosen with the checkbox. Plain text means the
 characters themselves - searching for `a.b` finds `a.b` and not `axb` - and an expression that will
 not compile says so rather than quietly finding nothing, because "that is not a pattern" and "the
-text is not there" send you in opposite directions. Both ignore case, as the rest of the app's
-searching does.
+text is not there" send you in opposite directions.
+
+**Match case** is a second, separate checkbox. The two are independent rather than a mode: a
+case-sensitive regular expression is an ordinary thing to want, and so is a case-sensitive plain
+search. It starts off, which is what the rest of the app's searching does - turn it on when the
+difference matters, as it does in a source file, where `state`, `State` and `STATE` are three things
+in code and one thing in prose.
+
+**The panel can be moved.** Grab the strip the tabs sit on and drag it anywhere in the editor. It
+floats over the document it is reporting on, so it can end up sitting exactly on top of the text you
+were trying to read, and this is the way out of that. It cannot be dragged off the edge - it has no
+title bar of its own, so a panel pushed out of sight would be one you could never get back - and
+where you put it is remembered until you close the app, so it does not go back to covering the same
+text the next time you press Ctrl+F. The buttons on that strip still work; only a press that starts
+on the strip itself moves the panel.
 
 Three things a search in files will not do. It **never leaves the folder you have open** - the
 boundary is checked where the files are read, not in the window that asked. It **reads only the file

@@ -57,11 +57,12 @@ describe("useFind: the dialog", () => {
 });
 
 describe("useFind: the open document", () => {
-  const searched = async (query: string, regex = false) => {
+  const searched = async (query: string, regex = false, caseSensitive = false) => {
     const view = run();
     act(() => view.result.current.openFind());
     act(() => view.result.current.setQuery(query));
     if (regex) act(() => view.result.current.setRegex(true));
+    if (caseSensitive) act(() => view.result.current.setCaseSensitive(true));
     await act(async () => {
       await view.result.current.search();
     });
@@ -104,6 +105,19 @@ describe("useFind: the open document", () => {
     expect(result.current.status).toMatchObject({ kind: "results", total: 3 });
   });
 
+  // Off to begin with, because that is what every other search in the app does. On is what makes a
+  // search of a source file useful, where `state` and `State` are two different things.
+  it("ignores case until it is told not to", async () => {
+    // `The`, `the`, and the middle of `Another`.
+    const insensitive = await searched("the");
+    expect(insensitive.result.current.caseSensitive).toBe(false);
+    expect(insensitive.result.current.status).toMatchObject({ total: 3 });
+
+    // Only the one that is actually capitalised.
+    const sensitive = await searched("The", false, true);
+    expect(sensitive.result.current.status).toMatchObject({ total: 1 });
+  });
+
   // "That is not a pattern" and "nothing here matches" send the user in opposite directions.
   it("says an expression is broken rather than saying nothing matched", async () => {
     const { result } = await searched("[unclosed", true);
@@ -144,6 +158,30 @@ describe("useFind: the open document", () => {
   });
 });
 
+/// Where the panel sits.
+///
+/// Remembered by the hook rather than by the dialog, which unmounts when the find closes: a panel
+/// moved out of the way of the text you were reading would go back to covering it the next time you
+/// pressed Ctrl+F.
+describe("useFind: where the panel sits", () => {
+  it("starts wherever the stylesheet puts it", () => {
+    const { result } = run();
+    expect(result.current.position).toBeNull();
+  });
+
+  it("remembers where it was moved to, across closing and reopening", () => {
+    const { result } = run();
+
+    act(() => result.current.openFind());
+    act(() => result.current.setPosition({ left: 40, top: 120 }));
+    expect(result.current.position).toEqual({ left: 40, top: 120 });
+
+    act(() => result.current.close());
+    act(() => result.current.openFind());
+    expect(result.current.position).toEqual({ left: 40, top: 120 });
+  });
+});
+
 describe("useFind: the files under a folder", () => {
   const HITS: FindResult = {
     ok: true,
@@ -174,6 +212,7 @@ describe("useFind: the files under a folder", () => {
       path: "docs",
       pattern: "cat",
       regex: false,
+      caseSensitive: false,
       fileTypes: ["markdown"],
     });
     expect(result.current.status).toMatchObject({ kind: "results", total: 2, current: 1 });

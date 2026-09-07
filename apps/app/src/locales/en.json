@@ -328,6 +328,7 @@
     "tabFiles": "Find in Files",
     "query": "Search for",
     "regex": "Regular expression",
+    "caseSensitive": "Match case",
     "scope": "Searching {{folder}} and everything below it",
     "wholeFolder": "the whole folder",
     "noFolder": "Open a folder to search its files.",
