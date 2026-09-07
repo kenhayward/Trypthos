@@ -27,6 +27,9 @@ interface Props {
   /// The file types the user has turned on, so a fenced code block in a reply is coloured on the
   /// same terms one in their own document is.
   fileTypes: readonly string[];
+  /// Which folder the paths a model names are in, so they can be turned into links. Null when no
+  /// folder is open, where a path names nothing.
+  linkWorkspaceId?: string | null;
   streaming: boolean;
   error: string | null;
   /// A file being read on the model's behalf, if one is.
@@ -93,6 +96,7 @@ export default function ChatPanel({
   onSelectModel,
   turns,
   fileTypes,
+  linkWorkspaceId = null,
   streaming,
   error,
   activity,
@@ -131,8 +135,8 @@ export default function ChatPanel({
   // The chat panel only. Preview renders what the USER wrote, and turning their code spans into
   // links would change how their own prose reads.
   useEffect(() => {
-    if (threadRef.current !== null) linkifyPaths(threadRef.current, fileTypes);
-  }, [fileTypes, turns]);
+    if (threadRef.current !== null) linkifyPaths(threadRef.current, fileTypes, linkWorkspaceId);
+  }, [fileTypes, linkWorkspaceId, turns]);
 
   /// Whether the thread should keep following the newest message.
   ///

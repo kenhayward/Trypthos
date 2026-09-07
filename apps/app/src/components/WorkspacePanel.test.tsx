@@ -4,18 +4,22 @@ import { describe, expect, it, vi } from "vitest";
 import WorkspacePanel from "./WorkspacePanel";
 import type { FolderState } from "../lib/treeRows";
 
+/// Every path names the folder it is in, so the map is keyed by qualified path and the workspace's
+/// own id is the key of its root.
+const DIARIZ = { id: "Diariz", name: "Diariz", root: "D:/Diariz" };
+
 const FOLDERS: Record<string, FolderState> = {
-  "": {
+  Diariz: {
     status: "loaded",
     children: [
-      { id: "docs", name: "docs", kind: "directory" },
-      { id: "README.md", name: "README.md", kind: "file" },
-      { id: "logo.png", name: "logo.png", kind: "file" },
+      { id: "Diariz/docs", name: "docs", kind: "directory" },
+      { id: "Diariz/README.md", name: "Diariz/README.md", kind: "file" },
+      { id: "Diariz/logo.png", name: "Diariz/logo.png", kind: "file" },
     ],
   },
-  docs: {
+  "Diariz/docs": {
     status: "loaded",
-    children: [{ id: "docs/plan.md", name: "plan.md", kind: "file" }],
+    children: [{ id: "Diariz/docs/plan.md", name: "plan.md", kind: "file" }],
   },
 };
 
@@ -23,7 +27,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
   const props = {
     width: 268,
     onCollapse: vi.fn(),
-    workspaceName: "Diariz",
+    workspaces: [DIARIZ] as readonly { id: string; name: string; root: string }[],
     folders: FOLDERS,
     filter: "",
     activePath: null,
@@ -37,6 +41,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     fileTypes: ["markdown"] as readonly string[],
     selectedFolder: "",
     onSelectFolder: vi.fn(),
+    onCloseWorkspace: vi.fn(),
     onOpenFileTypes: vi.fn(),
     ...overrides,
   };
@@ -46,7 +51,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
 
 describe("WorkspacePanel", () => {
   it("invites you to open a folder when none is", () => {
-    panel({ workspaceName: null });
+    panel({ workspaces: [] });
     expect(screen.getByText("No folder open yet.")).toBeDefined();
   });
 
@@ -69,12 +74,12 @@ describe("WorkspacePanel", () => {
 
     await user.click(screen.getByRole("button", { name: /plan\.md/ }));
     expect(props.onOpenFile).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "docs/plan.md" }),
+      expect.objectContaining({ id: "Diariz/docs/plan.md" }),
     );
   });
 
   it("marks the file on screen, and only that one", () => {
-    panel({ activePath: "docs/plan.md", openPaths: ["docs/plan.md"] });
+    panel({ activePath: "Diariz/docs/plan.md", openPaths: ["Diariz/docs/plan.md"] });
     expect(screen.getByRole("button", { name: /plan\.md/ }).getAttribute("aria-current")).toBe("true");
     expect(screen.getByRole("button", { name: /README\.md/ }).getAttribute("aria-current")).toBeNull();
   });
@@ -82,7 +87,7 @@ describe("WorkspacePanel", () => {
   // Several files are open at once, and only one of them is on screen. The tree says which are open
   // so that clicking one is understood as going to a tab rather than loading a file afresh.
   it("marks every open file, whether or not it is the one on screen", () => {
-    panel({ activePath: "docs/plan.md", openPaths: ["docs/plan.md", "README.md"] });
+    panel({ activePath: "Diariz/docs/plan.md", openPaths: ["Diariz/docs/plan.md", "Diariz/README.md"] });
 
     expect(screen.getByRole("button", { name: /README\.md/ }).dataset.open).toBe("true");
     expect(screen.getByRole("button", { name: /README\.md/ }).getAttribute("aria-current")).toBeNull();
@@ -90,9 +95,9 @@ describe("WorkspacePanel", () => {
 
   it("marks unsaved changes on each file that has them", () => {
     panel({
-      activePath: "README.md",
-      openPaths: ["docs/plan.md", "README.md"],
-      dirtyPaths: ["docs/plan.md"],
+      activePath: "Diariz/README.md",
+      openPaths: ["Diariz/docs/plan.md", "Diariz/README.md"],
+      dirtyPaths: ["Diariz/docs/plan.md"],
     });
 
     expect(screen.getByLabelText("Unsaved changes")).toBeDefined();
@@ -107,12 +112,12 @@ describe("WorkspacePanel", () => {
   it("reports a failed folder on its own row, with a retry beside it", async () => {
     const user = userEvent.setup();
     const props = panel({
-      folders: { ...FOLDERS, docs: { status: "error" } },
+      folders: { ...FOLDERS, "Diariz/docs": { status: "error" } },
     });
 
     expect(screen.getByText("Couldn't list this folder.")).toBeDefined();
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    expect(props.onRetryFolder).toHaveBeenCalledWith("docs");
+    expect(props.onRetryFolder).toHaveBeenCalledWith("Diariz/docs");
   });
 
   it("says so when a filter matches nothing", () => {
@@ -158,7 +163,7 @@ describe("the file types the panel is showing", () => {
 describe("files nothing can open", () => {
   it("lists them", () => {
     panel();
-    expect(screen.getByText("logo.png")).toBeDefined();
+    expect(screen.getByText("Diariz/logo.png")).toBeDefined();
   });
 
   // Not a button, so it cannot be clicked, cannot be tabbed to, and is not announced as something
@@ -171,7 +176,7 @@ describe("files nothing can open", () => {
 
   it("does nothing when one is clicked", async () => {
     const props = panel();
-    await userEvent.click(screen.getByText("logo.png"));
+    await userEvent.click(screen.getByText("Diariz/logo.png"));
     expect(props.onOpenFile).not.toHaveBeenCalled();
   });
 
@@ -180,7 +185,7 @@ describe("files nothing can open", () => {
   // file those types cannot open would make the two halves of one sentence disagree.
   it("are not counted in the footer", () => {
     panel();
-    expect(screen.getByText("logo.png")).toBeDefined();
+    expect(screen.getByText("Diariz/logo.png")).toBeDefined();
     expect(screen.getByText("2 files")).toBeDefined();
   });
 });
@@ -191,14 +196,14 @@ describe("choosing the folder chat maps", () => {
     const props = panel();
     await userEvent.click(screen.getByRole("button", { name: /docs/ }));
 
-    expect(props.onSelectFolder).toHaveBeenCalledWith("docs");
-    expect(props.onToggleFolder).toHaveBeenCalledWith("docs");
+    expect(props.onSelectFolder).toHaveBeenCalledWith("Diariz/docs");
+    expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz/docs");
   });
 
   // Selection and expansion are separate facts about a folder, so they are separate attributes: a
   // folder can be the one chat is mapping while collapsed, and expanded while another is chosen.
   it("marks the chosen folder, and only that one", () => {
-    panel({ selectedFolder: "docs" });
+    panel({ selectedFolder: "Diariz/docs" });
     expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-current")).toBe("true");
   });
 

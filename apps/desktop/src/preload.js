@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   isDesktop: true,
 
   openWorkspace: () => ipcRenderer.invoke("workspace:open"),
+  /// Closes one open workspace, by the id the main process minted for it. Never by its root - see
+  /// the note at the top of this file.
+  closeWorkspace: (workspaceId) => ipcRenderer.invoke("workspace:close", { workspaceId }),
   listDirectory: (path) => ipcRenderer.invoke("workspace:list", { path }),
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
@@ -27,7 +30,8 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// Save As. Note what is NOT sent: a destination. The dialog runs in the main process and the path
   /// it answers with is checked against the open workspace there - `path` here is only where the
   /// dialog should open, and null for a document that has never been anywhere.
-  saveFileAs: (path, content) => ipcRenderer.invoke("file:saveAs", { path, content }),
+  saveFileAs: (workspaceId, path, content) =>
+    ipcRenderer.invoke("file:saveAs", { workspaceId, path, content }),
 
   /// API keys, write-only by construction.
   ///

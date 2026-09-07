@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
 import { failureKey, failureParams, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
-import type { ConfirmDiscard } from "./useWorkspace";
+import type { ConfirmDiscard, WorkspaceActions } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
 /// A hand-written fake, not a mocking library. It records what it was asked to do, which is what most
@@ -11,7 +11,7 @@ import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceC
 function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
   const writes: { path: string; content: string; revision: string | null }[] = [];
   const reads: string[] = [];
-  const saveAsCalls: { path: string | null; content: string }[] = [];
+  const saveAsCalls: { workspaceId: string; path: string | null; content: string }[] = [];
 
   const client: WorkspaceClient = {
     // Chat's map of the folder. Nothing in this hook asks for it; it is here because the client is
@@ -19,18 +19,24 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     workspaceOutline: async () => ({ ok: true, outline: { path: "", paths: [], truncated: false } }),
     // Find in Files, for the same reason: this hook never searches, and the client is one interface.
     findInFiles: async () => ({ ok: true, hits: [], capped: false }),
-    openWorkspace: async () => ({ ok: true, workspace: { root: "/ws", name: "ws" } }),
-    reopenWorkspace: async (root) => ({ ok: true, workspace: { root, name: "ws" } }),
+    // The id the main process minted. It is the first segment of every path in this workspace,
+    // which is what makes a path say which of the open folders it is in.
+    openWorkspace: async () => ({ ok: true, workspace: { id: "ws", root: "/ws", name: "ws" } }),
+    reopenWorkspace: async (root) => ({
+      ok: true,
+      workspace: { id: root.replace(/^\//, ""), root, name: "ws" },
+    }),
+    // Qualified ids, as the shell answers with - so the renderer never has to work out which
+    // workspace a row belongs to.
     listDirectory: async (path) => ({
       ok: true,
-      nodes:
-        path === ""
-          ? [
-              { id: "b.md", name: "b.md", kind: "file" },
-              { id: "notes", name: "notes", kind: "directory" },
-              { id: "a.md", name: "a.md", kind: "file" },
-            ]
-          : [{ id: `${path}/inner.md`, name: "inner.md", kind: "file" }],
+      nodes: path.includes("/")
+        ? [{ id: `${path}/inner.md`, name: "inner.md", kind: "file" }]
+        : [
+            { id: `${path}/b.md`, name: "b.md", kind: "file" },
+            { id: `${path}/notes`, name: "notes", kind: "directory" },
+            { id: `${path}/a.md`, name: "a.md", kind: "file" },
+          ],
     }),
     readFile: async (path): Promise<ReadResult> => {
       reads.push(path);
@@ -46,10 +52,11 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     },
     // The dialog lives in the shell, so the fake stands in for the whole of it: what came back is
     // what the user picked. Note there is no destination to pass in - see `SaveAsRequest`.
-    saveFileAs: async (path, content) => {
-      saveAsCalls.push({ path, content });
-      return { ok: true, path: "chosen.md", revision: { id: "r-saved-as" } };
+    saveFileAs: async (workspaceId, path, content) => {
+      saveAsCalls.push({ workspaceId, path, content });
+      return { ok: true, path: `${workspaceId}/chosen.md`, revision: { id: "r-saved-as" } };
     },
+    closeWorkspace: async () => ({ ok: true }),
     ...overrides,
   };
 
@@ -141,7 +148,7 @@ describe("useWorkspace", () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
-    expect(result.current.state.workspace).toBeNull();
+    expect(result.current.state.workspaces).toEqual([]);
     expect(result.current.state.file).toBeNull();
   });
 
@@ -153,9 +160,9 @@ describe("useWorkspace", () => {
       await result.current.actions.open();
     });
 
-    expect(result.current.state.workspace?.name).toBe("ws");
-    expect(result.current.state.folders[""]?.status).toBe("loaded");
-    expect(result.current.state.folders[""]?.children?.map((n) => n.name)).toContain("notes");
+    expect(result.current.state.workspaces[0]?.name).toBe("ws");
+    expect(result.current.state.folders["ws"]?.status).toBe("loaded");
+    expect(result.current.state.folders["ws"]?.children?.map((n) => n.name)).toContain("notes");
   });
 
   it("expands a folder, then collapses it again", async () => {
@@ -166,14 +173,14 @@ describe("useWorkspace", () => {
       await result.current.actions.open();
     });
     await act(async () => {
-      await result.current.actions.toggleFolder("notes");
+      await result.current.actions.toggleFolder("ws/notes");
     });
-    expect(result.current.state.folders["notes"]?.status).toBe("loaded");
+    expect(result.current.state.folders["ws/notes"]?.status).toBe("loaded");
 
     await act(async () => {
-      await result.current.actions.toggleFolder("notes");
+      await result.current.actions.toggleFolder("ws/notes");
     });
-    expect(result.current.state.folders["notes"]).toBeUndefined();
+    expect(result.current.state.folders["ws/notes"]).toBeUndefined();
   });
 
   // A failed folder is a fact about that row. Raising it as a banner would suggest the workspace is
@@ -181,7 +188,7 @@ describe("useWorkspace", () => {
   it("records a failed listing on the folder, not as a panel-wide error", async () => {
     const { client } = fakeClient({
       listDirectory: async (path) =>
-        path === "notes" ? { ok: false, reason: "permission-denied" } : { ok: true, nodes: [] },
+        path === "ws/notes" ? { ok: false, reason: "permission-denied" } : { ok: true, nodes: [] },
     });
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -189,10 +196,10 @@ describe("useWorkspace", () => {
       await result.current.actions.open();
     });
     await act(async () => {
-      await result.current.actions.toggleFolder("notes");
+      await result.current.actions.toggleFolder("ws/notes");
     });
 
-    expect(result.current.state.folders["notes"]?.status).toBe("error");
+    expect(result.current.state.folders["ws/notes"]?.status).toBe("error");
     expect(result.current.state.errorKey).toBeNull();
   });
 
@@ -207,14 +214,14 @@ describe("useWorkspace", () => {
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.retryFolder("notes");
+      await result.current.actions.retryFolder("ws/notes");
     });
-    expect(result.current.state.folders["notes"]?.status).toBe("error");
+    expect(result.current.state.folders["ws/notes"]?.status).toBe("error");
 
     await act(async () => {
-      await result.current.actions.retryFolder("notes");
+      await result.current.actions.retryFolder("ws/notes");
     });
-    expect(result.current.state.folders["notes"]?.status).toBe("loaded");
+    expect(result.current.state.folders["ws/notes"]?.status).toBe("loaded");
   });
 
   // A remembered folder that has since gone is not an error the user caused, and a warning about a
@@ -226,10 +233,10 @@ describe("useWorkspace", () => {
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.reopen("D:/Gone");
+      await result.current.actions.reopen(["D:/Gone"]);
     });
 
-    expect(result.current.state.workspace).toBeNull();
+    expect(result.current.state.workspaces).toEqual([]);
     expect(result.current.state.errorKey).toBeNull();
   });
 
@@ -238,11 +245,12 @@ describe("useWorkspace", () => {
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.reopen("D:/Notes");
+      await result.current.actions.reopen(["D:/Notes"]);
     });
 
-    expect(result.current.state.workspace?.root).toBe("D:/Notes");
-    expect(result.current.state.folders[""]?.status).toBe("loaded");
+    expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
+    // Keyed by the workspace's own id, which the fake mints from the root it was handed.
+    expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
   });
 
   it("holds the filter text", () => {
@@ -488,7 +496,7 @@ describe("useWorkspace", () => {
     });
 
     expect(result.current.state.errorKey).toBe("errors.notDesktop");
-    expect(result.current.state.workspace).toBeNull();
+    expect(result.current.state.workspaces).toEqual([]);
   });
 
   it("raises nothing when the folder picker is cancelled", async () => {
@@ -819,9 +827,12 @@ describe("opening what the app was launched with", () => {
       await result.current.actions.openTarget({ root: "D:/Notes", file: "a.md" });
     });
 
-    expect(result.current.state.workspace?.root).toBe("D:/Notes");
-    expect(result.current.state.folders[""]?.status).toBe("loaded");
-    expect(result.current.state.file?.path).toBe("a.md");
+    expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
+    // Keyed by the workspace's own id, which the fake mints from the root it was handed.
+    expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
+    // Qualified on the way in: the file arrived relative to a ROOT, and this is the side that knows
+    // which workspace that root turned out to be.
+    expect(result.current.state.file?.path).toBe("D:/Notes/a.md");
   });
 
   it("opens a folder on its own", async () => {
@@ -832,7 +843,7 @@ describe("opening what the app was launched with", () => {
       await result.current.actions.openTarget({ root: "D:/Notes", file: null });
     });
 
-    expect(result.current.state.workspace?.root).toBe("D:/Notes");
+    expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
     expect(reads).toEqual([]);
   });
 
@@ -851,16 +862,19 @@ describe("opening what the app was launched with", () => {
     });
 
     expect(result.current.state.documents.map((document) => document.path)).toEqual([
-      "a.md",
-      "b.md",
+      "ws/a.md",
+      "ws/b.md",
     ]);
     // The first document was not disturbed by a folder being reopened around it.
     expect(result.current.state.documents[0]?.content).toBe("# Mine\n");
   });
 
-  // Another folder replaces the workspace, so it discards every open document - the same question
-  // opening a folder from the button asks.
-  it("asks about unsaved work before another folder replaces it", async () => {
+  /// Another folder is ADDED, not swapped in.
+  ///
+  /// This is what 0.57.0 changed, and it is why there is nothing to ask about here: every path names
+  /// the folder it is in, so a second folder cannot make the documents from the first ambiguous.
+  /// Before, opening one discarded every open document and had to ask first.
+  it("adds another folder without disturbing the documents already open", async () => {
     const { client } = fakeClient();
     const asked: (string | null | undefined)[] = [];
     const { result } = renderHook(() =>
@@ -871,33 +885,27 @@ describe("opening what the app was launched with", () => {
     );
 
     await act(async () => {
-      await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
+      await result.current.actions.openTarget({ root: "/ws", file: "a.md" });
     });
     act(() => result.current.actions.edit("# Mine\n"));
     await act(async () => {
       await result.current.actions.openTarget({ root: "D:/Other", file: "b.md" });
     });
 
-    expect(asked).toEqual(["a.md"]);
-    expect(result.current.state.workspace).toBeNull();
-    expect(result.current.state.documents.map((document) => document.path)).toEqual(["a.md"]);
+    // Nothing was asked, because nothing was going to be discarded.
+    expect(asked).toEqual([]);
+    expect(result.current.state.workspaces.map((workspace) => workspace.root)).toEqual([
+      "/ws",
+      "D:/Other",
+    ]);
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      "ws/a.md",
+      "D:/Other/b.md",
+    ]);
+    // And the unsaved work in the first folder's document is exactly where it was.
+    expect(result.current.state.documents[0]?.content).toBe("# Mine\n");
   });
 
-  it("closes the documents of the folder it left", async () => {
-    const { client } = fakeClient();
-    const { result } = renderHook(() => useWorkspace(client));
-
-    await act(async () => {
-      await result.current.actions.openFile({ id: "a.md", name: "a.md", kind: "file" });
-    });
-    await act(async () => {
-      await result.current.actions.openTarget({ root: "D:/Other", file: "b.md" });
-    });
-
-    // "a.md" belonged to the folder that was open. Keeping its tab would leave a path pointing at a
-    // file that is not in this workspace.
-    expect(result.current.state.documents.map((document) => document.path)).toEqual(["b.md"]);
-  });
 
   it("says so when the folder is no longer there", async () => {
     const { client } = fakeClient({
@@ -919,8 +927,8 @@ describe("opening what the app was launched with", () => {
 /// two paths that ask are the two that discard everything: opening another folder, and closing the
 /// window. Switching tabs is not one of them, which is the point of tabs.
 describe("guarding unsaved changes", () => {
-  const NODE = { id: "b.md", name: "b.md", kind: "file" as const };
-  const OTHER = { id: "a.md", name: "a.md", kind: "file" as const };
+  const NODE = { id: "ws/b.md", name: "b.md", kind: "file" as const };
+  const OTHER = { id: "ws/a.md", name: "a.md", kind: "file" as const };
 
   /// Records what it was asked about, and answers what the test tells it to.
   function asker(answer: "save" | "discard" | "cancel") {
@@ -939,6 +947,11 @@ describe("guarding unsaved changes", () => {
     const ask = asker(answer);
     const { result } = renderHook(() => useWorkspace(client, "", ask.confirm));
 
+    // With a folder open, because closing one is now where the question about unsaved work is asked
+    // - and because a document has to be IN a folder for that to mean anything.
+    await act(async () => {
+      await result.current.actions.open();
+    });
     await act(async () => {
       await result.current.actions.openFile(NODE);
     });
@@ -965,34 +978,52 @@ describe("guarding unsaved changes", () => {
     expect(ask.asked).toHaveLength(0);
   });
 
-  it("guards opening another folder, and keeps the documents on cancel", async () => {
+  /// Opening another folder asks nothing, because it discards nothing.
+  ///
+  /// This is what 0.57.0 changed. Every path names the folder it is in, so a second folder cannot
+  /// make the documents from the first ambiguous - and a prompt about work that is not going
+  /// anywhere is a prompt people learn to dismiss.
+  it("asks nothing when another folder is opened, and keeps every document", async () => {
     const { result, ask } = await dirtyEditor("cancel");
 
     await act(async () => {
       await result.current.actions.open();
     });
 
-    expect(ask.asked).toEqual(["b.md"]);
-    expect(result.current.state.file?.path).toBe("b.md");
+    expect(ask.asked).toEqual([]);
+    expect(result.current.state.file?.path).toBe("ws/b.md");
     expect(result.current.state.dirty).toBe(true);
   });
 
-  // Every tab belongs to the folder that was open. Carrying them into another workspace would leave
-  // paths pointing at files that are not there.
-  it("closes every document when another folder is opened", async () => {
-    const { result, writes } = await dirtyEditor("save");
+  /// Closing one DOES discard its documents, and asks about each in turn.
+  ///
+  /// The question moved rather than disappearing: it belongs where the folder actually goes away.
+  it("asks about the unsaved work in a folder being closed", async () => {
+    const { result, ask, writes } = await dirtyEditor("save");
 
     await act(async () => {
-      await result.current.actions.openFile(OTHER);
-    });
-    await act(async () => {
-      await result.current.actions.open();
+      await result.current.actions.closeWorkspace("ws");
     });
 
+    expect(ask.asked).toEqual(["b.md"]);
     expect(writes).toHaveLength(1);
     expect(result.current.state.documents).toHaveLength(0);
-    expect(result.current.state.file).toBeNull();
+    expect(result.current.state.workspaces).toEqual([]);
   });
+
+  // The first cancel stops the close: a folder that went while somebody was still deciding about a
+  // file in it would take the answer away along with the question.
+  it("keeps the folder and its documents when the question is cancelled", async () => {
+    const { result } = await dirtyEditor("cancel");
+
+    await act(async () => {
+      await result.current.actions.closeWorkspace("ws");
+    });
+
+    expect(result.current.state.documents).toHaveLength(1);
+    expect(result.current.state.workspaces).toHaveLength(1);
+  });
+
 
   // The same question the shell asks before closing the window, so there is one implementation of
   // "may I throw this away" rather than one per caller.
@@ -1188,19 +1219,38 @@ describe("the selected folder", () => {
 
   // A folder in the old workspace is not a folder in the new one, and carrying the path across
   // would point chat at a directory that may not exist.
-  it("goes back to the root when another workspace is opened", async () => {
+  // Opening another folder does not disturb the selection: it disturbs nothing at all.
+  it("keeps the chosen folder when another workspace is opened", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
       await result.current.actions.open();
     });
-    act(() => result.current.actions.selectFolder("notes"));
+    act(() => result.current.actions.selectFolder("ws/notes"));
     await act(async () => {
       await result.current.actions.open();
     });
 
+    expect(result.current.state.selectedFolder).toBe("ws/notes");
+  });
+
+  // Closing the folder it was in does. A folder chat is mapping in a workspace that has gone is a
+  // question about nothing.
+  it("forgets the chosen folder when its workspace is closed", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    act(() => result.current.actions.selectFolder("ws/notes"));
+    await act(async () => {
+      await result.current.actions.closeWorkspace("ws");
+    });
+
     expect(result.current.state.selectedFolder).toBe("");
+    expect(result.current.state.folders["ws"]).toBeUndefined();
   });
 });
 
@@ -1210,12 +1260,21 @@ describe("the selected folder", () => {
 /// and it differs by what was being saved. A file moves. The scratch buffer and the built-in guide
 /// have no file to move, so they are copied out and stay where they are.
 describe("saving somewhere else", () => {
-  const A = { id: "a.md", name: "a.md", kind: "file" as const };
+  const A = { id: "ws/a.md", name: "a.md", kind: "file" as const };
 
-  it("sends the document and where it currently lives, and nothing about where it should go", async () => {
+  /// Save As names WHICH folder it saves into, so these all start with one open. A document that has
+  /// never been saved has no path to read the answer from - see the test at the end of this block.
+  const withWorkspace = async (result: { current: { actions: WorkspaceActions } }) => {
+    await act(async () => {
+      await result.current.actions.open();
+    });
+  };
+
+  it("sends the document, where it lives, and which folder it belongs to", async () => {
     const { client, saveAsCalls } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
+    await withWorkspace(result);
     await act(async () => {
       await result.current.actions.openFile(A);
     });
@@ -1224,13 +1283,14 @@ describe("saving somewhere else", () => {
       await result.current.actions.saveAs();
     });
 
-    expect(saveAsCalls).toEqual([{ path: "a.md", content: "# Mine\n" }]);
+    expect(saveAsCalls).toEqual([{ workspaceId: "ws", path: "ws/a.md", content: "# Mine\n" }]);
   });
 
   it("moves the tab to the file that was written, clean and at its new revision", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
+    await withWorkspace(result);
     await act(async () => {
       await result.current.actions.openFile(A);
     });
@@ -1239,11 +1299,11 @@ describe("saving somewhere else", () => {
       await result.current.actions.saveAs();
     });
 
-    expect(result.current.state.activePath).toBe("chosen.md");
+    expect(result.current.state.activePath).toBe("ws/chosen.md");
     expect(result.current.state.file?.revision).toEqual({ id: "r-saved-as" });
     expect(result.current.state.content).toBe("# Mine\n");
     expect(result.current.state.dirty).toBe(false);
-    expect(result.current.state.documents.map((document) => document.path)).toEqual(["chosen.md"]);
+    expect(result.current.state.documents.map((document) => document.path)).toEqual(["ws/chosen.md"]);
   });
 
   // The scratch buffer is the reason Save As can be reached with nothing open at all. It has never
@@ -1252,12 +1312,17 @@ describe("saving somewhere else", () => {
     const { client, saveAsCalls } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client, "typed into the scratch buffer"));
 
+    await withWorkspace(result);
     await act(async () => {
       await result.current.actions.saveAs();
     });
 
-    expect(saveAsCalls).toEqual([{ path: null, content: "typed into the scratch buffer" }]);
-    expect(result.current.state.activePath).toBe("chosen.md");
+    // No path, because it has never been anywhere - and the first open folder, because something
+    // has to say which one, and it is the only one there is.
+    expect(saveAsCalls).toEqual([
+      { workspaceId: "ws", path: null, content: "typed into the scratch buffer" },
+    ]);
+    expect(result.current.state.activePath).toBe("ws/chosen.md");
     expect(result.current.state.content).toBe("typed into the scratch buffer");
     expect(result.current.state.dirty).toBe(false);
   });
@@ -1268,6 +1333,7 @@ describe("saving somewhere else", () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
+    await withWorkspace(result);
     act(() => result.current.actions.openGuide("# Guide\n"));
     await act(async () => {
       await result.current.actions.saveAs();
@@ -1275,9 +1341,9 @@ describe("saving somewhere else", () => {
 
     expect(result.current.state.documents.map((document) => document.path)).toEqual([
       GUIDE_PATH,
-      "chosen.md",
+      "ws/chosen.md",
     ]);
-    expect(result.current.state.activePath).toBe("chosen.md");
+    expect(result.current.state.activePath).toBe("ws/chosen.md");
     expect(result.current.state.readOnly).toBe(false);
   });
 
@@ -1287,6 +1353,7 @@ describe("saving somewhere else", () => {
     });
     const { result } = renderHook(() => useWorkspace(client));
 
+    await withWorkspace(result);
     await act(async () => {
       await result.current.actions.openFile(A);
     });
@@ -1295,7 +1362,7 @@ describe("saving somewhere else", () => {
       await result.current.actions.saveAs();
     });
 
-    expect(result.current.state.activePath).toBe("a.md");
+    expect(result.current.state.activePath).toBe("ws/a.md");
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.errorKey).toBeNull();
   });
@@ -1308,6 +1375,7 @@ describe("saving somewhere else", () => {
     });
     const { result } = renderHook(() => useWorkspace(client));
 
+    await withWorkspace(result);
     await act(async () => {
       await result.current.actions.openFile(A);
     });
@@ -1316,7 +1384,7 @@ describe("saving somewhere else", () => {
     });
 
     expect(result.current.state.errorKey).toBe("errors.outsideWorkspace");
-    expect(result.current.state.activePath).toBe("a.md");
+    expect(result.current.state.activePath).toBe("ws/a.md");
   });
 
   // The caller may be about to act on the answer, exactly as it may with `save`.
@@ -1324,6 +1392,7 @@ describe("saving somewhere else", () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
+    await withWorkspace(result);
     let landed: boolean | undefined;
     await act(async () => {
       landed = await result.current.actions.saveAs();
@@ -1338,7 +1407,9 @@ describe("saving somewhere else", () => {
 /// would be two things. Which files it reports is the whole question - a chat attachment goes
 /// through the same read, and a list that collected those would fill with files nobody opened.
 describe("reporting an opened file", () => {
-  const A = { id: "notes/a.md", name: "a.md", kind: "file" as const };
+  // Qualified, as every path in the tree now is. The root reported back is the ABSOLUTE folder that
+  // workspace stands for, and the path is relative to it - which is what a recent-files entry needs.
+  const A = { id: "ws/notes/a.md", name: "a.md", kind: "file" as const };
 
   function withReporter(overrides = {}) {
     const opened: { root: string; path: string }[] = [];
@@ -1406,6 +1477,8 @@ describe("reporting an opened file", () => {
       await result.current.actions.saveAs();
     });
 
+    // Relative to the root beside it: a recent-files entry is a folder and a path inside it, so the
+    // workspace comes off the front here rather than being stored twice.
     expect(opened).toEqual([{ root: "/ws", path: "chosen.md" }]);
   });
 
@@ -1525,15 +1598,20 @@ describe("a new document", () => {
     const { client, saveAsCalls, writes } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
+    // A draft belongs to no folder, so something has to say which one it lands in. With one open it
+    // is that one; with none there is nowhere to save to at all.
+    await act(async () => {
+      await result.current.actions.open();
+    });
     act(() => result.current.actions.newDocument("notes.md"));
     act(() => result.current.actions.edit("# Notes"));
     await act(async () => {
       await result.current.actions.save();
     });
 
-    expect(saveAsCalls).toEqual([{ path: "notes.md", content: "# Notes" }]);
+    expect(saveAsCalls).toEqual([{ workspaceId: "ws", path: "notes.md", content: "# Notes" }]);
     expect(writes).toEqual([]);
-    expect(result.current.state.file?.path).toBe("chosen.md");
+    expect(result.current.state.file?.path).toBe("ws/chosen.md");
     expect(result.current.state.dirty).toBe(false);
   });
 
@@ -1542,6 +1620,9 @@ describe("a new document", () => {
     const { client, saveAsCalls, writes } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
+    await act(async () => {
+      await result.current.actions.open();
+    });
     act(() => result.current.actions.newDocument("notes.md"));
     await act(async () => {
       await result.current.actions.save();
@@ -1552,7 +1633,7 @@ describe("a new document", () => {
     });
 
     expect(saveAsCalls).toHaveLength(1);
-    expect(writes).toEqual([{ path: "chosen.md", content: "# More", revision: "r-saved-as" }]);
+    expect(writes).toEqual([{ path: "ws/chosen.md", content: "# More", revision: "r-saved-as" }]);
   });
 
   // The dialog is where the folder is chosen, so cancelling it leaves the document exactly where it
@@ -1629,5 +1710,167 @@ describe("opening an image", () => {
 
     expect(result.current.state.media).toBeNull();
     expect(result.current.state.content).toBe("# On disk\n");
+  });
+});
+
+/// Several folders open at once.
+///
+/// The change 0.57.0 made, and the reason every path now carries the folder it is in: two files
+/// called `notes.md` in two folders are two documents, and nothing but the workspace on the front
+/// tells them apart.
+describe("several folders open at once", () => {
+  /// A fake that mints a different id per folder, as the shell does - the id is the folder's name.
+  function twoFolders() {
+    const roots = ["/one", "/two"];
+    let next = 0;
+    const closed: string[] = [];
+
+    const { client } = fakeClient({
+      openWorkspace: async () => {
+        const root = roots[next++]!;
+        return { ok: true as const, workspace: { id: root.slice(1), root, name: root.slice(1) } };
+      },
+      closeWorkspace: async (workspaceId) => {
+        closed.push(workspaceId);
+        return { ok: true };
+      },
+    });
+    return { client, closed };
+  }
+
+  const openBoth = async (result: { current: { actions: WorkspaceActions } }) => {
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.open();
+    });
+  };
+
+  it("keeps both folders, in the order they were opened", async () => {
+    const { client } = twoFolders();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await openBoth(result);
+
+    expect(result.current.state.workspaces.map((workspace) => workspace.id)).toEqual(["one", "two"]);
+    expect(result.current.state.folders["one"]?.status).toBe("loaded");
+    expect(result.current.state.folders["two"]?.status).toBe("loaded");
+  });
+
+  // The whole point. Without the folder on the front these are one path, and the second click would
+  // be read as going back to the first file rather than opening a different one.
+  it("tells apart two files with the same name in different folders", async () => {
+    const { client } = twoFolders();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await openBoth(result);
+    await act(async () => {
+      await result.current.actions.openPath("one/notes.md");
+    });
+    await act(async () => {
+      await result.current.actions.openPath("two/notes.md");
+    });
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      "one/notes.md",
+      "two/notes.md",
+    ]);
+    expect(result.current.state.activePath).toBe("two/notes.md");
+  });
+
+  it("closes one folder and its documents, leaving the other alone", async () => {
+    const { client, closed } = twoFolders();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await openBoth(result);
+    await act(async () => {
+      await result.current.actions.openPath("one/a.md");
+    });
+    await act(async () => {
+      await result.current.actions.openPath("two/b.md");
+    });
+
+    await act(async () => {
+      await result.current.actions.closeWorkspace("one");
+    });
+
+    // Told to the shell as well, so the workspace stops answering there - a path naming it is
+    // refused rather than quietly resolving against a provider nothing is using.
+    expect(closed).toEqual(["one"]);
+    expect(result.current.state.workspaces.map((workspace) => workspace.id)).toEqual(["two"]);
+    expect(result.current.state.documents.map((document) => document.path)).toEqual(["two/b.md"]);
+    expect(result.current.state.folders["one"]).toBeUndefined();
+    expect(result.current.state.folders["two"]?.status).toBe("loaded");
+  });
+
+  // Closing the folder a document came from cannot leave that document on screen: it could neither
+  // be saved nor re-read.
+  it("puts the reader on what is left after closing the folder they were in", async () => {
+    const { client } = twoFolders();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await openBoth(result);
+    await act(async () => {
+      await result.current.actions.openPath("two/b.md");
+    });
+    await act(async () => {
+      await result.current.actions.openPath("one/a.md");
+    });
+    expect(result.current.state.activePath).toBe("one/a.md");
+
+    await act(async () => {
+      await result.current.actions.closeWorkspace("one");
+    });
+
+    expect(result.current.state.activePath).toBe("two/b.md");
+  });
+
+  // Opening the same folder twice is one workspace: the shell answers with the one it is already
+  // open as, and the list must not gain a duplicate of it.
+  it("does not list the same folder twice", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(result.current.state.workspaces).toHaveLength(1);
+  });
+
+  it("reopens every remembered folder, in order", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen(["D:/One", "D:/Two"]);
+    });
+
+    expect(result.current.state.workspaces.map((workspace) => workspace.root)).toEqual([
+      "D:/One",
+      "D:/Two",
+    ]);
+  });
+
+  // One folder that has since been deleted must not take the rest with it.
+  it("skips a remembered folder that has gone, and opens the others", async () => {
+    const { client } = fakeClient({
+      reopenWorkspace: async (root) =>
+        root === "D:/Gone"
+          ? { ok: false, reason: "not-found" }
+          : { ok: true, workspace: { id: root, root, name: root } },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen(["D:/Gone", "D:/Here"]);
+    });
+
+    expect(result.current.state.workspaces.map((workspace) => workspace.root)).toEqual(["D:/Here"]);
+    expect(result.current.state.errorKey).toBeNull();
   });
 });

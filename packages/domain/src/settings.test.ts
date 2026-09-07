@@ -48,7 +48,8 @@ describe("migrating from version 1", () => {
     const migrated = loadSettings(v1);
     expect(migrated.panels.workspaceWidth).toBe(326);
     expect(migrated.panels.chatCollapsed).toBe(true);
-    expect(migrated.lastWorkspace).toBe("D:/Notes");
+    // The one remembered folder became a list of one, so the installation comes back as it was left.
+    expect(migrated.workspaces).toEqual(["D:/Notes"]);
   });
 
   it("fills in what version 2 added", () => {
@@ -91,7 +92,7 @@ describe("migrating from version 2", () => {
     const v1 = {
       schemaVersion: 1,
       panels: { workspaceWidth: 300, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: false },
-      lastWorkspace: null,
+      workspaces: [],
     };
     const migrated = loadSettings(v1);
 
@@ -260,8 +261,8 @@ describe("loadSettings", () => {
   });
 
   it("reads a current-version file", () => {
-    const stored = { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" };
-    expect(loadSettings(stored).lastWorkspace).toBe("D:/Notes");
+    const stored = { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] };
+    expect(loadSettings(stored).workspaces).toEqual(["D:/Notes"]);
   });
 
   // Settings are a convenience, not the user's work. A corrupt or unreadable file must not stop the
@@ -402,7 +403,8 @@ describe("migrating from version 8", () => {
     expect(migrated.chat.folderFileLimit).toBe(40);
     expect(migrated.chat.showPanel).toBeNull();
     expect(migrated.window.closeToTray).toBe(true);
-    expect(migrated.lastWorkspace).toBe("D:/Notes");
+    // The one remembered folder became a list of one, so the installation comes back as it was left.
+    expect(migrated.workspaces).toEqual(["D:/Notes"]);
   });
 
   it("arrives at the current version", () => {
@@ -492,7 +494,8 @@ describe("the file types a settings file names", () => {
 
   it("leaves everything else version 10 stored", () => {
     const migrated = loadSettings(before);
-    expect(migrated.lastWorkspace).toBe("D:/Notes");
+    // The one remembered folder became a list of one, so the installation comes back as it was left.
+    expect(migrated.workspaces).toEqual(["D:/Notes"]);
     expect(migrated.chat.folderFileLimit).toBe(40);
     expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
   });
@@ -525,7 +528,8 @@ describe("the file types a settings file names", () => {
   it("loads a file naming a type it does not know", () => {
     const newer = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "klingon"] } };
     expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon"]);
-    expect(loadSettings(newer).lastWorkspace).toBe("D:/Notes");
+    // And the rest of the file survived the migration to a list of workspaces alongside it.
+    expect(loadSettings(newer).workspaces).toEqual(["D:/Notes"]);
   });
 });
 

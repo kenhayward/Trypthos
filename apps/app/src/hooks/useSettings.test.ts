@@ -5,7 +5,7 @@ import { useSettings, type SettingsBridge } from "./useSettings";
 
 const stored: Settings = {
   ...DEFAULT_SETTINGS,
-  lastWorkspace: "D:/Notes",
+  workspaces: ["D:/Notes"],
   panels: { ...DEFAULT_SETTINGS.panels, workspaceWidth: 300 },
 };
 
@@ -37,7 +37,7 @@ describe("useSettings", () => {
 
     await flush();
     expect(result.current.loaded).toBe(true);
-    expect(result.current.settings.lastWorkspace).toBe("D:/Notes");
+    expect(result.current.settings.workspaces).toEqual(["D:/Notes"]);
   });
 
   // Until the file has been read the state is DEFAULTS, not what is stored. Writing then would

@@ -961,6 +961,9 @@ describe("ChatPanel: links in a reply", () => {
   const reply = (content: string) =>
     panel({
       fileTypes: ["markdown", "python"],
+      // Which folder the model's paths are in. Without one a bare path names nothing, which is the
+      // honest answer when no folder is open.
+      linkWorkspaceId: "Notes",
       turns: [
         { role: "user" as const, content: "Where is it?" },
         { role: "assistant" as const, content },

@@ -11,7 +11,7 @@ export const APP_VERSION = __APP_VERSION__;
 export const CAPABILITIES = `
 | Feature | Description |
 | --- | --- |
-| Workspace browser | Open a local folder and browse it. Cloud accounts follow in a later release. |
+| Workspace browser | Open as many local folders as you like, each with its own tree and its own close button. They reopen next time you start. Cloud accounts follow in a later release. |
 | File types | Choose which kinds of file Trypthos opens: markdown, plain text, and thirty-odd data formats and languages, all on to begin with. Shell, PowerShell and batch scripts included. A file no enabled type covers is listed in grey and cannot be opened. |
 | Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab, shown at their own size and zoomed with Shift and the wheel. Nothing to edit and nothing written back, and never sent to a chat model. |
 | Syntax colouring | Each type is coloured by role, from the same palette as the rest of the app, in both themes. Fenced code is coloured by the language on the fence, in every view and in chat replies. Grammars load only when a file needs one. |

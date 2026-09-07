@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.57.0",
+    date: "2026-09-07",
+    pr: 112,
+    headline: "Open more than one folder at a time",
+    summary:
+      "Open Folder now ADDS a folder rather than replacing the one you had. Each open folder gets its own row at the top of the browser with its own tree beneath it, and a cross at the end of that row closes it - along with its tabs, asking about anything unsaved first. Every folder you leave open is reopened next time you start, in the order you opened them. This changes something underneath that is worth knowing about, because it is why the rest works: a file is now named by its folder as well as its path, so two files both called notes.md in two different folders are two documents rather than one. The tab strip shows that when it has to - two tabs that would both read notes.md become Notes/notes.md and Work/notes.md - and links, chat and Find in Files all stay inside the folder they started in. Nothing you had is lost: the one folder the app remembered becomes a list of one, and it opens exactly as it did before.",
+    added: [
+      "Several folders open at once, each with its own tree in the browser.",
+      "A close button at the end of each folder's row, which closes its tabs too.",
+      "Every open folder is reopened the next time you start.",
+    ],
+    changed: [
+      "Open Folder adds a folder rather than replacing the one you had - so it no longer asks about unsaved work, because it no longer discards anything. Closing a folder asks instead.",
+      "A tab shows the folder its file is in when two open files share a name.",
+    ],
+  },
+  {
     version: "0.56.1",
     date: "2026-09-07",
     pr: 111,

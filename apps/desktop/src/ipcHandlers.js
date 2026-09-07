@@ -17,7 +17,11 @@ const {
   SetIntegrationRequest,
   SetSecretRequest,
   createPathGuard,
+  CloseWorkspaceRequest,
   FindRequest,
+  qualifyPath,
+  splitQualified,
+  workspaceIdFor,
   imageMediaType,
   ListRequest,
   OutlineRequest,
@@ -46,10 +50,21 @@ const { searchFiles } = require("./fileSearch");
 ///     the currently open workspace, which is held HERE rather than passed in. A renderer that could
 ///     name its own root could name any directory on the machine.
 
-/// The open workspace. Not exported, and not settable except by the user choosing a folder.
-let current = null;
+/// The open workspaces, by the id the main process minted for each.
+///
+/// Not exported, and not settable except by the user choosing a folder. A renderer can name an id -
+/// which is a thing this side made up - and can never name a root, which would be a way to reach any
+/// directory on the machine.
+const open = new Map();
 
+/// Opens a folder, or answers the workspace it is already open as.
+///
+/// Opening the same folder twice is one workspace, not two: two trees over one directory would be
+/// two sets of tabs for the same files, each with its own idea of what is in them.
 function openWorkspace(root) {
+  const already = [...open.values()].find((workspace) => workspace.root === root);
+  if (already !== undefined) return { id: already.id, root: already.root, name: already.name };
+
   const guard = createPathGuard({
     root,
     // Windows and default macOS volumes compare names case-insensitively; Linux does not. Getting
@@ -57,11 +72,36 @@ function openWorkspace(root) {
     caseInsensitive: process.platform !== "linux",
   });
 
+  const name = path.basename(root) || root;
+  // The id is the folder's name, deduplicated - so a qualified path reads as something a person
+  // recognises, and a tab forced to disambiguate two files called `notes.md` shows `Notes/notes.md`
+  // rather than an opaque token.
+  const id = workspaceIdFor(name, [...open.keys()]);
+
   // The guard is kept beside the provider rather than only inside it, because Save As has a path to
   // check BEFORE it has anything to write: the dialog answers with an absolute path, and whether
   // that is a place in this workspace is the question asked first.
-  current = { root, name: path.basename(root) || root, guard, provider: createLocalWorkspace({ root, guard }) };
-  return { root, name: current.name };
+  open.set(id, { id, root, name, guard, provider: createLocalWorkspace({ root, guard }) });
+  return { id, root, name };
+}
+
+/// Which workspace a qualified path is in, and where in it.
+///
+/// The ONE place a qualified path is taken apart. What comes out is an ordinary workspace-relative
+/// path, and it goes through the provider's guard unchanged: naming a workspace adds a folder to a
+/// path, never permission to leave it.
+function locateQualified(request) {
+  const split = splitQualified(request.path ?? "");
+  if (split === null) return null;
+
+  const workspace = open.get(split.workspaceId);
+  return workspace === undefined ? null : { workspace, path: split.path };
+}
+
+/// The workspace a request names outright, for the one call that has no path to read it from.
+function locateById(request) {
+  const workspace = open.get(request.workspaceId);
+  return workspace === undefined ? null : { workspace };
 }
 
 /// An absolute path the save dialog returned, as a workspace-relative one - or null when it is not
@@ -82,9 +122,9 @@ function workspaceRelative(workspace, absolute) {
 /// Wraps a handler so a schema failure or a missing workspace becomes a result rather than an
 /// exception crossing the IPC boundary, where it would reach the renderer as an opaque string.
 ///
-/// `getWorkspace` is passed in rather than read from module state so the ordering below can be
-/// tested directly. That ordering is the point of the function.
-function guarded(getWorkspace, schema, handler) {
+/// `locate` is passed in rather than read from module state so the ordering below can be tested
+/// directly. That ordering is the point of the function.
+function guarded(locate, schema, handler) {
   return async (_event, payload) => {
     // Validation comes FIRST, before any consideration of state. A malformed payload is a protocol
     // error whatever the app happens to be doing, and reporting it as "no workspace open" would send
@@ -97,10 +137,15 @@ function guarded(getWorkspace, schema, handler) {
       return { ok: false, reason: "bad-request" };
     }
 
-    const workspace = getWorkspace();
-    if (!workspace) return { ok: false, reason: "no-workspace" };
+    // Which workspace, worked out from the request rather than from this module's state: several
+    // are open at once, so "the workspace" is not a thing the app has any more.
+    const found = locate(parsed.data);
+    if (!found) return { ok: false, reason: "no-workspace" };
 
-    return handler(parsed.data, workspace);
+    // The handler is given the path INSIDE the workspace, never the qualified one it arrived as.
+    // That is what leaves every handler below unchanged by there being several workspaces.
+    const request = found.path === undefined ? parsed.data : { ...parsed.data, path: found.path };
+    return handler(request, found.workspace);
   };
 }
 
@@ -266,15 +311,20 @@ function registerIpcHandlers({
       parsed.data.context.folder === null
         ? null
         : async (wanted) => {
-            const workspace = getWorkspace();
-            if (!workspace) return { ok: false, reason: "no-workspace" };
+            // Which workspace, from the folder the user attached - it names one. Several folders
+            // are open at once, so "the workspace" is not a thing this side has any more.
+            const attached = locateQualified(parsed.data.context.folder);
+            if (!attached) return { ok: false, reason: "no-workspace" };
+            const { workspace } = attached;
 
             // Rebuilt HERE rather than trusted from the request: the outline is the allowlist, so
             // what may be read is decided by the main process walking the folder again. The folder
             // itself is the user's choice and comes with the context; the guard is what keeps that
             // choice inside the workspace.
             const outline = await outlineWorkspace(workspace.provider, {
-              path: parsed.data.context.folder.path,
+              // The folder INSIDE its workspace. What the model sees, and what it names back, is
+              // relative to the workspace its folder is in - one folder is one world to it.
+              path: attached.path,
               fileTypes: settings.fileTypes.enabled,
               limit: settings.chat.folderFileLimit,
             });
@@ -297,14 +347,15 @@ function registerIpcHandlers({
       parsed.data.context.folder === null
         ? null
         : async (name, argumentsJson) => {
-            const workspace = getWorkspace();
-            if (!workspace) return null;
+            const attached = locateQualified(parsed.data.context.folder);
+            if (!attached) return null;
+            const { workspace } = attached;
 
             // Built per call rather than held, so a folder or a file-types change between turns is
             // picked up rather than remembered from whenever the conversation started.
             const run = createFolderToolRunner({
               provider: workspace.provider,
-              folder: parsed.data.context.folder.path,
+              folder: attached.path,
               fileTypes: settings.fileTypes.enabled,
               // Down the channel a launch from File Explorer already uses, so the renderer opens it
               // the one way - asking about unsaved work, reporting a file that is not there. There
@@ -356,8 +407,9 @@ function registerIpcHandlers({
     const parsed = OutlineRequest.safeParse(payload);
     if (!parsed.success) return { ok: false, reason: "bad-request" };
 
-    const workspace = getWorkspace();
-    if (!workspace) return { ok: false, reason: "no-workspace" };
+    const found = locateQualified(parsed.data);
+    if (!found) return { ok: false, reason: "no-workspace" };
+    const { workspace } = found;
 
     // The FOLDER comes from the renderer - it is what the user selected in the tree - and is
     // therefore validated by the provider, which applies the same guard every other path gets. The
@@ -366,7 +418,7 @@ function registerIpcHandlers({
     return {
       ok: true,
       outline: await outlineWorkspace(workspace.provider, {
-        path: parsed.data.path,
+        path: found.path,
         // Both from settings read HERE, never from the renderer: this list is the allowlist the
         // model reads from, so widening it is a decision the main process makes.
         fileTypes: settings.fileTypes.enabled,
@@ -412,8 +464,9 @@ function registerIpcHandlers({
       title: chatTitleFrom(parsed.data.turns),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      // The renderer never names a workspace root - the main process holds the open one.
-      workspaceRoot: current?.root ?? null,
+      // The renderer never names a workspace root - the main process holds the open ones, and a
+      // chat records the root of whichever workspace the file it is about lives in.
+      workspaceRoot: locateQualified({ path: parsed.data.filePath ?? "" })?.workspace.root ?? null,
       filePath: parsed.data.filePath,
       profileId: parsed.data.profileId,
       turns: parsed.data.turns,
@@ -453,7 +506,19 @@ function registerIpcHandlers({
     return { ok: true, workspace: openWorkspace(result.filePaths[0]) };
   });
 
-  // Reopening the folder the app was last closed with. Same validation path as the dialog, so a
+  /// Closing one workspace. The tabs that belonged to it are the renderer's business; what happens
+  /// here is that its provider and its guard stop existing, so a path naming it stops resolving.
+  ipcMain.handle("workspace:close", async (_event, payload) => {
+    const parsed = CloseWorkspaceRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    // Answered the same whether or not it was open. Closing a workspace that has already gone is
+    // the state the caller wanted, not a failure to report.
+    open.delete(parsed.data.workspaceId);
+    return { ok: true };
+  });
+
+  // Reopening a folder the app was last closed with. Same validation path as the dialog, so a
   // stored path that has since been deleted or moved is refused rather than trusted.
   ipcMain.handle("workspace:reopen", async (_event, payload) => {
     const root = typeof payload?.root === "string" ? payload.root : null;
@@ -469,16 +534,23 @@ function registerIpcHandlers({
     return { ok: true, workspace: openWorkspace(root) };
   });
 
-  const getWorkspace = () => current;
-
   ipcMain.handle(
     "workspace:list",
-    guarded(getWorkspace, ListRequest, (request, workspace) => workspace.provider.list(request.path)),
+    guarded(locateQualified, ListRequest, async (request, workspace) => {
+      const result = await workspace.provider.list(request.path);
+      if (!result.ok) return result;
+      // Qualified HERE, so the renderer receives ids it can hand straight back and never has to
+      // work out which workspace a row belongs to.
+      return {
+        ok: true,
+        nodes: result.nodes.map((node) => ({ ...node, id: qualifyPath(workspace.id, node.id) })),
+      };
+    }),
   );
 
   ipcMain.handle(
     "file:read",
-    guarded(getWorkspace, ReadRequest, (request, workspace) => workspace.provider.read(request.path)),
+    guarded(locateQualified, ReadRequest, (request, workspace) => workspace.provider.read(request.path)),
   );
 
   /// Find in Files.
@@ -488,7 +560,7 @@ function registerIpcHandlers({
   /// Which folder INSIDE the workspace is a choice, not a permission, exactly as for `workspace:outline`.
   ipcMain.handle(
     "workspace:find",
-    guarded(getWorkspace, FindRequest, (request, workspace) =>
+    guarded(locateQualified, FindRequest, (request, workspace) =>
       searchFiles(workspace.provider, request),
     ),
   );
@@ -505,15 +577,20 @@ function registerIpcHandlers({
   /// where a file may be written is not the user's to answer in a file picker.
   ipcMain.handle(
     "file:saveAs",
-    guarded(getWorkspace, SaveAsRequest, async (request, workspace) => {
+    guarded(locateById, SaveAsRequest, async (request, workspace) => {
       const window = getWindow();
       const result = await dialog.showSaveDialog(window, {
         title: "Save As",
         // Where the dialog OPENS, and the only thing the renderer's path is for. A Save As from a
         // file deep in the tree that opened at the root would make the user navigate back to where
         // they already were.
+        // Where the dialog OPENS, and the only thing the path is for. It arrives qualified like
+        // every other path, so the workspace comes off the front - the workspace this saves INTO is
+        // the one the request named outright, not one inferred from where the dialog started.
         defaultPath:
-          request.path === null ? workspace.root : path.join(workspace.root, request.path),
+          request.path === null
+            ? workspace.root
+            : path.join(workspace.root, splitQualified(request.path)?.path ?? ""),
       });
 
       // Cancelling is not a failure, and must not raise anything: see `failureKey`.
@@ -527,7 +604,11 @@ function registerIpcHandlers({
       const written = await workspace.provider.write(relative, request.content, null, {
         overwrite: true,
       });
-      return written.ok ? { ok: true, path: relative, revision: written.revision } : written;
+      // Qualified on the way back, like a listing: the renderer receives a path it can hand
+      // straight to any other channel and never has to work out which workspace it names.
+      return written.ok
+        ? { ok: true, path: qualifyPath(workspace.id, relative), revision: written.revision }
+        : written;
     }),
   );
 
@@ -542,7 +623,7 @@ function registerIpcHandlers({
   /// renderer - and a name that is not an image this app draws is refused rather than guessed at.
   ipcMain.handle(
     "file:readImage",
-    guarded(getWorkspace, ReadImageRequest, async (request, workspace) => {
+    guarded(locateQualified, ReadImageRequest, async (request, workspace) => {
       const mediaType = imageMediaType(request.path);
       if (mediaType === null) return { ok: false, reason: "not-an-image" };
 
@@ -555,7 +636,7 @@ function registerIpcHandlers({
 
   ipcMain.handle(
     "file:write",
-    guarded(getWorkspace, WriteRequest, (request, workspace) =>
+    guarded(locateQualified, WriteRequest, (request, workspace) =>
       workspace.provider.write(request.path, request.content, request.expectedRevision),
     ),
   );

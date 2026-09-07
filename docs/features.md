@@ -5,8 +5,22 @@ About box carries a shorter table again; all three change together.
 
 ## Workspace browser
 
-The left panel shows a workspace as a tree. Open a folder from your machine, expand folders in place,
-and click a file to open it in the editor. A filter box narrows the files by name.
+The left panel shows your open folders as trees. Open a folder from your machine, expand folders in
+place, and click a file to open it in the editor. A filter box narrows the files by name.
+
+**Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
+row at the top of its tree, and a cross at the end of that row closes it - taking its tabs with it,
+and asking about anything unsaved one document at a time. Every folder you leave open is reopened the
+next time you start, in the order you opened them. Opening the same folder twice is one folder, not
+two: two trees over one directory would be two sets of tabs for the same files, each with its own
+idea of what is in them.
+
+**A file is named by its folder as well as its path.** That is what makes two files both called
+`notes.md`, in two different folders, two documents rather than one - and it is why the tab strip
+shows `Notes/notes.md` and `Work/notes.md` when it has to tell two tabs apart. Everything that
+resolves a path stays inside the folder it started in: a relative link cannot climb out of its
+folder into the one beside it, a chat question about a folder is about that folder, and Find in
+Files searches the workspace the selected folder belongs to.
 
 Every folder and every file is listed, except hidden entries such as `.git` - they are not what this
 panel is for. Files your enabled types cannot open are drawn in grey and cannot be clicked (see

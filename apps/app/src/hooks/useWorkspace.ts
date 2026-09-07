@@ -16,7 +16,9 @@ import {
   markSaved,
   draftPath,
   openDocument,
+  qualifyPath,
   renameDocument,
+  splitQualified,
   updateContent,
 } from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
@@ -41,7 +43,11 @@ export interface OpenFile {
 }
 
 export interface WorkspaceState {
-  workspace: WorkspaceInfo | null;
+  /// Every open folder, in the order they were opened.
+  ///
+  /// A list rather than one, and the id on each is what every path in that folder carries on its
+  /// front - which is how two files both called `notes.md` stay two files.
+  workspaces: readonly WorkspaceInfo[];
   /// What is known about each folder, keyed by workspace-relative path. "" is the root.
   ///
   /// Absent means collapsed and never opened. Status is per folder rather than per panel because one
@@ -50,11 +56,12 @@ export interface WorkspaceState {
   folders: Record<string, FolderState>;
   /// Narrows the visible files by name.
   filter: string;
-  /// The folder chat maps when its Folder button is on. "" is the workspace root.
+  /// The folder chat maps when its Folder button is on, qualified. "" is no selection at all.
   ///
   /// A real selection rather than something derived from the open file: which document you are
   /// reading and which folder your question is about are different questions, and asking about one
-  /// folder while reading a file from another is the ordinary case rather than the odd one.
+  /// folder while reading a file from another is the ordinary case rather than the odd one. With
+  /// several folders open it also has to say which of them, which is what qualifying it does.
   selectedFolder: string;
   /// Every open document, in the order their tabs appear.
   documents: readonly OpenDocument[];
@@ -83,9 +90,21 @@ export interface WorkspaceState {
 }
 
 export interface WorkspaceActions {
+  /// Adds a folder, chosen from the native dialog.
+  ///
+  /// ADDS rather than replaces, since 0.57.0: every open document belongs to a named folder now, so
+  /// opening another one has no reason to disturb them. Opening a folder that is already open is
+  /// answered with the workspace it is already open as.
   open(): Promise<void>;
-  /// Opens a remembered folder on launch, without a dialog.
-  reopen(root: string): Promise<void>;
+  /// Opens remembered folders on launch, without a dialog. Each is opened in turn, and one that has
+  /// since been deleted is skipped in silence.
+  reopen(roots: readonly string[]): Promise<void>;
+  /// Closes one folder, and every document that came from it.
+  ///
+  /// The documents go with it, asking about unsaved work one at a time and stopping at the first
+  /// cancel - the same rule as Close Others. A tab whose folder is closed would be a tab that can
+  /// neither be saved nor re-read, which is worse than being asked about.
+  closeWorkspace(workspaceId: string): Promise<void>;
   /// Expands a collapsed folder, or collapses an expanded one.
   toggleFolder(path: string): Promise<void>;
   /// Re-lists a folder whose listing failed.
@@ -147,7 +166,7 @@ export interface WorkspaceActions {
 /// What the hook actually holds. The state the interface reads is derived from this on each render,
 /// so a document's text, its dirty flag and the tab that shows it cannot drift apart.
 interface Internal {
-  workspace: WorkspaceInfo | null;
+  workspaces: readonly WorkspaceInfo[];
   folders: Record<string, FolderState>;
   filter: string;
   documents: DocumentSet;
@@ -164,7 +183,7 @@ interface Internal {
 }
 
 const INITIAL: Internal = {
-  workspace: null,
+  workspaces: [],
   folders: {},
   filter: "",
   selectedFolder: "",
@@ -231,6 +250,15 @@ export function failureParams(failure: {
     size: formatBytes(failure.sizeBytes ?? 0),
     limit: formatBytes(failure.limitBytes ?? MAX_TEXT_FILE_BYTES),
   };
+}
+
+/// The absolute root of the workspace a qualified path is in, or undefined when there is none.
+///
+/// What the recent-files list records: a path means nothing without the folder it is relative to,
+/// and with several open the folder is no longer "the workspace".
+function rootOf(workspaces: readonly WorkspaceInfo[], qualified: string): string | undefined {
+  const workspaceId = splitQualified(qualified)?.workspaceId;
+  return workspaces.find((workspace) => workspace.id === workspaceId)?.root;
 }
 
 /// The parent of a workspace-relative directory path. "" is the root and has no parent.
@@ -335,7 +363,17 @@ export function useWorkspace(
     // what the dialog wants - the workspace root, with the file already called what the user called
     // it. A read-only document has no path worth offering either.
     const openAt = active === null || active.draft ? (active?.name ?? null) : active.path;
-    const result = await client.saveFileAs(openAt, content);
+    // WHICH folder this saves into. From the document when it is in one, and otherwise from the
+    // first open folder - the scratch buffer, a draft and the built-in guide are in none, and with
+    // several open something has to say. Nothing open at all means there is nowhere to save to.
+    const workspaceId =
+      splitQualified(active?.path ?? "")?.workspaceId ?? stateRef.current.workspaces[0]?.id;
+    if (workspaceId === undefined) {
+      fail({ reason: "no-workspace" });
+      return false;
+    }
+
+    const result = await client.saveFileAs(workspaceId, openAt, content);
 
     if (!result.ok) {
       // Cancelling is not a failure and raises nothing - `failureKey` answers null for it - but the
@@ -360,8 +398,9 @@ export function useWorkspace(
 
     // Save As leaves the user editing a file they have never opened. Leaving it off the list would
     // put the original there and not the one they are actually working in.
-    const root = stateRef.current.workspace?.root;
-    if (root !== undefined) reportOpened?.({ root, path: result.path });
+    const root = rootOf(stateRef.current.workspaces, result.path);
+    const relative = splitQualified(result.path)?.path;
+    if (root !== undefined && relative !== undefined) reportOpened?.({ root, path: relative });
     return true;
   }, [client, fail, reportOpened]);
 
@@ -446,26 +485,62 @@ export function useWorkspace(
     return true;
   }, [mayDiscardOne]);
 
-  const open = useCallback(async () => {
-    if (!(await mayDiscard())) return;
+  /// Puts a workspace on the list and lists its root. Shared by the dialog and by reopening.
+  ///
+  /// Nothing is discarded. Every path names the folder it is in, so a second folder cannot make the
+  /// documents from the first ambiguous - which is the whole reason opening one is additive now.
+  const addWorkspace = useCallback(
+    async (workspace: WorkspaceInfo) => {
+      setInternal((prev) => ({
+        ...prev,
+        workspaces: prev.workspaces.some((open) => open.id === workspace.id)
+          ? prev.workspaces
+          : [...prev.workspaces, workspace],
+        busy: false,
+      }));
+      await loadFolder(workspace.id);
+    },
+    [loadFolder],
+  );
 
+  const open = useCallback(async () => {
     setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
     const result = await client.openWorkspace();
     if (!result.ok) return fail(result);
 
-    setInternal((prev) => ({
-      ...prev,
-      workspace: result.workspace,
-      folders: {},
-      // Every tab belonged to the folder that was open. Carrying them across would leave paths
-      // pointing at files that are not in this workspace at all - and the same goes for the folder
-      // chat was mapping, which may not exist here.
-      documents: emptyDocumentSet(),
-      selectedFolder: "",
-      busy: false,
-    }));
-    await loadFolder("");
-  }, [client, fail, loadFolder, mayDiscard]);
+    await addWorkspace(result.workspace);
+  }, [addWorkspace, client, fail]);
+
+  const closeWorkspace = useCallback(
+    async (workspaceId: string) => {
+      // Its documents first, one at a time, and the first cancel stops the whole close: a folder
+      // that went while somebody was still deciding about a file in it would take the answer away
+      // along with the question.
+      const inside = stateRef.current.documents.documents
+        .filter((document) => splitQualified(document.path)?.workspaceId === workspaceId)
+        .map((document) => document.path);
+
+      for (const path of inside) {
+        if (!(await mayDiscardOne(path))) return;
+        setInternal((prev) => ({ ...prev, documents: closeDocument(prev.documents, path) }));
+      }
+
+      await client.closeWorkspace(workspaceId);
+
+      setInternal((prev) => ({
+        ...prev,
+        workspaces: prev.workspaces.filter((workspace) => workspace.id !== workspaceId),
+        // Its rows go with it, and so does the selection if it pointed inside. A folder chat was
+        // mapping in a workspace that is gone is a question about nothing.
+        folders: withoutSubtree(prev.folders, workspaceId),
+        selectedFolder:
+          splitQualified(prev.selectedFolder)?.workspaceId === workspaceId
+            ? ""
+            : prev.selectedFolder,
+      }));
+    },
+    [client, mayDiscardOne],
+  );
 
   const openPath = useCallback(
     async (path: string) => {
@@ -500,8 +575,11 @@ export function useWorkspace(
           busy: false,
         }));
 
-        const imageRoot = stateRef.current.workspace?.root;
-        if (imageRoot !== undefined) reportOpened?.({ root: imageRoot, path });
+        const imageRoot = rootOf(stateRef.current.workspaces, path);
+        const imageRelative = splitQualified(path)?.path;
+        if (imageRoot !== undefined && imageRelative !== undefined) {
+          reportOpened?.({ root: imageRoot, path: imageRelative });
+        }
         return;
       }
 
@@ -522,10 +600,11 @@ export function useWorkspace(
       }));
 
       // After the read, so a file that could not be opened is not remembered as one that was. The
-      // root comes from here rather than from the caller: a path is relative to one open folder, and
-      // this is the side that knows which.
-      const root = stateRef.current.workspace?.root;
-      if (root !== undefined) reportOpened?.({ root, path });
+      // root comes from the path itself now: it names its workspace, and this is the side that knows
+      // which absolute folder that workspace is.
+      const root = rootOf(stateRef.current.workspaces, path);
+      const relative = splitQualified(path)?.path;
+      if (root !== undefined && relative !== undefined) reportOpened?.({ root, path: relative });
     },
     [client, fail, reportOpened],
   );
@@ -558,43 +637,40 @@ export function useWorkspace(
   /// cannot behave differently because a file arrived from Explorer.
   const openTarget = useCallback(
     async ({ root, file }: { root: string; file: string | null }) => {
-      // Already the open folder: this is another tab, and reopening the workspace around the
-      // documents already in it would close every one of them for nothing.
-      if (stateRef.current.workspace?.root !== root) {
-        if (!(await mayDiscard())) return;
+      // Already open: this is another tab in a folder that is already on screen, and nothing about
+      // the workspace needs disturbing.
+      let workspace = stateRef.current.workspaces.find((open) => open.root === root) ?? null;
 
+      if (workspace === null) {
         setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
         const result = await client.reopenWorkspace(root);
         if (!result.ok) return fail(result);
 
-        setInternal((prev) => ({
-          ...prev,
-          workspace: result.workspace,
-          folders: {},
-          documents: emptyDocumentSet(),
-          selectedFolder: "",
-          busy: false,
-        }));
-        await loadFolder("");
+        workspace = result.workspace;
+        await addWorkspace(workspace);
       }
 
-      if (file !== null) await openPath(file);
+      // The file arrives relative to the root it was named with - from File Explorer, or from a
+      // model opening something in the folder it was given - so it is qualified here, where the
+      // workspace that root belongs to has just been established.
+      if (file !== null) await openPath(qualifyPath(workspace.id, file));
     },
-    [client, fail, loadFolder, mayDiscard, openPath],
+    [addWorkspace, client, fail, openPath],
   );
 
   const reopen = useCallback(
-    async (root: string) => {
-      const result = await client.reopenWorkspace(root);
-      // Silent on failure: a remembered folder that has since gone is not an error the user caused,
-      // and greeting them with a warning about a path they may not remember choosing is worse than
-      // simply opening with nothing.
-      if (!result.ok) return;
-
-      setInternal((prev) => ({ ...prev, workspace: result.workspace, folders: {} }));
-      await loadFolder("");
+    async (roots: readonly string[]) => {
+      // In turn rather than at once, so the order on screen is the order they were opened in - and
+      // so one folder that has since gone cannot take the rest with it.
+      for (const root of roots) {
+        const result = await client.reopenWorkspace(root);
+        // Silent on failure: a remembered folder that has since gone is not an error the user
+        // caused, and greeting them with a warning about a path they may not remember choosing is
+        // worse than simply opening without it.
+        if (result.ok) await addWorkspace(result.workspace);
+      }
     },
-    [client, loadFolder],
+    [addWorkspace, client],
   );
 
   const toggleFolder = useCallback(
@@ -613,7 +689,7 @@ export function useWorkspace(
 
   const state: WorkspaceState = useMemo(
     () => ({
-      workspace: internal.workspace,
+      workspaces: internal.workspaces,
       folders: internal.folders,
       filter: internal.filter,
       selectedFolder: internal.selectedFolder,
@@ -637,6 +713,7 @@ export function useWorkspace(
 
   const actions: WorkspaceActions = {
     open,
+    closeWorkspace,
     reopen,
     toggleFolder,
     retryFolder: loadFolder,

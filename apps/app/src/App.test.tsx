@@ -159,20 +159,23 @@ describe("App", () => {
         isDesktop: true,
         readSettings: async () => ({
           ok: true as const,
-          settings: { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" },
+          settings: { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] },
         }),
         writeSettings: async (settings: Settings) => {
           written.push(settings);
         },
         reopenWorkspace: async (root: string) => ({
           ok: true as const,
-          workspace: { root, name: "Notes" },
+          // The id the main process mints, from the folder's name. It is the first segment of every
+          // path in this workspace.
+          workspace: { id: "Notes", root, name: "Notes" },
         }),
         listDirectory: async () => ({
           ok: true as const,
+          // Qualified, as the shell answers - the renderer never works out which folder a row is in.
           nodes: [
-            { id: "one.md", name: "one.md", kind: "file" as const },
-            { id: "two.md", name: "two.md", kind: "file" as const },
+            { id: "Notes/one.md", name: "one.md", kind: "file" as const },
+            { id: "Notes/two.md", name: "two.md", kind: "file" as const },
           ],
         }),
         readFile: async (path: string) => {
@@ -195,9 +198,13 @@ describe("App", () => {
         setDocumentDirty: async () => {},
         // The dialog is the shell's, so the fake stands in for the whole of it - what comes back is
         // what the user picked. Note there is no destination to pass in.
-        saveFileAs: async (path: string | null, content: string) => {
+        saveFileAs: async (workspaceId: string, path: string | null, content: string) => {
           savedAs.push({ path, content });
-          return { ok: true as const, path: "elsewhere.md", revision: { id: "r-saved-as" } };
+          return {
+            ok: true as const,
+            path: `${workspaceId}/elsewhere.md`,
+            revision: { id: "r-saved-as" },
+          };
         },
       } as unknown as typeof window.trypthos;
       return { reads, asked, savedAs, menu, written };
@@ -231,7 +238,8 @@ describe("App", () => {
       // Clicking the file in the TREE is the same act: it goes to the tab that is already open, and
       // reads nothing, because what is on disk would replace what the user has typed.
       await user.click(row("two.md"));
-      expect(reads).toEqual(["one.md", "two.md"]);
+      // Qualified, because a path names the folder it is in.
+      expect(reads).toEqual(["Notes/one.md", "Notes/two.md"]);
     });
 
     // Bound on the window rather than inside the strip, so it works wherever the caret is - which is
@@ -265,7 +273,7 @@ describe("App", () => {
       await waitFor(() =>
         expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["elsewhere.md"]),
       );
-      expect(savedAs).toEqual([{ path: "one.md", content: "# one.md\n" }]);
+      expect(savedAs).toEqual([{ path: "Notes/one.md", content: "# Notes/one.md\n" }]);
     });
 
     // Ctrl+Shift+S, and it must not be read as Ctrl+S: the two write to different places, and the
@@ -421,16 +429,18 @@ describe("App", () => {
         isDesktop: true,
         readSettings: async () => ({
           ok: true as const,
-          settings: { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" },
+          settings: { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] },
         }),
         writeSettings: async () => {},
         reopenWorkspace: async (root: string) => ({
           ok: true as const,
-          workspace: { root, name: "Notes" },
+          // The id the main process mints, from the folder's name. It is the first segment of every
+          // path in this workspace.
+          workspace: { id: "Notes", root, name: "Notes" },
         }),
         listDirectory: async () => ({
           ok: true as const,
-          nodes: [{ id: "gone.md", name: "gone.md", kind: "file" as const }],
+          nodes: [{ id: "Notes/gone.md", name: "gone.md", kind: "file" as const }],
         }),
         readFile: async () => ({ ok: false as const, reason: "not-found" }),
       } as unknown as typeof window.trypthos;
@@ -524,8 +534,18 @@ describe("making a new file", () => {
     window.trypthos = {
       ...browserClient,
       isDesktop: true,
-      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+      // With a folder open, because a document that has never been saved has to land in one - and
+      // with several possible, something has to say which.
+      readSettings: async () => ({
+        ok: true as const,
+        settings: { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] },
+      }),
       writeSettings: async () => {},
+      reopenWorkspace: async (root: string) => ({
+        ok: true as const,
+        workspace: { id: "Notes", root, name: "Notes" },
+      }),
+      listDirectory: async () => ({ ok: true as const, nodes: [] }),
       onWindowState: () => () => {},
       onCloseRequested: () => () => {},
       onMenuAction: (listener: (message: { action: string }) => void) => {
@@ -533,9 +553,9 @@ describe("making a new file", () => {
         return () => {};
       },
       setDocumentDirty: async () => {},
-      saveFileAs: async (path: string | null, content: string) => {
+      saveFileAs: async (workspaceId: string, path: string | null, content: string) => {
         savedAs.push({ path, content });
-        return { ok: true as const, path: "notes.md", revision: { id: "r1" } };
+        return { ok: true as const, path: `${workspaceId}/notes.md`, revision: { id: "r1" } };
       },
     } as unknown as typeof window.trypthos;
     return { menu, savedAs };

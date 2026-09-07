@@ -16,7 +16,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 13;
+export const SETTINGS_VERSION = 14;
 
 export const SettingsSchema = z
   .object({
@@ -29,8 +29,11 @@ export const SettingsSchema = z
         chatCollapsed: z.boolean(),
       })
       .strict(),
-    /// Absolute path to the folder open when the app last closed, reopened on launch.
-    lastWorkspace: z.string().nullable(),
+    /// Absolute paths to the folders open when the app last closed, reopened on launch.
+    ///
+    /// A list since version 14: several folders are open at once, and remembering one of them would
+    /// mean the app came back with less than the user left it with.
+    workspaces: z.array(z.string()),
     /// The files the File menu offers to reopen, newest first.
     ///
     /// Each names a workspace as well as a path, because a relative path means nothing without the
@@ -129,7 +132,7 @@ export const DEFAULT_SETTINGS: Settings = {
     workspaceCollapsed: false,
     chatCollapsed: false,
   },
-  lastWorkspace: null,
+  workspaces: [],
   recentFiles: [],
   appearance: { theme: "system" },
   window: { closeToTray: false },
@@ -149,6 +152,17 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 14,
+    // Version 14 opened several folders at once. The one folder that was remembered becomes a list
+    // of one, so an existing installation comes back exactly as it was left - and `lastWorkspace`
+    // is REMOVED rather than left beside it, because the schema is strict and a field nothing reads
+    // is a second answer to the same question waiting to disagree.
+    migrate: ({ lastWorkspace, ...input }) => ({
+      ...input,
+      workspaces: typeof lastWorkspace === "string" ? [lastWorkspace] : [],
+    }),
+  },
   {
     to: 13,
     // Version 13 added the recent files list. Empty, which is exactly the state an existing

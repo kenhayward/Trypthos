@@ -59,8 +59,11 @@ async function withWorkspace(files, body) {
     });
 
     // Through the dialog, the way a user opens one.
-    await ipcMain.invoke("workspace:open");
-    await body({ ipcMain, root });
+    const opened = await ipcMain.invoke("workspace:open");
+    // Paths name their workspace now, and the id is minted by the main process from the folder's
+    // name - which is a temporary directory here, so the tests learn it rather than assume it.
+    const q = (path) => (path === "" ? opened.workspace.id : `${opened.workspace.id}/${path}`);
+    await body({ ipcMain, root, q, workspaceId: opened.workspace.id });
   } finally {
     await fs.rm(base, { recursive: true, force: true });
     await fs.rm(userData, { recursive: true, force: true });
@@ -68,8 +71,8 @@ async function withWorkspace(files, body) {
 }
 
 test("answers with the files at the workspace root", async () => {
-  await withWorkspace({ "top.md": null, "notes/inner.md": null }, async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("workspace:outline", { path: "" });
+  await withWorkspace({ "top.md": null, "notes/inner.md": null }, async ({ ipcMain, q }) => {
+    const result = await ipcMain.invoke("workspace:outline", { path: q("") });
 
     assert.equal(result.ok, true);
     assert.deepEqual(result.outline.paths, ["top.md"]);
@@ -81,8 +84,8 @@ test("answers with the files at the workspace root", async () => {
 test("answers with the files in the folder it was given", async () => {
   await withWorkspace(
     { "top.md": null, "notes/inner.md": null, "notes/other.md": null },
-    async ({ ipcMain }) => {
-      const result = await ipcMain.invoke("workspace:outline", { path: "notes" });
+    async ({ ipcMain, q }) => {
+      const result = await ipcMain.invoke("workspace:outline", { path: q("notes") });
 
       assert.equal(result.ok, true);
       assert.deepEqual(result.outline.paths, ["notes/inner.md", "notes/other.md"]);

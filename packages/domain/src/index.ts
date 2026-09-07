@@ -220,6 +220,8 @@ export type { AvailableUpdate, PublishedAsset, PublishedRelease } from "./update
 export { PANEL_BOUNDS, resolvePanelWidths } from "./panelLayout";
 export type { PanelRequest, PanelWidths } from "./panelLayout";
 
+export { qualifyPath, splitQualified, workspaceIdFor } from "./qualifiedPath";
+
 export {
   FIND_FILE_LIMIT,
   FIND_MATCH_LIMIT,
@@ -259,6 +261,7 @@ export {
   OpenExternalRequest,
   SendChatRequest,
   ReadImageRequest,
+  CloseWorkspaceRequest,
   ReadRequest,
   SaveAsRequest,
   RevisionSchema,

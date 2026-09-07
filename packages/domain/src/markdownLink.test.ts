@@ -4,8 +4,20 @@ import { isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
 /// Most of these cases are about schemes, traversal and encoding, and have nothing to say about file
 /// types - so they run against the types a fresh installation has, named once here. The cases that
 /// ARE about file types pass their own list.
+/// Every path names the workspace it is in. The fixtures below stay unqualified so they read as
+/// paths rather than as plumbing; the helper puts the workspace on, exactly as the app does.
+const WORKSPACE = "Notes";
+
 const link = (href: string, fromPath: string | null, enabled: readonly string[] = ["markdown"]) =>
-  linkAction(href, fromPath, enabled);
+  linkAction(
+    href,
+    fromPath === null ? null : `${WORKSPACE}/${fromPath}`,
+    enabled,
+    WORKSPACE,
+  );
+
+/// What the helper above expects back: the same path, in that workspace.
+const inWorkspace = (path: string) => `${WORKSPACE}/${path}`;
 
 describe("linkAction", () => {
   describe("web addresses", () => {
@@ -90,33 +102,33 @@ describe("linkAction", () => {
     it("resolves a sibling against the open file's folder", () => {
       expect(link("chapter-2.md", "book/chapter-1.md")).toEqual({
         kind: "document",
-        path: "book/chapter-2.md",
+        path: inWorkspace("book/chapter-2.md"),
       });
     });
 
     it("resolves an explicit ./ the same way", () => {
       expect(link("./chapter-2.md", "book/chapter-1.md")).toEqual({
         kind: "document",
-        path: "book/chapter-2.md",
+        path: inWorkspace("book/chapter-2.md"),
       });
     });
 
     it("walks up with ..", () => {
       expect(link("../index.md", "book/chapter-1.md")).toEqual({
         kind: "document",
-        path: "index.md",
+        path: inWorkspace("index.md"),
       });
     });
 
     it("treats a leading slash as the workspace root", () => {
       expect(link("/index.md", "book/deep/chapter-1.md")).toEqual({
         kind: "document",
-        path: "index.md",
+        path: inWorkspace("index.md"),
       });
     });
 
     it("resolves against the root when no file is open", () => {
-      expect(link("notes.md", null)).toEqual({ kind: "document", path: "notes.md" });
+      expect(link("notes.md", null)).toEqual({ kind: "document", path: inWorkspace("notes.md") });
     });
 
     it("accepts every extension the folder browser calls markdown", () => {
@@ -130,22 +142,22 @@ describe("linkAction", () => {
     it("decodes percent-encoding in the path", () => {
       expect(link("my%20notes.md", null)).toEqual({
         kind: "document",
-        path: "my notes.md",
+        path: inWorkspace("my notes.md"),
       });
     });
 
     it("keeps the path when the link carries a fragment or a query", () => {
       expect(link("notes.md#heading", null)).toEqual({
         kind: "document",
-        path: "notes.md",
+        path: inWorkspace("notes.md"),
       });
-      expect(link("notes.md?v=2", null)).toEqual({ kind: "document", path: "notes.md" });
+      expect(link("notes.md?v=2", null)).toEqual({ kind: "document", path: inWorkspace("notes.md") });
     });
 
     it("accepts a backslash as a separator, as a Windows author would write it", () => {
       expect(link("sub\\notes.md", "book/chapter-1.md")).toEqual({
         kind: "document",
-        path: "book/sub/notes.md",
+        path: inWorkspace("book/sub/notes.md"),
       });
     });
   });
@@ -171,7 +183,7 @@ describe("linkAction", () => {
       expect(link("notes.txt", null)).toEqual({ kind: "none", reason: "not-openable" });
       expect(link("notes.txt", null, ["markdown", "text"])).toEqual({
         kind: "document",
-        path: "notes.txt",
+        path: inWorkspace("notes.txt"),
       });
     });
 
@@ -254,5 +266,57 @@ describe("isUnsupportedScheme", () => {
     for (const href of ["https://example.com", "mailto:ada@example.com", "notes.md", "a/b.md", ""]) {
       expect(isUnsupportedScheme(href)).toBe(false);
     }
+  });
+});
+
+/// Links, now that every path names the workspace it is in.
+///
+/// A relative link resolves inside the document's own workspace for free - the workspace is the
+/// first segment of the document's path, so climbing out of it runs out of segments and is refused
+/// by the same check that always refused climbing out of the workspace. The two cases that need
+/// telling are the ones where the document cannot answer.
+describe("linkAction across several workspaces", () => {
+  const enabled = ["markdown"];
+
+  it("keeps a relative link inside the workspace its document is in", () => {
+    expect(linkAction("../plan.md", "Notes/docs/a.md", enabled)).toEqual({
+      kind: "document",
+      path: "Notes/plan.md",
+    });
+  });
+
+  // The workspace is part of the depth now, so a link that climbs past it is refused by the check
+  // that always refused climbing past the root - there is no extra rule to get wrong.
+  it("refuses a link that climbs out of its workspace", () => {
+    expect(linkAction("../../elsewhere.md", "Notes/docs/a.md", enabled)).toEqual({
+      kind: "none",
+      reason: "escapes-workspace",
+    });
+  });
+
+  // "The root" has to be told which root.
+  it("resolves a root-relative link against the workspace it is told about", () => {
+    expect(linkAction("/plan.md", "Notes/docs/a.md", enabled, "Notes")).toEqual({
+      kind: "document",
+      path: "Notes/plan.md",
+    });
+  });
+
+  // A reply in the chat panel, and the scratch buffer: neither is in a workspace, so neither has a
+  // folder for a relative link to start from.
+  it("resolves a link with no document behind it against the workspace it is told about", () => {
+    expect(linkAction("plan.md", null, enabled, "Notes")).toEqual({
+      kind: "document",
+      path: "Notes/plan.md",
+    });
+  });
+
+  // Not a link at all, rather than one that resolves nowhere. There is no folder for it to be
+  // relative to, so there is no file it could name.
+  it("makes such a link nothing when there is no workspace to name", () => {
+    expect(linkAction("plan.md", null, enabled)).toEqual({
+      kind: "none",
+      reason: "no-workspace",
+    });
   });
 });
