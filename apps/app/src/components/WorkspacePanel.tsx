@@ -75,6 +75,10 @@ export default function WorkspacePanel({
     () =>
       workspaces.map((workspace) => ({
         workspace,
+        // A root is a folder like any other, so it is collapsed in the same way: by not having been
+        // listed. The map is the only record of what is open, which is what keeps expanding, its
+        // failure and its retry one mechanism rather than two.
+        state: folders[workspace.id],
         rows: treeRows(folders, filter, fileTypes, workspace.id),
       })),
     [workspaces, folders, filter, fileTypes],
@@ -144,24 +148,34 @@ export default function WorkspacePanel({
           </div>
 
           <div className="min-h-0 grow overflow-auto px-1 py-2">
-            {rows.length === 0 && (
-              <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.emptyFolder")}</p>
-            )}
             {noMatches && (
               <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.noMatches")}</p>
             )}
 
-            {trees.map(({ workspace, rows: tree }) => (
+            {trees.map(({ workspace, state, rows: tree }) => (
               <div key={workspace.id}>
                 {/* The workspace's own row. It behaves like the folder it is - selecting it is what
                     points chat and Find at the whole workspace - and it is the only row that can be
                     closed, because closing is something you do to a folder you opened. */}
                 <WorkspaceRow
                   workspace={workspace}
+                  status={state?.status ?? null}
+                  expanded={state !== undefined && state.status !== "error"}
                   selected={selectedFolder === workspace.id}
-                  onSelect={() => onSelectFolder(workspace.id)}
+                  onToggle={() => {
+                    onSelectFolder(workspace.id);
+                    void onToggleFolder(workspace.id);
+                  }}
+                  onRetry={() => onRetryFolder(workspace.id)}
                   onClose={() => onCloseWorkspace(workspace.id)}
                 />
+
+                {/* Per folder rather than once for the panel. "This folder is empty" said over two
+                    open folders would be a claim about neither of them - and said about one nobody
+                    has looked inside yet, a claim the panel cannot make at all. */}
+                {state?.status === "loaded" && tree.length === 0 && (
+                  <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.emptyFolder")}</p>
+                )}
 
                 {tree.map((row) =>
                   row.node.kind === "directory" ? (
@@ -219,55 +233,87 @@ const indent = (depth: number) => ({ paddingLeft: `${depth * 16 + 4}px` });
 /// a keyboard in a predictable order.
 function WorkspaceRow({
   workspace,
+  status,
+  expanded,
   selected,
   onClose,
-  onSelect,
+  onToggle,
+  onRetry,
 }: {
   workspace: { id: string; name: string; root: string };
+  /// What is known about the root's own listing, or null when it has never been asked for.
+  status: FolderState["status"] | null;
+  expanded: boolean;
   selected: boolean;
   onClose: () => void;
-  onSelect: () => void;
+  onToggle: () => void;
+  onRetry: () => void;
 }) {
   const { t } = useTranslation();
 
   return (
-    <div
-      className={
-        selected
-          ? "flex items-center gap-1 rounded-md bg-selected pr-1"
-          : "flex items-center gap-1 rounded-md pr-1 hover:bg-hover"
-      }
-    >
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-current={selected ? "true" : undefined}
-        // The absolute folder, which is the one thing the name does not say - two folders can share
-        // a name, and the tree shows the name.
-        title={workspace.root}
+    <>
+      <div
         className={
           selected
-            ? "flex min-w-0 grow items-center gap-1.5 py-1 pl-2 text-left text-base font-semibold text-selected-ink"
-            : "flex min-w-0 grow items-center gap-1.5 py-1 pl-2 text-left text-base font-semibold text-ink"
+            ? "flex items-center gap-1 rounded-md bg-selected pr-1"
+            : "flex items-center gap-1 rounded-md pr-1 hover:bg-hover"
         }
       >
-        <Glyph className="size-3.5 text-leaf">
-          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-        </Glyph>
-        <span className="min-w-0 truncate">{workspace.name}</span>
-      </button>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label={t("workspace.closeFolder", { name: workspace.name })}
-        title={t("workspace.closeFolder", { name: workspace.name })}
-        className="shrink-0 rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
-      >
-        <Glyph className="size-3.5">
-          <path d="M6 6l12 12M18 6L6 18" />
-        </Glyph>
-      </button>
-    </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          // Selection and expansion are separate facts about a folder, so they are separate
+          // attributes - exactly as they are on a folder inside one. A root can be the folder chat
+          // is mapping while collapsed, and expanded while some other folder is chosen.
+          aria-current={selected ? "true" : undefined}
+          // The absolute folder, which is the one thing the name does not say - two folders can
+          // share a name, and the tree shows the name.
+          title={workspace.root}
+          className={
+            selected
+              ? "flex min-w-0 grow items-center gap-1.5 py-1 pl-1 text-left text-base font-semibold text-selected-ink"
+              : "flex min-w-0 grow items-center gap-1.5 py-1 pl-1 text-left text-base font-semibold text-ink"
+          }
+        >
+          <Chevron open={expanded} />
+          <Glyph className={status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
+            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+          </Glyph>
+          <span className="min-w-0 truncate">{workspace.name}</span>
+          {status === "loading" && (
+            <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("workspace.closeFolder", { name: workspace.name })}
+          title={t("workspace.closeFolder", { name: workspace.name })}
+          className="shrink-0 rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+        >
+          <Glyph className="size-3.5">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </Glyph>
+        </button>
+      </div>
+
+      {/* Inline on the row that failed, exactly as it is for a folder inside one. A root can fail to
+          list too - a folder that has been unmounted or renamed since it was opened - and now that
+          it can be collapsed and expanded again, it can fail at a moment the user is watching. */}
+      {status === "error" && (
+        <p
+          style={indent(1)}
+          className="flex items-center gap-2 py-0.5 pr-2 text-xs text-danger"
+        >
+          <span>{t("workspace.listFailed")}</span>
+          <button type="button" onClick={onRetry} className="font-semibold underline">
+            {t("workspace.retry")}
+          </button>
+        </p>
+      )}
+    </>
   );
 }
 

@@ -300,6 +300,33 @@ describe("two folders open at once", () => {
     ]);
   });
 
+  /// Collapsing one root, with the other still open beside it.
+  ///
+  /// The reason it matters is only visible with two: two large trees at once is a lot of rows to
+  /// scroll past to reach the second one, and collapsing the first is how you stop scrolling.
+  it("collapses one folder and leaves the other listed", async () => {
+    twoFolders();
+    render(<App />);
+
+    await waitFor(() =>
+      expect(within(panel()).getAllByRole("button", { name: /notes\.md/ })).toHaveLength(2),
+    );
+
+    const root = (name: string) =>
+      within(panel()).getByRole("button", { name: new RegExp(`^${name}$`) });
+    expect(root("Notes").getAttribute("aria-expanded")).toBe("true");
+
+    await userEvent.click(root("Notes"));
+
+    await waitFor(() => expect(root("Notes").getAttribute("aria-expanded")).toBe("false"));
+    // One file left on screen, in the folder that is still open - and its row is drawn, not merely
+    // present.
+    const left = within(panel()).getAllByRole("button", { name: /notes\.md/ });
+    expect(left).toHaveLength(1);
+    expect(left[0]!.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(root("Work").getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("closes one folder and leaves the other", async () => {
     const { closed } = twoFolders();
     render(<App />);

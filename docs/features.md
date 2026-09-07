@@ -9,8 +9,12 @@ The left panel shows your open folders as trees. Open a folder from your machine
 place, and click a file to open it in the editor. A filter box narrows the files by name.
 
 **Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
-row at the top of its tree, and a cross at the end of that row closes it - taking its tabs with it,
-and asking about anything unsaved one document at a time. Every folder you leave open is reopened the
+row at the top of its tree. **That row collapses like any folder inside one**: click it and the whole
+folder folds away, which is what keeps the panel usable with two or three open - put the ones you are
+not using away and the one you are stays at the top. One click both collapses a folder and points
+chat and Find at it, exactly as it does for a folder inside one. A cross at the end of the row closes
+the folder instead - taking its tabs with it, and asking about anything unsaved one document at a
+time. Every folder you leave open is reopened the
 next time you start, in the order you opened them. Opening the same folder twice is one folder, not
 two: two trees over one directory would be two sets of tabs for the same files, each with its own
 idea of what is in them.
