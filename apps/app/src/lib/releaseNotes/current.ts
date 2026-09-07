@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.58.0",
+    date: "2026-09-07",
+    pr: 113,
+    headline: "Collapse a whole folder, not just the ones inside it",
+    summary:
+      "Each open folder's own row now has a chevron, and clicking it collapses that folder away exactly as clicking a folder inside one does. With two or three folders open this is what stops the panel being a long scroll: put the ones you are not using away and the one you are stays at the top. It behaves like every other folder row rather than like something new - one click both collapses it and points chat and Find at it, expanding it lists it again, and a folder that cannot be listed says so on its own row with a retry beside it, which can now happen to a folder you opened weeks ago and have just expanded again. The cross at the end of the row still closes the folder rather than collapsing it. One small thing improved alongside: This folder is empty is now said under the folder it is about, rather than once for the whole panel where it was a claim about neither of two open folders.",
+    added: [
+      "A workspace's own row collapses and expands, like the folders inside it.",
+    ],
+    changed: [
+      "This folder is empty is said under the folder it describes, and only once that folder has actually been looked in.",
+    ],
+  },
+  {
     version: "0.57.0",
     date: "2026-09-07",
     pr: 112,

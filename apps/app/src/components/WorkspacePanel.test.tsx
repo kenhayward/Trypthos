@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import WorkspacePanel from "./WorkspacePanel";
@@ -210,5 +210,83 @@ describe("choosing the folder chat maps", () => {
   it("marks nothing when the root is the one chat maps", () => {
     panel({ selectedFolder: "" });
     expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-current")).toBeNull();
+  });
+});
+
+/// Collapsing a whole folder.
+///
+/// A workspace root behaves like the folder it is: the same chevron, the same click, the same
+/// forgetting of what was under it. With several folders open this is what makes the panel usable -
+/// two large trees at once is a lot of rows to scroll past to reach the second one.
+describe("collapsing a workspace root", () => {
+  const OTHER = { id: "Work", name: "Work", root: "D:/Work" };
+
+  const rootRow = (name: string) =>
+    within(screen.getByRole("complementary", { name: "Workspace" })).getByRole("button", {
+      name: new RegExp(`^${name}$`),
+    });
+
+  it("draws the root as expanded while its listing is there", () => {
+    panel();
+    expect(rootRow("Diariz").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  // Collapsed is simply not having been listed - the same state a folder nobody has opened is in.
+  it("draws the root as collapsed when its listing is not", () => {
+    panel({ folders: {} });
+    expect(rootRow("Diariz").getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: /README\.md/ })).toBeNull();
+  });
+
+  it("toggles the root, and points chat at it, in one click", async () => {
+    const user = userEvent.setup();
+    const props = panel();
+
+    await user.click(rootRow("Diariz"));
+
+    expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz");
+    expect(props.onSelectFolder).toHaveBeenCalledWith("Diariz");
+  });
+
+  // The cross is on the same row and must keep meaning what it says.
+  it("closes rather than collapses when the cross is clicked", async () => {
+    const user = userEvent.setup();
+    const props = panel();
+
+    await user.click(screen.getByRole("button", { name: "Close Diariz" }));
+
+    expect(props.onCloseWorkspace).toHaveBeenCalledWith("Diariz");
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+  });
+
+  // One collapsed folder must not hide the other, which is the whole point of collapsing one.
+  it("leaves the other folder listed", () => {
+    panel({
+      workspaces: [DIARIZ, OTHER],
+      folders: { Work: { status: "loaded", children: [{ id: "Work/a.md", name: "a.md", kind: "file" }] } },
+    });
+
+    expect(rootRow("Diariz").getAttribute("aria-expanded")).toBe("false");
+    expect(rootRow("Work").getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: /a\.md/ })).toBeDefined();
+  });
+
+  // "This folder is empty" about a folder nobody has looked inside is a claim the panel cannot make.
+  it("says a folder is empty only when it has been looked in", () => {
+    panel({ folders: {} });
+    expect(screen.queryByText("This folder is empty.")).toBeNull();
+
+    panel({ folders: { Diariz: { status: "loaded", children: [] } } });
+    expect(screen.getAllByText("This folder is empty.")).toHaveLength(1);
+  });
+
+  // A root that cannot be listed says so on its own row, exactly as a folder inside one does.
+  it("offers a retry when the root cannot be listed", async () => {
+    const user = userEvent.setup();
+    const props = panel({ folders: { Diariz: { status: "error" } } });
+
+    expect(screen.getByText("Couldn't list this folder.")).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(props.onRetryFolder).toHaveBeenCalledWith("Diariz");
   });
 });
