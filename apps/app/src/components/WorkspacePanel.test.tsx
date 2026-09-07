@@ -290,3 +290,39 @@ describe("collapsing a workspace root", () => {
     expect(props.onRetryFolder).toHaveBeenCalledWith("Diariz");
   });
 });
+
+/// How far in each row sits.
+///
+/// The indent is the only thing saying what is inside what, so it is worth asserting rather than
+/// trusting: at the first level it once said the opposite of the truth, drawing a workspace's own
+/// folders level with the workspace itself.
+describe("indenting", () => {
+  const paddingOf = (name: string | RegExp) =>
+    within(screen.getByRole("complementary", { name: "Workspace" }))
+      .getByRole("button", { name })
+      .style.paddingLeft;
+
+  const px = (value: string) => Number.parseFloat(value.replace("px", ""));
+
+  it("puts a workspace's own folders one level in from its root", () => {
+    panel();
+
+    const root = px(paddingOf(/^Diariz$/));
+    const inside = px(paddingOf(/docs/));
+
+    expect(inside).toBeGreaterThan(root);
+  });
+
+  // Files keep their own ladder, a step further in than the folders beside them - a file has no
+  // chevron, and lining its name up with a folder's is what that step is for. What matters is that
+  // the ladder is even: one step per level, wherever the level is.
+  it("steps files evenly, level by level", () => {
+    panel();
+
+    const atRoot = px(paddingOf(/README\.md/));
+    const insideDocs = px(paddingOf(/plan\.md/));
+    const rootToFolder = px(paddingOf(/docs/)) - px(paddingOf(/^Diariz$/));
+
+    expect(insideDocs - atRoot).toBe(rootToFolder);
+  });
+});

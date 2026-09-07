@@ -79,7 +79,13 @@ export default function WorkspacePanel({
         // listed. The map is the only record of what is open, which is what keeps expanding, its
         // failure and its retry one mechanism rather than two.
         state: folders[workspace.id],
-        rows: treeRows(folders, filter, fileTypes, workspace.id),
+        // One level in from the root, because the root is a ROW now. `treeRows` measures depth from
+        // the folder it was given, so its direct children come back at zero - which is the depth the
+        // root itself is drawn at, and drew a workspace's own folders level with the workspace.
+        rows: treeRows(folders, filter, fileTypes, workspace.id).map((row) => ({
+          ...row,
+          depth: row.depth + 1,
+        })),
       })),
     [workspaces, folders, filter, fileTypes],
   );
@@ -271,10 +277,13 @@ function WorkspaceRow({
           // The absolute folder, which is the one thing the name does not say - two folders can
           // share a name, and the tree shows the name.
           title={workspace.root}
+          // The same helper every other row uses, at depth 0, rather than a padding class that
+          // happens to match it - one way of expressing an indent is one thing to keep in step.
+          style={indent(0)}
           className={
             selected
-              ? "flex min-w-0 grow items-center gap-1.5 py-1 pl-1 text-left text-base font-semibold text-selected-ink"
-              : "flex min-w-0 grow items-center gap-1.5 py-1 pl-1 text-left text-base font-semibold text-ink"
+              ? "flex min-w-0 grow items-center gap-1.5 py-1 text-left text-base font-semibold text-selected-ink"
+              : "flex min-w-0 grow items-center gap-1.5 py-1 text-left text-base font-semibold text-ink"
           }
         >
           <Chevron open={expanded} />
