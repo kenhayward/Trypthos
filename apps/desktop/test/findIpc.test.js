@@ -65,7 +65,13 @@ async function withWorkspace(files, body) {
 const MARKDOWN = ["markdown"];
 
 const find = (ipcMain, request) =>
-  ipcMain.invoke("workspace:find", { path: "", regex: false, fileTypes: MARKDOWN, ...request });
+  ipcMain.invoke("workspace:find", {
+    path: "",
+    regex: false,
+    caseSensitive: false,
+    fileTypes: MARKDOWN,
+    ...request,
+  });
 
 test("finds a phrase and says where it is", async () => {
   await withWorkspace({ "notes.md": "alpha\nthe needle is here\nomega\n" }, async ({ ipcMain }) => {
@@ -118,6 +124,18 @@ test("reads only the file types that are turned on", async () => {
   });
 });
 
+/// Case sensitivity travels the same way as the expression flag: told, never guessed at.
+test("matches case when it is told to", async () => {
+  await withWorkspace({ "notes.md": "Needle\nneedle\nNEEDLE\n" }, async ({ ipcMain }) => {
+    const insensitive = await find(ipcMain, { pattern: "needle" });
+    assert.equal(insensitive.hits.length, 3);
+
+    const sensitive = await find(ipcMain, { pattern: "needle", caseSensitive: true });
+    assert.equal(sensitive.hits.length, 1);
+    assert.equal(sensitive.hits[0].line, 2);
+  });
+});
+
 test("takes a regular expression when it is told to", async () => {
   await withWorkspace({ "notes.md": "cat\nmat\ndog\n" }, async ({ ipcMain }) => {
     const result = await find(ipcMain, { pattern: "[cm]at", regex: true });
@@ -157,6 +175,7 @@ test("refuses a request that is not the shape it expects", async () => {
       path: "",
       pattern: "",
       regex: false,
+      caseSensitive: false,
       fileTypes: MARKDOWN,
     });
     assert.equal(empty.ok, false);
@@ -165,6 +184,7 @@ test("refuses a request that is not the shape it expects", async () => {
       path: "",
       pattern: "needle",
       regex: false,
+      caseSensitive: false,
       fileTypes: MARKDOWN,
       follow: true,
     });

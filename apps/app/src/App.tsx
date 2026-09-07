@@ -547,6 +547,10 @@ export default function App() {
                 onQueryChange={find.setQuery}
                 regex={find.regex}
                 onRegexChange={find.setRegex}
+                caseSensitive={find.caseSensitive}
+                onCaseSensitiveChange={find.setCaseSensitive}
+                position={find.position}
+                onMove={find.setPosition}
                 scope={state.workspace === null ? null : find.scope}
                 status={find.status}
                 onSearch={() => void find.search()}

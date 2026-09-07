@@ -150,7 +150,21 @@ round-trip and nothing that can reformat a user's file behind their back.
     is derived rather than stored, which costs one thing worth knowing: pressing Preview while
     results are on screen does nothing.
   - The dialog is **not a modal**, unlike every other in the app. The answer is a highlight in the
-    document underneath it, so a backdrop over that document would report matches and show none.
+    document underneath it, so a backdrop over that document would report matches and show none. For
+    the same reason it is **draggable**: it can end up over the text it is reporting on.
+    `lib/dialogDrag.ts` clamps it inside the editor, which is the part that had to be a function -
+    a dialog dragged off the edge has no chrome of its own, so the only thing that could bring it
+    back is the drag it can no longer be given. The position lives in `useFind`, not in the dialog,
+    which unmounts on close.
+  - **The grab strip is the tab row itself, not an overlay above it.** An overlay was the first
+    attempt and could never be pressed: the tab row is positioned, so it paints over anything earlier
+    in the markup, and a real click landed on the tabs and selected text instead. Every test passed,
+    because each dispatched the press straight AT the handle. The browser test now aims at the point
+    a user would - level with the tabs, in the gap before the close cross - resolves it through
+    `elementFromPoint`, and presses whatever is really there.
+  - **Case sensitivity is required on `FindOptions`, not defaulted.** It changes which lines come
+    back, and an option like that left to a default is how a caller quietly asks a different question
+    from the one it meant. The DIALOG defaults it to off, which is where a default belongs.
 - **Zoom and pan are one hook and one variable.** `hooks/useZoomPan.ts` reads Shift+wheel and
   Shift+drag on a surface; `lib/zoom.ts` holds the pure parts (the ladder of levels, which way a
   wheel notch means, where a drag puts the scroll offset). `EditorPanel` holds the level **per

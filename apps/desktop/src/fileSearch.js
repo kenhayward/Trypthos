@@ -62,7 +62,7 @@ async function filesUnder(provider, start, fileTypes) {
 /// The refusals are named rather than collapsed into one failure, because they send the user in
 /// different directions: `bad-pattern` means retype the expression, and a folder that cannot be
 /// listed at all means the folder is gone or outside the workspace.
-async function searchFiles(provider, { path: start, pattern, regex, fileTypes }) {
+async function searchFiles(provider, { path: start, pattern, regex, caseSensitive, fileTypes }) {
   // Asked before the walk, so a folder outside the workspace is refused without reading anything at
   // all. The guard lives in the provider; this is where its answer is turned into a refusal.
   const opened = await provider.list(start);
@@ -84,7 +84,13 @@ async function searchFiles(provider, { path: start, pattern, regex, fileTypes })
     // not text, and a result list full of apologies about binary files is worse than one without.
     if (!read.ok) continue;
 
-    const found = fileHits(file, read.content, pattern, { regex }, FIND_MATCH_LIMIT - hits.length);
+    const found = fileHits(
+      file,
+      read.content,
+      pattern,
+      { regex, caseSensitive },
+      FIND_MATCH_LIMIT - hits.length,
+    );
     // Null is the pattern failing to compile, which it does identically for every file - so it is
     // reported once, as itself, rather than as an empty result repeated.
     if (found === null) return { ok: false, reason: "bad-pattern" };
