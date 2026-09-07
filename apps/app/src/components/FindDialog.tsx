@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { FindStatus, FindTab } from "../hooks/useFind";
 import type { FindStep } from "../lib/findNavigation";
-import { nextDialogPosition, type DialogDragStart } from "../lib/dialogDrag";
+import { dragLimits, nextDialogPosition, type DialogDragStart } from "../lib/dialogDrag";
 
 interface Props {
   tab: FindTab;
@@ -102,12 +102,17 @@ export default function FindDialog({
       left: element.offsetLeft,
       top: element.offsetTop,
     };
-    const bounds = {
-      panelWidth: container.clientWidth,
-      panelHeight: container.clientHeight,
+    // Measured against the WINDOW, not against the panel this is a child of. The panel is only
+    // where the coordinates are measured from - see `dragLimits` for why the two are different.
+    const origin = container.getBoundingClientRect();
+    const bounds = dragLimits({
+      originX: origin.left,
+      originY: origin.top,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
       dialogWidth: element.offsetWidth,
       dialogHeight: element.offsetHeight,
-    };
+    });
 
     const onMouseMove = (moved: MouseEvent) =>
       onMove(

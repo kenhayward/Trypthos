@@ -152,10 +152,15 @@ round-trip and nothing that can reformat a user's file behind their back.
   - The dialog is **not a modal**, unlike every other in the app. The answer is a highlight in the
     document underneath it, so a backdrop over that document would report matches and show none. For
     the same reason it is **draggable**: it can end up over the text it is reporting on.
-    `lib/dialogDrag.ts` clamps it inside the editor, which is the part that had to be a function -
-    a dialog dragged off the edge has no chrome of its own, so the only thing that could bring it
-    back is the drag it can no longer be given. The position lives in `useFind`, not in the dialog,
-    which unmounts on close.
+    `lib/dialogDrag.ts` decides how far it may go, and the bounds are the WINDOW's rather than the
+    editor's - the editor is only what its `left`/`top` are measured from. Clamping it to the editor
+    was the first rule and it was wrong: every find is about the editor, so the editor is exactly the
+    area a reader wants the dialog out of, and the one place it could go was the one place it was in
+    the way. It travels to negative offsets and over the side panels, which are not its ancestors and
+    so do not clip it. Two bounds are not the window's: it may not climb above its container, since
+    that is where this frameless window draws its own controls, and nothing may leave the window at
+    all - a dialog with no chrome that is out of sight can never be dragged back. The position lives
+    in `useFind`, not in the dialog, which unmounts on close.
   - **The grab strip is the tab row itself, not an overlay above it.** An overlay was the first
     attempt and could never be pressed: the tab row is positioned, so it paints over anything earlier
     in the markup, and a real click landed on the tabs and selected text instead. Every test passed,

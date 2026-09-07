@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.56.1",
+    date: "2026-09-07",
+    pr: 111,
+    headline: "The find panel goes anywhere in the window",
+    summary:
+      "The find panel could be dragged, but only within the editor - push it towards the folder browser or the chat panel and it stopped at the edge. That was the wrong place to stop it: every find is about the editor, so the editor is exactly the area you want the panel out of, and the one place it could go was the one place it was in the way. It now moves anywhere across the width of the window and down to the bottom of it. Two limits are deliberately kept. It will not climb above the title bar, because that is where the window buttons are and a panel parked over the close button is a panel in the way. And it still cannot be pushed off the edge of the window - it has no title bar of its own, so one dragged out of sight would be one you could never get back.",
+    fixed: [
+      "The find panel can be dragged over the folder browser and the chat panel, not only within the editor.",
+    ],
+  },
+  {
     version: "0.56.0",
     date: "2026-09-07",
     pr: 109,

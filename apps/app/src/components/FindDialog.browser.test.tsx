@@ -11,17 +11,25 @@ import FindDialog from "./FindDialog";
 /// `nextDialogPosition`, which is pure and tested without any of this; what is here is that the
 /// measuring and the wiring are right.
 
-/// The panel the dialog floats over.
+/// The panel the dialog is positioned against.
 ///
-/// It FILLS the viewport rather than taking a fixed size, because the browser runner's viewport is
-/// narrow: a panel wider than the window puts half the dialog outside it, where `elementFromPoint`
-/// answers null and a pointer could not reach it either. Everything below moves the panel by small
-/// amounts for the same reason - there is not much room, and the clamp is a separate test.
-function Floating({ onMove = vi.fn() }: { onMove?: (at: { left: number; top: number }) => void }) {
+/// It fills the viewport by default, because the browser runner's viewport is narrow and a panel
+/// wider than the window puts half the dialog outside it, where `elementFromPoint` answers null and
+/// a pointer could not reach it either.
+///
+/// `inset` narrows it, which is the arrangement the app actually has: the editor with a side panel
+/// beside it. What the dialog must be able to do is leave that box.
+function Floating({
+  onMove = vi.fn(),
+  inset = 0,
+}: {
+  onMove?: (at: { left: number; top: number }) => void;
+  inset?: number;
+}) {
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
   return (
-    <main style={{ position: "fixed", inset: 0 }}>
+    <main style={{ position: "fixed", top: 0, bottom: 0, left: `${inset}px`, right: `${inset}px` }}>
       <FindDialog
         tab="document"
         onTabChange={vi.fn()}
@@ -134,10 +142,32 @@ describe("Dragging the find panel", () => {
     );
   });
 
-  // A dialog dragged off the edge is a dialog with no way back: it has no chrome of its own, so the
-  // only thing that could return it is the drag it can no longer be given.
-  it("cannot be dragged out of the panel", async () => {
-    render(<Floating />);
+  // The whole point of the fix. Every find is about the editor, so the editor is exactly the area a
+  // reader wants the dialog out of - and it used to be the only place it could go.
+  it("travels past the panel it is positioned against, over whatever is beside it", async () => {
+    const inset = 60;
+    render(<Floating inset={inset} />);
+    const before = dialog().getBoundingClientRect();
+
+    press(grip(), "mousedown", { x: before.left + 20, y: before.top + 10 });
+    press(window, "mousemove", { x: -5000, y: before.top + 10 });
+    press(window, "mouseup", { x: -5000, y: before.top + 10 });
+
+    await vi.waitFor(() => {
+      const panel = document.querySelector("main")!.getBoundingClientRect();
+      const after = dialog().getBoundingClientRect();
+      expect(Math.round(after.left)).toBeLessThan(Math.round(panel.left));
+      // And it is genuinely drawn out there, not merely positioned there - the panels it crosses
+      // have `overflow-hidden`, and being clipped by one of them would be the same bug wearing a
+      // different hat.
+      expect(after.width).toBeGreaterThan(0);
+    });
+  });
+
+  // A dialog dragged out of the WINDOW is a dialog with no way back: it has no chrome of its own,
+  // so the only thing that could return it is the drag it can no longer be given.
+  it("cannot be dragged out of the window", async () => {
+    render(<Floating inset={60} />);
     const before = dialog().getBoundingClientRect();
 
     press(grip(), "mousedown", { x: before.left + 20, y: before.top + 10 });
@@ -145,11 +175,39 @@ describe("Dragging the find panel", () => {
     press(window, "mouseup", { x: -5000, y: -5000 });
 
     await vi.waitFor(() => {
-      const panel = document.querySelector("main")!.getBoundingClientRect();
       const after = dialog().getBoundingClientRect();
-      expect(Math.round(after.left)).toBe(Math.round(panel.left));
-      expect(Math.round(after.top)).toBe(Math.round(panel.top));
+      expect(Math.round(after.left)).toBe(0);
     });
+  });
+
+  // Above the container is the title bar, and this window draws its own: a panel parked over the
+  // close button is in the way of the only chrome there is.
+  it("does not climb above the panel it is positioned against", async () => {
+    const inset = 60;
+    render(<Floating inset={inset} />);
+    const before = dialog().getBoundingClientRect();
+
+    press(grip(), "mousedown", { x: before.left + 20, y: before.top + 10 });
+    press(window, "mousemove", { x: before.left + 20, y: -5000 });
+    press(window, "mouseup", { x: before.left + 20, y: -5000 });
+
+    await vi.waitFor(() => {
+      const panel = document.querySelector("main")!.getBoundingClientRect();
+      expect(Math.round(dialog().getBoundingClientRect().top)).toBe(Math.round(panel.top));
+    });
+  });
+
+  it("can be dragged down to the bottom of the window", async () => {
+    render(<Floating inset={60} />);
+    const before = dialog().getBoundingClientRect();
+
+    press(grip(), "mousedown", { x: before.left + 20, y: before.top + 10 });
+    press(window, "mousemove", { x: before.left + 20, y: 5000 });
+    press(window, "mouseup", { x: before.left + 20, y: 5000 });
+
+    await vi.waitFor(() =>
+      expect(Math.round(dialog().getBoundingClientRect().bottom)).toBe(window.innerHeight),
+    );
   });
 
   it("stops when the button is released", async () => {
