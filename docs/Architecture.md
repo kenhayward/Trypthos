@@ -145,6 +145,14 @@ round-trip and nothing that can reformat a user's file behind their back.
     takes away, deliberately: Shift+click no longer extends the selection in the editor.
   - **A picture is scaled by its width and height, not by `transform`.** A transform paints it
     larger and leaves the layout box where it was, so a zoomed picture would have nothing to pan.
+  The keyboard shortcuts (`zoomKeyCommand`) are bound on the **window**, not on a surface, and that
+  asymmetry with the gestures is deliberate: a gesture is aimed by the pointer and a shortcut is not
+  aimed at all, so it acts on the document on screen wherever the caret is. Two details: the plus and
+  minus keys have several spellings, because Ctrl and plus is Ctrl+Shift+= on a US layout, so Shift
+  is not part of the test - and Alt is, since Ctrl+Alt is AltGr and a European layout must be able to
+  type a bracket without resizing the document. `preventDefault` is load-bearing too: those three
+  combinations resize the whole page in a browser, and in any Electron build whose menu carries the
+  zoom roles.
 - `components/ImageViewer.tsx` draws a picture - the one document kind with no modes, no status bar
   and nothing written back. It reads the natural size on load rather than guessing one, so 100% means
   the picture's own pixels.

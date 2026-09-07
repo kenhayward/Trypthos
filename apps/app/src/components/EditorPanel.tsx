@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MARKDOWN_FILE_TYPE,
@@ -19,7 +19,8 @@ import ImageViewer from "./ImageViewer";
 import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
-import { DEFAULT_ZOOM, nextZoom, type ZoomDirection } from "../lib/zoom";
+import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
+import { currentPlatform } from "../lib/windowControls";
 
 interface Props {
   workspaceName: string | null;
@@ -153,6 +154,29 @@ export default function EditorPanel({
       setZooms((prev) => ({ ...prev, [key]: nextZoom(prev[key] ?? DEFAULT_ZOOM, direction) })),
     [key],
   );
+
+  /// Ctrl and plus, minus or zero - Cmd on macOS.
+  ///
+  /// Bound on the WINDOW rather than on a surface, unlike the wheel and the drag: a gesture is aimed
+  /// by the pointer, and a shortcut is not aimed at all. It acts on the document on screen wherever
+  /// the caret happens to be, which is the only reading of it that does not depend on the user
+  /// knowing which panel has focus.
+  ///
+  /// `preventDefault` is not decoration. Ctrl+plus and Ctrl+minus resize the whole page in a browser
+  /// and in any Electron build whose menu carries the zoom roles - which would scale the app around
+  /// the document instead of the document.
+  useEffect(() => {
+    const platform = currentPlatform();
+    const onKeyDown = (event: KeyboardEvent) => {
+      const command = zoomKeyCommand(event, platform);
+      if (command === null) return;
+      event.preventDefault();
+      if (command === "reset") setZooms((prev) => ({ ...prev, [key]: DEFAULT_ZOOM }));
+      else stepZoom(command);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [key, stepZoom]);
 
   const [caret, setCaret] = useState({ line: 1, column: 1 });
 

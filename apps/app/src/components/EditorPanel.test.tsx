@@ -474,6 +474,15 @@ describe("EditorPanel: zoom", () => {
       }
     });
 
+  // Bound on the window rather than on a surface, so it works wherever the caret is - the point of
+  // a keyboard shortcut is that it does not need the pointer to be anywhere in particular.
+  const shortcut = (key: string) =>
+    act(() =>
+      void window.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ctrlKey: true }),
+      ),
+    );
+
   it("opens a document at its own size", () => {
     render(<Harness />);
     expect(level(surface())).toBe("1");
@@ -518,6 +527,43 @@ describe("EditorPanel: zoom", () => {
 
     await user.click(modeButton("Preview"));
     expect(level(screen.getByLabelText("Markdown preview"))).toBe(zoomed);
+  });
+
+  it("steps with the keyboard as well as the wheel", () => {
+    render(<Harness />);
+
+    shortcut("=");
+    expect(Number(level(surface()))).toBeGreaterThan(1);
+
+    shortcut("-");
+    expect(level(surface())).toBe("1");
+  });
+
+  // The one thing the wheel cannot do in a press: from anywhere on the ladder, straight back.
+  it("goes back to its own size in one press", () => {
+    render(<Harness />);
+
+    spin(surface(), 4, "in");
+    expect(Number(level(surface()))).toBeGreaterThan(1);
+
+    shortcut("0");
+    expect(level(surface())).toBe("1");
+  });
+
+  it("resets the document on screen, not every document", async () => {
+    const user = userEvent.setup();
+    render(<TwoTabs />);
+
+    spin(surface(), 2, "in");
+    const zoomed = level(surface());
+
+    await user.click(screen.getByRole("tab", { name: /other\.md/ }));
+    spin(surface(), 3, "in");
+    shortcut("0");
+    expect(level(surface())).toBe("1");
+
+    await user.click(screen.getByRole("tab", { name: /notes\.md/ }));
+    expect(level(surface())).toBe(zoomed);
   });
 
   // Per document, like the view mode beside it. One level for the window would resize a file you

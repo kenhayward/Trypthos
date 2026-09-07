@@ -16,7 +16,7 @@ export const CAPABILITIES = `
 | Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab, shown at their own size and zoomed with Shift and the wheel. Nothing to edit and nothing written back, and never sent to a chat model. |
 | Syntax colouring | Each type is coloured by role, from the same palette as the rest of the app, in both themes. Fenced code is coloured by the language on the fence, in every view and in chat replies. Grammars load only when a file needs one. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. |
-| Zoom and pan | Hold Shift and turn the wheel to zoom, Shift and drag to move around. Text grows in size, a picture is scaled for real. Each document keeps its own level, in every view. |
+| Zoom and pan | Hold Shift and turn the wheel to zoom, Shift and drag to move around, or press Ctrl with plus, minus and 0. Text grows in size, a picture is scaled for real. Each document keeps its own level, in every view. |
 | Formatting toolbar | In Source view, a button for every markdown construct. Headings act on the current line, character formatting wraps your selection, and a second press removes what the first added. |
 | Tabs | Open as many files as you like. Each has its own tab, keeps its own unsaved changes, and comes back where you left it. A list at the end of the strip reaches any of them. Right-click a tab for the five ways of closing: this one, everything to its right, all, others, or the saved ones. |
 | Links | A link to a markdown file in your folder opens it here; a web address opens in your browser. Hover to see where a link goes. |

@@ -52,6 +52,43 @@ export function wheelZoomDirection({ shiftKey, deltaX, deltaY }: WheelGesture): 
   return travel < 0 ? "in" : "out";
 }
 
+/// What a zoom shortcut asks for. `reset` is the one the gestures cannot express: the wheel walks
+/// the ladder, and getting back to 100% by turning it is only reliable BECAUSE 1 is a rung - a key
+/// says it in one press from anywhere on the ladder.
+export type ZoomCommand = ZoomDirection | "reset";
+
+export interface ZoomKeyPress {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+}
+
+/// Which key combinations mean in, out, or back to 100%.
+///
+/// The plus and minus keys have more than one spelling because the character that arrives is not
+/// the one on the key cap: Ctrl and plus is Ctrl+Shift+= on a US layout, so `=` and `+` are the same
+/// request, as are `-` and `_`. Shift is therefore NOT part of the test - it is how half of these
+/// are typed.
+///
+/// Alt is, though. Ctrl+Alt is AltGr on a Windows keyboard, so without that clause somebody typing
+/// a bracket or a backslash on a European layout would resize their document doing it.
+export function zoomKeyCommand(
+  press: ZoomKeyPress,
+  platform: "darwin" | "win32" | "linux",
+): ZoomCommand | null {
+  if (press.altKey) return null;
+  // The platform's modifier, and only it. Ctrl on macOS is a right click rather than a modifier,
+  // and a Cmd that also worked on Windows would collide with the shell's own shortcuts.
+  const held = platform === "darwin" ? press.metaKey && !press.ctrlKey : press.ctrlKey && !press.metaKey;
+  if (!held) return null;
+
+  if (press.key === "=" || press.key === "+") return "in";
+  if (press.key === "-" || press.key === "_") return "out";
+  if (press.key === "0") return "reset";
+  return null;
+}
+
 export interface PanStart {
   /// Where the pointer was when the drag began.
   x: number;

@@ -7,6 +7,8 @@ import {
   nextZoom,
   panScroll,
   wheelZoomDirection,
+  zoomKeyCommand,
+  type ZoomKeyPress,
 } from "./zoom";
 
 describe("ZOOM_LEVELS", () => {
@@ -100,5 +102,51 @@ describe("panScroll", () => {
   // a fractional one leaves the text blurred on a non-retina display.
   it("never asks for a negative or fractional offset", () => {
     expect(panScroll(start, { x: 400.5, y: 400.5 })).toEqual({ left: 0, top: 0 });
+  });
+});
+
+describe("zoomKeyCommand", () => {
+  const press = (key: string, held: Partial<ZoomKeyPress> = {}): ZoomKeyPress => ({
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    ...held,
+  });
+
+  it("reads the three shortcuts on Windows and Linux", () => {
+    expect(zoomKeyCommand(press("=", { ctrlKey: true }), "win32")).toBe("in");
+    expect(zoomKeyCommand(press("-", { ctrlKey: true }), "win32")).toBe("out");
+    expect(zoomKeyCommand(press("0", { ctrlKey: true }), "linux")).toBe("reset");
+  });
+
+  // Ctrl and the plus key is Ctrl+Shift+= on a US layout and its own key on a numeric pad, so the
+  // character that arrives is not always the one on the key cap.
+  it("takes every spelling of the plus and minus keys", () => {
+    expect(zoomKeyCommand(press("+", { ctrlKey: true }), "win32")).toBe("in");
+    expect(zoomKeyCommand(press("_", { ctrlKey: true }), "win32")).toBe("out");
+  });
+
+  // Cmd on macOS, and Ctrl there is a right click rather than a modifier.
+  it("uses the platform's modifier", () => {
+    expect(zoomKeyCommand(press("=", { metaKey: true }), "darwin")).toBe("in");
+    expect(zoomKeyCommand(press("=", { ctrlKey: true }), "darwin")).toBeNull();
+    expect(zoomKeyCommand(press("=", { metaKey: true }), "win32")).toBeNull();
+  });
+
+  it("ignores the keys on their own", () => {
+    expect(zoomKeyCommand(press("="), "win32")).toBeNull();
+    expect(zoomKeyCommand(press("0"), "win32")).toBeNull();
+  });
+
+  // Ctrl+Alt+something is a different shortcut, and on Windows it is how AltGr arrives - so a
+  // German keyboard typing a character with AltGr must not resize the document doing it.
+  it("leaves a combination with Alt alone", () => {
+    expect(zoomKeyCommand(press("-", { ctrlKey: true, altKey: true }), "win32")).toBeNull();
+  });
+
+  it("ignores keys that are not the zoom ones", () => {
+    expect(zoomKeyCommand(press("s", { ctrlKey: true }), "win32")).toBeNull();
+    expect(zoomKeyCommand(press("9", { ctrlKey: true }), "win32")).toBeNull();
   });
 });
