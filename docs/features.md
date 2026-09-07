@@ -246,11 +246,18 @@ search. It starts off, which is what the rest of the app's searching does - turn
 difference matters, as it does in a source file, where `state`, `State` and `STATE` are three things
 in code and one thing in prose.
 
-**The panel can be moved.** Grab the strip the tabs sit on and drag it anywhere in the editor. It
-floats over the document it is reporting on, so it can end up sitting exactly on top of the text you
-were trying to read, and this is the way out of that. It cannot be dragged off the edge - it has no
-title bar of its own, so a panel pushed out of sight would be one you could never get back - and
-where you put it is remembered until you close the app, so it does not go back to covering the same
+**The panel can be moved.** Grab the strip the tabs sit on and drag it anywhere in the window -
+across the folder browser, across the chat panel, and down to the bottom. It floats over the document
+it is reporting on, so it can end up sitting exactly on top of the text you were trying to read, and
+this is the way out of that; confining it to the editor would leave the one place it could go being
+the one place it is in the way.
+
+Two limits are kept. It will not climb above the title bar, because that is where the window buttons
+are and a panel parked over the close button is a panel in the way of the only chrome this window
+has. And it cannot be pushed off the edge of the window - it has no title bar of its own, so one
+dragged out of sight would be one you could never get back.
+
+Where you put it is remembered until you close the app, so it does not go back to covering the same
 text the next time you press Ctrl+F. The buttons on that strip still work; only a press that starts
 on the strip itself moves the panel.
 
