@@ -9,6 +9,8 @@ import { editorTheme } from "../lib/editorTheme";
 import { LANGUAGE_LOADERS } from "../lib/languageLoaders";
 import { followLinks, liveMode } from "../lib/liveExtension";
 import { currentPlatform } from "../lib/windowControls";
+import { useZoomPan } from "../hooks/useZoomPan";
+import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
 
 /// Marks a transaction as replacing the document from outside rather than editing it.
 ///
@@ -125,6 +127,16 @@ interface Props {
   ref?: React.Ref<EditorHandle>;
   /// Labels the editing surface for assistive technology and for tests.
   ariaLabel: string;
+  /// How far in the reader has zoomed, where 1 is the size the editor was designed at.
+  ///
+  /// Applied as a CSS variable rather than a font size, because the editor's theme is CSS and every
+  /// size in it - the gutter, the heading scale in Live mode - is expressed against the same base.
+  /// Multiplying one number is what keeps them in proportion; setting a font size here would scale
+  /// the text and leave the rest where it was.
+  zoom?: number;
+  /// A zoom gesture over the editor. The level itself belongs to the panel, which holds one per
+  /// document, so this reports the step rather than deciding it.
+  onZoom?: (direction: ZoomDirection) => void;
 }
 
 /// The CodeMirror 6 editing surface.
@@ -148,6 +160,8 @@ export default function DocumentEditor({
   onFollowLink,
   ref,
   ariaLabel,
+  zoom = DEFAULT_ZOOM,
+  onZoom,
 }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
   const view = useRef<EditorView | null>(null);
@@ -455,5 +469,29 @@ export default function DocumentEditor({
     shownDocument.current = documentId;
   }, [value, documentId]);
 
-  return <div ref={host} className="h-full overflow-auto" data-testid="document-editor" />;
+  /// The gestures are read on the host, but the thing that scrolls is CodeMirror's own scroller -
+  /// a descendant it creates. Panning the host would move nothing at all.
+  useZoomPan({
+    host,
+    scroller: () => view.current?.scrollDOM ?? null,
+    onZoom: (direction: ZoomDirection) => onZoom?.(direction),
+  });
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    // CodeMirror caches the height of a line and the width of a character, and a zoom changes both
+    // without changing the document. Without this the caret and the selection are drawn against the
+    // measurements of the previous size until something else provokes a measure.
+    editor.requestMeasure();
+  }, [zoom]);
+
+  return (
+    <div
+      ref={host}
+      className="h-full overflow-auto"
+      data-testid="document-editor"
+      style={{ ["--tp-zoom" as string]: zoom }}
+    />
+  );
 }

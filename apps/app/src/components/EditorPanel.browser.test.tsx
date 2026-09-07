@@ -905,3 +905,129 @@ describe("the selection, once focus has gone elsewhere", () => {
     expect(drawn().length).toBeGreaterThan(0);
   });
 });
+
+/// Zoom, in a real browser.
+///
+/// The only place the question can be answered. Every surface reports its level as a CSS variable
+/// and the sizes are derived from it in CSS - `calc(13px * var(--tp-zoom))` in the editor's theme,
+/// `em` throughout rendered prose, the picture's own pixels for an image. jsdom resolves none of
+/// that: it has no cascade for a custom property and no layout to apply the result to, so a test
+/// there would assert the variable and learn nothing about whether anything got bigger.
+describe("Zoom, in a real browser", () => {
+  const spin = (element: Element, notches: number, direction: "in" | "out") => {
+    for (let turn = 0; turn < notches; turn += 1) {
+      element.dispatchEvent(
+        new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          shiftKey: true,
+          // A shifted wheel is reported on the HORIZONTAL axis by the browser. This is the one
+          // place that claim is made against a real one.
+          deltaX: direction === "in" ? -120 : 120,
+        }),
+      );
+    }
+  };
+
+  const sizeOf = (element: Element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize.replace("px", ""));
+
+  const editorSurface = () => screen.getByTestId("document-editor");
+
+  it("draws the document's text larger", async () => {
+    render(<Harness />);
+    const before = sizeOf(surface());
+
+    spin(editorSurface(), 2, "in");
+    await vi.waitFor(() => expect(sizeOf(surface())).toBeGreaterThan(before));
+  });
+
+  // The gutter is sized off the same base as the text, so it has to travel with it. A zoom that
+  // grew the prose and left the line numbers at 13px would put a small gutter beside large lines.
+  //
+  // Its font, not its width: CodeMirror gives a gutter element a `min-width` in pixels, so a short
+  // document's gutter is that minimum at every zoom and the width would prove nothing either way.
+  it("takes the gutter with it", async () => {
+    render(<Harness />);
+    const gutter = () => document.querySelector(".cm-gutters") as HTMLElement;
+    const before = sizeOf(gutter());
+
+    spin(editorSurface(), 3, "in");
+    await vi.waitFor(() => expect(sizeOf(gutter())).toBeGreaterThan(before));
+  });
+
+  it("puts it back where it started", async () => {
+    render(<Harness />);
+    const before = sizeOf(surface());
+
+    spin(editorSurface(), 3, "in");
+    await vi.waitFor(() => expect(sizeOf(surface())).toBeGreaterThan(before));
+    spin(editorSurface(), 3, "out");
+    await vi.waitFor(() => expect(sizeOf(surface())).toBe(before));
+  });
+
+  it("draws rendered prose larger too", async () => {
+    render(<Harness />);
+    await userEvent.click(modeButton("Preview"));
+
+    const paragraph = () => document.querySelector(".markdown-body p") as HTMLElement;
+    const before = sizeOf(paragraph());
+
+    spin(screen.getByLabelText("Markdown preview"), 2, "in");
+    await vi.waitFor(() => expect(sizeOf(paragraph())).toBeGreaterThan(before));
+  });
+});
+
+/// A picture, which is scaled in real pixels rather than restyled.
+describe("Zooming a picture, in a real browser", () => {
+  // 40x20, solid. Small enough to sit in a test file, and rectangular so a width and a height
+  // cannot be confused for one another.
+  const PNG =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mOIqjgxIIhh1OJRi0ctHrV41OJRi0ctHrV45FgMAPz9AYwylnrnAAAAAElFTkSuQmCC";
+
+  const withImage = () =>
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["shot.png"]}
+        activePath="shot.png"
+        dirty={false}
+        value=""
+        readOnly
+        media={PNG}
+        fileTypes={["markdown", "image"]}
+        onChange={() => {}}
+      />,
+    );
+
+  const picture = () => screen.getByRole("img", { name: "shot.png" });
+
+  const spinOver = (element: Element, notches: number) => {
+    for (let turn = 0; turn < notches; turn += 1) {
+      element.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, shiftKey: true, deltaX: -120 }),
+      );
+    }
+  };
+
+  it("opens at the picture's own pixels", async () => {
+    withImage();
+    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(40));
+    expect(picture().getBoundingClientRect().height).toBe(20);
+  });
+
+  // A real zoom: the layout box grows, not just what is painted. That is what gives the surface
+  // something to scroll, and a zoomed picture that cannot be panned is half a feature.
+  it("grows the picture's box, so there is something to pan", async () => {
+    withImage();
+    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(40));
+
+    spinOver(picture(), 5);
+    await vi.waitFor(() => {
+      const box = picture().getBoundingClientRect();
+      expect(box.width).toBeGreaterThan(40);
+      // In proportion, which is the whole claim of a zoom as against a resize.
+      expect(box.width / box.height).toBeCloseTo(2, 5);
+    });
+  });
+});

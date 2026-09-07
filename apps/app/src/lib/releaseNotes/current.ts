@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.54.0",
+    date: "2026-09-07",
+    pr: 107,
+    headline: "Zoom in, and move around",
+    summary:
+      "Hold Shift and turn the mouse wheel to zoom, hold Shift and drag to move around. It works on the same two things you look at all day and does the right thing for each. Text gets bigger rather than stretched - the document, its line numbers and its headings grow together, and it still wraps to the panel at the size you are reading it at, so a document you have zoomed into is a document you can still read across. A picture is scaled for real: its pixels are multiplied, so the picture gets bigger and there is somewhere to pan to. The wheel steps through set levels with 100% among them, which means turning it back the way you came puts a document at exactly the size it opened at rather than near it. The level belongs to the document: zooming one file leaves the tab beside it alone, and switching between Live, Source and Preview keeps the size you were reading at. It is not remembered between sessions - a zoom is how you are reading something now, not a setting. One thing it takes away, and it is worth knowing: in the editor, Shift and a click used to extend the selection to where you clicked, and now it starts a pan. Selecting by dragging, by double-click, and with Shift and the arrow keys are all unchanged.",
+    added: [
+      "Shift and the mouse wheel zooms the document, the rendered preview, or a picture.",
+      "Shift and drag moves around whatever you have zoomed into.",
+    ],
+    changed: [
+      "A picture now opens at its own pixels rather than being shrunk to the width of the panel - Shift and the wheel is how you get it back.",
+      "In the editor, Shift and a click now starts a pan rather than extending the selection.",
+    ],
+  },
+  {
     version: "0.53.0",
     date: "2026-09-06",
     pr: 105,

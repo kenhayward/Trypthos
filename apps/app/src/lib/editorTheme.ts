@@ -130,7 +130,11 @@ export const codeHighlighter: Highlighter = tagHighlighter(
 export const editorChrome = EditorView.theme({
   "&": {
     height: "100%",
-    fontSize: "13px",
+    // The one size everything else in the editor is expressed against, multiplied by the reader's
+    // zoom. A variable rather than a prop because a CodeMirror theme IS css: the gutter, the
+    // heading scale in Live mode and the code font all size themselves in `em` off this, so
+    // multiplying here is what keeps them in proportion at every level.
+    fontSize: "calc(13px * var(--tp-zoom, 1))",
   },
   "&, .cm-content": {
     color: "var(--color-ink-2)",

@@ -15,9 +15,11 @@ import DocumentEditor, {
   type EditorSelection,
 } from "./DocumentEditor";
 import MarkdownPreview from "./MarkdownPreview";
+import ImageViewer from "./ImageViewer";
 import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
+import { DEFAULT_ZOOM, nextZoom, type ZoomDirection } from "../lib/zoom";
 
 interface Props {
   workspaceName: string | null;
@@ -135,6 +137,23 @@ export default function EditorPanel({
   const preferred = fileType.modes.includes(defaultMode) ? defaultMode : (fileType.modes[0] ?? "source");
   const mode = chosen[key] ?? preferred;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
+
+  /// How far into each document the reader has zoomed, keyed by path like the view mode above.
+  ///
+  /// Per document rather than per window, for the reason the mode map exists: one level for the
+  /// whole app would resize a file you had left alone every time you leaned into the one beside it.
+  /// It is deliberately NOT persisted - a zoom is how you are reading something now, not a setting.
+  const [zooms, setZooms] = useState<Record<string, number>>({});
+  const zoom = zooms[key] ?? DEFAULT_ZOOM;
+  /// Stepped from the level as it is when the gesture lands, not from the render that wired the
+  /// handler up: a wheel spin is a lot of notches in a very short time, and reading `zoom` here
+  /// would apply every one of them to the same starting level.
+  const stepZoom = useCallback(
+    (direction: ZoomDirection) =>
+      setZooms((prev) => ({ ...prev, [key]: nextZoom(prev[key] ?? DEFAULT_ZOOM, direction) })),
+    [key],
+  );
+
   const [caret, setCaret] = useState({ line: 1, column: 1 });
 
   /// The live editor, so the toolbar can act on the document and the selection as they are now.
@@ -201,14 +220,13 @@ export default function EditorPanel({
         {media !== null ? (
           // A picture, drawn rather than edited. It scrolls within the panel at its own size rather
           // than being scaled to fit, because a screenshot shrunk to a panel is a screenshot you
-          // cannot read - and there is no zoom yet to get it back.
-          <div className="h-full overflow-auto bg-sunken p-4">
-            <img
-              src={media}
-              alt={t("editor.imageAlt", { name: activePath ?? "" })}
-              className="mx-auto max-w-full"
-            />
-          </div>
+          // cannot read - and Shift and the wheel are how you get it back.
+          <ImageViewer
+            source={media}
+            name={activePath ?? ""}
+            zoom={zoom}
+            onZoom={stepZoom}
+          />
         ) : isEditable(mode) ? (
           <DocumentEditor
             documentId={activePath}
@@ -223,9 +241,16 @@ export default function EditorPanel({
             readOnly={readOnly}
             ref={attach}
             ariaLabel={t("editor.surface")}
+            zoom={zoom}
+            onZoom={stepZoom}
           />
         ) : (
-          <MarkdownPreview source={value} fileTypes={fileTypes} />
+          <MarkdownPreview
+            source={value}
+            fileTypes={fileTypes}
+            zoom={zoom}
+            onZoom={stepZoom}
+          />
         )}
       </div>
 
