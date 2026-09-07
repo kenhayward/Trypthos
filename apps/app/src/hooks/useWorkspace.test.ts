@@ -17,6 +17,8 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     // Chat's map of the folder. Nothing in this hook asks for it; it is here because the client is
     // one interface.
     workspaceOutline: async () => ({ ok: true, outline: { path: "", paths: [], truncated: false } }),
+    // Find in Files, for the same reason: this hook never searches, and the client is one interface.
+    findInFiles: async () => ({ ok: true, hits: [], capped: false }),
     openWorkspace: async () => ({ ok: true, workspace: { root: "/ws", name: "ws" } }),
     reopenWorkspace: async (root) => ({ ok: true, workspace: { root, name: "ws" } }),
     listDirectory: async (path) => ({

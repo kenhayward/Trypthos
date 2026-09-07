@@ -59,6 +59,9 @@
   --color-tok-type: var(--tp-tok-type);
   --color-tok-func: var(--tp-tok-func);
   --color-caret-line: var(--tp-caret-line);
+  --color-find-match: var(--tp-find-match);
+  --color-find-active: var(--tp-find-active);
+  --color-find-active-edge: var(--tp-find-active-edge);
 
   --shadow-tab: var(--tp-shadow-tab);
   --shadow-popup: var(--tp-shadow-popup);
@@ -112,6 +115,14 @@
      question being typed, so it stays visible, one step quieter to say where the caret is not. */
   --tp-text-selection: rgba(47, 107, 237, 0.28);
   --tp-text-selection-idle: rgba(47, 107, 237, 0.16);
+
+  /* What Find found. Amber rather than the selection blue, deliberately: a search result and a
+     selection are different claims about the same text, and a document can be showing both at once.
+     The one you are ON gets the stronger fill and an outline as well - colour alone is not enough
+     for everyone, and it has to be findable at a glance among a dozen others. */
+  --tp-find-match: rgba(217, 145, 32, 0.30);
+  --tp-find-active: rgba(217, 145, 32, 0.55);
+  --tp-find-active-edge: #b26b00;
 
   /* Diariz green: folders and links. */
   --tp-leaf: #2e7d6b;
@@ -170,6 +181,10 @@
     --tp-text-selection: rgba(96, 145, 255, 0.34);
     --tp-text-selection-idle: rgba(96, 145, 255, 0.2);
 
+    --tp-find-match: rgba(240, 180, 70, 0.28);
+    --tp-find-active: rgba(240, 180, 70, 0.52);
+    --tp-find-active-edge: #ffcc70;
+
     /* The repo's CSS only ever defined the light green, so the dark one is new here. */
     --tp-leaf: #5fc3ab;
 
@@ -223,6 +238,10 @@
 
   --tp-text-selection: rgba(96, 145, 255, 0.34);
   --tp-text-selection-idle: rgba(96, 145, 255, 0.2);
+
+  --tp-find-match: rgba(240, 180, 70, 0.28);
+  --tp-find-active: rgba(240, 180, 70, 0.52);
+  --tp-find-active-edge: #ffcc70;
 
   --tp-leaf: #5fc3ab;
 

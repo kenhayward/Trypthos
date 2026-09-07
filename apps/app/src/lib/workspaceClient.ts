@@ -1,4 +1,4 @@
-import type { Revision, Settings } from "@trypthos/domain";
+import type { FileHit, FindRequest, Revision, Settings } from "@trypthos/domain";
 import type { ChatBridge } from "../hooks/useChat";
 import type { ChatHistoryBridge } from "../hooks/useChatHistory";
 import type { KeyBridge } from "../hooks/useApiKeys";
@@ -50,6 +50,17 @@ export type ImageResult =
 
 export type SaveAsResult = { ok: true; path: string; revision: Revision } | Failure;
 
+/// What Find in Files came back with.
+///
+/// `capped` is part of the answer rather than a detail: a search is the one thing in the app that
+/// can touch a whole tree, so it stops - and a list silently cut short is a wrong answer given
+/// confidently. `bad-pattern` is its own refusal for the same reason: "that is not an expression"
+/// and "nothing matched" send the user in opposite directions.
+export type FindResult =
+  | { ok: true; hits: FileHit[]; capped: boolean }
+  | { ok: false; reason: "bad-pattern" }
+  | Failure;
+
 export interface WorkspaceClient {
   /// The files in ONE folder of the workspace, for chat to use as a map. Paths only.
   ///
@@ -74,6 +85,12 @@ export interface WorkspaceClient {
   /// `path` is only where the dialog should open, and null for a document that has never been
   /// anywhere. A renderer that could name a target could write a file anywhere on the machine.
   saveFileAs(path: string | null, content: string): Promise<SaveAsResult>;
+  /// Searches the files under one folder of the workspace.
+  ///
+  /// A folder INSIDE the open workspace, never a root - the same rule as everything else here. The
+  /// walk happens in the main process, through the provider, which is what applies the boundary
+  /// guard.
+  findInFiles(request: FindRequest): Promise<FindResult>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge {
@@ -194,6 +211,7 @@ export const browserClient: WorkspaceClient = {
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),
   saveFileAs: async () => unavailable(),
+  findInFiles: async () => unavailable(),
 };
 
 export function workspaceClient(): WorkspaceClient {

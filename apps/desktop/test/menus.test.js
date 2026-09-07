@@ -396,3 +396,27 @@ test("a click with nothing to offer produces no menu", () => {
 
   assert.deepEqual(template, []);
 });
+
+/// Find, which is an action rather than a role.
+///
+/// The platform roles above act on whatever has focus through the system's own editing machinery,
+/// and there is no system machinery for "search this document and the folder around it" - so this
+/// one has to reach the renderer, where the document and the folder both are.
+test("the Edit menu offers Find, in the popup menu and in the application menu alike", () => {
+  const chosen = [];
+  const on = { ...handlers(), action: (name) => chosen.push(name) };
+
+  const popup = popupTemplate("edit", { platform: "win32", on });
+  const application = appMenuTemplate({ platform: "darwin", on, appName: "Trypthos" }).find(
+    (menu) => menu.label === "Edit",
+  ).submenu;
+
+  for (const template of [popup, application]) {
+    const item = find(template, "Find...");
+    assert.ok(item, "no Find item");
+    assert.equal(item.accelerator, "CmdOrCtrl+F");
+    item.click();
+  }
+
+  assert.deepEqual(chosen, ["find", "find"]);
+});

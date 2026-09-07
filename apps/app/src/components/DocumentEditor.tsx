@@ -11,6 +11,12 @@ import { followLinks, liveMode } from "../lib/liveExtension";
 import { currentPlatform } from "../lib/windowControls";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
+import { findHighlighting, setFoundMatches } from "../lib/findExtension";
+import type { FindMatch } from "@trypthos/domain";
+
+/// Hoisted rather than defaulted inline. The highlight effect keys on this array, so a fresh `[]`
+/// on every render would dispatch into CodeMirror on every keystroke.
+const NO_MATCHES: readonly FindMatch[] = [];
 
 /// Marks a transaction as replacing the document from outside rather than editing it.
 ///
@@ -137,6 +143,16 @@ interface Props {
   /// A zoom gesture over the editor. The level itself belongs to the panel, which holds one per
   /// document, so this reports the step rather than deciding it.
   onZoom?: (direction: ZoomDirection) => void;
+  /// What Find found in THIS document, and which of them the reader is on.
+  ///
+  /// A prop rather than a call through the handle, and the reason is Find in Files: a hit names a
+  /// file that is not open yet, so the offsets and the document arrive in the same render but not in
+  /// the same instant. Handed down declaratively, the highlight is applied when the document it
+  /// belongs to is the one on screen - and the effect below runs AFTER the one that swaps documents,
+  /// so it is never mapped through a change that replaced every character.
+  matches?: readonly FindMatch[];
+  /// Which match is the current one, or -1. The active one is drawn differently and scrolled to.
+  activeMatch?: number;
 }
 
 /// The CodeMirror 6 editing surface.
@@ -162,6 +178,8 @@ export default function DocumentEditor({
   ariaLabel,
   zoom = DEFAULT_ZOOM,
   onZoom,
+  matches = NO_MATCHES,
+  activeMatch = -1,
 }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
   const view = useRef<EditorView | null>(null);
@@ -282,6 +300,7 @@ export default function DocumentEditor({
           languageCompartment.current.of([]),
           behaviourCompartment.current.of(behaviourFor(initialKind.current)),
           editorTheme,
+          findHighlighting,
           liveCompartment.current.of(initialLive.current ? liveMode : []),
           readOnlyCompartment.current.of(
             initialReadOnly.current
@@ -468,6 +487,31 @@ export default function DocumentEditor({
 
     shownDocument.current = documentId;
   }, [value, documentId]);
+
+  /// What Find found, applied to the document now on screen.
+  ///
+  /// **Declared after the effect that swaps documents**, deliberately: both fire in the same commit
+  /// when a Find in Files hit opens a file, and React runs them in declaration order - so the new
+  /// document is in the buffer before these offsets are used against it. The other order would map
+  /// the highlight through a change that replaced every character in the editor.
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+
+    editor.dispatch({ effects: setFoundMatches.of({ matches, active: activeMatch }) });
+
+    const current = matches[activeMatch];
+    if (current === undefined) return;
+    // Scrolled to in a transaction of its own, so the position is not mapped through changes that
+    // are not there - and centred, because a match pinned to the top edge of the panel reads as the
+    // start of the document rather than as an answer.
+    editor.dispatch({
+      effects: EditorView.scrollIntoView(
+        Math.max(0, Math.min(current.from, editor.state.doc.length)),
+        { y: "center" },
+      ),
+    });
+  }, [matches, activeMatch]);
 
   /// The gestures are read on the host, but the thing that scrolls is CodeMirror's own scroller -
   /// a descendant it creates. Panning the host would move nothing at all.

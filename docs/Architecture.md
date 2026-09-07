@@ -125,6 +125,32 @@ round-trip and nothing that can reformat a user's file behind their back.
   so the one document in the app whose purpose is to show markdown is not a template literal full of
   escaped backticks. `lib/builtInDocuments.ts` maps its path to a catalogue key, because a built-in
   document is the one document whose name cannot come from its path.
+- **Find is two searches with one dialog, and they share only their pure parts.**
+  `packages/domain/src/find.ts` holds the matching (`findMatches`, `fileHits`), the scope rule
+  (`searchScopeFolder`) and `FindRequest` - in the DOMAIN rather than the renderer, because the two
+  halves run in different processes and must agree exactly: the renderer matches the buffer it is
+  showing and the main process matches the bytes it reads off disk, and a query that meant different
+  things in each would find a line the editor could not then highlight.
+  - `hooks/useFind.ts` holds the state both tabs need - a query, a list, and a place in it. The
+    document search runs here against `state.content`; the folder search goes over
+    `workspace:find`, whose walk in `apps/desktop/src/fileSearch.js` goes through the **provider**
+    rather than `fs`, which is what applies the workspace guard including its realpath check. Only
+    file types the user has turned on are opened, and the answer is capped and says when it was.
+  - **The highlight is a value handed down, not a call into the editor.** `EditorPanel` passes
+    `matches`/`activeMatch` to `DocumentEditor`, which applies them in an effect declared AFTER the
+    one that swaps documents - so a Find in Files hit, which opens a file and highlights inside it in
+    the same commit, is not mapped through a change that replaced every character. Dispatching from
+    the hook would race the file being opened.
+  - `lib/findExtension.ts` is a **state field**, unlike Live mode's view plugin: these decorations
+    come from outside the document rather than being derived from it, so nothing in the editor could
+    recompute them - and a field maps them through edits for free, so a highlight moves with its text
+    instead of staying where the text used to be.
+  - **Preview cannot show a match**, having no caret and no decorations, so `EditorPanel` DERIVES an
+    editable view while there are matches and returns to the reader's choice when there are none. It
+    is derived rather than stored, which costs one thing worth knowing: pressing Preview while
+    results are on screen does nothing.
+  - The dialog is **not a modal**, unlike every other in the app. The answer is a highlight in the
+    document underneath it, so a backdrop over that document would report matches and show none.
 - **Zoom and pan are one hook and one variable.** `hooks/useZoomPan.ts` reads Shift+wheel and
   Shift+drag on a surface; `lib/zoom.ts` holds the pure parts (the ladder of levels, which way a
   wheel notch means, where a drag puts the scroll offset). `EditorPanel` holds the level **per
@@ -954,6 +980,12 @@ Two guards now stand there, and both are needed:
 - `apps/desktop/test/domainExports.test.js` scans every `const { ... } = require("@trypthos/domain")`
   in the shell and asserts each name is actually exported. It carries a second test proving the scan
   matches anything at all, since a regex that quietly found nothing would pass for ever.
+- `apps/app/src/lib/bridgeSurface.test.ts` closes the other half of the same seam, from the renderer's
+  side: every method on `WorkspaceClient` must be a key the preload actually exposes, and every
+  channel in `IPC_CHANNELS` must be named in `preload.js`
+  (`apps/desktop/test/secretsIpc.test.js`). A handler with no route to it from the renderer passes
+  every other test and fails the first time a user reaches for the feature. Both read the names from
+  the source rather than listing them, and both assert their scan matched something.
 - `apps/desktop/test/outlineIpc.test.js` exercises the CHANNEL rather than the function under it,
   including that a malformed request is refused rather than thrown. There was no test on that
   channel at all, which is why a handler that could not run reached two releases.
@@ -1485,7 +1517,7 @@ no corrections while the chat box and settings fields had them, and nothing woul
 
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
-(`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`), files (`file:read`,
+(`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`, `workspace:find`), files (`file:read`,
 `file:readImage`, `file:write`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved

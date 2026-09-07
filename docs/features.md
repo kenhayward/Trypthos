@@ -216,6 +216,41 @@ into the document afterwards. The toolbar is in Source view only: Live hides the
 writes, so the same button there would insert punctuation that vanished as it landed, and Preview is
 not an editing surface.
 
+## Find, and find in files
+
+**Ctrl+F, or Edit > Find.** A small panel opens in the corner of the editor with two tabs. It is
+deliberately not a modal over the window: the whole answer is a highlight in the document underneath
+it, so a dialog that covered the document would report three matches and show none of them.
+
+**Find** looks through the document you have open. Every match is marked, and the one you are on is
+marked more strongly, so a page with a dozen of them still tells you where you are. **Next** and
+**Previous** walk the list and wrap round at both ends. **Enter** in the box does the same thing -
+it searches the first time and steps after that, and **Shift+Enter** goes back - so a document can
+be walked without reaching for the buttons.
+
+**Find in Files** searches the folder selected in the browser and everything below it. If you have
+not selected a folder, it searches the folder the file you are reading lives in; if you are not
+reading a file either, it searches the whole folder you have open. **The panel says which before you
+press Search**, because those can be a long way apart and a search that quietly looked somewhere else
+would be worse than one that refused. Every hit opens its file in a tab and marks the line, and Next
+carries straight on into the next file.
+
+**Both take plain text or a regular expression**, chosen with the checkbox. Plain text means the
+characters themselves - searching for `a.b` finds `a.b` and not `axb` - and an expression that will
+not compile says so rather than quietly finding nothing, because "that is not a pattern" and "the
+text is not there" send you in opposite directions. Both ignore case, as the rest of the app's
+searching does.
+
+Three things a search in files will not do. It **never leaves the folder you have open** - the
+boundary is checked where the files are read, not in the window that asked. It **reads only the file
+types you have turned on**, so a type you have switched off is not searched any more than it is
+listed. And it **stops at a sensible size** rather than walking a fifty-thousand-file tree - and when
+it stops early it says so, because a list silently cut short is a wrong answer given confidently.
+
+One consequence worth knowing: **a document in Preview switches to an editable view while a match is
+on screen.** Preview has no caret and no place to draw a highlight, so a search there would report
+matches and show none of them. It goes back to Preview when you close the find.
+
 ## Zoom and pan
 
 **Hold Shift and turn the wheel to zoom, hold Shift and drag to pan.** The same two gestures work

@@ -34,6 +34,7 @@ const SETTINGS = "Settings";
 const ABOUT = `About ${APP_NAME}`;
 const CHECK_FOR_UPDATES = "Check for Updates...";
 const MARKDOWN_GUIDE = "Markdown Syntax Guide";
+const FIND = "Find...";
 const OPEN_RECENT = "Open Recent";
 
 const separator = { type: "separator" };
@@ -93,7 +94,13 @@ function fileItems(on, recent = []) {
   ];
 }
 
-function editItems() {
+/// The Edit menu.
+///
+/// Find is the one item here that is not a platform role: the roles act on whatever has focus
+/// through the system's own editing machinery, and there is no system machinery for "search this
+/// document and the folder around it". So it is an action like Save - the renderer opens its own
+/// dialog, because the renderer is where the document and the folder both are.
+function editItems(on) {
   return [
     { role: "undo" },
     { role: "redo" },
@@ -101,6 +108,8 @@ function editItems() {
     ...clipboardRoles(),
     separator,
     { role: "selectAll" },
+    separator,
+    { label: FIND, accelerator: "CmdOrCtrl+F", click: () => on.action("find") },
   ];
 }
 
@@ -131,7 +140,7 @@ function popupTemplate(name, { on, recent = [] }) {
       { label: "Quit", accelerator: "CmdOrCtrl+Q", click: () => on.quit() },
     ];
   }
-  if (name === "edit") return editItems();
+  if (name === "edit") return editItems(on);
   if (name === "tools") {
     return [{ label: SETTINGS, accelerator: "CmdOrCtrl+,", click: () => on.action("preferences") }];
   }
@@ -161,7 +170,7 @@ function appMenuTemplate({ appName = APP_NAME, on, recent = [] }) {
       ],
     },
     { label: "File", submenu: [...fileItems(on, recent), separator, { role: "close" }] },
-    { label: "Edit", submenu: editItems() },
+    { label: "Edit", submenu: editItems(on) },
     { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }] },
     {
       label: "Help",

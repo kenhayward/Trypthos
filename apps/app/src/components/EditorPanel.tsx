@@ -20,6 +20,7 @@ import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
+import type { FindMatch } from "@trypthos/domain";
 import { currentPlatform } from "../lib/windowControls";
 
 interface Props {
@@ -71,6 +72,21 @@ interface Props {
   fileTypes?: readonly string[];
   /// Handle for applying a chat edit the user accepted.
   ref?: React.Ref<EditorHandle>;
+  /// What Find found in the document ON SCREEN. Empty when nothing is being shown.
+  ///
+  /// The panel does not search - it is handed the answer. What it decides is that there is an
+  /// editing surface to show it in: a match arriving while the document is in Preview would be
+  /// highlighted on a surface that is not there, and a Find that reports three matches and shows
+  /// none is a Find that looks broken.
+  matches?: readonly FindMatch[];
+  /// Which of them the reader is on, or -1.
+  activeMatch?: number;
+  /// Drawn over the editing area - the find dialog, and nothing else so far.
+  ///
+  /// Here rather than in the window, because this is the panel it has to float over: rendered a
+  /// level up it would be positioned against the whole three-panel row and would sit over the chat
+  /// panel whenever one was open.
+  overlay?: React.ReactNode;
 }
 
 /// Centre panel: the open files, the editor, and its status bar.
@@ -84,6 +100,10 @@ interface Props {
 /// reload the document's language on every render - a visible flicker of uncoloured text, from
 /// nothing more than an array literal in a parameter list.
 const NO_FILE_TYPES: readonly string[] = [];
+
+/// Hoisted for the same reason as `NO_FILE_TYPES`: the effect below and the editor's own both key on
+/// this array, and a fresh `[]` per render would make each of them run on every render.
+const NO_MATCHES: readonly FindMatch[] = [];
 
 export default function EditorPanel({
   workspaceName,
@@ -103,6 +123,9 @@ export default function EditorPanel({
   defaultMode = DEFAULT_EDITOR_MODE,
   fileTypes = NO_FILE_TYPES,
   ref,
+  matches = NO_MATCHES,
+  activeMatch = -1,
+  overlay = null,
 }: Props) {
   const { t } = useTranslation();
   /// The view each document is being read in, keyed by path.
@@ -136,7 +159,23 @@ export default function EditorPanel({
   // a branch that a media document does not take, and this keeps the fallback honest rather than
   // asserting an element that is not there.
   const preferred = fileType.modes.includes(defaultMode) ? defaultMode : (fileType.modes[0] ?? "source");
-  const mode = chosen[key] ?? preferred;
+  const reading = chosen[key] ?? preferred;
+
+  /// The view actually on screen.
+  ///
+  /// Almost always the one the reader chose. The exception is Find: Preview has no caret and no
+  /// decorations, so it cannot show a match - a search that reported three matches and highlighted
+  /// none would be a Find that looks broken. While there is something to show, the document is read
+  /// in the view it would have opened in, and it goes back to Preview when the find is closed.
+  ///
+  /// Derived rather than stored, which has one cost worth stating: pressing Preview while results
+  /// are on screen does nothing, because the derivation overrides it on the next render. That is the
+  /// better of the two trades - the alternative is a search whose answer is invisible - and it lasts
+  /// only as long as the results do.
+  const mode =
+    matches.length > 0 && !isEditable(reading)
+      ? (fileType.modes.find((candidate) => isEditable(candidate)) ?? reading)
+      : reading;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
 
   /// How far into each document the reader has zoomed, keyed by path like the view mode above.
@@ -206,7 +245,8 @@ export default function EditorPanel({
   });
 
   return (
-    <main aria-label={t("editor.title")} className="flex min-w-0 grow flex-col bg-app">
+    <main aria-label={t("editor.title")} className="relative flex min-w-0 grow flex-col bg-app">
+      {overlay}
       {/* One row: identity on the left, state on the right. The strip takes whatever width the
           header does not need, and scrolls within it - so the list of open files is pinned between
           the two rather than inside the strip, where it would scroll away with the tabs. */}
@@ -267,6 +307,8 @@ export default function EditorPanel({
             ariaLabel={t("editor.surface")}
             zoom={zoom}
             onZoom={stepZoom}
+            matches={matches}
+            activeMatch={activeMatch}
           />
         ) : (
           <MarkdownPreview
