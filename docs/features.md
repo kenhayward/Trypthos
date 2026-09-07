@@ -84,8 +84,9 @@ carries.
 
 **An image is the one type Trypthos does not edit.** Click a picture and it opens in a tab, drawn at
 its own size and scrolling within the panel rather than shrunk to fit - a screenshot scaled down to a
-side panel is a screenshot you cannot read. There are no view buttons, no word count and no editing
-surface, because all three are questions about text, and nothing is ever written back.
+side panel is a screenshot you cannot read. Hold Shift and turn the wheel to zoom it, and Shift and
+drag to move around it (see **Zoom and pan** below). There are no view buttons, no word count and no
+editing surface, because all three are questions about text, and nothing is ever written back.
 
 **SVG is deliberately not an image here.** It is a picture and a text file both, and the catalogue
 cannot let two rows claim one extension - so it stays with XML, where you can edit it, which is the
@@ -214,6 +215,37 @@ Each press is a single change, so one Ctrl+Z (Cmd+Z on macOS) undoes it, and the
 into the document afterwards. The toolbar is in Source view only: Live hides the markers a press
 writes, so the same button there would insert punctuation that vanished as it landed, and Preview is
 not an editing surface.
+
+## Zoom and pan
+
+**Hold Shift and turn the wheel to zoom, hold Shift and drag to pan.** The same two gestures work
+wherever the pointer is - the editing surface, rendered prose, or a picture - and what they do
+underneath is what each of those needs:
+
+- **Text is zoomed by size, not by scale.** The document's text, its line numbers and its heading
+  scale all grow together, and the text still wraps to the panel at the size you are reading it at.
+  Nothing is stretched, because nothing is being scaled: it is the same document at a larger size.
+- **A picture is zoomed for real.** Its own pixels are multiplied, so its box on screen grows with
+  it and there is something to pan around. That is the difference between a zoom and a magnifying
+  glass: a picture painted larger inside a box that stayed the same size could not be moved.
+
+The wheel steps through a ladder of levels rather than multiplying by a fraction each notch, and 100%
+is on it - so turning the wheel back the way you came puts a document back at exactly the size it
+opened at rather than near it.
+
+**The level belongs to the document, not to the window.** Zooming one file does not resize the one in
+the tab beside it, and switching between Live, Source and Preview keeps the level you were reading
+at - a view of a document, in both senses. It is not saved: a zoom is how you are reading something
+now rather than a setting, so a file opens at its own size every time.
+
+**The keyboard does the same three things.** **Ctrl and plus** and **Ctrl and minus** step the same
+ladder the wheel does, and **Ctrl and 0** goes straight back to 100% from wherever you are on it -
+the one thing the wheel cannot do in a press. On macOS they are Cmd. They act on the document on
+screen wherever the cursor is, so you do not have to put the pointer over anything first.
+
+**Dragging with Shift held pans instead of selecting.** That is the one thing it takes away: in the
+editor, Shift and a click would otherwise extend the selection to where you clicked. Selecting by
+dragging, by double-click, and with Shift and the arrow keys all work as they did.
 
 ## The markdown Trypthos speaks
 

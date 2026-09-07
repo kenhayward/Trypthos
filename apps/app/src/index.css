@@ -280,6 +280,22 @@ body {
 }
 
 /*
+  A surface being panned - Shift held with the button down.
+
+  The descendant rule and the `!important` are both doing work: the pointer during a pan is over
+  CodeMirror's text, which sets its own `cursor: text`, and over rendered prose, which sets a
+  pointer on every link. Without them the cursor stays an I-beam through a gesture that is not
+  selecting anything, which is the one moment it needs to say otherwise.
+*/
+[data-panning="true"],
+[data-panning="true"] * {
+  cursor: grabbing !important;
+  /* A pan that also selects is a pan that replaces the selection with the next keystroke. The
+     capture-phase handler stops CodeMirror starting one; this stops the browser's own. */
+  user-select: none !important;
+}
+
+/*
   Preview mode prose. Tailwind resets heading and list styling globally, so rendered markdown needs it
   putting back - scoped here rather than applied through a plugin, to keep the renderer and the
   sanitiser the only two things deciding what preview shows.
@@ -287,6 +303,9 @@ body {
 .markdown-body {
   line-height: 1.7;
   color: var(--color-ink-2);
+  /* Every size below is in `em`, so scaling the root scales the rendered document in proportion -
+     the same one number the editor's theme multiplies its own base size by. */
+  font-size: calc(1em * var(--tp-zoom, 1));
 }
 .markdown-body h1 { font-size: 1.6em; font-weight: 600; margin: 0.6em 0 0.4em; color: var(--color-ink); }
 .markdown-body h2 { font-size: 1.3em; font-weight: 600; margin: 0.6em 0 0.4em; color: var(--color-ink); }

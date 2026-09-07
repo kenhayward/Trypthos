@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
@@ -428,5 +428,190 @@ describe("EditorPanel: an image", () => {
   it("puts no editing surface on screen", () => {
     withImage();
     expect(document.querySelector(".cm-content")).toBeNull();
+  });
+});
+
+/// Zoom.
+///
+/// Shift and the wheel, on whichever surface the pointer is over. The panel holds the level; each
+/// surface decides what a level means - a font size for text, real pixels for a picture - which is
+/// why what is asserted here is the level reaching the surface rather than a size in pixels. What a
+/// browser then draws is the browser suite's question.
+describe("EditorPanel: zoom", () => {
+  const TWO = ["docs/notes.md", "docs/other.md"];
+
+  function TwoTabs() {
+    const [active, setActive] = useState<string>("docs/notes.md");
+    return (
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={TWO}
+        activePath={active}
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        onActivateFile={setActive}
+      />
+    );
+  }
+
+  const surface = () => screen.getByTestId("document-editor");
+  const level = (element: HTMLElement) => element.style.getPropertyValue("--tp-zoom");
+  // Wrapped in `act`, because the listener is attached to the DOM by hand rather than by React -
+  // so the state it sets is outside any batch React would flush on its own.
+  const spin = (element: HTMLElement, notches: number, direction: "in" | "out") =>
+    act(() => {
+      for (let turn = 0; turn < notches; turn += 1) {
+        element.dispatchEvent(
+          new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            shiftKey: true,
+            // A shifted wheel arrives on the horizontal axis, which is how the browser reports it.
+            deltaX: direction === "in" ? -120 : 120,
+          }),
+        );
+      }
+    });
+
+  // Bound on the window rather than on a surface, so it works wherever the caret is - the point of
+  // a keyboard shortcut is that it does not need the pointer to be anywhere in particular.
+  const shortcut = (key: string) =>
+    act(() =>
+      void window.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ctrlKey: true }),
+      ),
+    );
+
+  it("opens a document at its own size", () => {
+    render(<Harness />);
+    expect(level(surface())).toBe("1");
+  });
+
+  it("grows the text when the wheel turns forwards with Shift held", () => {
+    render(<Harness />);
+
+    spin(surface(), 1, "in");
+    expect(Number(level(surface()))).toBeGreaterThan(1);
+  });
+
+  // The ladder has 1 on it, so stepping back out of a zoom lands on the size the document opened
+  // at rather than near it.
+  it("returns to its own size when the wheel turns back", () => {
+    render(<Harness />);
+
+    spin(surface(), 3, "in");
+    spin(surface(), 3, "out");
+    expect(level(surface())).toBe("1");
+  });
+
+  it("leaves an unshifted wheel to scroll", () => {
+    render(<Harness />);
+
+    act(() =>
+      void surface().dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -120 }),
+      ),
+    );
+    expect(level(surface())).toBe("1");
+  });
+
+  // A view, not a transform: switching mode must not disturb the document OR how the reader had it
+  // set up to be read.
+  it("carries the zoom into another view of the same document", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    spin(surface(), 2, "in");
+    const zoomed = level(surface());
+
+    await user.click(modeButton("Preview"));
+    expect(level(screen.getByLabelText("Markdown preview"))).toBe(zoomed);
+  });
+
+  it("steps with the keyboard as well as the wheel", () => {
+    render(<Harness />);
+
+    shortcut("=");
+    expect(Number(level(surface()))).toBeGreaterThan(1);
+
+    shortcut("-");
+    expect(level(surface())).toBe("1");
+  });
+
+  // The one thing the wheel cannot do in a press: from anywhere on the ladder, straight back.
+  it("goes back to its own size in one press", () => {
+    render(<Harness />);
+
+    spin(surface(), 4, "in");
+    expect(Number(level(surface()))).toBeGreaterThan(1);
+
+    shortcut("0");
+    expect(level(surface())).toBe("1");
+  });
+
+  it("resets the document on screen, not every document", async () => {
+    const user = userEvent.setup();
+    render(<TwoTabs />);
+
+    spin(surface(), 2, "in");
+    const zoomed = level(surface());
+
+    await user.click(screen.getByRole("tab", { name: /other\.md/ }));
+    spin(surface(), 3, "in");
+    shortcut("0");
+    expect(level(surface())).toBe("1");
+
+    await user.click(screen.getByRole("tab", { name: /notes\.md/ }));
+    expect(level(surface())).toBe(zoomed);
+  });
+
+  // Per document, like the view mode beside it. One level for the window would resize a file you
+  // had left alone every time you zoomed the one next to it.
+  it("zooms each document separately", async () => {
+    const user = userEvent.setup();
+    render(<TwoTabs />);
+
+    spin(surface(), 2, "in");
+    const zoomed = level(surface());
+
+    await user.click(screen.getByRole("tab", { name: /other\.md/ }));
+    expect(level(surface())).toBe("1");
+
+    await user.click(screen.getByRole("tab", { name: /notes\.md/ }));
+    expect(level(surface())).toBe(zoomed);
+  });
+});
+
+/// Zoom over a picture, which is scaled rather than restyled.
+describe("EditorPanel: zooming an image", () => {
+  const PNG = "data:image/png;base64,AAAA";
+
+  const withImage = () =>
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["shot.png"]}
+        activePath="shot.png"
+        dirty={false}
+        value=""
+        readOnly
+        media={PNG}
+        fileTypes={["markdown", "image"]}
+        onChange={vi.fn()}
+      />,
+    );
+
+  it("reports the level on the picture, so it can be scaled to it", () => {
+    withImage();
+    const picture = screen.getByRole("img", { name: "shot.png" });
+    expect(picture.style.getPropertyValue("--tp-zoom")).toBe("1");
+
+    act(() =>
+      void picture.dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, shiftKey: true, deltaX: -120 }),
+      ),
+    );
+    expect(Number(picture.style.getPropertyValue("--tp-zoom"))).toBeGreaterThan(1);
   });
 });

@@ -125,6 +125,37 @@ round-trip and nothing that can reformat a user's file behind their back.
   so the one document in the app whose purpose is to show markdown is not a template literal full of
   escaped backticks. `lib/builtInDocuments.ts` maps its path to a catalogue key, because a built-in
   document is the one document whose name cannot come from its path.
+- **Zoom and pan are one hook and one variable.** `hooks/useZoomPan.ts` reads Shift+wheel and
+  Shift+drag on a surface; `lib/zoom.ts` holds the pure parts (the ladder of levels, which way a
+  wheel notch means, where a drag puts the scroll offset). `EditorPanel` holds the level **per
+  document**, keyed by path like the view mode beside it, and each surface receives it as the CSS
+  variable `--tp-zoom`. The sizes are then derived from that variable in CSS - `calc(13px *
+  var(--tp-zoom))` in `editorTheme`, `calc(1em * var(--tp-zoom))` on `.markdown-body`, the picture's
+  natural pixels in `ImageViewer` - which is what keeps the gutter, the Live heading scale and the
+  code font in proportion at every level, and is why the assertions live in the **browser** suite:
+  jsdom resolves neither a custom property through a cascade nor a `calc` into a layout.
+  Four details are load-bearing and each is silent when wrong:
+  - **A shifted wheel is reported on the HORIZONTAL axis.** A handler reading `deltaY` alone sees
+    zero on every notch of the one gesture this is bound to.
+  - **The wheel listener is attached by hand, not through `onWheel`.** React attaches its wheel
+    listener passively at the root, so `preventDefault` from a React handler does nothing and the
+    browser scrolls the surface sideways while it zooms.
+  - **The press is taken in the CAPTURE phase and stopped there**, because CodeMirror reads a
+    shifted mousedown as "extend the selection to here". This is the one behaviour the feature
+    takes away, deliberately: Shift+click no longer extends the selection in the editor.
+  - **A picture is scaled by its width and height, not by `transform`.** A transform paints it
+    larger and leaves the layout box where it was, so a zoomed picture would have nothing to pan.
+  The keyboard shortcuts (`zoomKeyCommand`) are bound on the **window**, not on a surface, and that
+  asymmetry with the gestures is deliberate: a gesture is aimed by the pointer and a shortcut is not
+  aimed at all, so it acts on the document on screen wherever the caret is. Two details: the plus and
+  minus keys have several spellings, because Ctrl and plus is Ctrl+Shift+= on a US layout, so Shift
+  is not part of the test - and Alt is, since Ctrl+Alt is AltGr and a European layout must be able to
+  type a bracket without resizing the document. `preventDefault` is load-bearing too: those three
+  combinations resize the whole page in a browser, and in any Electron build whose menu carries the
+  zoom roles.
+- `components/ImageViewer.tsx` draws a picture - the one document kind with no modes, no status bar
+  and nothing written back. It reads the natural size on load rather than guessing one, so 100% means
+  the picture's own pixels.
 - `lib/editorTheme.ts` holds the Source palette. In Source mode colour **stands in for** formatting
   rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
   of the bytes.
