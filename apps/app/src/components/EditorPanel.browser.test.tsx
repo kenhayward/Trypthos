@@ -1031,3 +1031,58 @@ describe("Zooming a picture, in a real browser", () => {
     });
   });
 });
+
+/// What Find found, drawn.
+///
+/// Only a browser can answer it. The highlight is a CodeMirror decoration resolved through the
+/// stylesheet, and whether anything is on the screen is a question about boxes - jsdom has no layout
+/// engine and would report a mark of no size as happily as one that is painted.
+describe("Find's highlights, in a real browser", () => {
+  const found = (matches: { from: number; to: number }[], active: number) =>
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["notes.md"]}
+        activePath="notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={() => {}}
+        matches={matches}
+        activeMatch={active}
+      />,
+    );
+
+  // "# Title\n\nSome **bold** text.\n" - the two occurrences of "Title" and "text".
+  const TITLE = { from: 2, to: 7 };
+  const TEXT = { from: 23, to: 27 };
+
+  const marks = () => [...document.querySelectorAll(".cm-find-match")];
+
+  it("paints every match", async () => {
+    found([TITLE, TEXT], 0);
+
+    await vi.waitFor(() => expect(marks().length).toBe(2));
+    // Painted, not merely present: a mark of no size is a highlight nobody can see.
+    expect(marks()[0]!.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+
+  // A dozen highlights with nothing to say which one you are on is a list, not a position.
+  it("draws the one you are on differently", async () => {
+    found([TITLE, TEXT], 1);
+
+    await vi.waitFor(() => expect(marks().length).toBe(2));
+    const active = document.querySelectorAll(".cm-find-active");
+    expect(active.length).toBe(1);
+    expect(active[0]!.textContent).toBe("text");
+
+    const style = getComputedStyle(active[0]!);
+    expect(style.backgroundColor).not.toBe(getComputedStyle(marks()[0]!).backgroundColor);
+    expect(style.outlineStyle).toBe("solid");
+  });
+
+  it("has nothing to draw before a search", async () => {
+    found([], -1);
+    await vi.waitFor(() => expect(document.querySelector(".cm-content")).not.toBeNull());
+    expect(marks()).toHaveLength(0);
+  });
+});

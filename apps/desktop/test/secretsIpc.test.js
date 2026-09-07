@@ -201,6 +201,22 @@ test("no IPC channel returns a stored key, whatever it is asked", async () => {
   });
 });
 
+/// The other half of the seam.
+///
+/// The test below proves every channel in the contract has a handler. This one proves the RENDERER
+/// can reach it: a channel with a handler that the preload never names is a feature that works in
+/// every test and fails the first time somebody uses it, because the bridge is the only route in and
+/// there is deliberately no general "invoke any channel" helper.
+test("every channel in the contract is named by the preload bridge", () => {
+  const preload = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "..", "src", "preload.js"),
+    "utf8",
+  );
+
+  const unreachable = IPC_CHANNELS.filter((channel) => !preload.includes(`"${channel}"`));
+  assert.deepEqual(unreachable, []);
+});
+
 test("every channel the preload bridge names is registered, and vice versa", async () => {
   await withHandlers(async ({ ipcMain }) => {
     // Registered elsewhere: the window and document channels by windowHandlers, which owns the close

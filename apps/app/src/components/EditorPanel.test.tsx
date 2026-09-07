@@ -615,3 +615,108 @@ describe("EditorPanel: zooming an image", () => {
     expect(Number(picture.style.getPropertyValue("--tp-zoom"))).toBeGreaterThan(1);
   });
 });
+
+/// What Find found, on its way to the editor.
+///
+/// The panel's part in this is small and worth pinning: it hands the matches to the editing surface,
+/// and it makes sure there IS an editing surface to hand them to. A search that reported three
+/// matches while the document was in Preview would highlight nothing at all, which is a Find that
+/// looks broken.
+describe("EditorPanel: showing what Find found", () => {
+  const MATCHES = [{ from: 2, to: 6 }];
+
+  const panel = (props: Partial<React.ComponentProps<typeof EditorPanel>> = {}) =>
+    render(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        {...props}
+      />,
+    );
+
+  it("brings a document out of Preview when a match arrives", async () => {
+    const user = userEvent.setup();
+    const view = panel();
+
+    await user.click(modeButton("Preview"));
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+
+    view.rerender(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        matches={MATCHES}
+        activeMatch={0}
+      />,
+    );
+
+    expect(screen.getByTestId("document-editor")).toBeDefined();
+  });
+
+  // The switch lasts as long as the results do. Closing the find puts the reader back in the view
+  // they were reading in, rather than leaving them somewhere they did not choose.
+  it("goes back to Preview when the results are cleared", async () => {
+    const user = userEvent.setup();
+    const view = panel();
+
+    await user.click(modeButton("Preview"));
+    view.rerender(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        matches={MATCHES}
+        activeMatch={0}
+      />,
+    );
+    expect(screen.getByTestId("document-editor")).toBeDefined();
+
+    view.rerender(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        matches={[]}
+        activeMatch={-1}
+      />,
+    );
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+  });
+
+  // Only when there is something to show. Switching view on an empty result would take somebody out
+  // of the view they were reading in to show them nothing.
+  it("leaves Preview alone when nothing was found", async () => {
+    const user = userEvent.setup();
+    const view = panel();
+
+    await user.click(modeButton("Preview"));
+    view.rerender(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        matches={[]}
+        activeMatch={-1}
+      />,
+    );
+
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+  });
+});

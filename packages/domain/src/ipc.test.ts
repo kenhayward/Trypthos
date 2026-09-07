@@ -42,6 +42,7 @@ describe("IPC_CHANNELS", () => {
       "chats:save",
       "chats:delete",
       "workspace:outline",
+      "workspace:find",
       "document:dirty",
       "document:confirmDiscard",
       "shell:openExternal",

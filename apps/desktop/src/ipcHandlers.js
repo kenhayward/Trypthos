@@ -17,6 +17,7 @@ const {
   SetIntegrationRequest,
   SetSecretRequest,
   createPathGuard,
+  FindRequest,
   imageMediaType,
   ListRequest,
   OutlineRequest,
@@ -32,6 +33,7 @@ const { createLocalWorkspace } = require("./localWorkspace");
 const chatStore = require("./chatStore");
 const { outlineWorkspace } = require("./workspaceOutline");
 const { createFolderToolRunner } = require("./folderToolRunner");
+const { searchFiles } = require("./fileSearch");
 
 /// The main-process side of the IPC surface.
 ///
@@ -477,6 +479,18 @@ function registerIpcHandlers({
   ipcMain.handle(
     "file:read",
     guarded(getWorkspace, ReadRequest, (request, workspace) => workspace.provider.read(request.path)),
+  );
+
+  /// Find in Files.
+  ///
+  /// The walk goes through the provider, which is what applies the workspace guard - so a folder
+  /// that climbs out is refused by the listing rather than by a check written a second time here.
+  /// Which folder INSIDE the workspace is a choice, not a permission, exactly as for `workspace:outline`.
+  ipcMain.handle(
+    "workspace:find",
+    guarded(getWorkspace, FindRequest, (request, workspace) =>
+      searchFiles(workspace.provider, request),
+    ),
   );
 
   /// Save As: a native dialog, then a write to wherever it landed.

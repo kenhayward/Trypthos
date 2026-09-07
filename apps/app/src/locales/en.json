@@ -286,7 +286,11 @@
       "thinking": "Thinking",
       "thinkingHint": "Ask the model to reason before it answers. Only some models have a reasoning mode - gpt-oss does - and an endpoint that has never heard of the setting may refuse the request outright, so this is off unless you turn it on.",
       "reasoningEffort": "How much",
-      "reasoning": { "low": "Low", "medium": "Medium", "high": "High" },
+      "reasoning": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
       "supportsToolsHint": "Lets the model propose document changes as a structured call rather than as text, which is more reliable where it works. Leave this off if you are unsure: changes still work without it.",
       "folderFiles": "Files offered from the folder",
       "folderFilesHint": "How many of the folder's files the model is shown when Folder is on. It can ask to read any of them, so a longer list is a more capable chat and a more expensive one.",
@@ -317,5 +321,26 @@
     "edit": "Edit",
     "tools": "Tools",
     "help": "Help"
+  },
+  "find": {
+    "title": "Find",
+    "tabDocument": "Find",
+    "tabFiles": "Find in Files",
+    "query": "Search for",
+    "regex": "Regular expression",
+    "scope": "Searching {{folder}} and everything below it",
+    "wholeFolder": "the whole folder",
+    "noFolder": "Open a folder to search its files.",
+    "searching": "Searching...",
+    "badPattern": "That is not a regular expression Trypthos can read.",
+    "failed": "That search could not be run.",
+    "noMatches": "No matches.",
+    "count": "{{current}} of {{total}}",
+    "countCapped": "{{current}} of {{total}} - stopped early, there may be more",
+    "previous": "Previous",
+    "next": "Next",
+    "search": "Search",
+    "closeButton": "Close",
+    "close": "Close find"
   }
 }

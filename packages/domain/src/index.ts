@@ -220,6 +220,17 @@ export type { AvailableUpdate, PublishedAsset, PublishedRelease } from "./update
 export { PANEL_BOUNDS, resolvePanelWidths } from "./panelLayout";
 export type { PanelRequest, PanelWidths } from "./panelLayout";
 
+export {
+  FIND_FILE_LIMIT,
+  FIND_MATCH_LIMIT,
+  FIND_MAX_DEPTH,
+  FindRequest,
+  fileHits,
+  findMatches,
+  searchScopeFolder,
+} from "./find";
+export type { FileHit, FindMatch, FindOptions } from "./find";
+
 export { countWords, detectLineEnding } from "./documentStats";
 export type { LineEnding } from "./documentStats";
 

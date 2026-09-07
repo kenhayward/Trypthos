@@ -51,6 +51,10 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// never names the folder, and the walk happens where the workspace is held.
   workspaceOutline: (path) => ipcRenderer.invoke("workspace:outline", { path }),
 
+  /// Find in Files. A folder INSIDE the open workspace, a pattern, and whether to read it as an
+  /// expression - never a root, for the reason at the top of this file.
+  findInFiles: (request) => ipcRenderer.invoke("workspace:find", request),
+
   listChats: () => ipcRenderer.invoke("chats:list"),
   loadChat: (id) => ipcRenderer.invoke("chats:load", { id }),
   saveChat: (request) => ipcRenderer.invoke("chats:save", request),

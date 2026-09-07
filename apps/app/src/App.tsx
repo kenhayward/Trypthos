@@ -12,10 +12,12 @@ import {
   parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
+  type FindMatch,
   type ProposedEdit,
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
+import FindDialog from "./components/FindDialog";
 import EditorPanel from "./components/EditorPanel";
 import type { EditorHandle, EditorSelection } from "./components/DocumentEditor";
 import PanelDivider from "./components/PanelDivider";
@@ -31,6 +33,7 @@ import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { useFind } from "./hooks/useFind";
 import { builtInTitleKey } from "./lib/builtInDocuments";
 import { answerFor } from "./lib/commandAnswers";
 import { openExternal } from "./lib/externalLinks";
@@ -67,6 +70,10 @@ this line to see its own markers appear.
 
 Inline \`code\` and a [link](https://example.com) render too.
 `;
+
+/// Hoisted, not written inline: it is handed to the editor as a prop that an effect keys on, and a
+/// fresh `[]` per render would dispatch into CodeMirror on every keystroke.
+const NO_MATCHES: readonly FindMatch[] = [];
 
 /// The three-panel shell: workspace browser, editor, chat.
 export default function App() {
@@ -188,6 +195,21 @@ export default function App() {
 
   /// The live editor, for applying an edit the user accepted.
   const editor = useRef<EditorHandle>(null);
+
+  /// Find, and Find in Files.
+  ///
+  /// Here rather than inside the editor panel, because the two searches need different halves of
+  /// this level: one needs the text of the document on screen, and the other needs the folder
+  /// selected in the browser and the ability to open a file in a tab. Neither is the editor's to
+  /// know about.
+  const find = useFind({
+    content: state.content,
+    activePath: state.activePath,
+    selectedFolder: state.selectedFolder,
+    fileTypes: settings.fileTypes.enabled,
+    findInFiles: (request) => client.findInFiles(request),
+    openPath: (path) => actions.openPath(path),
+  });
 
   /// What chat may see, read when a turn is sent so it reflects the buffer as it is then.
   ///
@@ -355,6 +377,11 @@ export default function App() {
         // put the document over the file the user was trying to keep.
         if (event.shiftKey) void actions.saveAs();
         else void actions.save();
+      } else if (key === "f") {
+        // Taken from the browser's own find, which would search the app's chrome rather than the
+        // document - and cannot see a line CodeMirror has not drawn.
+        event.preventDefault();
+        find.openFind();
       } else if (key === "w" && state.activePath !== null) {
         // Only with a document open. Otherwise this is the shell's own "close the window", and
         // swallowing it would leave the shortcut doing nothing at all.
@@ -364,7 +391,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [actions, state.activePath]);
+  }, [actions, state.activePath, find]);
 
   // A folder or a file the app was launched with, from File Explorer's right-click menu. It arrives
   // here rather than being acted on in the shell because this side owns the open documents, and is
@@ -384,6 +411,7 @@ export default function App() {
     () =>
       windowControls().onMenuAction((action) => {
         if (action === "new-file") setNamingFile(true);
+        else if (action === "find") find.openFind();
         else if (action === "open-folder") void actions.open();
         else if (action === "save") void actions.save();
         else if (action === "save-as") void actions.saveAs();
@@ -394,7 +422,7 @@ export default function App() {
         // check, so an entry stays until it falls off the end or this is chosen.
         else if (action === "clear-recent") update({ recentFiles: [] });
       }),
-    [actions, update],
+    [actions, update, find],
   );
 
   /// Clicking a link in rendered markdown - Preview mode, a chat reply, the About box.
@@ -506,6 +534,27 @@ export default function App() {
           onFollowLink={(href) => followLink(href, linkHandlers)}
           ref={editor}
           onChange={actions.edit}
+          // Only for the document the matches were found in. Switching to another tab must not leave
+          // one file's offsets painted over another file's text.
+          matches={find.highlight.path === state.activePath ? find.highlight.matches : NO_MATCHES}
+          activeMatch={find.highlight.path === state.activePath ? find.highlight.active : -1}
+          overlay={
+            find.open ? (
+              <FindDialog
+                tab={find.tab}
+                onTabChange={find.setTab}
+                query={find.query}
+                onQueryChange={find.setQuery}
+                regex={find.regex}
+                onRegexChange={find.setRegex}
+                scope={state.workspace === null ? null : find.scope}
+                status={find.status}
+                onSearch={() => void find.search()}
+                onStep={(step) => void find.step(step)}
+                onClose={find.close}
+              />
+            ) : null
+          }
         />
         {showChat &&
           (panels.chatCollapsed ? (

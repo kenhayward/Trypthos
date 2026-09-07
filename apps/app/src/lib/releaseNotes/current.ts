@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.55.0",
+    date: "2026-09-07",
+    pr: 108,
+    headline: "Find, and find in files",
+    summary:
+      "Ctrl+F, or Edit > Find, opens a small panel in the corner of the editor with two tabs. Find looks through the document you have open, marks every match and steps you through them with Next and Previous - Enter does the same thing, and Shift+Enter goes back, so you can walk a document without reaching for the buttons. The one you are on is marked more strongly than the rest, so a page with a dozen matches still tells you where you are. Find in Files searches the folder you have selected in the browser and everything below it - or, if you have not picked one, the folder the file you are reading lives in. The panel says which before you press Search, because those two can be a long way apart. Every hit opens its file in a tab and marks the line, and Next carries on into the next file. Both tabs take either plain text or a regular expression, and an expression that will not compile says so rather than quietly finding nothing. The panel deliberately does not cover the document: the whole answer is a highlight in the text underneath it. A search in files reads only the file types you have turned on, never leaves the folder you have open, and stops at a sensible size - and when it stops early it says so rather than pretending the list is complete.",
+    added: [
+      "Edit > Find, or Ctrl+F: a Find panel with a Find and a Find in Files tab.",
+      "Find marks every match in the open document and steps through them with Next and Previous, or with Enter and Shift+Enter.",
+      "Find in Files searches the selected folder and everything below it, opening each hit in a tab.",
+      "Both searches take plain text or a regular expression.",
+    ],
+    changed: [
+      "A document in Preview switches to an editable view while a match is on screen, because Preview has nowhere to draw one - and goes back when the find is closed.",
+    ],
+  },
+  {
     version: "0.54.0",
     date: "2026-09-07",
     pr: 107,

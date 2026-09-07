@@ -28,6 +28,7 @@ export const MENU_ACTIONS = [
   "open-folder",
   "save",
   "save-as",
+  "find",
   "preferences",
   "about",
   "markdown-guide",
