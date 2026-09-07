@@ -327,6 +327,29 @@ describe("two folders open at once", () => {
     expect(root("Work").getAttribute("aria-expanded")).toBe("true");
   });
 
+  /// How far in each row sits, measured on screen.
+  ///
+  /// The indent is the only thing saying what is inside what, and at the first level it once said
+  /// the opposite of the truth - a workspace's own folders drawn level with the workspace. Asserted
+  /// here as well as in jsdom because it is a question about where boxes actually are.
+  it("draws a folder's contents indented from the folder", async () => {
+    twoFolders();
+    render(<App />);
+
+    const rows = await waitFor(() => {
+      const found = within(panel()).getAllByRole("button", { name: /notes\.md/ });
+      expect(found).toHaveLength(2);
+      return found;
+    });
+
+    const root = within(panel()).getByRole("button", { name: /^Notes$/ });
+    // The NAME, not the button: the indent is padding inside the row, so every row's box starts at
+    // the same x and only what is drawn in it moves.
+    const nameOf = (row: Element) => row.querySelector(".truncate")!.getBoundingClientRect().left;
+
+    expect(nameOf(rows[0]!)).toBeGreaterThan(nameOf(root));
+  });
+
   it("closes one folder and leaves the other", async () => {
     const { closed } = twoFolders();
     render(<App />);

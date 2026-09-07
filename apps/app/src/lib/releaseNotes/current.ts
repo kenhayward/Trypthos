@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.58.1",
+    date: "2026-09-07",
+    pr: 115,
+    headline: "The first folder inside a workspace is indented again",
+    summary:
+      "The folders and files at the top of an open folder were drawn at the same indent as the folder itself, so a tree read as though its first level were a sibling of the folder it was inside. Everything deeper was fine, which made it look like a quirk of the top row rather than what it was. They now sit one level in, and every level below steps evenly from there. The indent is the only thing in that panel saying what is inside what, so at the first level it was saying the opposite of the truth - which is worse than saying nothing.",
+    fixed: [
+      "Folders and files at the top of an open folder are indented under it, rather than level with it.",
+    ],
+  },
+  {
     version: "0.58.0",
     date: "2026-09-07",
     pr: 113,
