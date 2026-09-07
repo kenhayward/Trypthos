@@ -41,6 +41,7 @@ export const IPC_CHANNELS = [
   "chats:delete",
   "workspace:outline",
   "workspace:find",
+  "workspace:close",
   "document:dirty",
   "document:confirmDiscard",
   "shell:openExternal",
@@ -167,6 +168,13 @@ export const OutlineRequest = z.object({ path: relativePath }).strict();
 
 export const ReadRequest = z.object({ path: relativePath.min(1) }).strict();
 
+/// Closing one of the open workspaces.
+///
+/// A workspace is named by the id the MAIN PROCESS minted for it, never by its root. That is the
+/// same rule as everywhere else here: a renderer that could name a root could name any directory on
+/// the machine, and closing is only the reverse of an opening this side performed.
+export const CloseWorkspaceRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
 /// Reading an image, which does not go through `file:read`.
 ///
 /// The same shape, and a different channel on purpose: `file:read` DECODES, and an image must not
@@ -198,8 +206,18 @@ export const WriteRequest = z
 ///
 /// `path` is only where the dialog starts - null for the scratch buffer, which has never been
 /// anywhere.
+/// Save As. The renderer names WHICH workspace, and never where in it.
+///
+/// `workspaceId` is the authority, not `path`: a document that has never been saved has no path at
+/// all, and two fields that could each answer "which workspace" would be two answers waiting to
+/// disagree. `path` is where the dialog should OPEN and nothing else - qualified like every other
+/// path, and the workspace is taken off it only to find the folder to start in.
 export const SaveAsRequest = z
-  .object({ path: relativePath.min(1).nullable(), content: z.string() })
+  .object({
+    workspaceId: z.string().min(1),
+    path: relativePath.min(1).nullable(),
+    content: z.string(),
+  })
   .strict();
 
 /// One turn of a conversation, on the way to the provider.
@@ -311,6 +329,7 @@ export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
 export type OutlineRequest = z.infer<typeof OutlineRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
+export type CloseWorkspaceRequest = z.infer<typeof CloseWorkspaceRequest>;
 export type ReadImageRequest = z.infer<typeof ReadImageRequest>;
 export type SaveAsRequest = z.infer<typeof SaveAsRequest>;
 export type WriteRequest = z.infer<typeof WriteRequest>;

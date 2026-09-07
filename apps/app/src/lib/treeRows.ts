@@ -34,6 +34,11 @@ export function treeRows(
   folders: Record<string, FolderState>,
   filter: string,
   enabled: readonly string[],
+  /// Where to start: the key of the workspace's own root, which is its id.
+  ///
+  /// Several folders are open at once, and they share one map - keyed by qualified path, so the
+  /// roots cannot collide. Each is walked separately, because they are separate trees on screen.
+  root: string,
 ): TreeRow[] {
   const query = filter.trim().toLowerCase();
 
@@ -71,7 +76,7 @@ export function treeRows(
     });
   };
 
-  return rowsFor("", 0);
+  return rowsFor(root, 0);
 }
 
 /// Files on screen that can actually be opened.

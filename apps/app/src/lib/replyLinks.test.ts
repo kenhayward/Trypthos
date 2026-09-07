@@ -13,10 +13,14 @@ import { renderMarkdown } from "./markdown";
 
 const TYPES = ["markdown", "typescript", "javascript", "python"];
 
+/// The folder the model's paths are in. A model names files relative to the folder it was given,
+/// and with several open that is no longer enough on its own.
+const WORKSPACE = "Notes";
+
 function rendered(source: string, fileTypes: readonly string[] = TYPES) {
   const container = document.createElement("div");
   container.innerHTML = renderMarkdown(source);
-  linkifyPaths(container, fileTypes);
+  linkifyPaths(container, fileTypes, WORKSPACE);
   return container;
 }
 
@@ -71,7 +75,7 @@ describe("linkifyPaths", () => {
   // Run again on the same reply - which happens on every streamed token - and nothing doubles up.
   it("can be run twice over the same reply", () => {
     const container = rendered("See `notes/plan.md`.");
-    linkifyPaths(container, TYPES);
+    linkifyPaths(container, TYPES, WORKSPACE);
 
     expect(links(container)).toEqual(["notes/plan.md"]);
     expect(container.querySelectorAll("a")).toHaveLength(1);

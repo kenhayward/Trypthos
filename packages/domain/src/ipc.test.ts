@@ -43,6 +43,7 @@ describe("IPC_CHANNELS", () => {
       "chats:delete",
       "workspace:outline",
       "workspace:find",
+      "workspace:close",
       "document:dirty",
       "document:confirmDiscard",
       "shell:openExternal",
@@ -282,13 +283,23 @@ describe("OpenTargetSchema", () => {
 /// that folder rather than at the root.
 describe("SaveAsRequest", () => {
   it("takes the document being saved and where it currently lives", () => {
-    const parsed = SaveAsRequest.safeParse({ path: "notes/plan.md", content: "# Plan" });
+    const parsed = SaveAsRequest.safeParse({
+      workspaceId: "Notes",
+      path: "Notes/notes/plan.md",
+      content: "# Plan",
+    });
     expect(parsed.success).toBe(true);
   });
 
   // The scratch buffer has never been anywhere, and Save As is how it gets somewhere.
   it("accepts a document with no path yet", () => {
-    expect(SaveAsRequest.safeParse({ path: null, content: "" }).success).toBe(true);
+    expect(
+      SaveAsRequest.safeParse({ workspaceId: "Notes", path: null, content: "" }).success,
+    ).toBe(true);
+
+    // Which workspace is not optional. A document with no path has no other way of saying, and a
+    // Save As that guessed would write into whichever folder happened to be first.
+    expect(SaveAsRequest.safeParse({ path: null, content: "" }).success).toBe(false);
   });
 
   it("has no way to name a destination", () => {

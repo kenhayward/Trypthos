@@ -22,7 +22,16 @@ import { linkAction } from "@trypthos/domain";
 /// from scratch and cannot end up with an anchor inside an anchor.
 const CONSIDERED = "data-reply-link";
 
-export function linkifyPaths(container: HTMLElement, fileTypes: readonly string[]): void {
+export function linkifyPaths(
+  container: HTMLElement,
+  fileTypes: readonly string[],
+  /// Which folder the paths in this reply are in.
+  ///
+  /// A model's paths are relative to the folder it was given, and with several folders open that is
+  /// no longer enough to name a file. Null makes nothing a link, which is the honest answer: a path
+  /// with no folder behind it names nothing.
+  workspaceId: string | null,
+): void {
   for (const code of [...container.querySelectorAll("code")]) {
     if (code.hasAttribute(CONSIDERED)) continue;
     code.setAttribute(CONSIDERED, "");
@@ -34,9 +43,10 @@ export function linkifyPaths(container: HTMLElement, fileTypes: readonly string[
     if (code.closest("a") !== null) continue;
 
     const text = code.textContent ?? "";
-    // `fromPath` is null, so a path is read from the workspace root. That is what it means: the
-    // paths a model has are the ones the folder outline gave it, and those are root-relative.
-    const action = linkAction(text, null, fileTypes);
+    // `fromPath` is null, so a path is read from the root of the workspace named beside it. That is
+    // what it means: the paths a model has are the ones the folder outline gave it, and those are
+    // relative to the workspace its folder is in.
+    const action = linkAction(text, null, fileTypes, workspaceId);
     if (action.kind !== "document" && action.kind !== "external") continue;
 
     const anchor = document.createElement("a");

@@ -19,7 +19,10 @@ export interface MarkdownLinkHandlers {
   /// The file types the user has turned on, by id. A link to a file the folder browser would not
   /// show must not be a link that opens, or the tree and the document disagree about the same file.
   fileTypes: readonly string[];
-  /// Opens a file in the workspace. Workspace-relative, validated again in the shell.
+  /// Which folder a link with no folder of its own belongs to - one written with a leading
+  /// separator, or one in a document that is not in a workspace at all.
+  workspaceId?: string | null;
+  /// Opens a file in the workspace. Qualified, and validated again in the shell.
   openDocument(path: string): void;
   /// Hands a web address to the user's browser.
   openExternal(url: string): void;
@@ -38,7 +41,7 @@ export interface LinkClick {
 /// same whether it was read as prose or as the text being edited. Doing nothing is a legitimate
 /// outcome and the common one for a target the app has nowhere to put.
 export function followLink(href: string, handlers: MarkdownLinkHandlers): void {
-  const action = linkAction(href, handlers.fromPath, handlers.fileTypes);
+  const action = linkAction(href, handlers.fromPath, handlers.fileTypes, handlers.workspaceId ?? null);
   if (action.kind === "external") handlers.openExternal(action.url);
   else if (action.kind === "document") handlers.openDocument(action.path);
   else if (action.kind === "anchor") {

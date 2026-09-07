@@ -12,6 +12,7 @@ import {
   parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
+  splitQualified,
   type FindMatch,
   type ProposedEdit,
 } from "@trypthos/domain";
@@ -70,6 +71,19 @@ this line to see its own markers appear.
 
 Inline \`code\` and a [link](https://example.com) render too.
 `;
+
+/// Which folder the document on screen came from, for the tab strip's hover text.
+///
+/// A path names its workspace, so this is a lookup rather than a guess - and it answers null for a
+/// document that is in no folder at all: the scratch buffer, a draft, the built-in guide.
+function workspaceNameFor(
+  workspaces: readonly { id: string; name: string }[],
+  activePath: string | null,
+): string | null {
+  const workspaceId = activePath === null ? null : splitQualified(activePath)?.workspaceId;
+  if (workspaceId === undefined || workspaceId === null) return null;
+  return workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? null;
+}
 
 /// Hoisted, not written inline: it is handed to the editor as a prop that an effect keys on, and a
 /// fresh `[]` per render would dispatch into CodeMirror on every keystroke.
@@ -331,19 +345,28 @@ export default function App() {
     [chat, history, state.file?.path],
   );
 
-  // Reopening the folder the app was last closed with. Only once, and only after settings have been
-  // read - before that `lastWorkspace` is the default, which is null.
+  // Reopening the folders the app was last closed with. Only once, and only after settings have
+  // been read - before that `workspaces` is the default, which is empty.
   const reopened = useRef(false);
   useEffect(() => {
     if (!loaded || reopened.current) return;
     reopened.current = true;
-    if (settings.lastWorkspace !== null) void actions.reopen(settings.lastWorkspace);
-  }, [loaded, settings.lastWorkspace, actions]);
+    if (settings.workspaces.length > 0) void actions.reopen(settings.workspaces);
+  }, [loaded, settings.workspaces, actions]);
 
+  /// What to reopen next time: every folder that is open, in the order they are on screen.
+  ///
+  /// Written only when the list actually differs, and compared by value rather than by reference:
+  /// the state's array is rebuilt on every render, so an identity check would write the settings
+  /// file on each one.
   useEffect(() => {
-    const root = state.workspace?.root ?? null;
-    if (loaded && root !== null && root !== settings.lastWorkspace) update({ lastWorkspace: root });
-  }, [loaded, state.workspace, settings.lastWorkspace, update]);
+    if (!loaded) return;
+    const roots = state.workspaces.map((workspace) => workspace.root);
+    const same =
+      roots.length === settings.workspaces.length &&
+      roots.every((root, at) => root === settings.workspaces[at]);
+    if (!same) update({ workspaces: roots });
+  }, [loaded, state.workspaces, settings.workspaces, update]);
 
   // The shell keeps its own copy of the dirty flag, so that a window with nothing to lose closes
   // without asking the renderer anything at all.
@@ -433,14 +456,27 @@ export default function App() {
   /// document is open, so a relative link resolves the way its author meant, and how to open
   /// another one. It matches on the mark `renderMarkdown` puts on its own anchors, so an anchor the
   /// app draws itself is left entirely alone.
+  /// Which folder a link with no folder of its own belongs to.
+  ///
+  /// The document on screen when there is one, then the folder chosen in the browser, then the first
+  /// open folder. All three are the same answer nearly always; they differ when somebody is reading
+  /// the scratch buffer or a chat reply with several folders open, which is exactly when a bare path
+  /// needs telling apart.
+  const linkWorkspaceId = useMemo(() => {
+    const fromDocument = splitQualified(state.activePath ?? "")?.workspaceId;
+    const fromSelection = splitQualified(state.selectedFolder)?.workspaceId;
+    return fromDocument ?? fromSelection ?? state.workspaces[0]?.id ?? null;
+  }, [state.activePath, state.selectedFolder, state.workspaces]);
+
   const linkHandlers = useMemo(
     () => ({
       fromPath: state.file?.path ?? null,
       fileTypes: settings.fileTypes.enabled,
+      workspaceId: linkWorkspaceId,
       openDocument: (path: string) => void actions.openPath(path),
       openExternal,
     }),
-    [state.file?.path, settings.fileTypes.enabled, actions],
+    [state.file?.path, settings.fileTypes.enabled, linkWorkspaceId, actions],
   );
   const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
 
@@ -486,7 +522,7 @@ export default function App() {
         <WorkspacePanel
           width={widths.workspace}
           onCollapse={() => updatePanels({ workspaceCollapsed: true })}
-          workspaceName={state.workspace?.name ?? null}
+          workspaces={state.workspaces}
           folders={state.folders}
           filter={state.filter}
           activePath={state.activePath}
@@ -500,6 +536,7 @@ export default function App() {
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}
           onSelectFolder={actions.selectFolder}
+          onCloseWorkspace={(workspaceId) => void actions.closeWorkspace(workspaceId)}
           onOpenFileTypes={() => setSettingsOn("fileTypes")}
         />
             <PanelDivider
@@ -514,7 +551,7 @@ export default function App() {
         )}
 
         <EditorPanel
-          workspaceName={state.workspace?.name ?? null}
+          workspaceName={workspaceNameFor(state.workspaces, state.activePath)}
           paths={openPaths}
           activePath={state.activePath}
           dirtyPaths={state.dirtyPaths}
@@ -551,7 +588,7 @@ export default function App() {
                 onCaseSensitiveChange={find.setCaseSensitive}
                 position={find.position}
                 onMove={find.setPosition}
-                scope={state.workspace === null ? null : find.scope}
+                scope={state.workspaces.length === 0 ? null : find.scope}
                 status={find.status}
                 onSearch={() => void find.search()}
                 onStep={(step) => void find.step(step)}
@@ -585,6 +622,7 @@ export default function App() {
                 onSelectModel={setChosenModel}
                 turns={chat.turns}
           fileTypes={settings.fileTypes.enabled}
+                linkWorkspaceId={linkWorkspaceId}
                 streaming={chat.streaming}
                 error={chat.error}
                 activity={chat.activity}
@@ -619,7 +657,7 @@ export default function App() {
                   files: scope.files,
                   includeFolder: scope.includeFolder,
             folderPath: state.selectedFolder,
-                  canUseFolder: state.workspace !== null,
+                  canUseFolder: state.workspaces.length > 0,
                   onToggleFolder: scope.setIncludeFolder,
                   onNeedFiles: () => void scope.loadFiles(),
                   onAttach: (path) => void scope.attach(path),

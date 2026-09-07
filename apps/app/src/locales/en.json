@@ -6,6 +6,7 @@
   "workspace": {
     "title": "Workspace",
     "openFolder": "Open folder",
+    "closeFolder": "Close {{name}}",
     "noFolder": "No folder open yet.",
     "emptyFolder": "This folder is empty.",
     "filter": "Filter files",

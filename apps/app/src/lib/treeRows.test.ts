@@ -8,7 +8,7 @@ const rows_ = (
   folders: Record<string, FolderState>,
   filter: string,
   enabled: readonly string[] = ["markdown"],
-) => treeRows(folders, filter, enabled);
+) => treeRows(folders, filter, enabled, "");
 import type { RemoteNode } from "./workspaceClient";
 
 const dir = (id: string, name: string): RemoteNode => ({ id, name, kind: "directory" });
@@ -129,5 +129,40 @@ describe("treeRows", () => {
 
   it("is empty when the root has not been listed", () => {
     expect(rows_({}, "")).toEqual([]);
+  });
+});
+
+/// Several folders open at once.
+///
+/// They share one map, keyed by qualified path so their roots cannot collide, and each is walked
+/// from its own root - because they are separate trees on the screen, not one tree with two tops.
+describe("treeRows across several workspaces", () => {
+  const TWO: Record<string, FolderState> = {
+    Notes: loaded([file("Notes/a.md", "a.md"), dir("Notes/docs", "docs")]),
+    "Notes/docs": loaded([file("Notes/docs/deep.md", "deep.md")]),
+    Work: loaded([file("Work/a.md", "a.md")]),
+  };
+
+  it("walks only the workspace it was given", () => {
+    expect(treeRows(TWO, "", ["markdown"], "Work").map((row) => row.node.id)).toEqual(["Work/a.md"]);
+  });
+
+  it("expands folders inside that workspace", () => {
+    expect(treeRows(TWO, "", ["markdown"], "Notes").map((row) => row.node.id)).toEqual([
+      "Notes/docs",
+      "Notes/docs/deep.md",
+      "Notes/a.md",
+    ]);
+  });
+
+  // Depth counts from the workspace's own root, so the two trees are drawn the same way whatever
+  // they are called - and a deeply nested workspace does not start its rows further in.
+  it("counts depth from the workspace, not from the map", () => {
+    const rows = treeRows(TWO, "", ["markdown"], "Notes");
+    expect(rows.map((row) => row.depth)).toEqual([0, 1, 0]);
+  });
+
+  it("answers nothing for a workspace that has not been listed", () => {
+    expect(treeRows(TWO, "", ["markdown"], "Missing")).toEqual([]);
   });
 });

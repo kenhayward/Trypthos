@@ -64,8 +64,10 @@ async function withWorkspace(files, body) {
       },
     });
 
-    await ipcMain.invoke("workspace:open");
-    await body({ ipcMain, root });
+    const opened = await ipcMain.invoke("workspace:open");
+    // Paths name their workspace now, and the id is the folder's name - a temporary directory here.
+    const q = (path) => (path === "" ? opened.workspace.id : `${opened.workspace.id}/${path}`);
+    await body({ ipcMain, root, q });
   } finally {
     await fs.rm(base, { recursive: true, force: true });
     await fs.rm(userData, { recursive: true, force: true });
@@ -73,8 +75,8 @@ async function withWorkspace(files, body) {
 }
 
 test("answers with a data URL the window can draw", async () => {
-  await withWorkspace({ "shot.png": PNG }, async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("file:readImage", { path: "shot.png" });
+  await withWorkspace({ "shot.png": PNG }, async ({ ipcMain, q }) => {
+    const result = await ipcMain.invoke("file:readImage", { path: q("shot.png") });
 
     assert.equal(result.ok, true);
     assert.ok(result.dataUrl.startsWith("data:image/png;base64,"));
@@ -86,20 +88,20 @@ test("answers with a data URL the window can draw", async () => {
 
 // The reason this channel exists at all: `file:read` decodes, and would refuse these bytes.
 test("reads what the text channel refuses", async () => {
-  await withWorkspace({ "shot.png": PNG }, async ({ ipcMain }) => {
-    const asText = await ipcMain.invoke("file:read", { path: "shot.png" });
+  await withWorkspace({ "shot.png": PNG }, async ({ ipcMain, q }) => {
+    const asText = await ipcMain.invoke("file:read", { path: q("shot.png") });
     assert.equal(asText.ok, false);
     assert.equal(asText.reason, "not-text");
 
-    assert.equal((await ipcMain.invoke("file:readImage", { path: "shot.png" })).ok, true);
+    assert.equal((await ipcMain.invoke("file:readImage", { path: q("shot.png") })).ok, true);
   });
 });
 
 // The media type comes from the NAME, decided here. A renderer that could name it could tell the
 // window to read one kind of file as another.
 test("names the type from the file, and refuses a file that is not one", async () => {
-  await withWorkspace({ "notes.md": "# Notes\n" }, async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("file:readImage", { path: "notes.md" });
+  await withWorkspace({ "notes.md": "# Notes\n" }, async ({ ipcMain, q }) => {
+    const result = await ipcMain.invoke("file:readImage", { path: q("notes.md") });
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, "not-an-image");
@@ -108,8 +110,8 @@ test("names the type from the file, and refuses a file that is not one", async (
 
 // The boundary is unchanged by any of this. Bytes are still bytes inside the workspace only.
 test("refuses a path that climbs out of the workspace", async () => {
-  await withWorkspace({ "shot.png": PNG }, async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("file:readImage", { path: "../outside.png" });
+  await withWorkspace({ "shot.png": PNG }, async ({ ipcMain, q }) => {
+    const result = await ipcMain.invoke("file:readImage", { path: q("../outside.png") });
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, "permission-denied");
@@ -117,10 +119,10 @@ test("refuses a path that climbs out of the workspace", async () => {
 });
 
 test("refuses an image larger than the app will draw", async () => {
-  await withWorkspace({}, async ({ ipcMain, root }) => {
+  await withWorkspace({}, async ({ ipcMain, root, q }) => {
     await fs.writeFile(path.join(root, "huge.png"), Buffer.alloc(MAX_IMAGE_FILE_BYTES + 1));
 
-    const result = await ipcMain.invoke("file:readImage", { path: "huge.png" });
+    const result = await ipcMain.invoke("file:readImage", { path: q("huge.png") });
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, "too-large");
@@ -129,8 +131,8 @@ test("refuses an image larger than the app will draw", async () => {
 });
 
 test("refuses a malformed request before touching disk", async () => {
-  await withWorkspace({}, async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("file:readImage", { path: "a.png", extra: true });
+  await withWorkspace({}, async ({ ipcMain, q }) => {
+    const result = await ipcMain.invoke("file:readImage", { path: q("a.png"), extra: true });
     assert.deepEqual(result, { ok: false, reason: "bad-request" });
   });
 });

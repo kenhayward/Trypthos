@@ -1,4 +1,5 @@
 import { isOpenable } from "./fileTypes";
+import { qualifyPath, splitQualified } from "./qualifiedPath";
 
 /// What clicking a link in rendered markdown should do.
 ///
@@ -32,6 +33,9 @@ export type LinkRejection =
   | "unsupported-scheme"
   /// Lexically well-formed, but `..` walks above the workspace root.
   | "escapes-workspace"
+  /// Relative, in a document that is not in a workspace - the scratch buffer, the built-in guide, or
+  /// a chat reply with no folder attached. There is no folder for it to be relative TO.
+  | "no-workspace"
   /// Inside the workspace, but not a file the editor opens - either no file type describes it, or
   /// the type that does is turned off. Both mean the same thing to a click: nothing happens.
   | "not-openable";
@@ -93,6 +97,13 @@ export function linkAction(
   href: string,
   fromPath: string | null,
   enabled: readonly string[],
+  /// Which workspace a link with no folder of its own belongs to.
+  ///
+  /// Two cases need it, and both are cases where `fromPath` cannot answer: a link written with a
+  /// leading separator, which means "the root" and has to be told WHICH root, and a link in a
+  /// document that is not in a workspace at all - the scratch buffer, or a reply in the chat panel.
+  /// Null with nothing else to go on makes the link nothing at all, which is the honest answer.
+  workspaceId: string | null = null,
 ): LinkAction {
   const trimmed = href.trim();
   if (trimmed === "") return { kind: "none", reason: "empty" };
@@ -126,7 +137,20 @@ export function linkAction(
   // the same reason `workspacePath` does it. A leading separator means the workspace root, which is
   // the only reading available: there is no drive and no filesystem root inside a workspace.
   const unified = decoded.replace(/\\/g, "/");
-  const base = unified.startsWith("/") ? "" : (fromPath === null ? "" : folderOf(fromPath));
+  // Which workspace this link lands in, and where inside it the walk starts.
+  //
+  // The two are held apart deliberately. A link resolves WITHIN one workspace, so the workspace is
+  // taken off the front first and put back at the end - which means the `..` guard below counts only
+  // the folders inside it, and a link that climbs past the workspace root is refused by exactly the
+  // check that always refused climbing past the root. Joining first and inspecting afterwards would
+  // let `../../elsewhere.md` become a plausible-looking path in no workspace at all.
+  const source = fromPath === null ? null : splitQualified(fromPath);
+  const workspace = source?.workspaceId ?? workspaceId;
+  // Nothing to resolve against. A relative link in a document that is not in a folder - the scratch
+  // buffer, the built-in guide - names no file, so it is not a link.
+  if (workspace === null) return { kind: "none", reason: "no-workspace" };
+
+  const base = unified.startsWith("/") || source === null ? "" : folderOf(source.path);
 
   const segments = base === "" ? [] : base.split("/");
   for (const segment of unified.split("/")) {
@@ -143,7 +167,7 @@ export function linkAction(
 
   if (segments.length === 0) return { kind: "none", reason: "empty" };
 
-  const path = segments.join("/");
+  const path = qualifyPath(workspace, segments.join("/"));
   // The same catalogue the folder browser filters on, so a link the tree would not show is a link
   // the editor will not open. Two lists answering this separately is two lists that will disagree.
   if (!isOpenable(segments[segments.length - 1]!, enabled)) {

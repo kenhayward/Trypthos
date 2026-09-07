@@ -8,7 +8,8 @@ interface Props {
   /// Rendered width, resolved against the window. The panel does not choose its own size.
   width: number;
   onCollapse: () => void;
-  workspaceName: string | null;
+  /// Every open folder, in the order they were opened. Each is a tree of its own.
+  workspaces: readonly { id: string; name: string; root: string }[];
   folders: Record<string, FolderState>;
   filter: string;
   /// The document on screen, highlighted as the one you are in.
@@ -33,6 +34,8 @@ interface Props {
   /// click, because a row that needed two different gestures for two different meanings would need
   /// two different targets, and this row is one word wide.
   onSelectFolder: (path: string) => void;
+  /// Closes one folder, and the documents that came from it. The asking happens above.
+  onCloseWorkspace: (workspaceId: string) => void;
   /// Opens the File types page of Settings.
   ///
   /// The footer is the only place the setting is discoverable at all: every type but markdown is
@@ -48,7 +51,7 @@ interface Props {
 export default function WorkspacePanel({
   width,
   onCollapse,
-  workspaceName,
+  workspaces,
   folders,
   filter,
   activePath,
@@ -62,10 +65,21 @@ export default function WorkspacePanel({
   fileTypes,
   selectedFolder,
   onSelectFolder,
+  onCloseWorkspace,
   onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
-  const rows = useMemo(() => treeRows(folders, filter, fileTypes), [folders, filter, fileTypes]);
+  /// One list of rows per open folder. Separate walks rather than one, because they are separate
+  /// trees on screen - each with its own root row that can be collapsed and closed.
+  const trees = useMemo(
+    () =>
+      workspaces.map((workspace) => ({
+        workspace,
+        rows: treeRows(folders, filter, fileTypes, workspace.id),
+      })),
+    [workspaces, folders, filter, fileTypes],
+  );
+  const rows = useMemo(() => trees.flatMap((tree) => tree.rows), [trees]);
   const fileCount = visibleFileCount(rows);
   // Folders survive a filter, so the row list is never empty while any exist - which meant a filter
   // matching nothing left folder rows on screen with no explanation at all. The message keys off the
@@ -87,7 +101,7 @@ export default function WorkspacePanel({
     >
       <div className="flex items-center gap-1 border-b border-rule px-3 py-2">
         <h2 className="truncate text-xs font-semibold tracking-[0.06em] text-ink-4 uppercase">
-          {workspaceName ?? t("workspace.title")}
+          {t("workspace.title")}
         </h2>
         <button
           type="button"
@@ -114,7 +128,7 @@ export default function WorkspacePanel({
         </button>
       </div>
 
-      {workspaceName === null ? (
+      {workspaces.length === 0 ? (
         <p className="p-3 text-sm text-ink-3">{t("workspace.noFolder")}</p>
       ) : (
         <>
@@ -137,29 +151,43 @@ export default function WorkspacePanel({
               <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.noMatches")}</p>
             )}
 
-            {rows.map((row) =>
-              row.node.kind === "directory" ? (
-                <FolderRow
-                  key={row.node.id}
-                  row={row}
-                  selected={selectedFolder === row.node.id}
-                  onToggle={() => {
-                    onSelectFolder(row.node.id);
-                    void onToggleFolder(row.node.id);
-                  }}
-                  onRetry={() => onRetryFolder(row.node.id)}
+            {trees.map(({ workspace, rows: tree }) => (
+              <div key={workspace.id}>
+                {/* The workspace's own row. It behaves like the folder it is - selecting it is what
+                    points chat and Find at the whole workspace - and it is the only row that can be
+                    closed, because closing is something you do to a folder you opened. */}
+                <WorkspaceRow
+                  workspace={workspace}
+                  selected={selectedFolder === workspace.id}
+                  onSelect={() => onSelectFolder(workspace.id)}
+                  onClose={() => onCloseWorkspace(workspace.id)}
                 />
-              ) : (
-                <FileRow
-                  key={row.node.id}
-                  row={row}
-                  selected={row.node.id === activePath}
-                  open={openPaths.includes(row.node.id)}
-                  dirty={dirtyPaths.includes(row.node.id)}
-                  onOpen={() => onOpenFile(row.node)}
-                />
-              ),
-            )}
+
+                {tree.map((row) =>
+                  row.node.kind === "directory" ? (
+                    <FolderRow
+                      key={row.node.id}
+                      row={row}
+                      selected={selectedFolder === row.node.id}
+                      onToggle={() => {
+                        onSelectFolder(row.node.id);
+                        void onToggleFolder(row.node.id);
+                      }}
+                      onRetry={() => onRetryFolder(row.node.id)}
+                    />
+                  ) : (
+                    <FileRow
+                      key={row.node.id}
+                      row={row}
+                      selected={row.node.id === activePath}
+                      open={openPaths.includes(row.node.id)}
+                      dirty={dirtyPaths.includes(row.node.id)}
+                      onOpen={() => onOpenFile(row.node)}
+                    />
+                  ),
+                )}
+              </div>
+            ))}
           </div>
 
           <div className="flex items-center gap-1 border-t border-rule px-3 py-1 text-xs text-faint">
@@ -182,6 +210,66 @@ export default function WorkspacePanel({
 
 /// Rows indent by depth. The value is inline because it is computed; everything else is a class.
 const indent = (depth: number) => ({ paddingLeft: `${depth * 16 + 4}px` });
+
+/// One open folder's own row: its name, and the only close button in the panel.
+///
+/// The close sits at the END of the row rather than beside the name, so the names line up down the
+/// panel and the crosses line up down the other edge - and it is a button inside a button's row
+/// rather than nested in one, because a control inside a control is a control nobody can reach with
+/// a keyboard in a predictable order.
+function WorkspaceRow({
+  workspace,
+  selected,
+  onClose,
+  onSelect,
+}: {
+  workspace: { id: string; name: string; root: string };
+  selected: boolean;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      className={
+        selected
+          ? "flex items-center gap-1 rounded-md bg-selected pr-1"
+          : "flex items-center gap-1 rounded-md pr-1 hover:bg-hover"
+      }
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? "true" : undefined}
+        // The absolute folder, which is the one thing the name does not say - two folders can share
+        // a name, and the tree shows the name.
+        title={workspace.root}
+        className={
+          selected
+            ? "flex min-w-0 grow items-center gap-1.5 py-1 pl-2 text-left text-base font-semibold text-selected-ink"
+            : "flex min-w-0 grow items-center gap-1.5 py-1 pl-2 text-left text-base font-semibold text-ink"
+        }
+      >
+        <Glyph className="size-3.5 text-leaf">
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+        </Glyph>
+        <span className="min-w-0 truncate">{workspace.name}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={t("workspace.closeFolder", { name: workspace.name })}
+        title={t("workspace.closeFolder", { name: workspace.name })}
+        className="shrink-0 rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+      >
+        <Glyph className="size-3.5">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </Glyph>
+      </button>
+    </div>
+  );
+}
 
 function FolderRow({
   row,

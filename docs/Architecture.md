@@ -71,6 +71,49 @@ both processes and testable without booting either.
   editor applies it as a single transaction. Nothing here parses markdown: the rules are textual,
   which is why the pair of asterisks shared by bold and italic is handled explicitly.
 
+## Several folders open at once
+
+**A path names the workspace it is in.** `Notes/docs/notes.md` rather than `docs/notes.md`, because
+two folders can each hold a `docs/notes.md` and a tab strip that cannot tell them apart is a tab
+strip that has stopped working. `packages/domain/src/qualifiedPath.ts` is the whole rule -
+`qualifyPath`, `splitQualified`, and the id a new workspace is given.
+
+**Why a qualified string rather than a pair.** A path is already the identity of a tab, a tree row, a
+link target, a chat attachment and a find result; making it a `{workspaceId, path}` pair would change
+every one of those and every function between them. It also matches what this app already did with
+the documents that have no workspace - `trypthos:markdown-guide` and `trypthos:draft/1/notes.md` are
+reserved paths on the same principle, and `splitQualified` refuses them rather than guessing.
+
+**The id is the folder's name, deduplicated** (`Notes`, `Notes (2)`). Opaque tokens would be shorter
+and would show up in the one place a qualified path is ever read by a person: a tab lengthening its
+label until two files differ, which is exactly the case this feature creates.
+
+- **The split happens in one place.** The shell takes the workspace off the front (`locateQualified`)
+  and hands the handler an ordinary workspace-relative path, so **every handler is unchanged** by
+  there being several workspaces - each still resolves a relative path against one provider, which
+  applies the boundary guard including its realpath check. Qualifying a path adds a folder to it,
+  never permission: a path naming one workspace cannot climb into another, and that is asserted in
+  `workspacesIpc.test.js` against two real folders on disk.
+- **The shell holds a map, not a variable.** `workspace:open` mints an id and adds; opening a folder
+  that is already open answers with the workspace it is already open as; `workspace:close` removes
+  one, after which a path naming it is refused like any other unknown workspace.
+- **Listings answer with qualified ids**, so the renderer never works out which workspace a row
+  belongs to - it hands back what it was given.
+- **Save As names its workspace outright.** A document that has never been saved has no path to read
+  one from, and two fields that could each answer "which workspace" would be two answers waiting to
+  disagree - so `SaveAsRequest.workspaceId` is the authority and `path` only says where the dialog
+  should open.
+- **Opening a folder is additive and asks nothing**, because it discards nothing. The question about
+  unsaved work moved to closing a folder, which is where documents actually go away.
+- **Links resolve within one workspace.** `linkAction` takes the workspace off the front before the
+  `..` walk and puts it back at the end, so a link that climbs past the workspace root is refused by
+  exactly the check that always refused climbing past the root. A document with no workspace - the
+  scratch buffer, the guide, a chat reply - is told which one to resolve against, and answers
+  `no-workspace` when there is nothing to tell it.
+- **Settings hold a list.** `workspaces: string[]` replaced `lastWorkspace`, with a migration to
+  version 14 that turns the one remembered folder into a list of one and REMOVES the old field - the
+  schema is strict, and a field nothing reads is a second answer waiting to disagree.
+
 ## The editor
 
 **CodeMirror 6 is the single editing surface.** There is no second editing engine and no markdown

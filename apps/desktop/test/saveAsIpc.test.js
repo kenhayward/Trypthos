@@ -71,8 +71,13 @@ async function withWorkspace(files, body) {
       },
     });
 
-    await ipcMain.invoke("workspace:open");
-    await body({ ipcMain, root, outside, dialogState });
+    const opened = await ipcMain.invoke("workspace:open");
+    // Save As names the workspace outright: a document that has never been saved has no path to
+    // read one from, and two fields answering "which workspace" would be two answers waiting to
+    // disagree. `path` is only where the dialog opens.
+    const workspaceId = opened.workspace.id;
+    const q = (path) => (path === "" ? workspaceId : `${workspaceId}/${path}`);
+    await body({ ipcMain, root, outside, dialogState, workspaceId, q });
   } finally {
     await fs.rm(base, { recursive: true, force: true });
     await fs.rm(userData, { recursive: true, force: true });
@@ -82,16 +87,17 @@ async function withWorkspace(files, body) {
 
 // Creating a file is the ordinary case, and it is the only way the scratch buffer reaches disk.
 test("writes the document where the dialog said, and answers with the path in workspace terms", async () => {
-  await withWorkspace({}, async ({ ipcMain, root, dialogState }) => {
+  await withWorkspace({}, async ({ ipcMain, root, dialogState, workspaceId, q }) => {
     dialogState.answer = path.join(root, "notes", "plan.md");
     await fs.mkdir(path.join(root, "notes"));
 
-    const result = await ipcMain.invoke("file:saveAs", { path: null, content: "# Plan\n" });
+    const result = await ipcMain.invoke("file:saveAs", { workspaceId, path: null, content: "# Plan\n" });
 
     assert.equal(result.ok, true);
-    // Workspace-relative and forward-slashed, because that is what a path IS everywhere else in the
-    // app - the tab, the tree, a markdown link and a saved chat all name a file this way.
-    assert.equal(result.path, "notes/plan.md");
+    // Qualified and forward-slashed, because that is what a path IS everywhere else in the app -
+    // the tab, the tree, a markdown link and a saved chat all name a file this way, and every one
+    // of them now has to say which of the open folders it means.
+    assert.equal(result.path, q("notes/plan.md"));
     assert.ok(result.revision.id.length > 0);
     assert.equal(await fs.readFile(path.join(root, "notes", "plan.md"), "utf8"), "# Plan\n");
   });
@@ -100,10 +106,10 @@ test("writes the document where the dialog said, and answers with the path in wo
 // The native dialog already asked. Answering "conflict" here would be putting the same question a
 // second time and refusing the answer the user gave to the first.
 test("replaces a file the dialog offered to replace", async () => {
-  await withWorkspace({ "top.md": "# Old\n" }, async ({ ipcMain, root, dialogState }) => {
+  await withWorkspace({ "top.md": "# Old\n" }, async ({ ipcMain, root, dialogState, workspaceId, q }) => {
     dialogState.answer = path.join(root, "top.md");
 
-    const result = await ipcMain.invoke("file:saveAs", { path: "draft.md", content: "# New\n" });
+    const result = await ipcMain.invoke("file:saveAs", { workspaceId, path: q("draft.md"), content: "# New\n" });
 
     assert.equal(result.ok, true);
     assert.equal(await fs.readFile(path.join(root, "top.md"), "utf8"), "# New\n");
@@ -113,11 +119,11 @@ test("replaces a file the dialog offered to replace", async () => {
 /// The boundary, which is the reason this channel exists at all rather than the renderer being told
 /// a path and asked to write it.
 test("refuses a destination outside the open workspace, and writes nothing", async () => {
-  await withWorkspace({}, async ({ ipcMain, outside, dialogState }) => {
+  await withWorkspace({}, async ({ ipcMain, outside, dialogState, workspaceId }) => {
     const target = path.join(outside, "escaped.md");
     dialogState.answer = target;
 
-    const result = await ipcMain.invoke("file:saveAs", { path: null, content: "secret\n" });
+    const result = await ipcMain.invoke("file:saveAs", { workspaceId, path: null, content: "secret\n" });
 
     assert.equal(result.ok, false);
     assert.equal(result.reason, "outside-workspace");
@@ -126,10 +132,10 @@ test("refuses a destination outside the open workspace, and writes nothing", asy
 });
 
 test("cancelling the dialog is not a failure and writes nothing", async () => {
-  await withWorkspace({ "top.md": "# Old\n" }, async ({ ipcMain, root, dialogState }) => {
+  await withWorkspace({ "top.md": "# Old\n" }, async ({ ipcMain, root, dialogState, workspaceId, q }) => {
     dialogState.answer = null;
 
-    const result = await ipcMain.invoke("file:saveAs", { path: "top.md", content: "# New\n" });
+    const result = await ipcMain.invoke("file:saveAs", { workspaceId, path: q("top.md"), content: "# New\n" });
 
     assert.deepEqual(result, { ok: false, reason: "cancelled" });
     assert.equal(await fs.readFile(path.join(root, "top.md"), "utf8"), "# Old\n");
@@ -140,18 +146,18 @@ test("cancelling the dialog is not a failure and writes nothing", async () => {
 // file deep in the tree that opened at the root would make the user navigate back to where they
 // already were.
 test("opens the dialog beside the document being saved", async () => {
-  await withWorkspace({ "notes/nested.md": "x" }, async ({ ipcMain, root, dialogState }) => {
+  await withWorkspace({ "notes/nested.md": "x" }, async ({ ipcMain, root, dialogState, workspaceId, q }) => {
     dialogState.answer = path.join(root, "notes", "copy.md");
-    await ipcMain.invoke("file:saveAs", { path: "notes/nested.md", content: "x" });
+    await ipcMain.invoke("file:saveAs", { workspaceId, path: q("notes/nested.md"), content: "x" });
 
     assert.equal(dialogState.seen[0].defaultPath, path.join(root, "notes", "nested.md"));
   });
 });
 
 test("opens the dialog at the workspace root for a document that has never been anywhere", async () => {
-  await withWorkspace({}, async ({ ipcMain, root, dialogState }) => {
+  await withWorkspace({}, async ({ ipcMain, root, dialogState, workspaceId }) => {
     dialogState.answer = path.join(root, "scratch.md");
-    await ipcMain.invoke("file:saveAs", { path: null, content: "x" });
+    await ipcMain.invoke("file:saveAs", { workspaceId, path: null, content: "x" });
 
     assert.equal(dialogState.seen[0].defaultPath, root);
   });

@@ -10,6 +10,12 @@ import type { SettingsBridge } from "../hooks/useSettings";
 /// bridge, and the renderer cannot name a workspace root - it can only ask the user to choose one.
 
 export interface WorkspaceInfo {
+  /// Minted by the main process when the folder was opened.
+  ///
+  /// The renderer names a workspace by this and never by its root - the same rule that has always
+  /// applied, now that there is more than one to name. It is also the first segment of every path
+  /// in this workspace, which is what makes a path say which folder it is in.
+  id: string;
   root: string;
   name: string;
 }
@@ -84,7 +90,12 @@ export interface WorkspaceClient {
   /// native dialog on the main process's side and is checked against the open workspace there;
   /// `path` is only where the dialog should open, and null for a document that has never been
   /// anywhere. A renderer that could name a target could write a file anywhere on the machine.
-  saveFileAs(path: string | null, content: string): Promise<SaveAsResult>;
+  ///
+  /// `workspaceId` says which of the open folders this saves into, and it is the authority: a
+  /// document that has never been saved has no path to read one from.
+  saveFileAs(workspaceId: string, path: string | null, content: string): Promise<SaveAsResult>;
+  /// Closes one open workspace. What happens to the tabs that came from it is decided above.
+  closeWorkspace(workspaceId: string): Promise<{ ok: boolean; reason?: string }>;
   /// Searches the files under one folder of the workspace.
   ///
   /// A folder INSIDE the open workspace, never a root - the same rule as everything else here. The
@@ -211,6 +222,7 @@ export const browserClient: WorkspaceClient = {
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),
   saveFileAs: async () => unavailable(),
+  closeWorkspace: async () => unavailable(),
   findInFiles: async () => unavailable(),
 };
 

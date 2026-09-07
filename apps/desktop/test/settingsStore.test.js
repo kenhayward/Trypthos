@@ -25,7 +25,7 @@ test("returns defaults on a first run, with no file present", async () => {
 
 test("round-trips what it was given", async () => {
   await withDir(async (dir) => {
-    const settings = { ...DEFAULT_SETTINGS, lastWorkspace: "D:/Notes" };
+    const settings = { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] };
     await writeSettings(dir, settings);
     assert.deepEqual(await readSettings(dir), settings);
   });
@@ -90,7 +90,7 @@ test("reads closeToTray, migrating a version 1 file rather than ignoring it", as
       JSON.stringify({
         schemaVersion: 1,
         panels: { workspaceWidth: 326, chatWidth: 348, workspaceCollapsed: false, chatCollapsed: true },
-        lastWorkspace: "D:/Notes",
+        workspaces: ["D:/Notes"],
       }),
       "utf8",
     );

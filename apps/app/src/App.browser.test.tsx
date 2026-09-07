@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { page } from "@vitest/browser/context";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import { page, userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@trypthos/domain";
 import App from "./App";
@@ -196,5 +196,119 @@ describe("a long reply", () => {
     expect((box.closest("aside") as HTMLElement).getBoundingClientRect().bottom).toBeLessThanOrEqual(
       window.innerHeight + 1,
     );
+  });
+});
+
+/// Two folders open at once, drawn.
+///
+/// The whole window, in a real browser, because what is being checked is what a person SEES: two
+/// trees with their own roots, a close button on each, and two files with the same name told apart
+/// on their tabs. jsdom answers every measurement with zero and has no cascade, so the tab strip's
+/// disambiguation and the panel's layout are questions it cannot be asked.
+describe("two folders open at once", () => {
+  const WORKSPACES = [
+    { id: "Notes", root: "D:/Notes", name: "Notes" },
+    { id: "Work", root: "D:/Work", name: "Work" },
+  ];
+
+  function twoFolders() {
+    const closed: string[] = [];
+
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: { ...DEFAULT_SETTINGS, workspaces: WORKSPACES.map((one) => one.root) },
+      }),
+      writeSettings: async () => {},
+      reopenWorkspace: async (root: string) => ({
+        ok: true as const,
+        workspace: WORKSPACES.find((one) => one.root === root)!,
+      }),
+      // Each folder holds a file with the same name, which is the case that has no answer without
+      // the workspace on the front of a path.
+      listDirectory: async (path: string) => ({
+        ok: true as const,
+        nodes: [{ id: `${path}/notes.md`, name: "notes.md", kind: "file" as const }],
+      }),
+      readFile: async (path: string) => ({
+        ok: true as const,
+        content: `# ${path}\n`,
+        revision: { id: "r1" },
+      }),
+      closeWorkspace: async (workspaceId: string) => {
+        closed.push(workspaceId);
+        return { ok: true };
+      },
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+
+    return { closed };
+  }
+
+  const panel = () => screen.getByRole("complementary", { name: "Workspace" });
+
+  it("draws a row for each folder, with a close button on each", async () => {
+    twoFolders();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close Notes" })).toBeDefined());
+    expect(screen.getByRole("button", { name: "Close Work" })).toBeDefined();
+
+    // Both roots are on screen, and both are visible boxes rather than merely present.
+    for (const name of ["Notes", "Work"]) {
+      const row = within(panel()).getByTitle(`D:/${name}`);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(0);
+    }
+  });
+
+  it("lists both folders' files, each under its own root", async () => {
+    twoFolders();
+    render(<App />);
+
+    await waitFor(() =>
+      expect(within(panel()).getAllByRole("button", { name: /notes\.md/ })).toHaveLength(2),
+    );
+  });
+
+  /// The case the whole change exists for.
+  ///
+  /// Two files called `notes.md`, in two folders. Opened one after the other they are two tabs, and
+  /// the strip lengthens both labels until they differ - which is where the workspace on the front
+  /// of a path earns its keep, because it is the only thing that differs.
+  it("opens both files called notes.md, and tells the tabs apart", async () => {
+    twoFolders();
+    render(<App />);
+
+    const rows = await waitFor(() => {
+      const found = within(panel()).getAllByRole("button", { name: /notes\.md/ });
+      expect(found).toHaveLength(2);
+      return found;
+    });
+
+    await userEvent.click(rows[0]!);
+    await userEvent.click(rows[1]!);
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Notes/notes.md",
+      "Work/notes.md",
+    ]);
+  });
+
+  it("closes one folder and leaves the other", async () => {
+    const { closed } = twoFolders();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close Notes" })).toBeDefined());
+    await userEvent.click(screen.getByRole("button", { name: "Close Notes" }));
+
+    await waitFor(() => expect(closed).toEqual(["Notes"]));
+    expect(screen.queryByRole("button", { name: "Close Notes" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close Work" })).toBeDefined();
   });
 });
