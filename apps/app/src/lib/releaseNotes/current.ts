@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.58.2",
+    date: "2026-09-08",
+    pr: 117,
+    headline: "The window title no longer looks like a menu",
+    summary:
+      "In the title bar, the app name and the file you have open sat immediately after File, Edit, Tools and Help in exactly the same colour as them - so Trypthos read as a fifth menu, and it was the obvious one to click when looking for something like Window or View. Nothing happened when you did, which is the worst answer a menu bar can give. The title is now drawn a shade quieter than the menu labels, so the menu bar visibly ends where the menus end and the title reads as what it is: a label saying which file you are in.",
+    fixed: [
+      "The window title is drawn in a quieter colour than the menu labels, rather than looking like another menu.",
+    ],
+  },
+  {
     version: "0.58.1",
     date: "2026-09-07",
     pr: 115,
