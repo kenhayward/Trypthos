@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { expectsConsoleError } from "../test-setup";
 import type { RepoSummary } from "@trypthos/domain";
 import OpenRepoDialog from "./OpenRepoDialog";
-import type { GitHubBridge } from "../lib/workspaceClient";
+import type { GitHubBridge, GitHubStatus } from "../lib/workspaceClient";
 
 /// The repository picker.
 ///
@@ -19,7 +20,7 @@ const REPOS: RepoSummary[] = [
 
 function bridge(overrides: Partial<GitHubBridge> = {}): GitHubBridge {
   return {
-    githubStatus: vi.fn(async () => ({ ok: true, connected: true, login: "ada", reason: null })),
+    githubStatus: vi.fn(async () => ({ ok: true as const, connected: true, login: "ada", reason: null })),
     connectGitHub: vi.fn(async () => ({ ok: true as const, login: "ada" })),
     disconnectGitHub: vi.fn(async () => ({ ok: true })),
     listRepositories: vi.fn(async () => ({ ok: true as const, repos: REPOS })),
@@ -95,7 +96,7 @@ describe("OpenRepoDialog", () => {
   it("asks for a token when no account is connected", async () => {
     draw({
       bridge: bridge({
-        githubStatus: vi.fn(async () => ({ ok: true, connected: false, login: null, reason: null })),
+        githubStatus: vi.fn(async () => ({ ok: true as const, connected: false, login: null, reason: null })),
       }),
     });
 
@@ -108,9 +109,7 @@ describe("OpenRepoDialog", () => {
 
     draw({
       bridge: bridge({
-        githubStatus: vi.fn(async () => ({
-          ok: true,
-          connected,
+        githubStatus: vi.fn(async () => ({ ok: true as const, connected,
           login: connected ? "ada" : null,
           reason: null,
         })),
@@ -133,7 +132,7 @@ describe("OpenRepoDialog", () => {
   it("does not show the token as it is typed", async () => {
     draw({
       bridge: bridge({
-        githubStatus: vi.fn(async () => ({ ok: true, connected: false, login: null, reason: null })),
+        githubStatus: vi.fn(async () => ({ ok: true as const, connected: false, login: null, reason: null })),
       }),
     });
 
@@ -144,7 +143,7 @@ describe("OpenRepoDialog", () => {
   it("says why a token was refused, and stays on the connect form", async () => {
     draw({
       bridge: bridge({
-        githubStatus: vi.fn(async () => ({ ok: true, connected: false, login: null, reason: null })),
+        githubStatus: vi.fn(async () => ({ ok: true as const, connected: false, login: null, reason: null })),
         connectGitHub: vi.fn(async () => ({ ok: false as const, reason: "permission-denied" })),
       }),
     });
@@ -192,5 +191,48 @@ describe("OpenRepoDialog", () => {
 
     expect(await screen.findByText(/needs the desktop app/)).toBeTruthy();
     expect(screen.queryByLabelText("Personal access token")).toBeNull();
+  });
+});
+
+/// A dialog that cannot say what went wrong is the bug this pair guards.
+describe("when the shell itself fails", () => {
+  const broken = (): Promise<never> =>
+    Promise.reject(new Error("No handler registered for 'github:status'"));
+
+  beforeEach(() => expectsConsoleError(/A call to the shell did not complete/));
+
+  // The reported symptom: the dialog sat on a loading message for ever, with no error and no way
+  // out, because a rejected IPC call left the status check running.
+  it("stops loading and says something went wrong, rather than spinning for ever", async () => {
+    draw({ bridge: bridge({ githubStatus: vi.fn(broken) }) });
+
+    expect(await screen.findByText("Something went wrong.")).toBeTruthy();
+    expect(screen.queryByText("Checking your GitHub account...")).toBeNull();
+    // And it falls back to the form, so there is something to do about it.
+    expect(screen.getByLabelText("Personal access token")).toBeTruthy();
+  });
+});
+
+describe("the two things it waits for", () => {
+  // They read differently on purpose: a user who cannot tell "checking your account" from "fetching
+  // your repositories" cannot say which one has gone wrong.
+  it("says which one it is doing", async () => {
+    let settle: (() => void) | null = null;
+    draw({
+      bridge: bridge({
+        githubStatus: vi.fn(
+          () =>
+            new Promise<GitHubStatus>((resolve) => {
+              settle = () => resolve({ ok: true, connected: true, login: "ada", reason: null });
+            }),
+        ),
+      }),
+    });
+
+    expect(await screen.findByText("Checking your GitHub account...")).toBeTruthy();
+    await act(async () => {
+      settle!();
+    });
+    expect(await screen.findByRole("button", { name: /ada\/notes/ })).toBeTruthy();
   });
 });

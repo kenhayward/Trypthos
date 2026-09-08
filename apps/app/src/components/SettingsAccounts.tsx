@@ -37,7 +37,7 @@ export default function SettingsAccounts({ bridge }: Props) {
           <h4 className="text-ui font-medium text-ink">{t("settings.accounts.github")}</h4>
           <span className="ml-auto text-xs text-ink-4">
             {github.checking
-              ? t("github.loading")
+              ? t("github.checking")
               : github.connected && github.login !== null
                 ? t("github.connectedAs", { login: github.login })
                 : t("github.notConnected")}

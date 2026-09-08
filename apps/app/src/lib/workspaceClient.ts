@@ -152,7 +152,12 @@ export interface WorkspaceClient {
 /// the main process. `reason` says why a stored token is not working - revoked, or a spent rate
 /// limit - which are different problems and send the user to different places.
 export interface GitHubStatus {
-  ok: boolean;
+  /// Always true, and a literal rather than a boolean on purpose.
+  ///
+  /// This channel does not fail: "no account connected" is an ANSWER, carried by `connected` and
+  /// `reason`, not a refusal. Typing it as `true` is what lets a caller tell a real answer from a
+  /// call that could not be made at all - see `attempt` in `useGitHub`.
+  ok: true;
   connected: boolean;
   login: string | null;
   reason: string | null;

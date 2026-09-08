@@ -8,6 +8,7 @@ const {
   Tray,
   dialog,
   ipcMain,
+  net,
   safeStorage,
   shell,
 } = require("electron");
@@ -303,7 +304,14 @@ if (!gotLock) {
       // Every GitHub call happens here, where the token is. The renderer never opens a socket to
       // GitHub and never holds the token - the same rule as the chat provider, for the same reason.
       // A factory rather than a client, so connecting can verify a token before it is stored.
-      createGitHub: (getToken) => createGitHubApi({ getToken }),
+      //
+      // **Electron's `net.fetch`, not Node's.** Node's knows nothing about the machine's proxy
+      // settings or its certificate store; Chromium's networking stack knows both. Behind a
+      // corporate proxy or a VPN that is the difference between a request that answers and one that
+      // hangs - and a hung request left the picker spinning with nothing to say. Wrapped rather than
+      // passed by reference, so it keeps its receiver.
+      createGitHub: (getToken) =>
+        createGitHubApi({ getToken, fetch: (url, options) => net.fetch(url, options) }),
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),

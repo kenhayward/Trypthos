@@ -45,11 +45,24 @@ const MAX_REPO_PAGES = 10;
 
 const PER_PAGE = 100;
 
+/// How long to wait for GitHub before giving up on a request.
+///
+/// **A request with nothing to give up on it can hang for ever**, and this one is awaited by an IPC
+/// handler the interface is waiting on - so a proxy that swallows the connection, a firewall, or a
+/// dropped link leaves a dialog spinning with nothing to say. Generous rather than tight: a tree for
+/// a large repository is a real amount of data, and giving up on a slow answer is its own bug.
+const DEFAULT_TIMEOUT_MS = 30_000;
+
 function failure(reason) {
   return { ok: false, reason };
 }
 
-function createGitHubApi({ getToken, fetch = globalThis.fetch, logger = console }) {
+function createGitHubApi({
+  getToken,
+  fetch = globalThis.fetch,
+  logger = console,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}) {
   /// One request, with the token on it, parsed by the schema the caller names.
   ///
   /// The schema is not optional and there is no raw variant: someone else's JSON annotated with a
@@ -60,9 +73,16 @@ function createGitHubApi({ getToken, fetch = globalThis.fetch, logger = console 
     // "GitHub could not be reached" send the user to different places.
     if (typeof token !== "string" || token === "") return failure("not-connected");
 
+    // Every request is abortable, and every request is given up on. Without this a hung connection
+    // is awaited for ever by a handler the interface is waiting on - which reaches the user as a
+    // dialog that spins with no error and no way out, rather than as anything they can act on.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error("timed out")), timeoutMs);
+
     let response;
     try {
       response = await fetch(url, {
+        signal: controller.signal,
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
@@ -75,6 +95,10 @@ function createGitHubApi({ getToken, fetch = globalThis.fetch, logger = console 
       // log is not where it belongs. The message alone says what happened.
       logger.error?.(`A request to GitHub did not complete: ${error.message}`);
       return failure("offline");
+    } finally {
+      // Cleared whichever way this went. A timer left running would abort nothing useful and keep
+      // the process awake for its duration.
+      clearTimeout(timer);
     }
 
     if (!response.ok) {

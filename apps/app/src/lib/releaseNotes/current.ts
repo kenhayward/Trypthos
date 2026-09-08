@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.61.1",
+    date: "2026-09-08",
+    pr: 123,
+    headline: "Connecting to GitHub says what went wrong",
+    summary:
+      "Connecting an account could leave the repository picker sitting on a loading message for ever - no repositories, no error, and nothing to do but close it and try again. Two things caused that and both are fixed. Trypthos now makes its GitHub requests through the same network machinery your browser uses, so a proxy, a VPN or a company certificate no longer leaves a request hanging with nobody waiting on the answer; and every request gives up after thirty seconds rather than waiting for ever. Behind those, the picker could not report a failure at all: if the request to the app's own background half failed outright, it went on saying it was still working. It now stops and says so, and falls back to the connect form so there is something to do about it. Checking your account and fetching your repositories also say different things while they wait, so a stall now tells you which half it is in.",
+    fixed: [
+      "The repository picker no longer hangs on a loading message when a request fails - it says something went wrong and offers the connect form again.",
+      "GitHub requests go through Electron's network stack, so a proxy, VPN or company certificate no longer leaves them hanging.",
+      "A GitHub request that gets no answer is given up on after thirty seconds rather than waiting indefinitely.",
+    ],
+    changed: [
+      "Checking your account and loading your repositories now say different things, so a stall says which one it is.",
+    ],
+  },
+  {
     version: "0.61.0",
     date: "2026-09-08",
     pr: 121,
