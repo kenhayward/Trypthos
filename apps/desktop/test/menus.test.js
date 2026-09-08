@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { MENU_NAMES } = require("@trypthos/domain");
+const { MENU_ACTIONS, MENU_NAMES } = require("@trypthos/domain");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("../src/menus");
 
 /// The menus, as data.
@@ -27,6 +27,32 @@ const handlers = () => ({
 
 const labels = (template) => template.map((item) => item.label ?? item.role ?? item.type);
 const find = (template, label) => template.find((item) => item.label === label);
+
+/// Every action a menu can send must be one the renderer will accept.
+///
+/// The two sides of this contract are a template here and `MENU_ACTIONS` in the domain, which the
+/// renderer validates every pushed message against. An action missing from that list is not an
+/// error anywhere: the message is dropped on arrival, and the menu item silently does nothing. That
+/// is exactly how `release-notes` behaved before it was added, which is why this test exists.
+test("every action a menu sends is one the renderer knows", () => {
+  const sent = new Set();
+  const on = { ...handlers(), action: (name) => sent.add(name) };
+
+  const clickAll = (template) => {
+    for (const item of template) {
+      if (Array.isArray(item.submenu)) clickAll(item.submenu);
+      else if (typeof item.click === "function") item.click();
+    }
+  };
+
+  for (const name of MENU_NAMES) clickAll(popupTemplate(name, { platform: "win32", on }));
+  clickAll(appMenuTemplate({ appName: "Trypthos", on }));
+
+  const unknown = [...sent].filter((action) => !MENU_ACTIONS.includes(action));
+  assert.deepEqual(unknown, []);
+  // The guard's own guard: a walk that clicked nothing would pass by finding no work to do.
+  assert.ok(sent.size >= 5, "no menu items were clicked");
+});
 
 test("there is a template for every menu the renderer can open", () => {
   for (const name of MENU_NAMES) {
@@ -159,6 +185,17 @@ test("Help carries About, and the update check that was only on the tray", () =>
 
 // The guide is help, and it is help the renderer draws: it opens as a read-only tab in the editor,
 // so the menu sends an action rather than doing anything itself.
+// The notes are the renderer's to draw - it holds the release history and the window that shows it -
+// so this is an action like the guide, on both platforms.
+test("Help offers the release notes, on both platforms", () => {
+  const windows = popupTemplate("help", { platform: "win32", on: handlers() });
+  assert.ok(find(windows, "Release Notes"));
+
+  const mac = appMenuTemplate({ appName: "Trypthos", on: handlers() });
+  const help = mac.find((item) => item.label === "Help");
+  assert.ok(find(help.submenu, "Release Notes"));
+});
+
 test("Help offers the markdown syntax guide, on both platforms", () => {
   const windows = popupTemplate("help", { platform: "win32", on: handlers() });
   assert.ok(find(windows, "Markdown Syntax Guide"));
@@ -179,6 +216,7 @@ test("choosing an item tells the renderer what was chosen", () => {
   find(popupTemplate("tools", { platform: "win32", on }), "Settings").click();
   find(popupTemplate("help", { platform: "win32", on }), "About Trypthos").click();
   find(popupTemplate("help", { platform: "win32", on }), "Markdown Syntax Guide").click();
+  find(popupTemplate("help", { platform: "win32", on }), "Release Notes").click();
 
   assert.deepEqual(chosen, [
     "new-file",
@@ -188,6 +226,7 @@ test("choosing an item tells the renderer what was chosen", () => {
     "preferences",
     "about",
     "markdown-guide",
+    "release-notes",
   ]);
 });
 

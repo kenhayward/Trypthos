@@ -30,7 +30,8 @@ export const CAPABILITIES = `
 | Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it here. Switched on from Settings. |
 | Recent files | Open Recent on the File menu lists the last ten files you opened, each with the folder it was in. Choosing one opens both, asking about unsaved work first. |
-| Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. |
+| Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. Settings, About and the release notes are reached from the menus - on macOS, from the Trypthos menu. |
+| Release notes | Help > Release Notes: what changed in each release, in full. Earlier releases are grouped into chapters; open one and every release in it is listed as it was written. |
 | Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct Trypthos renders, with examples, and the flavour of markdown named. |
 | Updates | Checks for a newer version on startup, or on demand from the Help menu or the tray icon. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |

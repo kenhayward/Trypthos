@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.60.0",
+    date: "2026-09-08",
+    pr: 120,
+    headline: "Read the release notes inside Trypthos",
+    summary:
+      "Every release has been written up since the first one, and until now there was nowhere in the app to read any of it. Help > Release Notes opens a window on the lot: the recent releases in full at the top, then a card for each earlier chapter with what it covered and how many releases are in it. Open a chapter and you get every release in it exactly as it was written, down to the wording of its bullets - a chapter is a heading over the history, never a replacement for it. The history is fetched when you open the window and not before, so carrying it about costs nothing until you ask to read it. Two buttons leave the title bar in the same release: the cog and the About button. Both are on the menus now - Settings on Tools, About and Release Notes on Help, and on macOS in the Trypthos menu - and one way in is one thing to keep working.",
+    added: [
+      "Help > Release Notes: the recent releases, and a card for each earlier chapter that opens onto every release in it.",
+    ],
+    changed: [
+      "The Settings cog and the About button have gone from the title bar. Both are on the menus.",
+    ],
+  },
+  {
     version: "0.59.0",
     date: "2026-09-08",
     pr: 118,

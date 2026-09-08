@@ -32,6 +32,7 @@ export const MENU_ACTIONS = [
   "preferences",
   "about",
   "markdown-guide",
+  "release-notes",
   "clear-recent",
 ] as const;
 

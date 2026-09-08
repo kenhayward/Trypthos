@@ -104,23 +104,54 @@ describe("App", () => {
     });
   });
 
-  it("shows the build version, which comes from /version.json", () => {
+  /// A shell that answers for settings and can push a menu action.
+  ///
+  /// Settings, About and the release notes are reached ONLY from the menus now - the title bar's
+  /// gear and About button went with 0.60.0 - so a test about any of them has to come in the way a
+  /// user does.
+  function shellWithMenu(): { push: (action: string) => void } {
+    const menu: { push: (action: string) => void } = {
+      push: () => {
+        throw new Error("The window never subscribed to menu actions.");
+      },
+    };
+    window.trypthos = {
+      ...browserClient,
+      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+      writeSettings: async () => {},
+      onMenuAction: (listener: (message: { action: string }) => void) => {
+        menu.push = (action: string) => listener({ action });
+        return () => {};
+      },
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+    return menu;
+  }
+
+  it("shows the build version, which comes from /version.json", async () => {
+    const user = userEvent.setup();
+    const menu = shellWithMenu();
     render(<App />);
-    expect(screen.getByRole("button", { name: `About ${APP_VERSION}` })).toBeDefined();
+
+    await act(async () => menu.push("about"));
+    expect(await screen.findByText(`Version ${APP_VERSION}`)).toBeDefined();
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
   });
 
-  // About is a page of the settings dialog rather than a modal of its own, so the title bar opens
-  // settings there. One About surface, and nothing that can drift from it.
-  it("opens settings on About, and closes it", async () => {
+  // About is a page of the settings dialog rather than a modal of its own, and Help > About opens it
+  // there. One About surface, and nothing that can drift from it.
+  it("opens settings on About from the Help menu, and closes it", async () => {
     const user = userEvent.setup();
+    const menu = shellWithMenu();
     render(<App />);
 
     expect(screen.queryByRole("dialog")).toBeNull();
 
-    // Resolve the element first, then act on it. Awaiting a query inside an act scope is what
-    // provokes React's "not configured to support act" warning, which test-setup turns into a failure.
-    await user.click(screen.getByRole("button", { name: `About ${APP_VERSION}` }));
+    await act(async () => menu.push("about"));
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "About" })).toBeDefined();
 
@@ -128,13 +159,28 @@ describe("App", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  // Two entry points, one dialog: the gear opens the settings themselves rather than About.
-  it("opens settings on Appearance from the title bar", async () => {
-    const user = userEvent.setup();
+  it("opens settings on Appearance from the Tools menu", async () => {
+    const menu = shellWithMenu();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await act(async () => menu.push("preferences"));
     expect(screen.getByRole("heading", { name: "Appearance" })).toBeDefined();
+  });
+
+  /// The release notes, from Help to the window.
+  ///
+  /// Awaited rather than found straight away: the window is a lazy import, which is what keeps the
+  /// release history out of what loads with the app.
+  it("opens the release notes from the Help menu, and closes them", async () => {
+    const user = userEvent.setup();
+    const menu = shellWithMenu();
+    render(<App />);
+
+    await act(async () => menu.push("release-notes"));
+    expect(await screen.findByRole("dialog", { name: "Release notes" })).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Close release notes" }));
+    expect(screen.queryByRole("dialog", { name: "Release notes" })).toBeNull();
   });
 
   /// Several files open at once, from the tree to the tabs and back.

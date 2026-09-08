@@ -429,6 +429,18 @@ Two details that are easy to lose:
 The title separator is a **plain hyphen**. The design specifies U+2014; the project bans em and en
 dashes in user-facing text, and the guard test fails the build on one.
 
+**The bar holds window controls and nothing else.** A Settings cog and an About button sat at its
+right-hand end until 0.60.0, when both moved to the menus that already carried them - Tools and Help
+on Windows, the application menu on macOS. One route to a surface is one route to keep working. The
+cost is worth stating: in the browser preview, where `popupMenu` is a no-op because there is no shell
+to pop a native menu, Settings and About are no longer reachable at all.
+
+**A menu action is a contract in two halves**, and `MENU_ACTIONS` in the domain is the half the
+renderer validates against. An action a menu sends that is missing from that list is dropped on
+arrival by the schema: no error, no log, just a menu item that quietly does nothing - which is exactly
+what `release-notes` did until the list was extended. `menus.test.js` now walks every template,
+clicks every item and asserts each action it sends is one the renderer knows.
+
 ## The workspace tree
 
 `treeRows` flattens a map of folder states into the rows to render. Pure, so how deep a row sits and
@@ -1720,6 +1732,14 @@ About - now a page of the settings dialog rather than a box of its own - reads `
 instead, which is why the capability table lives there and not beside the release notes. The settings
 dialog is eager, so an `import` of the release notes from any of its pages would put the whole history
 on every page load.
+
+**The window that shows them is `pages/ReleaseNotes.tsx`**, reached from Help > Release Notes and
+loaded with `lazy(() => import(...))` from `App`. It draws `RECENT` in full, then a card per epoch
+whose count and date span come from `ARCHIVED_SPINE`; opening one lazily loads `pages/EpochDetail.tsx`,
+the single module allowed to import `ARCHIVE`. Two guards hold that shape: the archive allow-list, and
+a second test that no eager module statically imports the release notes at all. The first was widened
+in 0.60.0 - it matched only a sibling `./archive`, so the pages that reach it as
+`../lib/releaseNotes/archive` went straight past a guard that appeared to be passing.
 
 ## Running it
 
