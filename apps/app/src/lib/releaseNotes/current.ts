@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.61.3",
+    date: "2026-09-08",
+    pr: 127,
+    headline: "The window no longer reloads itself",
+    summary:
+      "Trypthos could reload its own window while you were using it - everything on screen would vanish, the window would grey for a moment, and it would come back reset with nothing said about why. Open tabs went, and so did any unsaved work in them. It came from a retry meant for one narrow job: when Trypthos is being developed, the app and its interface start together and the app sometimes gets there first, so it tries again. That retry was never switched off once the app had started properly, so any later hiccup - of any kind, from anywhere - reloaded everything. It is now switched off the moment the app has loaded once, and a failure after that is written to the log rather than acted on. This is what was behind the GitHub picker appearing to close by itself with no message: the message went with everything else.",
+    fixed: [
+      "The window no longer reloads itself while you are using it, which was discarding open tabs and unsaved work.",
+      "A load failure after startup is logged rather than silently retried, so there is something to look at when one happens.",
+    ],
+  },
+  {
     version: "0.61.2",
     date: "2026-09-08",
     pr: 125,

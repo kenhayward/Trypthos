@@ -23,7 +23,7 @@ const { webPreferencesFor } = require("./windowOptions");
 const { rendererTarget } = require("./rendererTarget");
 const { navigationDecision } = require("./navigationGuard");
 const { builtIndexPath } = require("./builtIndex");
-const { nextRetryDelayMs } = require("./devReload");
+const { nextRetryDelayMs, shouldRetryLoad } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
 const { createSecretStore } = require("./secretStore");
@@ -65,6 +65,12 @@ let quitting = false;
 let closeToTray = false;
 let loadAttempt = 0;
 let retryTimer = null;
+/// True once the renderer has loaded successfully at least once.
+///
+/// What separates "the dev server is not up yet" from "a running app just had a load fail". The
+/// first is worth retrying; the second must never reload the window, because that discards the
+/// user's open tabs and any unsaved work.
+let hasLoaded = false;
 
 function loadRenderer(window) {
   const target = rendererTarget(
@@ -152,8 +158,17 @@ function createWindow() {
   // In development the shell and the Vite server start together, so the shell routinely wins the
   // race. Retrying turns "blank window, no explanation" into "appears a moment later", and also
   // covers restarting the dev server while the shell stays open.
-  mainWindow.webContents.on("did-fail-load", () => {
+  mainWindow.webContents.on("did-fail-load", (_event, code, description, _url, isMainFrame) => {
     if (!mainWindow) return;
+    // A running app must not reload itself: that discards every open tab and any unsaved work, and
+    // says nothing about why. See `shouldRetryLoad`.
+    if (!shouldRetryLoad({ isMainFrame, hasLoaded, isDev: process.env.TRYPTHOS_DEV === "1" })) {
+      // Logged rather than swallowed. This used to reload the window silently, which is why nobody
+      // could tell it had happened - and the code is the only thing that says what actually failed.
+      // Deliberately not the URL: it can name a file on the user's machine.
+      console.error("A load failed and was not retried: %s (%d), mainFrame=%s", description, code, isMainFrame);
+      return;
+    }
 
     const delay = nextRetryDelayMs(loadAttempt, {});
     if (delay === null) {
@@ -169,6 +184,8 @@ function createWindow() {
 
   mainWindow.webContents.on("did-finish-load", () => {
     loadAttempt = 0;
+    // From here on a failed load is not a startup race, and a packaged app stops retrying.
+    hasLoaded = true;
     // Whatever the app was launched with, now that there is a page to receive it. Cleared as it is
     // sent, so a later reload does not reopen a folder the user has since navigated away from.
     if (pendingTarget !== null) {
