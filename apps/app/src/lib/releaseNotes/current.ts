@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.59.0",
+    date: "2026-09-08",
+    pr: 118,
+    headline: "The filter box searches inside your folders",
+    summary:
+      "The box above the browser used to hide rows that were already on screen, which meant it could only find a file in a folder you had already expanded - the files it was most useful for were exactly the ones it could not see. It now searches every open folder, however deep, and shows what it found: each match under the folders it lives in, with the folders that contain nothing left out entirely. Windows search wildcards work, because that is what a Windows user has already learned - * matches any run of characters, ? matches exactly one, and a filter using either has to match the whole name, so *.md means ends in .md rather than contains it. Plain text still matches anywhere in a name, and case never matters. While a filter is up the panel is showing results rather than the tree, so those folder rows do not collapse - clear the box and your tree is exactly as you left it. A walk of a large folder is not instant, so it says when it is searching, and says so plainly if it stopped early rather than quietly showing you a short list. Hidden folders such as .git are not searched, exactly as they are not listed.",
+    added: [
+      "The filter box searches every open folder by name, and shows matches inside folders you have not expanded.",
+      "* and ? wildcards in the filter, as in the Windows search box.",
+    ],
+    changed: [
+      "A folder with no matching files is left out while a filter is up, rather than sitting there empty.",
+    ],
+  },
+  {
     version: "0.58.3",
     date: "2026-09-08",
     pr: 119,

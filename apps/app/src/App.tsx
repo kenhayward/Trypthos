@@ -34,6 +34,7 @@ import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind } from "./hooks/useFind";
 import { builtInTitleKey } from "./lib/builtInDocuments";
 import { answerFor } from "./lib/commandAnswers";
@@ -181,6 +182,16 @@ export default function App() {
   );
 
   const { state, actions } = useWorkspace(client, SCRATCH, confirmDiscard, noteRecent);
+
+  /// The browser's filter box, which searches every open folder by name.
+  ///
+  /// Its own hook rather than part of the workspace state: what it holds is a question in flight -
+  /// a timer, and an answer that may already be stale - and none of that belongs beside the
+  /// documents and their unsaved work.
+  const fileFilter = useFileFilter({
+    workspaces: state.workspaces,
+    filterFiles: (request) => client.filterFiles(request),
+  });
 
   /// The open documents as paths, which is what both the tab strip and the tree ask for. Memoised
   /// rather than mapped inline: a fresh array on every render re-renders both panels on every
@@ -524,12 +535,13 @@ export default function App() {
           onCollapse={() => updatePanels({ workspaceCollapsed: true })}
           workspaces={state.workspaces}
           folders={state.folders}
-          filter={state.filter}
+          filter={fileFilter.filter}
+          filterStatus={fileFilter.status}
           activePath={state.activePath}
           openPaths={openPaths}
           dirtyPaths={state.dirtyPaths}
           onOpenWorkspace={() => void actions.open()}
-          onFilterChange={actions.setFilter}
+          onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
           onOpenFile={(node) => void actions.openFile(node)}

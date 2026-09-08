@@ -431,8 +431,8 @@ dashes in user-facing text, and the guard test fails the build on one.
 
 ## The workspace tree
 
-`treeRows` flattens a map of folder states into the rows to render. Pure, so what a filter hides, how
-deep a row sits and which folder is still loading are all testable without a tree or a filesystem.
+`treeRows` flattens a map of folder states into the rows to render. Pure, so how deep a row sits and
+which folder is still loading are testable without a tree or a filesystem.
 
 - **Status is per folder, never per panel.** A cloud listing can fail or hang for one folder while the
   rest are fine, so the failure is recorded on the row and rendered inline with a Retry. A spinner
@@ -440,10 +440,35 @@ deep a row sits and which folder is still loading are all testable without a tre
 - **Collapsing forgets descendants** (`withoutSubtree`). Keeping them means re-expanding shows the
   tree as it was however long ago, including files since deleted. It matches on `path + "/"`, so
   `docs` does not take `docs-archive` with it - the same prefix trap the path guard has.
-- **Folders survive a filter, files do not.** What is inside an unexpanded folder is unknown, so
-  hiding it because nothing visible matches would hide matches nobody has looked for yet. That also
-  means the row list is never empty while folders exist, so the "no matches" message keys off the
-  file count rather than the row count.
+- **A filter is a search, and its rows are a second view.** `treeRows` knows nothing about the filter
+  box: the two were one function until 0.59.0, and a sieve over the rows on screen could only ever
+  find a file in a folder somebody had already expanded - the files it was most wanted for were the
+  ones it could not see. A filter now walks every open folder through `workspace:filter`, and
+  `matchRows` rebuilds a tree from the paths that come back. **The shape is in the paths themselves**
+  - a match at `Notes/docs/deep/chapter.md` implies `docs` and `docs/deep` - so drawing the answer
+  costs no further listings, and nothing has to be merged into the folder map. Nothing is: clearing
+  the box leaves the browse tree exactly as it was, which is only true because the two views never
+  share state.
+  - **The matching lives in `packages/domain/src/nameFilter.ts`**, for the same reason `find.ts`
+    does: the walk runs in the main process and the box is typed in the renderer, and a filter that
+    meant different things in each would be a list that disagrees with the word above it.
+    `matchesName` follows the **Windows search box** - plain text matches anywhere, `*` and `?` turn
+    it into a pattern anchored at both ends. `[^/]` in the compiled pattern keeps a wildcard from
+    spanning a separator.
+  - **The walk is `apps/desktop/src/nameSearch.js`**, breadth first through the provider, skipping
+    hidden entries, skipping a folder it cannot list, and bounded by `FILTER_MATCH_LIMIT`,
+    `FILTER_FOLDER_LIMIT` and `FIND_MAX_DEPTH`. It reads no file, which is why it is not
+    `searchFiles` with a different matcher - and why, unlike a find, it is **not** restricted to
+    enabled file types: the browser lists a file whose type is off and draws it grey, and a filter
+    that could not find it would disagree with the tree it sits above.
+  - **`hooks/useFileFilter.ts` holds the question in flight**: a settle delay so a word costs one
+    search rather than four, a generation counter so an answer to an abandoned filter is dropped, and
+    a **ref for the callback** - the window writes it inline, so an effect keyed on it re-rendered
+    into "Maximum update depth exceeded". `status` is derived from the last answer and the current
+    text rather than stored, which is what keeps a second state from disagreeing with the first.
+  - **While filtering, a folder row is a heading rather than a control.** It came from the search, so
+    there is nothing to collapse: no chevron, no `aria-expanded`, and the click still selects the
+    folder for chat and Find. A folder with no matches is left out entirely.
 - **Every file is listed; `openable` says whether clicking one does anything.** A file no enabled
   type covers is drawn dim and inert rather than left out - hiding it made the panel disagree with
   every other view of the same folder, and a missing file cannot be told from an unopenable one.
@@ -1579,7 +1604,8 @@ no corrections while the chat box and settings fields had them, and nothing woul
 
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
-(`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`, `workspace:find`), files (`file:read`,
+(`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`, `workspace:find`,
+`workspace:filter`), files (`file:read`,
 `file:readImage`, `file:write`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved

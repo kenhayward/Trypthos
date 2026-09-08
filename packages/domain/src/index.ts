@@ -233,6 +233,14 @@ export {
 } from "./find";
 export type { FileHit, FindMatch, FindOptions } from "./find";
 
+export {
+  FILTER_FOLDER_LIMIT,
+  FILTER_MATCH_LIMIT,
+  FilterRequest,
+  hasWildcards,
+  matchesName,
+} from "./nameFilter";
+
 export { countWords, detectLineEnding } from "./documentStats";
 export type { LineEnding } from "./documentStats";
 

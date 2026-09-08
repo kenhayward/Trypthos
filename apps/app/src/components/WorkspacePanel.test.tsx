@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import WorkspacePanel from "./WorkspacePanel";
 import type { FolderState } from "../lib/treeRows";
+import type { FilterStatus } from "../hooks/useFileFilter";
 
 /// Every path names the folder it is in, so the map is keyed by qualified path and the workspace's
 /// own id is the key of its root.
@@ -30,6 +31,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     workspaces: [DIARIZ] as readonly { id: string; name: string; root: string }[],
     folders: FOLDERS,
     filter: "",
+    filterStatus: { kind: "idle" } as FilterStatus,
     activePath: null,
     openPaths: [] as readonly string[],
     dirtyPaths: [] as readonly string[],
@@ -121,7 +123,7 @@ describe("WorkspacePanel", () => {
   });
 
   it("says so when a filter matches nothing", () => {
-    panel({ filter: "nothing-matches-this" });
+    panel({ filter: "nothing-matches-this", filterStatus: { kind: "results", paths: [], truncated: false } });
     expect(screen.getByText("No files match.")).toBeDefined();
   });
 
@@ -324,5 +326,94 @@ describe("indenting", () => {
     const rootToFolder = px(paddingOf(/docs/)) - px(paddingOf(/^Diariz$/));
 
     expect(insideDocs - atRoot).toBe(rootToFolder);
+  });
+});
+
+/// The filter box.
+///
+/// What it shows is the answer to a search of every open folder, not the rows that happened to be on
+/// screen - so these render matches from folders the map has never been asked about, which is
+/// exactly the case the old filter could not express.
+describe("filtering the browser", () => {
+  const filtered = (paths: string[], overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> = {}) =>
+    panel({
+      filter: "plan",
+      filterStatus: { kind: "results", paths, truncated: false },
+      ...overrides,
+    });
+
+  it("shows a match inside a folder nobody expanded, under the folders it is in", () => {
+    filtered(["Diariz/docs/deep/plan.md"], { folders: { Diariz: FOLDERS.Diariz! } });
+
+    expect(screen.getByRole("button", { name: /plan\.md/ })).toBeDefined();
+    expect(screen.getByRole("button", { name: /docs/ })).toBeDefined();
+    expect(screen.getByText("deep")).toBeDefined();
+  });
+
+  it("leaves out the files that did not match", () => {
+    filtered(["Diariz/docs/plan.md"]);
+    expect(screen.queryByRole("button", { name: /README\.md/ })).toBeNull();
+  });
+
+  // A heading for a folder with nothing under it says a folder was searched, which is not what the
+  // user asked. The message below covers the case where none of them had anything.
+  it("leaves out a folder that has no matches at all", () => {
+    filtered(["Diariz/docs/plan.md"], {
+      workspaces: [DIARIZ, { id: "Notes", name: "Notes", root: "D:/Notes" }],
+    });
+
+    // By exact name: each workspace row sits beside a "Close <name>" button of its own.
+    expect(screen.getByRole("button", { name: "Diariz" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Notes" })).toBeNull();
+  });
+
+  it("says it is searching while the folders are being walked", () => {
+    panel({ filter: "plan", filterStatus: { kind: "searching" } });
+    expect(screen.getByText("Searching...")).toBeDefined();
+    expect(screen.queryByText("No files match.")).toBeNull();
+  });
+
+  // An answer cut short that does not say so is a wrong answer given confidently.
+  it("says when the search stopped early", () => {
+    panel({
+      filter: "*",
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: true },
+    });
+    expect(screen.getByText(/Stopped early/)).toBeDefined();
+  });
+
+  // These folder rows exist to say where a match is. They came from the search rather than from the
+  // map of expanded folders, so collapsing one could not do anything - and a control that does
+  // nothing is worse than no control.
+  it("does not offer to collapse a folder it is showing results in", async () => {
+    const user = userEvent.setup();
+    const props = filtered(["Diariz/docs/plan.md"]);
+
+    await user.click(screen.getByRole("button", { name: /docs/ }));
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+    // Still the way to point chat and Find at a folder, which is the other half of what the row does.
+    expect(props.onSelectFolder).toHaveBeenCalledWith("Diariz/docs");
+  });
+
+  it("opens a matching file like any other row", async () => {
+    const user = userEvent.setup();
+    const props = filtered(["Diariz/docs/plan.md"]);
+
+    await user.click(screen.getByRole("button", { name: /plan\.md/ }));
+    expect(props.onOpenFile).toHaveBeenCalledWith({
+      id: "Diariz/docs/plan.md",
+      name: "plan.md",
+      kind: "file",
+    });
+  });
+
+  it("counts the matches it is showing", () => {
+    filtered(["Diariz/docs/plan.md", "Diariz/README.md"]);
+    expect(screen.getByText(/2 files/)).toBeDefined();
+  });
+
+  it("shows the tree again when the box is cleared", () => {
+    panel({ filter: "", filterStatus: { kind: "idle" } });
+    expect(screen.getByRole("button", { name: /README\.md/ })).toBeDefined();
   });
 });

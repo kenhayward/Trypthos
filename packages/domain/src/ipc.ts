@@ -41,6 +41,7 @@ export const IPC_CHANNELS = [
   "chats:delete",
   "workspace:outline",
   "workspace:find",
+  "workspace:filter",
   "workspace:close",
   "document:dirty",
   "document:confirmDiscard",

@@ -54,8 +54,6 @@ export interface WorkspaceState {
   /// folder can fail or hang while the rest are fine, and a spinner over the whole panel would hide
   /// the parts that worked.
   folders: Record<string, FolderState>;
-  /// Narrows the visible files by name.
-  filter: string;
   /// The folder chat maps when its Folder button is on, qualified. "" is no selection at all.
   ///
   /// A real selection rather than something derived from the open file: which document you are
@@ -109,7 +107,6 @@ export interface WorkspaceActions {
   toggleFolder(path: string): Promise<void>;
   /// Re-lists a folder whose listing failed.
   retryFolder(path: string): Promise<void>;
-  setFilter(filter: string): void;
   /// Chooses the folder chat maps. Expanding a folder is a separate act - see `toggleFolder`.
   selectFolder(path: string): void;
   openFile(node: RemoteNode): Promise<void>;
@@ -168,7 +165,6 @@ export interface WorkspaceActions {
 interface Internal {
   workspaces: readonly WorkspaceInfo[];
   folders: Record<string, FolderState>;
-  filter: string;
   documents: DocumentSet;
   selectedFolder: string;
   /// The buffer shown when no file is open. Kept while files are open rather than discarded: it is
@@ -185,7 +181,6 @@ interface Internal {
 const INITIAL: Internal = {
   workspaces: [],
   folders: {},
-  filter: "",
   selectedFolder: "",
   documents: emptyDocumentSet(),
   scratch: "",
@@ -691,7 +686,6 @@ export function useWorkspace(
     () => ({
       workspaces: internal.workspaces,
       folders: internal.folders,
-      filter: internal.filter,
       selectedFolder: internal.selectedFolder,
       documents: internal.documents.documents,
       activePath: internal.documents.activePath,
@@ -717,7 +711,6 @@ export function useWorkspace(
     reopen,
     toggleFolder,
     retryFolder: loadFolder,
-    setFilter: (filter: string) => setInternal((prev) => ({ ...prev, filter })),
     selectFolder: (path: string) => setInternal((prev) => ({ ...prev, selectedFolder: path })),
     openFile,
     openPath,

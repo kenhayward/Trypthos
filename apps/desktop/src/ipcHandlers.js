@@ -18,6 +18,7 @@ const {
   SetSecretRequest,
   createPathGuard,
   CloseWorkspaceRequest,
+  FilterRequest,
   FindRequest,
   qualifyPath,
   splitQualified,
@@ -38,6 +39,7 @@ const chatStore = require("./chatStore");
 const { outlineWorkspace } = require("./workspaceOutline");
 const { createFolderToolRunner } = require("./folderToolRunner");
 const { searchFiles } = require("./fileSearch");
+const { searchNames } = require("./nameSearch");
 
 /// The main-process side of the IPC surface.
 ///
@@ -563,6 +565,28 @@ function registerIpcHandlers({
     guarded(locateQualified, FindRequest, (request, workspace) =>
       searchFiles(workspace.provider, request),
     ),
+  );
+
+  /// The browser's filter box, which searches INSIDE the folders rather than only the rows on
+  /// screen.
+  ///
+  /// The same walk rules as Find in Files - through the provider, bounded, one unreadable folder
+  /// skipped rather than fatal - and one difference: nothing is read, so nothing is restricted by
+  /// file type. The browser lists a file whose type is off and draws it grey; a filter that could
+  /// not find it would disagree with the tree it sits above.
+  ipcMain.handle(
+    "workspace:filter",
+    guarded(locateQualified, FilterRequest, async (request, workspace) => {
+      const result = await searchNames(workspace.provider, request);
+      if (!result.ok) return result;
+      // Qualified HERE, exactly as a listing is, so the renderer receives paths it can hand straight
+      // back to open a file and never has to work out which workspace one belongs to.
+      return {
+        ok: true,
+        paths: result.paths.map((found) => qualifyPath(workspace.id, found)),
+        truncated: result.truncated,
+      };
+    }),
   );
 
   /// Save As: a native dialog, then a write to wherever it landed.
