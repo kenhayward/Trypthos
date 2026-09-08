@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const { createUpdater } = require("../src/updater");
 
@@ -24,6 +25,8 @@ function harness({
   // straight through to the asset-download path below. A test that needs the real Windows path -
   // electron-updater actually downloading - passes a fake shaped like the real one instead.
   autoUpdaterFactory = () => null,
+  fetch: fetchOverride = null,
+  checkTimeoutMs,
 } = {}) {
   const shown = [];
   const notifications = [];
@@ -32,7 +35,14 @@ function harness({
   const written = [];
   const openedPaths = [];
 
-  global.fetch = async (url) => {
+  /// Every URL the updater asked for, in order.
+  ///
+  /// Recorded so a test can assert that a request went through the fetch it was HANDED rather than
+  /// through an ambient global - which is the whole point of the updater taking one.
+  const asked = [];
+
+  const fetchImpl = async (url) => {
+    asked.push(String(url));
     if (fetchFails) throw new Error("offline");
     // The releases list is JSON; anything else here is a request for an asset's bytes. Distinguished
     // by URL, the same way the real GitHub API distinguishes the two kinds of endpoint.
@@ -84,9 +94,14 @@ function harness({
     downloadsDir: "/fake/downloads",
     autoUpdaterFactory,
     platform,
+    // Passed in rather than assigned to `global.fetch`. A test that reaches for a global leaves it
+    // set for whatever runs next, and it cannot prove the updater uses the one it was given - which
+    // is the property that keeps it on Electron's network stack in production.
+    fetch: fetchOverride ?? fetchImpl,
+    ...(checkTimeoutMs === undefined ? {} : { checkTimeoutMs }),
   });
 
-  return { updater, shown, notifications, opened, written, openedPaths };
+  return { updater, shown, notifications, opened, written, openedPaths, asked };
 }
 
 const release = (tag, assets = []) => ({
@@ -370,4 +385,98 @@ test("a manual download also uses the automated path when it can", async () => {
 
   assert.equal(written.length, 1);
   assert.equal(opened.length, 0);
+});
+
+/// Which network stack the update checks go over.
+///
+/// Node's `fetch` in the main process knows nothing about the machine's proxy settings or its
+/// certificate store; Electron's `net.fetch` uses Chromium's networking stack, which knows both.
+/// That is the difference between Trypthos reaching GitHub and the browser on the same machine
+/// reaching it - and it is why an update check could fail on a corporate network while the releases
+/// page opened perfectly well in a tab.
+///
+/// Asserted against `main.js` because that is the only place the two are joined. Nothing else can
+/// see it: the updater takes whatever fetch it is handed, and every test above hands it a fake.
+test("the shell checks for updates through Electron's network stack", () => {
+  const main = fs.readFileSync(path.join(__dirname, "..", "src", "main.js"), "utf8");
+
+  assert.match(main, /\bnet\b[\s\S]*?= require\("electron"\)/, "main must import net from electron");
+  assert.match(
+    main,
+    /createUpdater\(\{[^}]*fetch:[^}]*net\.fetch/s,
+    "createUpdater must be given net.fetch",
+  );
+});
+
+// The releases check and the asset download are two different requests, and a fix that reached only
+// the first would leave macOS downloading its .dmg over the stack that could not reach GitHub.
+test("uses the fetch it was given for the download as well as the check", async () => {
+  const { updater, asked } = harness({
+    version: "0.9.0",
+    releases: [release("v1.0.0", assetsFor("1.0.0"))],
+    platform: "win32",
+    dialogResponse: 0,
+  });
+
+  await updater.check("manual");
+
+  assert.ok(
+    asked.some((url) => url.includes("/releases")),
+    "the check must go through the injected fetch",
+  );
+  assert.ok(
+    asked.some((url) => url.includes("exe-1.0.0")),
+    "the download must go through the injected fetch too",
+  );
+});
+
+/// A check that gets no answer at all.
+///
+/// A refused connection throws and is already handled; a connection that simply hangs is not. A
+/// manual check would sit there for ever with the user waiting on it.
+test("gives up on a check that never answers", async () => {
+  let seen = null;
+  const { updater, shown } = harness({
+    releases: [],
+    fetch: (_url, options) =>
+      new Promise((_resolve, reject) => {
+        seen = options.signal;
+        options.signal.addEventListener("abort", () => reject(options.signal.reason));
+      }),
+    checkTimeoutMs: 20,
+  });
+
+  await updater.check("manual");
+
+  // Asserted as well as the answer: without this the test passes for the wrong reason, because a
+  // request with no signal at all throws on the line above and is reported the same way.
+  assert.ok(seen?.aborted, "the check should have been aborted rather than merely failing");
+  // The same answer a refused connection gets: a manual check is answered either way.
+  assert.equal(shown.length, 1, "a manual check must answer rather than hang");
+});
+
+/// The download deliberately has no timeout, and that is a decision rather than an omission.
+///
+/// An installer is around 110 MB. Any fixed limit generous enough for a slow connection is too long
+/// to be a useful guard, and one short enough to be useful would abort downloads that were working -
+/// which is a worse bug than the one a timeout would fix. The check is a few kilobytes of JSON and
+/// has one.
+test("does not abort a download that is merely slow", async () => {
+  const { updater, written } = harness({
+    releases: [release("v1.0.0", assetsFor("1.0.0"))],
+    platform: "win32",
+    dialogResponse: 0,
+    checkTimeoutMs: 20,
+    fetch: async (url) => {
+      if (String(url).includes("/releases")) {
+        return { ok: true, json: async () => [release("v1.0.0", assetsFor("1.0.0"))] };
+      }
+      // Longer than the check's timeout, which must not apply here.
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      return { ok: true, arrayBuffer: async () => new TextEncoder().encode("x").buffer };
+    },
+  });
+
+  await updater.check("manual");
+  assert.equal(written.length, 1, "a slow download must still land");
 });

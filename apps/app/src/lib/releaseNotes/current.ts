@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.61.2",
+    date: "2026-09-08",
+    pr: 125,
+    headline: "Update checks work behind a proxy",
+    summary:
+      "On a machine behind a company proxy, a VPN, or with a company certificate, Trypthos could never find an update - while the releases page opened perfectly well in a browser on that same machine. It was asking over its own networking rather than the machine's, so it knew nothing about the proxy it was meant to go through. It now uses the same network machinery your browser does, for the update check and for downloading the installer alike, which was the other half of it: on macOS the download failed the same way and dropped you on the releases page. This is the same fix 0.61.1 made for GitHub repositories, applied to the last place still doing it the old way. A check that gets no answer at all now gives up after thirty seconds rather than waiting for ever; downloading an installer deliberately has no such limit, because a large download over a slow connection is not a fault and stopping it would be.",
+    fixed: [
+      "Update checks and installer downloads go through the machine's own network settings, so a proxy, VPN or company certificate no longer stops Trypthos finding an update.",
+      "An update check that gets no answer gives up after thirty seconds rather than waiting indefinitely.",
+    ],
+  },
+  {
     version: "0.61.1",
     date: "2026-09-08",
     pr: 123,

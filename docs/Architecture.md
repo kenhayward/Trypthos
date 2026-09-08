@@ -414,7 +414,8 @@ addresses, the schemas someone else's JSON is checked against, the reading of a 
 listing, and what a failing status means. That split is what makes the awkward parts testable without
 a network, and it is the shape the next three providers should copy.
 
-- **Requests go through Electron's `net.fetch`, not Node's `fetch`.** Node's knows nothing about the
+- **Requests go through Electron's `net.fetch`, not Node's `fetch`.** The updater does the same,
+  for the same reason - between them they are every outbound request the shell makes. Node's knows nothing about the
   machine's proxy settings or its certificate store; Chromium's networking stack knows both. Behind a
   corporate proxy or a VPN that is the difference between a request that answers and one that hangs.
   It is injected from `main.js` rather than reached for, so every test hands the client a fake - and
@@ -1873,6 +1874,14 @@ place. **macOS cannot**: Squirrel.Mac refuses to update an unsigned app, so it c
 releases API directly and downloads and opens the matching `.dmg` itself instead (see "downloading
 the installer itself" below) - honest about what it can do, rather than failing part-way through an
 install.
+
+**Both requests use Electron's `net.fetch`**, injected from `main.js` - the releases check and the
+asset download alike. Node's `fetch` knows nothing about the machine's proxy settings or its
+certificate store, which is how an update check came to fail on a corporate network while the
+releases page opened perfectly well in a browser on that same machine. The check also **times out at
+30s**; the download deliberately does not, because an installer is ~110 MB and any limit generous
+enough for a slow connection is too long to guard anything, while a shorter one would abort downloads
+that were working.
 
 Two consent models, which is why `check` takes a trigger:
 
