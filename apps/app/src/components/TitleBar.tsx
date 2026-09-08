@@ -77,7 +77,16 @@ export default function TitleBar({ platform, fileName, onAbout, onSettings }: Pr
         </nav>
       )}
 
-      <span className="min-w-0 truncate text-sm text-ink-3">{windowTitle(APP_NAME, fileName)}</span>
+      {/*
+        One tier below the menu labels, deliberately. The title lands right beside them and is not
+        clickable, so in the menus' own colour the app name reads as a fifth menu - and it is the
+        word a user would click. Colour is the only thing that can separate them here; there is no
+        room for a rule and no other cue that survives both themes.
+
+        One tier, not the faintest: the file name is something a user reads, and ink-5 lands around
+        2.5:1 on the light ground - a legible separation in a screenshot, not in daylight.
+      */}
+      <span className="min-w-0 truncate text-sm text-ink-4">{windowTitle(APP_NAME, fileName)}</span>
 
       <div className="app-no-drag ml-auto flex items-center">
         <button

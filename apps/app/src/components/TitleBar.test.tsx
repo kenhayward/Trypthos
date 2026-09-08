@@ -42,6 +42,21 @@ describe("TitleBar", () => {
     expect(title).not.toContain(String.fromCharCode(0x2014));
   });
 
+  // The title sits immediately after the menu labels and is not clickable. Drawn in the menu's own
+  // colour it reads as a fifth menu, and the app name is the word that invites the click.
+  //
+  // Asserted on the classes rather than the computed colour: jsdom resolves no variables, so a
+  // colour assertion here could not tell one token from another.
+  it("draws the window title in a different colour from the menu labels", () => {
+    render(<TitleBar platform="win32" fileName="README.md" onAbout={noop} onSettings={noop} />);
+
+    const ink = (element: Element) => [...element.classList].find((name) => name.startsWith("text-ink"));
+    const title = ink(screen.getByText("Trypthos - README.md"));
+
+    expect(title).toBeDefined();
+    expect(title).not.toBe(ink(screen.getByRole("button", { name: "File" })));
+  });
+
   it("carries About, since there is no in-app header any more", async () => {
     const onAbout = vi.fn();
     const user = userEvent.setup();
