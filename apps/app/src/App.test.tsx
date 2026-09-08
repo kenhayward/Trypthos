@@ -666,3 +666,92 @@ describe("making a new file", () => {
     await waitFor(() => expect(savedAs).toEqual([{ path: "notes.md", content: "" }]));
   });
 });
+
+/// Opening a GitHub repository, through the whole window.
+///
+/// The picker was reported vanishing on its own while it said it was loading, which no test of the
+/// dialog on its own could see: the dialog is mounted by App, and whether it STAYS mounted is App's
+/// business rather than the dialog's. That seam is the one thing every other test here fakes away.
+describe("opening a GitHub repository", () => {
+  const REPOS = [
+    {
+      owner: "ada",
+      name: "notes",
+      fullName: "ada/notes",
+      private: false,
+      defaultBranch: "main",
+      description: null,
+      pushedAt: null,
+    },
+  ];
+
+  function shellWithGitHub(overrides: Record<string, unknown> = {}) {
+    const opened: unknown[] = [];
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+      writeSettings: async () => {},
+      listDirectory: async () => ({ ok: true as const, nodes: [] }),
+      githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
+      connectGitHub: async () => ({ ok: true as const, login: "ada" }),
+      disconnectGitHub: async () => ({ ok: true }),
+      listRepositories: async () => ({ ok: true as const, repos: REPOS }),
+      openWorkspaceRef: async (ref: unknown) => {
+        opened.push(ref);
+        return {
+          ok: true as const,
+          workspace: { id: "notes", name: "notes", ref, truncated: false },
+        };
+      },
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      onOpenTarget: () => () => {},
+      ...overrides,
+    } as unknown as typeof window.trypthos;
+    return { opened };
+  }
+
+  it("opens the picker and keeps it open while it loads", async () => {
+    shellWithGitHub();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+
+    // The reported failure: it appears, says it is working, and then goes away by itself.
+    expect(await screen.findByRole("button", { name: /ada\/notes/ })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Open a GitHub repository" })).toBeTruthy();
+  });
+
+  it("opens the repository that was chosen, and puts it in the browser", async () => {
+    const { opened } = shellWithGitHub();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+
+    expect(opened).toEqual([{ kind: "github", owner: "ada", repo: "notes" }]);
+    // The dialog has done its job and gone, and the repository is a row in the browser.
+    expect(screen.queryByRole("dialog", { name: "Open a GitHub repository" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "notes" })).toBeTruthy();
+  });
+
+  // If opening fails, the user must be told - the dialog has closed by then, so the message has
+  // nowhere to live but the window's own banner.
+  it("says so in the window when the repository cannot be opened", async () => {
+    shellWithGitHub({
+      openWorkspaceRef: async () => ({ ok: false as const, reason: "permission-denied" }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Trypthos is not allowed to open that.")).toBeTruthy();
+  });
+});

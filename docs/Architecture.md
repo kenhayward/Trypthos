@@ -511,6 +511,18 @@ would put U+FEFF in front of the first heading, which then stops being a heading
 in between, that revision is stale - and a stale revision makes the next save report a conflict,
 where a fresh one would accept the save and overwrite whatever arrived.
 
+### The renderer is loaded once, and reloaded only in development
+
+`main.js` retries `loadRenderer` on `did-fail-load`, for one narrow reason: in development the shell
+and the Vite server start together and the shell routinely wins the race.
+
+**That retry is disarmed the moment the renderer loads successfully** (`shouldRetryLoad`). It used to
+be armed for the life of the window, so any later `did-fail-load` reloaded a running app - discarding
+every open tab and **any unsaved document**, with nothing on screen to say what had happened. A
+packaged app that has already loaded never reloads itself; a development one still does, because a
+restarted dev server is a reload the developer wants. Subframe failures are ignored either way, and a
+failure that is not retried is logged rather than swallowed.
+
 ## Window chrome
 
 The window is **frameless**, and the renderer draws the title bar. Getting there differs by platform,
