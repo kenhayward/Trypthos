@@ -402,6 +402,12 @@ if (!gotLock) {
       shell,
       Notification,
       getWindow: () => mainWindow,
+      // Electron's network stack rather than Node's, for the same reason the GitHub provider uses
+      // it: Node's fetch knows nothing about the machine's proxy settings or its certificate store,
+      // so an update check could fail on a corporate network while the releases page opened
+      // perfectly well in a browser on the same machine. Wrapped rather than passed by reference,
+      // so it keeps its receiver.
+      fetch: (url, options) => net.fetch(url, options),
     });
 
     tray = createTray({

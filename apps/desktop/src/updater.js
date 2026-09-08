@@ -41,18 +41,45 @@ function defaultAutoUpdaterFactory(logger) {
   }
 }
 
+/// How long to wait for the releases list before giving up.
+///
+/// **The CHECK only, never the download.** The check is a few kilobytes of JSON, so a connection
+/// that has not answered in half a minute is not going to. An installer is around 110 MB: any limit
+/// generous enough for a slow connection is too long to be a useful guard, and one short enough to be
+/// useful would abort downloads that were working - which is a worse bug than the one it would fix.
+const CHECK_TIMEOUT_MS = 30_000;
+
 const RELEASES_API = "https://api.github.com/repos/kenhayward/Trypthos/releases";
 const RELEASES_PAGE = "https://github.com/kenhayward/Trypthos/releases/latest";
 
 /// Asks GitHub what has been published. Used on macOS, and as the fallback anywhere
 /// electron-updater cannot answer.
-async function fetchAvailableUpdate(currentVersion) {
-  const response = await fetch(RELEASES_API, {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "Trypthos" },
-  });
-  if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
+///
+/// `fetchImpl` is passed in rather than reached for. In production it is Electron's `net.fetch`,
+/// which uses Chromium's networking stack - see the note on `createUpdater`.
+async function fetchAvailableUpdate(
+  currentVersion,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = CHECK_TIMEOUT_MS,
+) {
+  // A refused connection throws and is handled by the caller; one that simply hangs is not, and
+  // would leave a manual check running with the user waiting on it.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("timed out")), timeoutMs);
 
-  return pickUpdate(await response.json(), currentVersion);
+  try {
+    const response = await fetchImpl(RELEASES_API, {
+      signal: controller.signal,
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "Trypthos" },
+    });
+    if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
+
+    return pickUpdate(await response.json(), currentVersion);
+  } finally {
+    // Cleared whichever way this went: a timer left running keeps the process awake for its duration
+    // and would abort nothing useful.
+    clearTimeout(timer);
+  }
 }
 
 function createUpdater({
@@ -75,6 +102,20 @@ function createUpdater({
   // here - which updater path applies, which asset name to look for - would silently take neither
   // the Windows nor the macOS branch if this were read from the real process.platform.
   platform = process.platform,
+  /// How to reach GitHub.
+  ///
+  /// **In production this is Electron's `net.fetch`, not Node's.** Node's knows nothing about the
+  /// machine's proxy settings or its certificate store; Chromium's networking stack knows both. That
+  /// is the difference between Trypthos reaching GitHub and the browser on the same machine reaching
+  /// it - and without it an update check fails on a corporate network while the releases page opens
+  /// perfectly well in a tab.
+  ///
+  /// Injected rather than reached for, so a test hands over a fake instead of assigning a global -
+  /// which would leave it set for whatever ran next, and could never prove the updater used it.
+  fetch = globalThis.fetch,
+  /// How long to wait for the releases list. See `CHECK_TIMEOUT_MS` - and note it does NOT apply to
+  /// the download, deliberately.
+  checkTimeoutMs = CHECK_TIMEOUT_MS,
 }) {
   /// Guards against two checks running at once - the startup check and an impatient tray click.
   let checking = false;
@@ -108,7 +149,7 @@ function createUpdater({
 
     let destination;
     try {
-      const response = await fetch(asset.url);
+      const response = await fetch(asset.url);  // The injected one - see the note above.
       if (!response.ok) throw new Error(`download answered ${response.status}`);
 
       const bytes = Buffer.from(await response.arrayBuffer());
@@ -167,7 +208,7 @@ function createUpdater({
         return { ok: true, state: "downloaded" };
       }
 
-      const update = await fetchAvailableUpdate(currentVersion);
+      const update = await fetchAvailableUpdate(currentVersion, fetch, checkTimeoutMs);
 
       if (update === null) {
         // Silence on startup is the point: an app that announces "you are up to date" every launch
