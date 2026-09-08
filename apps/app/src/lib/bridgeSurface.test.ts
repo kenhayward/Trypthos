@@ -16,31 +16,47 @@ import { repoPath } from "../testing/repoRoot";
 const CLIENT = repoPath("apps", "app", "src", "lib", "workspaceClient.ts");
 const PRELOAD = repoPath("apps", "desktop", "src", "preload.js");
 
-/// The member names of the `WorkspaceClient` interface.
+/// The interfaces whose members must each be a method on the bridge.
+///
+/// One entry per group of calls the renderer makes on the shell. A new provider adds a group here
+/// rather than a second copy of this test - which is the point: the guard has to grow with the
+/// surface, or it goes on checking only the half of it that was written first.
+const SURFACES = ["WorkspaceClient", "GitHubBridge"];
+
+/// The member names of one interface in the client's source.
 ///
 /// Read from the source rather than listed here, so a method added to the interface is covered
 /// without anybody remembering to add it - which is the failure this is guarding against in the
 /// first place.
-function clientMethods(): string[] {
-  const source = readFileSync(CLIENT, "utf8");
-  const start = source.indexOf("export interface WorkspaceClient {");
-  expect(start).toBeGreaterThan(-1);
+function interfaceMethods(source: string, name: string): string[] {
+  const start = source.indexOf(`export interface ${name} {`);
+  expect(start, `${name} should exist in the client`).toBeGreaterThan(-1);
 
   const body = source.slice(start, source.indexOf("\n}", start));
-  const names = [...body.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*)\(/gm)].map((match) => match[1]!);
-  // A regex that matched nothing would make this test pass by finding no work to do, which is the
-  // one way a guard like this fails silently.
-  expect(names.length).toBeGreaterThan(5);
-  return names;
+  return [...body.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*)\(/gm)].map((match) => match[1]!);
 }
 
 describe("the preload bridge", () => {
   it("answers every call the renderer's client makes", () => {
+    const source = readFileSync(CLIENT, "utf8");
     const preload = readFileSync(PRELOAD, "utf8");
-    const missing = clientMethods().filter(
-      (method) => !new RegExp(`^ {2}${method}:`, "m").test(preload),
-    );
 
+    const methods = SURFACES.flatMap((name) => interfaceMethods(source, name));
+    // A regex that matched nothing would make this test pass by finding no work to do, which is the
+    // one way a guard like this fails silently.
+    expect(methods.length).toBeGreaterThan(5);
+
+    const missing = methods.filter((method) => !new RegExp(`^ {2}${method}:`, "m").test(preload));
     expect(missing).toEqual([]);
+  });
+
+  /// Proof the scan reaches the newer surface as well as the original one.
+  ///
+  /// Without it, a typo in an interface name above would leave that group silently unchecked while
+  /// this suite still passed on the other.
+  it("covers the GitHub calls as well as the workspace ones", () => {
+    const source = readFileSync(CLIENT, "utf8");
+    expect(interfaceMethods(source, "GitHubBridge")).toContain("connectGitHub");
+    expect(interfaceMethods(source, "WorkspaceClient")).toContain("openWorkspaceRef");
   });
 });

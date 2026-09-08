@@ -30,7 +30,7 @@ describe("IPC_CHANNELS", () => {
       "window:close",
       "settings:read",
       "settings:write",
-      "workspace:reopen",
+      "workspace:openRef",
       "secrets:list",
       "secrets:set",
       "secrets:delete",
@@ -50,6 +50,10 @@ describe("IPC_CHANNELS", () => {
       "shell:openExternal",
       "shell:integration",
       "shell:setIntegration",
+      "github:status",
+      "github:connect",
+      "github:disconnect",
+      "github:repos",
     ]);
   });
 

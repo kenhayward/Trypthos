@@ -20,6 +20,9 @@ function dialog(overrides: Partial<React.ComponentProps<typeof SettingsDialog>> 
     onSaveKey: vi.fn(async () => ({ ok: true }) as const),
     onDeleteKey: vi.fn(async () => {}),
     explorer: { checked: true, supported: true, registered: false, set: vi.fn(async () => {}) },
+    // Null, as in the browser preview: the Accounts page then says so rather than drawing a form
+    // that cannot work, and no test here is about GitHub.
+    github: null,
     ...overrides,
   };
   render(<SettingsDialog {...props} />);
@@ -564,6 +567,7 @@ describe("SettingsDialog: AI and the system prompt", () => {
           isDesktop
           keyedEndpoints={[]}
           explorer={{ checked: true, supported: false, registered: false, set: vi.fn(async () => {}) }}
+          github={null}
           onClose={vi.fn()}
           onChange={(change) => setSettings((current) => ({ ...current, ...change }))}
           onSaveKey={vi.fn(async () => ({ ok: true }) as const)}

@@ -12,12 +12,14 @@ import {
   parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
+  sameWorkspaceRef,
   splitQualified,
   type FindMatch,
   type ProposedEdit,
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
+import OpenRepoDialog from "./components/OpenRepoDialog";
 import FindDialog from "./components/FindDialog";
 import EditorPanel from "./components/EditorPanel";
 import type { EditorHandle, EditorSelection } from "./components/DocumentEditor";
@@ -50,6 +52,7 @@ import {
   isDesktop,
   keyBridge,
   settingsBridge,
+  githubBridge,
   workspaceClient,
 } from "./lib/workspaceClient";
 import { currentPlatform, windowControls } from "./lib/windowControls";
@@ -110,12 +113,18 @@ export default function App() {
   const [settingsOn, setSettingsOn] = useState<SettingsSection | null>(null);
   /// True while File > New is asking for a name. Nothing is created until it answers.
   const [namingFile, setNamingFile] = useState(false);
+  /// True while the repository picker is open. Its own flag rather than a settings page: choosing a
+  /// repository is an act like opening a folder, not a preference.
+  const [pickingRepo, setPickingRepo] = useState(false);
   /// True while the release notes are open. Its own flag rather than a settings page: the notes are
   /// lazily loaded, and the settings dialog is eager.
   const [readingNotes, setReadingNotes] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
+  /// The GitHub half of the shell, or null in the browser preview. Read once: it is the preload
+  /// bridge, which does not change while the window is open.
+  const github = useMemo(() => githubBridge(), []);
   const { settings, loaded, updatePanels, update } = useSettings(bridge);
 
   const keys = useMemo(() => keyBridge(), []);
@@ -376,18 +385,25 @@ export default function App() {
     if (settings.workspaces.length > 0) void actions.reopen(settings.workspaces);
   }, [loaded, settings.workspaces, actions]);
 
-  /// What to reopen next time: every folder that is open, in the order they are on screen.
+  /// What to reopen next time: every workspace that is open, in the order they are on screen.
+  ///
+  /// References rather than paths, so a GitHub repository comes back next launch exactly as a folder
+  /// does - which is the whole reason a workspace carries one.
   ///
   /// Written only when the list actually differs, and compared by value rather than by reference:
   /// the state's array is rebuilt on every render, so an identity check would write the settings
-  /// file on each one.
+  /// file on each one. `sameWorkspaceRef` is the one rule for "the same place", so this comparison
+  /// and the shell's deduplication cannot disagree.
   useEffect(() => {
     if (!loaded) return;
-    const roots = state.workspaces.map((workspace) => workspace.root);
+    const refs = state.workspaces.map((workspace) => workspace.ref);
     const same =
-      roots.length === settings.workspaces.length &&
-      roots.every((root, at) => root === settings.workspaces[at]);
-    if (!same) update({ workspaces: roots });
+      refs.length === settings.workspaces.length &&
+      refs.every((ref, at) => {
+        const stored = settings.workspaces[at];
+        return stored !== undefined && sameWorkspaceRef(ref, stored);
+      });
+    if (!same) update({ workspaces: refs });
   }, [loaded, state.workspaces, settings.workspaces, update]);
 
   // The shell keeps its own copy of the dirty flag, so that a window with nothing to lose closes
@@ -548,6 +564,7 @@ export default function App() {
           openPaths={openPaths}
           dirtyPaths={state.dirtyPaths}
           onOpenWorkspace={() => void actions.open()}
+          onOpenRepo={() => setPickingRepo(true)}
           onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
@@ -710,6 +727,7 @@ export default function App() {
           onSaveKey={saveKey}
           onDeleteKey={deleteKey}
           explorer={explorer}
+          github={github}
         />
       )}
 
@@ -719,6 +737,19 @@ export default function App() {
         <Suspense fallback={null}>
           <ReleaseNotes onClose={() => setReadingNotes(false)} />
         </Suspense>
+      )}
+
+      {pickingRepo && (
+        <OpenRepoDialog
+          bridge={github}
+          onCancel={() => setPickingRepo(false)}
+          onOpen={(ref) => {
+            // Closed first: opening a repository fetches its whole tree, and a dialog sitting over
+            // the panel while that happens hides the thing the user just asked to see.
+            setPickingRepo(false);
+            void actions.openRef(ref);
+          }}
+        />
       )}
 
       {namingFile && (

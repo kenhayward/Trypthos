@@ -100,7 +100,26 @@ contextBridge.exposeInMainWorld("trypthos", {
 
   readSettings: () => ipcRenderer.invoke("settings:read"),
   writeSettings: (settings) => ipcRenderer.invoke("settings:write", settings),
-  reopenWorkspace: (root) => ipcRenderer.invoke("workspace:reopen", { root }),
+  /// Opens a workspace the app already knows how to name: a folder remembered from last launch, a
+  /// repository chosen from the picker, or a folder handed over by File Explorer.
+  ///
+  /// A reference, not a root - which is what lets one call open a local folder and a GitHub
+  /// repository. It is still not a way to name a folder on the machine: the only roots this side has
+  /// ever seen are ones the main process minted, and the shell checks the folder exists before
+  /// opening it.
+  openWorkspaceRef: (ref) => ipcRenderer.invoke("workspace:openRef", { ref }),
+
+  /// GitHub, as an account.
+  ///
+  /// Write-only by construction, exactly like the API keys above. `status` answers with a LOGIN and
+  /// never a token, and there is deliberately no `getToken`: a token that reached this side would be
+  /// visible in devtools, in the network panel, and in a renderer crash dump.
+  githubStatus: () => ipcRenderer.invoke("github:status"),
+  connectGitHub: (token) => ipcRenderer.invoke("github:connect", { token }),
+  disconnectGitHub: () => ipcRenderer.invoke("github:disconnect"),
+  /// The repositories the connected account owns. Fetched in the main process, where the token is,
+  /// and held for the session - `refresh` is for a user who has just made one.
+  listRepositories: (refresh = false) => ipcRenderer.invoke("github:repos", { refresh }),
 
   /// Opens a native menu under the label the renderer drew.
   ///

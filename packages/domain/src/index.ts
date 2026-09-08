@@ -278,6 +278,9 @@ export {
   WriteSettingsRequest,
   WindowStateSchema,
   WriteRequest,
+  OpenWorkspaceRefRequest,
+  ConnectGitHubRequest,
+  ListReposRequest,
 } from "./ipc";
 export type { ChatEvent, DiscardChoice, IpcChannel, OpenTarget, WindowState } from "./ipc";
 
@@ -291,3 +294,41 @@ export type {
   StorageProvider,
   WriteResult,
 } from "./provider";
+
+export {
+  PROVIDER_KINDS,
+  GitHubWorkspaceRefSchema,
+  LocalWorkspaceRefSchema,
+  WorkspaceRefSchema,
+  sameWorkspaceRef,
+  workspaceRefKey,
+  workspaceRefLabel,
+  workspaceRefName,
+} from "./workspaceRef";
+export type { ProviderKind, WorkspaceRef } from "./workspaceRef";
+
+export {
+  API_VERSION,
+  GITHUB_API,
+  GitHubBlobSchema,
+  GitHubBranchSchema,
+  GitHubRepoListSchema,
+  GitHubRepoSchema,
+  GitHubTreeSchema,
+  GitHubUserSchema,
+  RATE_LIMIT_HEADER,
+  USER_AGENT,
+  blobEntryFor,
+  blobUrl,
+  branchUrl,
+  githubErrorFor,
+  isSafeRef,
+  matchRepos,
+  ownedRepos,
+  repoRefFor,
+  repoUrl,
+  reposUrl,
+  treeNodesAt,
+  treeUrl,
+} from "./github";
+export type { GitHubTreeEntry, RepoSummary } from "./github";

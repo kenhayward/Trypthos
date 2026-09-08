@@ -48,8 +48,9 @@ describe("migrating from version 1", () => {
     const migrated = loadSettings(v1);
     expect(migrated.panels.workspaceWidth).toBe(326);
     expect(migrated.panels.chatCollapsed).toBe(true);
-    // The one remembered folder became a list of one, so the installation comes back as it was left.
-    expect(migrated.workspaces).toEqual(["D:/Notes"]);
+    // The one remembered folder became a list of one, and then a local reference, so the
+    // installation comes back as it was left.
+    expect(migrated.workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
   });
 
   it("fills in what version 2 added", () => {
@@ -261,8 +262,8 @@ describe("loadSettings", () => {
   });
 
   it("reads a current-version file", () => {
-    const stored = { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] };
-    expect(loadSettings(stored).workspaces).toEqual(["D:/Notes"]);
+    const stored = { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local", root: "D:/Notes" }] };
+    expect(loadSettings(stored).workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
   });
 
   // Settings are a convenience, not the user's work. A corrupt or unreadable file must not stop the
@@ -403,8 +404,9 @@ describe("migrating from version 8", () => {
     expect(migrated.chat.folderFileLimit).toBe(40);
     expect(migrated.chat.showPanel).toBeNull();
     expect(migrated.window.closeToTray).toBe(true);
-    // The one remembered folder became a list of one, so the installation comes back as it was left.
-    expect(migrated.workspaces).toEqual(["D:/Notes"]);
+    // The one remembered folder became a list of one, and then a local reference, so the
+    // installation comes back as it was left.
+    expect(migrated.workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
   });
 
   it("arrives at the current version", () => {
@@ -494,8 +496,9 @@ describe("the file types a settings file names", () => {
 
   it("leaves everything else version 10 stored", () => {
     const migrated = loadSettings(before);
-    // The one remembered folder became a list of one, so the installation comes back as it was left.
-    expect(migrated.workspaces).toEqual(["D:/Notes"]);
+    // The one remembered folder became a list of one, and then a local reference, so the
+    // installation comes back as it was left.
+    expect(migrated.workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
     expect(migrated.chat.folderFileLimit).toBe(40);
     expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
   });
@@ -529,7 +532,7 @@ describe("the file types a settings file names", () => {
     const newer = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "klingon"] } };
     expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon"]);
     // And the rest of the file survived the migration to a list of workspaces alongside it.
-    expect(loadSettings(newer).workspaces).toEqual(["D:/Notes"]);
+    expect(loadSettings(newer).workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
   });
 });
 
@@ -656,5 +659,60 @@ describe("recent files", () => {
     const settings = loadSettings(older);
     expect(settings.recentFiles).toEqual([]);
     expect(settings.schemaVersion).toBe(SETTINGS_VERSION);
+  });
+});
+
+describe("migrating from version 14", () => {
+  // Version 14 remembered a workspace as an absolute path. Version 15 remembers it as a reference
+  // that says WHICH provider answers for it, because a GitHub repository has no path at all.
+  const v14 = {
+    ...DEFAULT_SETTINGS,
+    schemaVersion: 14,
+    workspaces: ["D:\\Notes", "/home/ada/essays"],
+  };
+
+  it("reads every remembered folder as a local one", () => {
+    expect(loadSettings(v14).workspaces).toEqual([
+      { kind: "local", root: "D:\\Notes" },
+      { kind: "local", root: "/home/ada/essays" },
+    ]);
+  });
+
+  // The order is what the panel comes back in, so a migration that reordered would rearrange
+  // somebody's folders on the strength of an upgrade.
+  it("keeps them in the order they were open in", () => {
+    expect(loadSettings(v14).workspaces.map((ref) => ("root" in ref ? ref.root : ""))).toEqual([
+      "D:\\Notes",
+      "/home/ada/essays",
+    ]);
+  });
+
+  it("arrives at the current version", () => {
+    expect(loadSettings(v14).schemaVersion).toBe(SETTINGS_VERSION);
+  });
+
+  it("survives a file that never opened a folder at all", () => {
+    expect(loadSettings({ ...v14, workspaces: [] }).workspaces).toEqual([]);
+  });
+});
+
+describe("the workspaces a settings file remembers", () => {
+  it("keeps a GitHub repository", () => {
+    const settings = loadSettings({
+      ...DEFAULT_SETTINGS,
+      workspaces: [{ kind: "github", owner: "ada", repo: "notes" }],
+    });
+    expect(settings.workspaces).toEqual([{ kind: "github", owner: "ada", repo: "notes" }]);
+  });
+
+  // A settings file naming a provider this build has never heard of must not take the user's panel
+  // widths, their models and their recent files down with it - so the whole file falls back to
+  // defaults rather than throwing, which is what `loadSettings` already promises everywhere else.
+  it("falls back to defaults for a provider it does not know", () => {
+    const settings = loadSettings({
+      ...DEFAULT_SETTINGS,
+      workspaces: [{ kind: "dropbox", accountId: "1" }],
+    });
+    expect(settings).toEqual(DEFAULT_SETTINGS);
   });
 });

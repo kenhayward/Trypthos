@@ -5,8 +5,9 @@ About box carries a shorter table again; all three change together.
 
 ## Workspace browser
 
-The left panel shows your open folders as trees. Open a folder from your machine, expand folders in
-place, and click a file to open it in the editor.
+The left panel shows your open folders as trees. Open a folder from your machine or a repository from
+GitHub, expand folders in place, and click a file to open it in the editor. Both kinds sit in the
+same panel and behave the same way; the icon on a workspace's row says which it is.
 
 **The filter box searches, rather than sieving what is on screen.** Type in it and every open folder
 is walked by name, however deep, and what comes back is drawn as a tree of its own: each match under
@@ -46,8 +47,43 @@ it took 40 seconds across 113,000 folders.
 
 If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
 the tree keeps working, because one unreadable folder is a fact about that folder rather than about
-your workspace. OneDrive, Google Drive, Dropbox and GitHub arrive behind the same
-interface, in that order.
+your workspace. OneDrive, Google Drive and Dropbox arrive behind the same interface, in that order.
+
+## GitHub repositories
+
+**Connect an account once, then open repositories like folders.** Trypthos asks for a GitHub personal
+access token - from Settings > Accounts, or from the repository picker itself if you have not
+connected yet. Create one at github.com/settings/tokens with read access to your repositories. The
+token is checked by being used: Trypthos asks GitHub who it belongs to and shows that account, so a
+token that has been revoked reads as disconnected rather than as an account that is still there. A
+token that GitHub refuses is never written to disk.
+
+**Your token never leaves this machine, and never reaches the window.** It is encrypted by your
+operating system - DPAPI on Windows, the Keychain on macOS - and kept in its own file, apart from
+your chat API keys, so deleting a chat model cannot sign you out of GitHub. Every request to GitHub
+is made by the part of Trypthos that holds the token; the part that draws the window never sees it
+and there is no way for it to ask. If your machine cannot encrypt the token, Trypthos refuses to
+store it rather than writing it out in plain text.
+
+**The picker lists the repositories you own** - public and private, newest push first, with the
+description and a Private badge on each. The search box narrows that list as you type, matching the
+owner, the name and the description; it filters the list already fetched, so it is instant and works
+with no network. Refresh goes back to GitHub, which is what you want just after creating a
+repository.
+
+**A repository opens at the head of its default branch, pinned to the commit it was on** when you
+opened it. Nobody pushing while you read can change a file underneath you. The whole listing arrives
+in one request, so expanding folders, the filter box and Find in Files are as quick on a repository
+as on a folder. A repository too large for GitHub to describe in one answer says so on its row rather
+than quietly showing fewer folders than it has. Symlinks and submodules are not listed, exactly as
+they are not followed in a local folder.
+
+**Repositories are read-only for now.** Saving to GitHub is a commit on a branch, with history and
+merge conflicts rather than an overwrite, and that is not built yet. Rather than pretend otherwise,
+Trypthos says so before you open one and refuses a save instead of reporting one it never made. Save
+As is refused for the same reason: there is no folder to save into.
+
+Open repositories reopen the next time you start, exactly as your folders do.
 
 Saving is deliberate: press Ctrl+S (Cmd+S on macOS), and an asterisk beside the file name shows when
 there is something unsaved. If the file changed on disk since you opened it - another program, or

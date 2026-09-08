@@ -1,4 +1,12 @@
-import type { FileHit, FilterRequest, FindRequest, Revision, Settings } from "@trypthos/domain";
+import type {
+  FileHit,
+  FilterRequest,
+  FindRequest,
+  RepoSummary,
+  Revision,
+  Settings,
+  WorkspaceRef,
+} from "@trypthos/domain";
 import type { ChatBridge } from "../hooks/useChat";
 import type { ChatHistoryBridge } from "../hooks/useChatHistory";
 import type { KeyBridge } from "../hooks/useApiKeys";
@@ -10,14 +18,29 @@ import type { SettingsBridge } from "../hooks/useSettings";
 /// bridge, and the renderer cannot name a workspace root - it can only ask the user to choose one.
 
 export interface WorkspaceInfo {
-  /// Minted by the main process when the folder was opened.
+  /// Minted by the main process when the workspace was opened.
   ///
   /// The renderer names a workspace by this and never by its root - the same rule that has always
   /// applied, now that there is more than one to name. It is also the first segment of every path
   /// in this workspace, which is what makes a path say which folder it is in.
   id: string;
-  root: string;
   name: string;
+  /// Which place this is, and which provider answers for it.
+  ///
+  /// The reference itself rather than a root and a kind beside it: one field that draws the icon on
+  /// the workspace's row, says whether there is a folder on disk behind it, and is exactly what the
+  /// settings file remembers so the workspace comes back next launch. Three fields for one question
+  /// would be three answers that could disagree.
+  ///
+  /// `ref.kind === "local"` is the test for "has a folder", and `ref.root` is that folder. A GitHub
+  /// repository has neither, which is why the recent-files list simply does not record one.
+  ref: WorkspaceRef;
+  /// True when the provider could not describe the whole workspace.
+  ///
+  /// A fact about the listing rather than about the place, which is why it is not on the reference.
+  /// GitHub cuts a very large tree short; the browser says so on that workspace's row, because a
+  /// tree quietly missing folders is a wrong answer given confidently.
+  truncated: boolean;
 }
 
 export interface RemoteNode {
@@ -83,9 +106,14 @@ export interface WorkspaceClient {
     path: string,
   ): Promise<{ ok: true; outline: { path: string; paths: string[]; truncated: boolean } } | Failure>;
   openWorkspace(): Promise<OpenResult>;
-  /// Reopens a remembered folder without asking. The shell still checks it exists and is a
-  /// directory - a stored path can have been deleted, renamed or moved to another machine.
-  reopenWorkspace(root: string): Promise<OpenResult>;
+  /// Opens a workspace the app already knows how to name, without asking anything.
+  ///
+  /// One call for three acts that were always the same act: reopening a folder remembered from last
+  /// launch, opening a repository chosen from the picker, and following a folder handed over by File
+  /// Explorer. Which provider answers is decided in the shell; each checks what it needs to, so a
+  /// stored folder that has since been deleted and a repository that has been made private are both
+  /// refused rather than trusted.
+  openWorkspaceRef(ref: WorkspaceRef): Promise<OpenResult>;
   listDirectory(path: string): Promise<ListResult>;
   readFile(path: string): Promise<ReadResult>;
   /// Reads an image, which does not go through `readFile` - see `ImageResult`.
@@ -117,7 +145,34 @@ export interface WorkspaceClient {
   filterFiles(request: FilterRequest): Promise<FilterResult>;
 }
 
-interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge {
+/// What the shell knows about the connected GitHub account.
+///
+/// A LOGIN, never a token. That is the same shape `listKeyedEndpoints` has for API keys, and for the
+/// same reason: it is what lets the interface show who is connected while the credential stays in
+/// the main process. `reason` says why a stored token is not working - revoked, or a spent rate
+/// limit - which are different problems and send the user to different places.
+export interface GitHubStatus {
+  ok: boolean;
+  connected: boolean;
+  login: string | null;
+  reason: string | null;
+}
+
+export type ConnectResult = { ok: true; login: string } | Failure;
+export type RepoListResult = { ok: true; repos: RepoSummary[] } | Failure;
+
+/// The GitHub half of the bridge.
+///
+/// **There is deliberately no `getToken`, and there must never be one.** A token in the renderer is
+/// a token in devtools, in the network panel, and in a renderer crash dump.
+export interface GitHubBridge {
+  githubStatus(): Promise<GitHubStatus>;
+  connectGitHub(token: string): Promise<ConnectResult>;
+  disconnectGitHub(): Promise<{ ok: boolean }>;
+  listRepositories(refresh?: boolean): Promise<RepoListResult>;
+}
+
+interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge {
   platform: string;
   isDesktop: true;
   explorerIntegration(): Promise<IntegrationStatus>;
@@ -194,6 +249,22 @@ export function chatHistoryBridge(): ChatHistoryBridge | null {
   };
 }
 
+/// The GitHub half of the bridge, or null outside the desktop shell.
+///
+/// Null rather than a stub: a browser tab has no credential store and no main process to make the
+/// calls, and a Connect button that silently did nothing would be worse than one that is absent -
+/// which is the same choice the chat panel and the settings hook already make.
+export function githubBridge(): GitHubBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.githubStatus) return null;
+  return {
+    githubStatus: bridge.githubStatus,
+    connectGitHub: bridge.connectGitHub,
+    disconnectGitHub: bridge.disconnectGitHub,
+    listRepositories: bridge.listRepositories,
+  };
+}
+
 /// The API key half of the bridge, or null outside the desktop shell.
 ///
 /// Null rather than a stub for the same reason as settings: the browser preview has nowhere to store
@@ -229,7 +300,7 @@ const unavailable = (): Failure => ({ ok: false, reason: "not-desktop" });
 export const browserClient: WorkspaceClient = {
   workspaceOutline: async () => unavailable(),
   openWorkspace: async () => unavailable(),
-  reopenWorkspace: async () => unavailable(),
+  openWorkspaceRef: async () => unavailable(),
   listDirectory: async () => unavailable(),
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),

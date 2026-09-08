@@ -8,6 +8,7 @@ describe("settings sections", () => {
       "window",
       "chatModels",
       "ai",
+      "accounts",
       "editor",
       "fileTypes",
       "about",
