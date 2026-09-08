@@ -29,7 +29,8 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it in Trypthos. Switched on from Settings, and off again the same way. |
 | Recent files | Open Recent on the File menu lists the last ten files you opened, each with the folder it was in. Choosing one opens the folder and the file together, asking about unsaved work first. Clear the list from the same menu. |
-| Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with editing and spelling suggestions in every text field. |
+| Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with editing and spelling suggestions in every text field. Settings, About and the release notes are reached from the menus rather than from buttons in the title bar - on macOS, from the Trypthos menu. |
+| Release notes | Help > Release Notes opens the app's own history: the recent releases in full, then a card per earlier chapter. Open a chapter and every release in it is listed exactly as it was written. |
 | Updates | Checks GitHub for a newer release on startup, or on demand from the menu or the tray icon. |
 | Local by default | No server, no account, no telemetry. Chats and settings live on your machine. |
 

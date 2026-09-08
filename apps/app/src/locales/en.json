@@ -1,6 +1,5 @@
 {
   "app": {
-    "about": "About {{version}}",
     "dismiss": "Dismiss"
   },
   "workspace": {
@@ -226,7 +225,6 @@
   },
   "settings": {
     "title": "Settings",
-    "open": "Settings",
     "close": "Close settings",
     "nav": "Settings sections",
     "section": {
@@ -347,5 +345,18 @@
     "search": "Search",
     "closeButton": "Close",
     "close": "Close find"
+  },
+  "releaseNotes": {
+    "title": "Release notes",
+    "close": "Close release notes",
+    "latest": "Latest releases",
+    "chapters": "Earlier chapters",
+    "releaseCount": "{{count}} releases",
+    "dateSpan": "{{from}} to {{to}}",
+    "back": "All releases",
+    "loading": "Loading...",
+    "added": "Added",
+    "changed": "Changed",
+    "fixed": "Fixed"
   }
 }

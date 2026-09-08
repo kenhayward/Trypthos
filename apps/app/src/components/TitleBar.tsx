@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MENU_NAMES, titleBarLayout, windowTitle, type Platform } from "@trypthos/domain";
-import { APP_NAME, APP_VERSION } from "../lib/appInfo";
+import { APP_NAME } from "../lib/appInfo";
 import { windowControls } from "../lib/windowControls";
 
 interface Props {
   platform: Platform;
   fileName: string | null;
-  onAbout: () => void;
-  onSettings: () => void;
 }
 
 /// The window's own title bar.
@@ -19,7 +17,7 @@ interface Props {
 /// Whether it draws window controls comes from the shared layout function the SHELL also calls. If
 /// the two disagreed the window would have either two sets of controls or none, and none is
 /// unrecoverable: a frameless window with no close button cannot be closed from inside the app.
-export default function TitleBar({ platform, fileName, onAbout, onSettings }: Props) {
+export default function TitleBar({ platform, fileName }: Props) {
   const { t } = useTranslation();
   const layout = titleBarLayout(platform);
   const [maximized, setMaximized] = useState(false);
@@ -88,37 +86,10 @@ export default function TitleBar({ platform, fileName, onAbout, onSettings }: Pr
       */}
       <span className="min-w-0 truncate text-sm text-ink-4">{windowTitle(APP_NAME, fileName)}</span>
 
+      {/* Window controls, and nothing else. Settings and About had buttons here until 0.60.0; both
+          are on the menus - Settings on Tools, About and Release Notes on Help, and on macOS in the
+          application menu - and a second way in is a second thing to keep in step. */}
       <div className="app-no-drag ml-auto flex items-center">
-        <button
-          type="button"
-          onClick={onSettings}
-          aria-label={t("settings.open")}
-          title={t("settings.open")}
-          className="rounded p-1 text-ink-5 hover:bg-hover hover:text-ink"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-3.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          onClick={onAbout}
-          className="mr-1 rounded px-2 py-1 text-xs text-ink-5 hover:bg-hover hover:text-ink"
-        >
-          {t("app.about", { version: APP_VERSION })}
-        </button>
-
         {layout.drawsWindowControls && (
           <>
             <WindowButton label={t("window.minimize")} onClick={() => void windowControls().minimizeWindow()}>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
@@ -86,6 +86,14 @@ function workspaceNameFor(
   return workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? null;
 }
 
+/// The release-notes window, fetched when it is opened and not before.
+///
+/// `lazy` rather than an ordinary import, and the one thing keeping the release history out of what
+/// loads with the app: the archive alone holds every release ever made and grows without bound.
+/// `bundleBoundary.test.ts` asserts the module graph, because a static import of it here would look
+/// entirely correct and cost every page load.
+const ReleaseNotes = lazy(() => import("./pages/ReleaseNotes"));
+
 /// Hoisted, not written inline: it is handed to the editor as a prop that an effect keys on, and a
 /// fresh `[]` per render would dispatch into CodeMirror on every keystroke.
 const NO_MATCHES: readonly FindMatch[] = [];
@@ -102,6 +110,9 @@ export default function App() {
   const [settingsOn, setSettingsOn] = useState<SettingsSection | null>(null);
   /// True while File > New is asking for a name. Nothing is created until it answers.
   const [namingFile, setNamingFile] = useState(false);
+  /// True while the release notes are open. Its own flag rather than a settings page: the notes are
+  /// lazily loaded, and the settings dialog is eager.
+  const [readingNotes, setReadingNotes] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
@@ -452,6 +463,7 @@ export default function App() {
         else if (action === "preferences") setSettingsOn("appearance");
         else if (action === "about") setSettingsOn("about");
         else if (action === "markdown-guide") actions.openGuide(MARKDOWN_GUIDE);
+        else if (action === "release-notes") setReadingNotes(true);
         // The escape hatch for a list full of files that have since moved. Nothing walks the disk to
         // check, so an entry stays until it falls off the end or this is chosen.
         else if (action === "clear-recent") update({ recentFiles: [] });
@@ -498,12 +510,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-app text-ink" onClick={onMarkdownLink}>
-      <TitleBar
-        platform={platform}
-        fileName={documentTitle}
-        onAbout={() => setSettingsOn("about")}
-        onSettings={() => setSettingsOn("appearance")}
-      />
+      <TitleBar platform={platform} fileName={documentTitle} />
 
       {state.errorKey !== null && (
         <div
@@ -704,6 +711,14 @@ export default function App() {
           onDeleteKey={deleteKey}
           explorer={explorer}
         />
+      )}
+
+      {readingNotes && (
+        // No fallback of its own: the window is one local chunk, so a placeholder over the whole app
+        // would be a flash of something nobody reads. Until it arrives the app is simply still there.
+        <Suspense fallback={null}>
+          <ReleaseNotes onClose={() => setReadingNotes(false)} />
+        </Suspense>
       )}
 
       {namingFile && (

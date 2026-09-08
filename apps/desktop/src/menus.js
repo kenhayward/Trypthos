@@ -34,6 +34,7 @@ const SETTINGS = "Settings";
 const ABOUT = `About ${APP_NAME}`;
 const CHECK_FOR_UPDATES = "Check for Updates...";
 const MARKDOWN_GUIDE = "Markdown Syntax Guide";
+const RELEASE_NOTES = "Release Notes";
 const FIND = "Find...";
 const OPEN_RECENT = "Open Recent";
 
@@ -119,9 +120,16 @@ function guideItem(on) {
   return { label: MARKDOWN_GUIDE, click: () => on.action("markdown-guide") };
 }
 
+/// The release notes, for the same reason: the history is a module in the renderer and the window
+/// that shows it is the renderer's. The main process has no copy of either, and should not grow one.
+function releaseNotesItem(on) {
+  return { label: RELEASE_NOTES, click: () => on.action("release-notes") };
+}
+
 function helpItems(on) {
   return [
     guideItem(on),
+    releaseNotesItem(on),
     separator,
     { label: CHECK_FOR_UPDATES, click: () => on.checkForUpdates() },
     separator,
@@ -176,6 +184,7 @@ function appMenuTemplate({ appName = APP_NAME, on, recent = [] }) {
       label: "Help",
       submenu: [
         guideItem(on),
+        releaseNotesItem(on),
         separator,
         { label: CHECK_FOR_UPDATES, click: () => on.checkForUpdates() },
       ],

@@ -437,10 +437,31 @@ system menu bar at the top of the screen, and the window draws no menu labels of
 - **Edit** carries undo, redo, cut, copy, paste and select all.
 - **Tools** carries Settings. On macOS this lives in the application menu instead, which is where
   that platform expects it.
-- **Help** carries the Markdown Syntax Guide, Check for Updates and About.
+- **Help** carries the Markdown Syntax Guide, Release Notes, Check for Updates and About.
 
-Nothing on a menu is a separate implementation: each item drives the same thing its button or
-shortcut does, so they cannot drift apart.
+Nothing on a menu is a separate implementation: each item drives the same thing its shortcut does,
+so they cannot drift apart.
+
+**The menus are the way to Settings, About and the release notes.** The title bar carried a cog and
+an About button until 0.60.0; both are gone, because a second way in is a second thing to keep
+working, and the bar is now the window's chrome and nothing else. On macOS all three live where that
+platform expects them - Settings and About in the Trypthos menu, Release Notes under Help.
+
+## Release notes
+
+**Help > Release Notes** opens the app's own history. The releases since the last chapter are listed
+in full at the top: what each one was about, and what was added, changed or fixed. Below them is a
+card for each earlier **chapter** - a named stretch of work, with the number of releases it covers and
+the dates it ran between. Open a chapter and you get every release in it, exactly as it was written
+when it shipped.
+
+A chapter is a heading over the history, never a replacement for it. Nothing is merged, shortened or
+dropped to make a summary read better, and the release you find under a chapter heading is the one
+that was published, down to the wording of its bullets.
+
+The full history is fetched only when you open the window, and the older releases only when you open
+the chapter they are in. It grows with every release, and carrying it about would otherwise cost
+something on every start for a page most people open rarely.
 
 **Open Recent**, under File, lists the last ten files you opened, newest first. Each entry names the
 folder as well as the file, because the same file name in two folders is two different files.
