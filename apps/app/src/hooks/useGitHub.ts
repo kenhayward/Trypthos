@@ -48,6 +48,30 @@ export interface GitHubActions {
   dismissError(): void;
 }
 
+/// Runs one call to the shell, turning a rejection into an ordinary refusal.
+///
+/// **`ipcRenderer.invoke` REJECTS whenever the main-process handler throws**, so every call here can
+/// fail rather than answer - a handler that was never registered, an unexpected errno, a bug on the
+/// other side. Left uncaught, the hook simply stays in whatever state it was in: for the status
+/// check that means `checking` for ever, which is a dialog spinning on "Loading your repositories..."
+/// with no error and no way out. That was the bug.
+///
+/// The reason is deliberately generic. There is nothing to say about a failure the other side did
+/// not name, and inventing a specific one would send the user somewhere on the strength of a guess.
+async function attempt<T extends { ok: boolean }>(
+  call: () => Promise<T>,
+  logger: Pick<Console, "error"> = console,
+): Promise<T | { ok: false; reason: string }> {
+  try {
+    return await call();
+  } catch (error) {
+    // Logged rather than shown: the message is a main-process error string, which is for whoever is
+    // debugging it and not for the person trying to open a repository.
+    logger.error("A call to the shell did not complete:", error);
+    return { ok: false, reason: "unknown" };
+  }
+}
+
 const EMPTY: GitHubState = {
   supported: false,
   checking: true,
@@ -82,8 +106,22 @@ export function useGitHub(bridge: GitHubBridge | null): GitHubState & GitHubActi
 
     let live = true;
     void (async () => {
-      const status = await bridge.githubStatus();
+      const status = await attempt(() => bridge.githubStatus());
       if (!live) return;
+
+      // **`checking` ends whatever happened.** A call that failed outright leaves the account
+      // unknown, which reads as not connected with something to say - never as a check still in
+      // progress, which is a dialog that spins for ever.
+      if (!status.ok) {
+        setState((prev) => ({
+          ...prev,
+          checking: false,
+          connected: false,
+          login: null,
+          errorKey: failureKey(status.reason),
+        }));
+        return;
+      }
 
       setState((prev) => ({
         ...prev,
@@ -109,7 +147,7 @@ export function useGitHub(bridge: GitHubBridge | null): GitHubState & GitHubActi
       if (bridge === null || trimmed === "") return false;
 
       setState((prev) => ({ ...prev, loading: true, errorKey: null }));
-      const result = await bridge.connectGitHub(trimmed);
+      const result = await attempt(() => bridge.connectGitHub(trimmed));
 
       if (!result.ok) {
         setState((prev) => ({
@@ -140,7 +178,14 @@ export function useGitHub(bridge: GitHubBridge | null): GitHubState & GitHubActi
   const disconnect = useCallback(async () => {
     if (bridge === null) return;
 
-    await bridge.disconnectGitHub();
+    const result = await attempt(() => bridge.disconnectGitHub().then((ok) => ({ ...ok })));
+    // Reported rather than assumed. A disconnect that did not happen leaving the interface saying
+    // "not connected" would be the interface lying about a credential that is still on disk.
+    if (!result.ok) {
+      setState((prev) => ({ ...prev, errorKey: failureKey("unknown") }));
+      return;
+    }
+
     // The repositories go with the account. Keeping them would let a picker opened after signing out
     // show the repositories of an account the app can no longer reach.
     setState((prev) => ({ ...prev, connected: false, login: null, repos: [], errorKey: null }));
@@ -151,7 +196,7 @@ export function useGitHub(bridge: GitHubBridge | null): GitHubState & GitHubActi
       if (bridge === null) return;
 
       setState((prev) => ({ ...prev, loading: true, errorKey: null }));
-      const result = await bridge.listRepositories(refresh);
+      const result = await attempt(() => bridge.listRepositories(refresh));
 
       if (!result.ok) {
         // Carried rather than flattened into "could not load": a spent rate limit and a revoked

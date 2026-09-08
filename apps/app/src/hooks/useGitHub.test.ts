@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { expectsConsoleError } from "../test-setup";
 import type { RepoSummary } from "@trypthos/domain";
 import { useGitHub } from "./useGitHub";
 import type { GitHubBridge } from "../lib/workspaceClient";
@@ -17,7 +18,7 @@ const REPOS: RepoSummary[] = [
 
 function fakeBridge(overrides: Partial<GitHubBridge> = {}) {
   return {
-    githubStatus: vi.fn(async () => ({ ok: true, connected: false, login: null, reason: null })),
+    githubStatus: vi.fn(async () => ({ ok: true as const, connected: false, login: null, reason: null })),
     connectGitHub: vi.fn(async () => ({ ok: true as const, login: "ada" })),
     disconnectGitHub: vi.fn(async () => ({ ok: true })),
     listRepositories: vi.fn(async () => ({ ok: true as const, repos: REPOS })),
@@ -28,7 +29,7 @@ function fakeBridge(overrides: Partial<GitHubBridge> = {}) {
 describe("useGitHub", () => {
   it("asks the shell whether an account is connected", async () => {
     const bridge = fakeBridge({
-      githubStatus: vi.fn(async () => ({ ok: true, connected: true, login: "ada", reason: null })),
+      githubStatus: vi.fn(async () => ({ ok: true as const, connected: true, login: "ada", reason: null })),
     });
     const { result } = renderHook(() => useGitHub(bridge));
 
@@ -94,7 +95,7 @@ describe("useGitHub", () => {
 
   it("disconnects, and forgets the repositories with the account", async () => {
     const bridge = fakeBridge({
-      githubStatus: vi.fn(async () => ({ ok: true, connected: true, login: "ada", reason: null })),
+      githubStatus: vi.fn(async () => ({ ok: true as const, connected: true, login: "ada", reason: null })),
     });
     const { result } = renderHook(() => useGitHub(bridge));
     await waitFor(() => expect(result.current.connected).toBe(true));
@@ -171,5 +172,72 @@ describe("useGitHub", () => {
     });
 
     expect(JSON.stringify(result.current)).not.toContain("ghp_invented");
+  });
+});
+
+/// A call to the shell that fails outright, rather than answering with a refusal.
+///
+/// `ipcRenderer.invoke` REJECTS whenever the main-process handler throws, so every one of these can
+/// reject rather than resolve. Left uncaught, the hook stays in whatever state it was in - and for
+/// the status check that means `checking` for ever, which is a dialog spinning on "Loading your
+/// repositories..." with no error and no way out. That is the bug this describes.
+describe("when the shell itself fails", () => {
+  const broken = (): Promise<never> =>
+    Promise.reject(new Error("No handler registered for 'github:status'"));
+
+  // The hook logs the main-process error string rather than showing it, so each of these provokes
+  // one on purpose. Declared rather than spied on: a spy would take the console away from the
+  // guard for the length of the test.
+  beforeEach(() => expectsConsoleError(/A call to the shell did not complete/));
+
+  it("stops checking when the status call rejects, and says something went wrong", async () => {
+    // Built once, outside the render: the hook keys its status check on the bridge's identity, and a
+    // fresh object every render would cancel each check with the next render - which is how the app
+    // uses it too, through a useMemo.
+    const bridge = fakeBridge({ githubStatus: vi.fn(broken) });
+    const { result } = renderHook(() => useGitHub(bridge));
+
+    await waitFor(() => expect(result.current.checking).toBe(false));
+    expect(result.current.connected).toBe(false);
+    expect(result.current.errorKey).toBe("errors.unknown");
+  });
+
+  it("stops connecting when the connect call rejects", async () => {
+    const bridge = fakeBridge({ connectGitHub: vi.fn(broken) });
+    const { result } = renderHook(() => useGitHub(bridge));
+    await waitFor(() => expect(result.current.checking).toBe(false));
+
+    await act(async () => {
+      await result.current.connect("ghp_invented");
+    });
+
+    // The button must come back rather than sitting on "Connecting..." for ever.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.errorKey).toBe("errors.unknown");
+  });
+
+  it("stops loading when the repository call rejects", async () => {
+    const bridge = fakeBridge({ listRepositories: vi.fn(broken) });
+    const { result } = renderHook(() => useGitHub(bridge));
+    await waitFor(() => expect(result.current.checking).toBe(false));
+
+    await act(async () => {
+      await result.current.loadRepos();
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.errorKey).toBe("errors.unknown");
+  });
+
+  it("stops disconnecting when the disconnect call rejects", async () => {
+    const bridge = fakeBridge({ disconnectGitHub: vi.fn(broken) });
+    const { result } = renderHook(() => useGitHub(bridge));
+    await waitFor(() => expect(result.current.checking).toBe(false));
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+
+    expect(result.current.errorKey).toBe("errors.unknown");
   });
 });

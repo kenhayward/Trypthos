@@ -404,3 +404,26 @@ test("gives the model no way to open a tab it could not address", () => {
   assert.equal(tabOpenerFor({ root: null }, openInWindow), null);
   assert.equal(opens.length, 1, "nothing more should have reached the window");
 });
+
+/// Which network stack the GitHub calls go over.
+///
+/// Node's `fetch` in the main process knows nothing about the machine's proxy settings or its
+/// certificate store; Electron's `net.fetch` uses Chromium's networking stack, which knows both.
+/// Behind a corporate proxy or a VPN that is the difference between a request that answers and one
+/// that hangs - and a hung request is what left the picker spinning with nothing to say.
+///
+/// Asserted against `main.js` because that is the only place the two are joined, and nothing else
+/// can see it: the API client takes whatever fetch it is handed, and every test hands it a fake.
+test("the shell makes its GitHub requests through Electron's network stack", () => {
+  const main = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "..", "src", "main.js"),
+    "utf8",
+  );
+
+  assert.match(main, /\bnet\b[\s\S]*?= require\("electron"\)/, "main must import net from electron");
+  assert.match(
+    main,
+    /createGitHubApi\(\{[^}]*fetch:[^}]*net\.fetch/,
+    "createGitHubApi must be given net.fetch",
+  );
+});

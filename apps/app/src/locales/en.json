@@ -383,6 +383,7 @@
     "connectedAs": "Connected as {{login}}",
     "notConnected": "Not connected",
     "search": "Search your repositories",
+    "checking": "Checking your GitHub account...",
     "loading": "Loading your repositories...",
     "refresh": "Refresh",
     "noRepos": "This account owns no repositories.",

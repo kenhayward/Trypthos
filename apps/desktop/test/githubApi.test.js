@@ -257,3 +257,62 @@ test("tells a spent rate limit from a refused scope", async () => {
   });
   assert.deepEqual(await refused.api.whoami(), { ok: false, reason: "permission-denied" });
 });
+
+/// A request that never answers.
+///
+/// This is the one that leaves the dialog spinning on "Loading your repositories..." for ever: a
+/// proxy that swallows the connection, a firewall, a dropped link. Nothing here can wait
+/// indefinitely - a request the app has given up on is reported as one it could not make, which is
+/// what the user needs to be told.
+test("gives up on a request that never answers, and reads it as offline", async () => {
+  let seen = null;
+  const api = createGitHubApi({
+    getToken: async () => "ghp_invented",
+    // Answers only when the caller aborts, which is what a hung connection looks like from here.
+    fetch: (_url, options) =>
+      new Promise((_resolve, reject) => {
+        seen = options.signal;
+        options.signal.addEventListener("abort", () => reject(options.signal.reason));
+      }),
+    logger: { warn: () => {}, error: () => {} },
+    timeoutMs: 20,
+  });
+
+  assert.deepEqual(await api.whoami(), { ok: false, reason: "offline" });
+  // Asserted as well as the answer: without it this passes for the wrong reason - a request with no
+  // signal at all throws on the line above and is reported as `offline` too.
+  assert.ok(seen?.aborted, "the request should have been aborted rather than merely failing");
+});
+
+// The timeout must not fire on a request that answered. A clock left running would abort the NEXT
+// request made on a shared connection, which is a failure that only shows up under load.
+test("does not give up on a request that answered in time", async () => {
+  const api = createGitHubApi({
+    getToken: async () => "ghp_invented",
+    fetch: async () => jsonResponse({ login: "ada" }),
+    logger: { warn: () => {}, error: () => {} },
+    timeoutMs: 20,
+  });
+
+  assert.deepEqual(await api.whoami(), { ok: true, login: "ada" });
+  // Long enough for a timer that was never cleared to fire.
+  await new Promise((resolve) => setTimeout(resolve, 40));
+});
+
+// Every request carries one, so a hang anywhere - a listing, a tree, a blob - is given up on rather
+// than only the first call made.
+test("passes an abort signal on every request", async () => {
+  const signals = [];
+  const api = createGitHubApi({
+    getToken: async () => "ghp_invented",
+    fetch: async (_url, options) => {
+      signals.push(options.signal);
+      return jsonResponse({ sha: "c0ffee", truncated: false, tree: [] });
+    },
+    logger: { warn: () => {}, error: () => {} },
+  });
+
+  await api.tree("ada", "notes", "c0ffee");
+  assert.equal(signals.length, 1);
+  assert.ok(signals[0] instanceof AbortSignal, "a request must be abortable");
+});

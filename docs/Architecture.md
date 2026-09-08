@@ -414,8 +414,22 @@ addresses, the schemas someone else's JSON is checked against, the reading of a 
 listing, and what a failing status means. That split is what makes the awkward parts testable without
 a network, and it is the shape the next three providers should copy.
 
+- **Requests go through Electron's `net.fetch`, not Node's `fetch`.** Node's knows nothing about the
+  machine's proxy settings or its certificate store; Chromium's networking stack knows both. Behind a
+  corporate proxy or a VPN that is the difference between a request that answers and one that hangs.
+  It is injected from `main.js` rather than reached for, so every test hands the client a fake - and
+  a test on `main.js` asserts the two are joined, because nothing else can see it.
+- **Every request is abortable and times out** (30s). A request with nothing to give up on it is
+  awaited by an IPC handler the interface is waiting on, so a hung connection reaches the user as a
+  dialog that spins with no error rather than as anything they can act on.
+- **The renderer never lets an IPC rejection vanish.** `ipcRenderer.invoke` rejects whenever a
+  handler throws, and `useGitHub` runs every call through `attempt`, which turns a rejection into an
+  ordinary refusal. Without it the hook simply stayed in whatever state it was in - for the status
+  check, `checking` for ever, which is the same spinning dialog by another route.
 - **The token never leaves the main process.** `github:status` answers with a **login**; there is no
-  channel that returns a token, exactly as there is none for a chat API key.
+  channel that returns a token, exactly as there is none for a chat API key. `GitHubStatus.ok` is the
+  literal `true`: this channel does not fail, so "not connected" is an answer it carries rather than
+  a refusal - which is what lets a caller tell a real answer from a call that could not be made.
 - **Verified before stored.** `github:connect` builds a throwaway client over the offered token and
   asks `/user`. A token GitHub refuses never reaches disk, so the app never holds a credential it has
   never been able to use. There is no pattern check on the token: GitHub has changed its format twice,

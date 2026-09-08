@@ -88,9 +88,11 @@ export default function OpenRepoDialog({ bridge, onCancel, onOpen }: Props) {
         {!github.supported ? (
           <p className="mt-4 text-sm text-ink-3">{t("github.browserOnly")}</p>
         ) : github.checking ? (
-          /* Not the connect form. Showing one for half a second to somebody who is already signed in
-             would be wrong before it was right. */
-          <p className="mt-4 text-sm text-ink-3">{t("github.loading")}</p>
+          /* Not the connect form. Showing one for half a second to somebody who is already signed
+             in would be wrong before it was right.
+             Its own wording, rather than the repositories' - two states that read identically leave
+             a user unable to say which one has gone wrong. */
+          <p className="mt-4 text-sm text-ink-3">{t("github.checking")}</p>
         ) : !github.connected ? (
           <ConnectForm
             field={field}
