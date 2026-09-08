@@ -1684,6 +1684,12 @@ Nothing enforces that but who imports what, so `bundleBoundary.test.ts` asserts 
 directly: an eager `import { ARCHIVE }` type-checks, renders correctly, and passes every other test
 while putting the whole history on every page load.
 
+The first three epochs closed in 0.58.3, covering `0.1.0`-`0.53.0`. **Closing one is its own PR**, and
+its boundaries are chosen by theme rather than by version or date - the guard test that fails above 80
+entries in `RECENT` is a safety net, not the trigger. Entries move to `archive.ts` **unchanged and in
+order**, and `ARCHIVED_SPINE` is extended with the same pairs: an epoch stores no count and no date
+span, because a stored copy is a second derivation that agrees only by luck.
+
 About - now a page of the settings dialog rather than a box of its own - reads `lib/appInfo.ts`
 instead, which is why the capability table lives there and not beside the release notes. The settings
 dialog is eager, so an `import` of the release notes from any of its pages would put the whole history
