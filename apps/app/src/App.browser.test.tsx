@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { page, userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, it } from "vitest";
+import type { WorkspaceRef } from "@trypthos/domain";
 import { DEFAULT_SETTINGS } from "@trypthos/domain";
 import App from "./App";
 import { browserClient } from "./lib/workspaceClient";
@@ -207,8 +208,8 @@ describe("a long reply", () => {
 /// disambiguation and the panel's layout are questions it cannot be asked.
 describe("two folders open at once", () => {
   const WORKSPACES = [
-    { id: "Notes", root: "D:/Notes", name: "Notes" },
-    { id: "Work", root: "D:/Work", name: "Work" },
+    { id: "Notes", name: "Notes", ref: { kind: "local" as const, root: "D:/Notes" }, truncated: false },
+    { id: "Work", name: "Work", ref: { kind: "local" as const, root: "D:/Work" }, truncated: false },
   ];
 
   function twoFolders() {
@@ -219,12 +220,12 @@ describe("two folders open at once", () => {
       isDesktop: true,
       readSettings: async () => ({
         ok: true as const,
-        settings: { ...DEFAULT_SETTINGS, workspaces: WORKSPACES.map((one) => one.root) },
+        settings: { ...DEFAULT_SETTINGS, workspaces: WORKSPACES.map((one) => one.ref) },
       }),
       writeSettings: async () => {},
-      reopenWorkspace: async (root: string) => ({
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
         ok: true as const,
-        workspace: WORKSPACES.find((one) => one.root === root)!,
+        workspace: WORKSPACES.find((one) => one.ref.root === (ref as { root: string }).root)!,
       }),
       // Each folder holds a file with the same name, which is the case that has no answer without
       // the workspace on the front of a path.

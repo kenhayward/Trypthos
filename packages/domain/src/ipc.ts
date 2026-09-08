@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ChatTurnSchema } from "./chatCompletion";
 import { ChatContextSchema } from "./chatContext";
 import { SettingsSchema } from "./settings";
+import { WorkspaceRefSchema } from "./workspaceRef";
 import { isExternalUrl } from "./markdownLink";
 
 /// The IPC contract between the renderer and the shell.
@@ -28,7 +29,7 @@ export const IPC_CHANNELS = [
   "window:close",
   "settings:read",
   "settings:write",
-  "workspace:reopen",
+  "workspace:openRef",
   "secrets:list",
   "secrets:set",
   "secrets:delete",
@@ -48,6 +49,10 @@ export const IPC_CHANNELS = [
   "shell:openExternal",
   "shell:integration",
   "shell:setIntegration",
+  "github:status",
+  "github:connect",
+  "github:disconnect",
+  "github:repos",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -168,6 +173,42 @@ export const ListRequest = z.object({ path: relativePath }).strict();
 export const OutlineRequest = z.object({ path: relativePath }).strict();
 
 export const ReadRequest = z.object({ path: relativePath.min(1) }).strict();
+
+/// Opening a workspace the app already knows how to name: a folder remembered from last launch, a
+/// repository chosen from the picker, or a folder handed over by File Explorer.
+///
+/// **This is not a way for the renderer to name a folder on the machine.** A local reference carries
+/// an absolute root, and the only roots the renderer has ever seen are ones the main process minted
+/// - from the native dialog, from the settings file it wrote, or from the command line. That is the
+/// same round trip `workspace:reopen` made before this channel generalised it, and the shell still
+/// checks the folder exists and is a directory rather than trusting the string.
+export const OpenWorkspaceRefRequest = z.object({ ref: WorkspaceRefSchema }).strict();
+
+export type OpenWorkspaceRefRequest = z.infer<typeof OpenWorkspaceRefRequest>;
+
+/// Storing the GitHub token. One way, like every other credential here: nothing reads it back.
+///
+/// The token is checked by being USED - the shell asks GitHub who it belongs to and reports the
+/// login - rather than by matching a pattern. GitHub has changed its token format twice, and a regex
+/// here would start refusing valid tokens on a day nothing in this app changed.
+export const ConnectGitHubRequest = z
+  .object({
+    /// Trimmed by the caller. A token that is only whitespace is a mistake, not a token.
+    token: z.string().min(1),
+  })
+  .strict();
+
+export type ConnectGitHubRequest = z.infer<typeof ConnectGitHubRequest>;
+
+/// Asking for the repositories the connected account owns.
+///
+/// `refresh` skips the copy the shell is holding. The list is fetched once and kept, because it is
+/// several requests over a slow connection and the picker is opened far more often than a
+/// repository is created - but a user who has just made one needs a way to see it without restarting
+/// the app.
+export const ListReposRequest = z.object({ refresh: z.boolean().default(false) }).strict();
+
+export type ListReposRequest = z.infer<typeof ListReposRequest>;
 
 /// Closing one of the open workspaces.
 ///

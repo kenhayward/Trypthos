@@ -7,12 +7,14 @@ import {
   type Settings,
 } from "@trypthos/domain";
 import type { ExplorerIntegration } from "../hooks/useExplorerIntegration";
+import type { GitHubBridge } from "../lib/workspaceClient";
 import { blankDraft, draftFrom, removeProfile, upsertProfile } from "../lib/chatProfiles";
 import { MODE_HINT_KEYS, MODE_LABEL_KEYS } from "../lib/editorMode";
 import { SECTION_LABEL_KEYS, type SettingsSection } from "../lib/settingsSections";
 import { THEME_PREFERENCES, type ThemePreference } from "../lib/theme";
 import type { SaveKeyResult } from "./ChatProfileForm";
 import SettingsAbout from "./SettingsAbout";
+import SettingsAccounts from "./SettingsAccounts";
 import SettingsFileTypes from "./SettingsFileTypes";
 import SettingsChatModels from "./SettingsChatModels";
 import SettingsNav from "./SettingsNav";
@@ -35,6 +37,9 @@ interface Props {
   /// Trypthos's entries in File Explorer's right-click menu. The registry is the record, so this is
   /// what the shell reports rather than anything stored in settings.
   explorer: ExplorerIntegration;
+  /// The GitHub half of the shell, or null in the browser preview. Passed in rather than reached for
+  /// so the dialog can be rendered in a test without a bridge at all.
+  github: GitHubBridge | null;
 }
 
 /// A segmented control: one row of choices where exactly one is on.
@@ -90,6 +95,7 @@ export default function SettingsDialog({
   onSaveKey,
   onDeleteKey,
   explorer,
+  github,
 }: Props) {
   const { t } = useTranslation();
   const [section, setSection] = useState<SettingsSection>(openOn);
@@ -346,6 +352,8 @@ export default function SettingsDialog({
                 <p className="mt-4 text-xs text-ink-4">{t("settings.editor.defaultViewHint")}</p>
               </div>
             )}
+
+            {section === "accounts" && <SettingsAccounts bridge={github} />}
 
             {section === "fileTypes" && (
               <SettingsFileTypes

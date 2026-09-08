@@ -23,10 +23,18 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     filterFiles: async () => ({ ok: true, paths: [], truncated: false }),
     // The id the main process minted. It is the first segment of every path in this workspace,
     // which is what makes a path say which of the open folders it is in.
-    openWorkspace: async () => ({ ok: true, workspace: { id: "ws", root: "/ws", name: "ws" } }),
-    reopenWorkspace: async (root) => ({
+    openWorkspace: async () => ({
       ok: true,
-      workspace: { id: root.replace(/^\//, ""), root, name: "ws" },
+      workspace: { id: "ws", name: "ws", ref: { kind: "local" as const, root: "/ws" }, truncated: false },
+    }),
+    // A reference in, a workspace out. The fake mints the id from the reference so a test can name
+    // the folder it expects to see in the tree.
+    openWorkspaceRef: async (ref) => ({
+      ok: true,
+      workspace:
+        ref.kind === "github"
+          ? { id: ref.repo, name: ref.repo, ref, truncated: false }
+          : { id: ref.root.replace(/^\//, ""), name: "ws", ref, truncated: false },
     }),
     // Qualified ids, as the shell answers with - so the renderer never has to work out which
     // workspace a row belongs to.
@@ -63,6 +71,14 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
   };
 
   return { client, writes, reads, saveAsCalls };
+}
+
+/// The folder behind a workspace, or null when it has none.
+///
+/// A workspace carries its REFERENCE now rather than a root, because a GitHub repository has no
+/// folder at all - so the tests that care about a local root ask for it the way the hook does.
+function workspaceRoot(workspace: { ref: { kind: string; root?: string } } | undefined): string | null {
+  return workspace?.ref.kind === "local" ? (workspace.ref.root ?? null) : null;
 }
 
 describe("parentOf", () => {
@@ -117,6 +133,17 @@ describe("failureKey", () => {
     expect(failureKey("too-large")).toBe("errors.tooLarge");
     expect(failureKey("not-text")).toBe("errors.notText");
     expect(failureKey("unsupported-encoding")).toBe("errors.unsupportedEncoding");
+  });
+
+  // A cloud provider refuses in ways a local folder never does, and each sends the user somewhere
+  // different: wait an hour, check the connection, connect an account, or accept that Trypthos
+  // cannot do this to a repository yet. One shared key would send them all to the same wrong place.
+  it("maps each provider refusal to its own key", () => {
+    expect(failureKey("rate-limited")).toBe("errors.rateLimited");
+    expect(failureKey("offline")).toBe("errors.offline");
+    expect(failureKey("not-connected")).toBe("errors.notConnected");
+    expect(failureKey("unsupported")).toBe("errors.unsupported");
+    expect(failureKey("encryption-unavailable")).toBe("errors.encryptionUnavailable");
   });
 
   // An errno must never reach the interface, whether as wording or as a key that renders raw.
@@ -230,12 +257,12 @@ describe("useWorkspace", () => {
   // path they may not remember choosing is worse than simply opening with nothing.
   it("says nothing when a remembered folder can no longer be opened", async () => {
     const { client } = fakeClient({
-      reopenWorkspace: async () => ({ ok: false, reason: "not-found" }),
+      openWorkspaceRef: async () => ({ ok: false, reason: "not-found" }),
     });
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.reopen(["D:/Gone"]);
+      await result.current.actions.reopen([{ kind: "local", root: "D:/Gone" }]);
     });
 
     expect(result.current.state.workspaces).toEqual([]);
@@ -247,10 +274,10 @@ describe("useWorkspace", () => {
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.reopen(["D:/Notes"]);
+      await result.current.actions.reopen([{ kind: "local", root: "D:/Notes" }]);
     });
 
-    expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
+    expect(workspaceRoot(result.current.state.workspaces[0])).toBe("D:/Notes");
     // Keyed by the workspace's own id, which the fake mints from the root it was handed.
     expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
   });
@@ -819,7 +846,7 @@ describe("opening what the app was launched with", () => {
       await result.current.actions.openTarget({ root: "D:/Notes", file: "a.md" });
     });
 
-    expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
+    expect(workspaceRoot(result.current.state.workspaces[0])).toBe("D:/Notes");
     // Keyed by the workspace's own id, which the fake mints from the root it was handed.
     expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
     // Qualified on the way in: the file arrived relative to a ROOT, and this is the side that knows
@@ -835,7 +862,7 @@ describe("opening what the app was launched with", () => {
       await result.current.actions.openTarget({ root: "D:/Notes", file: null });
     });
 
-    expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
+    expect(workspaceRoot(result.current.state.workspaces[0])).toBe("D:/Notes");
     expect(reads).toEqual([]);
   });
 
@@ -886,7 +913,7 @@ describe("opening what the app was launched with", () => {
 
     // Nothing was asked, because nothing was going to be discarded.
     expect(asked).toEqual([]);
-    expect(result.current.state.workspaces.map((workspace) => workspace.root)).toEqual([
+    expect(result.current.state.workspaces.map(workspaceRoot)).toEqual([
       "/ws",
       "D:/Other",
     ]);
@@ -901,7 +928,7 @@ describe("opening what the app was launched with", () => {
 
   it("says so when the folder is no longer there", async () => {
     const { client } = fakeClient({
-      reopenWorkspace: async () => ({ ok: false, reason: "not-found" }),
+      openWorkspaceRef: async () => ({ ok: false, reason: "not-found" }),
     });
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -1720,7 +1747,10 @@ describe("several folders open at once", () => {
     const { client } = fakeClient({
       openWorkspace: async () => {
         const root = roots[next++]!;
-        return { ok: true as const, workspace: { id: root.slice(1), root, name: root.slice(1) } };
+        return {
+          ok: true as const,
+          workspace: { id: root.slice(1), name: root.slice(1), ref: { kind: "local" as const, root }, truncated: false },
+        };
       },
       closeWorkspace: async (workspaceId) => {
         closed.push(workspaceId);
@@ -1839,10 +1869,10 @@ describe("several folders open at once", () => {
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.reopen(["D:/One", "D:/Two"]);
+      await result.current.actions.reopen([{ kind: "local", root: "D:/One" }, { kind: "local", root: "D:/Two" }]);
     });
 
-    expect(result.current.state.workspaces.map((workspace) => workspace.root)).toEqual([
+    expect(result.current.state.workspaces.map(workspaceRoot)).toEqual([
       "D:/One",
       "D:/Two",
     ]);
@@ -1851,18 +1881,20 @@ describe("several folders open at once", () => {
   // One folder that has since been deleted must not take the rest with it.
   it("skips a remembered folder that has gone, and opens the others", async () => {
     const { client } = fakeClient({
-      reopenWorkspace: async (root) =>
-        root === "D:/Gone"
-          ? { ok: false, reason: "not-found" }
-          : { ok: true, workspace: { id: root, root, name: root } },
+      openWorkspaceRef: async (ref) => {
+        const root = ref.kind === "local" ? ref.root : "";
+        return root === "D:/Gone"
+          ? { ok: false as const, reason: "not-found" }
+          : { ok: true as const, workspace: { id: root, name: root, ref, truncated: false } };
+      },
     });
     const { result } = renderHook(() => useWorkspace(client));
 
     await act(async () => {
-      await result.current.actions.reopen(["D:/Gone", "D:/Here"]);
+      await result.current.actions.reopen([{ kind: "local", root: "D:/Gone" }, { kind: "local", root: "D:/Here" }]);
     });
 
-    expect(result.current.state.workspaces.map((workspace) => workspace.root)).toEqual(["D:/Here"]);
+    expect(result.current.state.workspaces.map(workspaceRoot)).toEqual(["D:/Here"]);
     expect(result.current.state.errorKey).toBeNull();
   });
 });

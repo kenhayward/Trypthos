@@ -10,6 +10,7 @@ export type SettingsSection =
   | "window"
   | "chatModels"
   | "ai"
+  | "accounts"
   | "editor"
   | "fileTypes"
   | "about";
@@ -22,6 +23,9 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "window",
   "chatModels",
   "ai",
+  // After the chat models, because it is the other place a credential is entered - and before the
+  // editor, which is where the settings turn from connections to how a document is drawn.
+  "accounts",
   "editor",
   // Beside Editor, because it is the other half of the same question: Editor is how a document is
   // drawn, this is which documents there are.
@@ -34,6 +38,7 @@ export const SECTION_LABEL_KEYS: Record<SettingsSection, string> = {
   window: "settings.section.window",
   chatModels: "settings.section.chatModels",
   ai: "settings.section.ai",
+  accounts: "settings.section.accounts",
   editor: "settings.section.editor",
   fileTypes: "settings.section.fileTypes",
   about: "settings.section.about",

@@ -12,8 +12,11 @@ component, cross-process contract, external dependency, stored-data shape or pac
 | Domain | Pure TypeScript, zod | `packages/domain` |
 
 Inside the shell, the modules worth knowing by name: `ipcHandlers.js` (the enumerated IPC surface),
-`localWorkspace.js` (the filesystem provider), `settingsStore.js`, `secretStore.js` (encrypted API
-keys), `chatProvider.js` (the call to the AI endpoint), `updater.js` and `tray.js`.
+`providers.js` (the registry that turns a workspace reference into an open workspace),
+`localWorkspace.js` (the filesystem provider), `githubApi.js` and `githubWorkspace.js` (the GitHub
+provider), `settingsStore.js`, `encryptedStore.js` (the one implementation of credentials-at-rest)
+with `secretStore.js` (chat API keys) and `accountStore.js` (cloud provider tokens) over it,
+`chatProvider.js` (the call to the AI endpoint), `updater.js` and `tray.js`.
 
 One npm workspace, one lock file, one `npm ci`.
 
@@ -73,6 +76,10 @@ both processes and testable without booting either.
 
 ## Several folders open at once
 
+Folders and GitHub repositories alike: everything below holds whatever a workspace is backed by,
+because the browser asks a provider the same questions either way. See **Storage providers** for what
+differs underneath.
+
 **A path names the workspace it is in.** `Notes/docs/notes.md` rather than `docs/notes.md`, because
 two folders can each hold a `docs/notes.md` and a tab strip that cannot tell them apart is a tab
 strip that has stopped working. `packages/domain/src/qualifiedPath.ts` is the whole rule -
@@ -112,7 +119,10 @@ label until two files differ, which is exactly the case this feature creates.
   `no-workspace` when there is nothing to tell it.
 - **Settings hold a list.** `workspaces: string[]` replaced `lastWorkspace`, with a migration to
   version 14 that turns the one remembered folder into a list of one and REMOVES the old field - the
-  schema is strict, and a field nothing reads is a second answer waiting to disagree.
+  schema is strict, and a field nothing reads is a second answer waiting to disagree. Version 15 then
+  replaced each path with a `WorkspaceRef`, because a GitHub repository has no path; the migration
+  reads every remembered string as a local reference, in order, so an existing installation comes back
+  exactly as it was left.
 
 ## The editor
 
@@ -351,7 +361,92 @@ character too far right.
 
 ## Storage providers
 
-Order: local (**built**), OneDrive, Google Drive, Dropbox, GitHub.
+Order: local (**built**), GitHub (**built, read-only**), OneDrive, Google Drive, Dropbox.
+
+### A workspace is named by a reference
+
+A workspace used to be an absolute path. It cannot stay one - a GitHub repository has no path - so it
+is named by a **`WorkspaceRef`** (`packages/domain/src/workspaceRef.ts`): a strict discriminated union
+whose `kind` says which provider answers. That is the shape the settings file persists, the shape
+`workspace:openRef` takes, and the shape a `WorkspaceInfo` carries back to the renderer.
+
+A union rather than a prefixed string, because `github:ada/notes` beside `D:\Notes` is a format
+nothing validates: the split rule would live at every call site, a Windows root already contains a
+colon, and a folder called `github:` is a path somebody can really make.
+
+`workspaceRefKey` is the one rule for "the same place", and it folds case for GitHub (owner and repo
+are case-insensitive there) while leaving a local root alone (Linux tells `/ws` and `/WS` apart). The
+shell deduplicates open workspaces with it and the renderer compares the persisted list with it, so
+the two cannot disagree.
+
+**Adding a provider is three edits, and two tests catch the ones you forget:** a kind in
+`workspaceRef.ts` (which also extends `PROVIDER_KINDS`), a row in `providers.js`, and a case in the
+interface's `SourceGlyph`. `providers.test.js` walks `PROVIDER_KINDS` against the registry, and
+`SourceGlyph` is an exhaustive `switch`, so a missing icon is a type error rather than a folder icon
+on a repository.
+
+### The registry, and the record every provider hands back
+
+`apps/desktop/src/providers.js` is the only place that knows which backend answers for which kind. It
+returns one record shape:
+
+| Field       | For                                                                          |
+| ----------- | ---------------------------------------------------------------------------- |
+| `ref`       | What was opened. Deduplication and the settings file both compare on this.    |
+| `name`      | What it is called, which becomes the front of every path in it.               |
+| `root`      | The absolute folder, or **null** for a provider that has none.                |
+| `provider`  | `list` / `read` / `readBytes` / `write`, in the local backend's exact shapes. |
+| `guard`     | The boundary check, or null when the provider applies its own internally.     |
+| `truncated` | True when the provider could not describe the whole workspace.                |
+
+`root` being nullable carries the whole difference between the two backends. Save As opens a native
+dialog at a folder on disk; a repository has none, so the handler refuses with `unsupported` before a
+dialog appears rather than offering one and then declining what the user chose.
+
+`truncated` is a fact about the **listing** rather than about the place, which is why it sits beside
+the reference and not on it. It reaches `WorkspaceInfo` and the browser draws a note on that
+workspace's row: a tree quietly missing folders is a wrong answer given confidently.
+
+### GitHub
+
+`githubApi.js` makes the calls; `github.ts` in the domain holds everything that is not the fetch - the
+addresses, the schemas someone else's JSON is checked against, the reading of a flat tree as a folder
+listing, and what a failing status means. That split is what makes the awkward parts testable without
+a network, and it is the shape the next three providers should copy.
+
+- **The token never leaves the main process.** `github:status` answers with a **login**; there is no
+  channel that returns a token, exactly as there is none for a chat API key.
+- **Verified before stored.** `github:connect` builds a throwaway client over the offered token and
+  asks `/user`. A token GitHub refuses never reaches disk, so the app never holds a credential it has
+  never been able to use. There is no pattern check on the token: GitHub has changed its format twice,
+  and a regex would start refusing valid tokens on a day nothing here changed.
+- **A separate credential file.** Tokens live in `providerAccounts.json`, not in `chatKeys.json`.
+  Saving settings sweeps the chat keys - dropping every one that does not belong to a configured
+  profile - and a GitHub token there would be deleted the first time somebody removed a model.
+  `encryptedStore.js` is the one implementation of the rules both files obey: ciphertext only,
+  versioned, unreadable reads as absent, no read over IPC.
+- **Pinned to a commit.** Opening resolves the default branch and then that branch's head commit, and
+  the tree is fetched at that SHA. A branch name would move under the user while they read.
+- **One request for the whole tree.** `?recursive=1` returns every path in the repository, so every
+  listing afterwards is a read of memory - which is what lets the filter box and Find in Files walk a
+  repository at all. `truncated` says when GitHub cut it short; directories are inferred from the
+  paths as well as taken from `tree` entries, so a folder whose own entry fell off the end still has a
+  row.
+- **The boundary check is the shared guard**, `createPathGuard` against a sentinel root, never a
+  second implementation. A repository path arrives from the renderer and is untrusted in exactly the
+  way a local one is. Owner, repo and sha go into URLs through `encodeURIComponent`; a branch, which
+  legitimately contains separators, goes through `isSafeRef` first.
+- **A blob's SHA is the revision** - a better one than the local backend manages, since it identifies
+  the content rather than the file's timestamp. When writing arrives, that is what a conditional
+  commit presents.
+- **Symlinks and submodules are not listed**, matching the local backend, which does not follow a
+  symlink either. A read of one answers `not-found`, so what can be clicked and what can be read are
+  the same set.
+- **`write` answers `unsupported`.** A save to GitHub is a commit on a branch, and it is not built.
+  The refusal is honest rather than optimistic: an editor reporting a save it did not make is the
+  precise failure the revision mechanism exists to prevent.
+
+### Local
 
 `apps/desktop/src/localWorkspace.js` is the local backend. Two path checks, and both are needed:
 
@@ -1616,8 +1711,9 @@ no corrections while the chat box and settings fields had them, and nothing woul
 
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
-(`workspace:open`, `workspace:reopen`, `workspace:list`, `workspace:outline`, `workspace:find`,
-`workspace:filter`), files (`file:read`,
+(`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
+`workspace:filter`, `workspace:close`), cloud accounts (`github:status`, `github:connect`,
+`github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved

@@ -11,7 +11,8 @@ export const APP_VERSION = __APP_VERSION__;
 export const CAPABILITIES = `
 | Feature | Description |
 | --- | --- |
-| Workspace browser | Open as many local folders as you like, each with its own tree, collapsible from its own row, and its own close button. They reopen next time you start. The filter box searches every open folder by name, however deep, and takes * and ? wildcards. Cloud accounts follow in a later release. |
+| Workspace browser | Open as many folders as you like - on this machine or on GitHub - each with its own tree, collapsible from its own row, and its own close button. They reopen next time you start. The filter box searches every open folder by name, however deep, and takes * and ? wildcards. OneDrive, Google Drive and Dropbox follow in a later release. |
+| GitHub repositories | Connect your GitHub account with a personal access token and open a repository as another tree beside your folders. It lists the repositories you own, public and private, with a search box over them. A repository opens at the head of its default branch, pinned to the commit it was at when you opened it, and read-only - saving back to GitHub is not built yet. |
 | File types | Choose which kinds of file Trypthos opens: markdown, plain text, and thirty-odd data formats and languages, all on to begin with. Shell, PowerShell and batch scripts included. A file no enabled type covers is listed in grey and cannot be opened. |
 | Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab, shown at their own size and zoomed with Shift and the wheel. Nothing to edit and nothing written back, and never sent to a chat model. |
 | Syntax colouring | Each type is coloured by role, from the same palette as the rest of the app, in both themes. Fenced code is coloured by the language on the fence, in every view and in chat replies. Grammars load only when a file needs one. |
@@ -44,4 +45,5 @@ export const DISCLAIMERS: readonly string[] = [
   "Editing is provided by CodeMirror 6. Preview is rendered with marked and sanitised with DOMPurify.",
   "Updates are checked against this project's public GitHub releases. Nothing else is sent.",
   "Chat requests go directly from this app to the endpoint you configure. No Trypthos server is involved.",
+  "GitHub requests go directly from this app to api.github.com, using the token you provide. Your token is encrypted by your operating system and never leaves this machine.",
 ];

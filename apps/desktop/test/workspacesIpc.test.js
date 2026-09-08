@@ -73,7 +73,7 @@ async function withTwoWorkspaces(first, second, body) {
 test("opens two folders as two workspaces with different ids", async () => {
   await withTwoWorkspaces({ "a.md": "one" }, { "a.md": "two" }, async ({ one, two }) => {
     assert.notEqual(one.id, two.id);
-    assert.notEqual(one.root, two.root);
+    assert.notEqual(one.ref.root, two.ref.root);
   });
 });
 

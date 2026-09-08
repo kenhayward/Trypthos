@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { enabledFileTypes } from "@trypthos/domain";
+import { enabledFileTypes, workspaceRefLabel } from "@trypthos/domain";
+import type { WorkspaceRef } from "@trypthos/domain";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 import type { RemoteNode } from "../lib/workspaceClient";
@@ -9,8 +10,11 @@ interface Props {
   /// Rendered width, resolved against the window. The panel does not choose its own size.
   width: number;
   onCollapse: () => void;
-  /// Every open folder, in the order they were opened. Each is a tree of its own.
-  workspaces: readonly { id: string; name: string; root: string }[];
+  /// Every open workspace, in the order they were opened. Each is a tree of its own.
+  ///
+  /// The reference is what says which provider it came from, which is what draws its icon - a folder
+  /// and a repository look alike in a tree and are very different things to save into.
+  workspaces: readonly { id: string; name: string; ref: WorkspaceRef; truncated: boolean }[];
   folders: Record<string, FolderState>;
   filter: string;
   /// What the search behind the filter box is doing, and what it found.
@@ -26,6 +30,9 @@ interface Props {
   /// The open documents with unsaved work.
   dirtyPaths: readonly string[];
   onOpenWorkspace: () => void;
+  /// Opens the repository picker. A separate act from `onOpenWorkspace` because it asks a different
+  /// question - the folder picker is the operating system's, and this one is ours.
+  onOpenRepo: () => void;
   onFilterChange: (filter: string) => void;
   onToggleFolder: (path: string) => void;
   onRetryFolder: (path: string) => void;
@@ -65,6 +72,7 @@ export default function WorkspacePanel({
   openPaths,
   dirtyPaths,
   onOpenWorkspace,
+  onOpenRepo,
   onFilterChange,
   onToggleFolder,
   onRetryFolder,
@@ -144,6 +152,18 @@ export default function WorkspacePanel({
           <Glyph>
             <path d="M15 6l-6 6 6 6" />
           </Glyph>
+        </button>
+        {/* One button per source rather than a menu behind one. There are two, the panel header has
+            room for two, and a menu would put the only cloud source Trypthos has behind a click that
+            says nothing about what is in it. This is the place a third one changes shape. */}
+        <button
+          type="button"
+          onClick={onOpenRepo}
+          aria-label={t("workspace.openRepo")}
+          title={t("workspace.openRepo")}
+          className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+        >
+          <SourceGlyph kind="github" className="size-4" />
         </button>
         <button
           type="button"
@@ -286,7 +306,7 @@ function WorkspaceRow({
   onToggle,
   onRetry,
 }: {
-  workspace: { id: string; name: string; root: string };
+  workspace: { id: string; name: string; ref: WorkspaceRef; truncated: boolean };
   /// What is known about the root's own listing, or null when it has never been asked for.
   status: FolderState["status"] | null;
   expanded: boolean;
@@ -321,9 +341,10 @@ function WorkspaceRow({
           // attributes - exactly as they are on a folder inside one. A root can be the folder chat
           // is mapping while collapsed, and expanded while some other folder is chosen.
           aria-current={selected ? "true" : undefined}
-          // The absolute folder, which is the one thing the name does not say - two folders can
-          // share a name, and the tree shows the name.
-          title={workspace.root}
+          // What the name does not say. Two folders can share a name and so can two repositories,
+          // and the tree shows only the name - so the tooltip carries the whole path, or the owner
+          // and repository together.
+          title={workspaceRefLabel(workspace.ref)}
           // The same helper every other row uses, at depth 0, rather than a padding class that
           // happens to match it - one way of expressing an indent is one thing to keep in step.
           style={indent(0)}
@@ -334,9 +355,13 @@ function WorkspaceRow({
           }
         >
           {filtering ? <ChevronSpace /> : <Chevron open={expanded} />}
-          <Glyph className={status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
-            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-          </Glyph>
+          {/* Which provider this workspace came from. A folder and a repository sit in the same
+              tree and behave very differently - one can be saved into and the other cannot - so
+              they do not look alike. */}
+          <SourceGlyph
+            kind={workspace.ref.kind}
+            className={status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}
+          />
           <span className="min-w-0 truncate">{workspace.name}</span>
           {status === "loading" && (
             <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
@@ -354,6 +379,15 @@ function WorkspaceRow({
           </Glyph>
         </button>
       </div>
+
+      {/* A listing that could not be complete says so, on the workspace it belongs to. GitHub cuts
+          a very large tree short, and a browser quietly missing folders is a wrong answer given
+          confidently rather than an incomplete one. */}
+      {workspace.truncated && !filtering && (
+        <p style={indent(1)} className="py-0.5 pr-2 text-xs text-ink-4">
+          {t("workspace.truncatedRepo")}
+        </p>
+      )}
 
       {/* Inline on the row that failed, exactly as it is for a folder inside one. A root can fail to
           list too - a folder that has been unmounted or renamed since it was opened - and now that
@@ -516,6 +550,27 @@ function Chevron({ open }: { open: boolean }) {
       <path d="M9 6l6 6-6 6" />
     </Glyph>
   );
+}
+
+/// The mark for one provider.
+///
+/// A `switch` over the kind rather than a lookup with a fallback, so adding a provider to the schema
+/// and forgetting its icon is a type error here rather than a folder icon on a repository.
+function SourceGlyph({ kind, className }: { kind: WorkspaceRef["kind"]; className?: string }) {
+  switch (kind) {
+    case "github":
+      return (
+        <Glyph className={className}>
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+        </Glyph>
+      );
+    case "local":
+      return (
+        <Glyph className={className}>
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+        </Glyph>
+      );
+  }
 }
 
 function Glyph({ className = "size-3.5", children }: { className?: string; children: React.ReactNode }) {

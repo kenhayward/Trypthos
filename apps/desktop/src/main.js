@@ -26,6 +26,8 @@ const { nextRetryDelayMs } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("./ipcHandlers");
 const { createSecretStore } = require("./secretStore");
+const { createAccountStore } = require("./accountStore");
+const { createGitHubApi } = require("./githubApi");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
 const { enableSpellChecker } = require("./spellcheck");
@@ -276,6 +278,13 @@ if (!gotLock) {
       encryptor: safeStorage,
     });
 
+    // Cloud provider tokens, in their own file. Not beside the chat keys: saving settings sweeps
+    // those, and a GitHub token there would be deleted the first time somebody removed a model.
+    const accounts = createAccountStore({
+      userDataDir: app.getPath("userData"),
+      encryptor: safeStorage,
+    });
+
     registerIpcHandlers({
       ipcMain,
       dialog,
@@ -290,6 +299,11 @@ if (!gotLock) {
       // The provider call lives here and only here. The renderer never opens a socket to a provider
       // and never holds the key.
       chat: createChatProvider({ secrets }),
+      accounts,
+      // Every GitHub call happens here, where the token is. The renderer never opens a socket to
+      // GitHub and never holds the token - the same rule as the chat provider, for the same reason.
+      // A factory rather than a client, so connecting can verify a token before it is stored.
+      createGitHub: (getToken) => createGitHubApi({ getToken }),
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),

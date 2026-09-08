@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import type { WorkspaceRef } from "@trypthos/domain";
 import { DEFAULT_SETTINGS, type Settings } from "@trypthos/domain";
 import App from "./App";
 import { APP_VERSION } from "./lib/appInfo";
@@ -205,16 +206,16 @@ describe("App", () => {
         isDesktop: true,
         readSettings: async () => ({
           ok: true as const,
-          settings: { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] },
+          settings: { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local" as const, root: "D:/Notes" }] },
         }),
         writeSettings: async (settings: Settings) => {
           written.push(settings);
         },
-        reopenWorkspace: async (root: string) => ({
+        openWorkspaceRef: async (ref: WorkspaceRef) => ({
           ok: true as const,
           // The id the main process mints, from the folder's name. It is the first segment of every
           // path in this workspace.
-          workspace: { id: "Notes", root, name: "Notes" },
+          workspace: { id: "Notes", name: "Notes", ref },
         }),
         listDirectory: async () => ({
           ok: true as const,
@@ -502,14 +503,14 @@ describe("App", () => {
         isDesktop: true,
         readSettings: async () => ({
           ok: true as const,
-          settings: { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] },
+          settings: { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local" as const, root: "D:/Notes" }] },
         }),
         writeSettings: async () => {},
-        reopenWorkspace: async (root: string) => ({
+        openWorkspaceRef: async (ref: WorkspaceRef) => ({
           ok: true as const,
           // The id the main process mints, from the folder's name. It is the first segment of every
           // path in this workspace.
-          workspace: { id: "Notes", root, name: "Notes" },
+          workspace: { id: "Notes", name: "Notes", ref },
         }),
         listDirectory: async () => ({
           ok: true as const,
@@ -611,12 +612,12 @@ describe("making a new file", () => {
       // with several possible, something has to say which.
       readSettings: async () => ({
         ok: true as const,
-        settings: { ...DEFAULT_SETTINGS, workspaces: ["D:/Notes"] },
+        settings: { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local" as const, root: "D:/Notes" }] },
       }),
       writeSettings: async () => {},
-      reopenWorkspace: async (root: string) => ({
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
         ok: true as const,
-        workspace: { id: "Notes", root, name: "Notes" },
+        workspace: { id: "Notes", name: "Notes", ref },
       }),
       listDirectory: async () => ({ ok: true as const, nodes: [] }),
       onWindowState: () => () => {},

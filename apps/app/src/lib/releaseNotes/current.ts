@@ -5,6 +5,25 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.61.0",
+    date: "2026-09-08",
+    pr: 121,
+    headline: "Open a GitHub repository like a folder",
+    summary:
+      "The browser has only ever opened folders on your own machine. It now opens GitHub repositories too, beside them in the same panel: connect your account once, pick a repository, and it appears as another tree with its own tabs, its own filter results and its own place in Find in Files. Everything you already know about the browser works on it unchanged, because a repository answers the same questions a folder does. Connecting is a personal access token, pasted into Settings > Accounts or into the picker itself; it is encrypted by your operating system, kept apart from your chat keys so deleting a model cannot sign you out, and never leaves the machine or reaches the part of the app that draws the window. The picker lists the repositories you own - public and private, newest push first - with a search box over them and a Refresh for one you have just made. A repository opens at the head of its default branch, pinned to the commit it was at when you opened it, so nobody pushing while you read can change the file under you. It opens read-only: saving to GitHub is a commit rather than a write, and rather than pretend otherwise, Trypthos says so before you open one and refuses a save instead of reporting one it never made. Your open repositories reopen next time you start, exactly as your folders do.",
+    added: [
+      "Open GitHub repository, from the button beside Open folder in the browser.",
+      "Settings > Accounts: connect a GitHub account with a personal access token, and disconnect it again.",
+      "The repository picker lists the repositories your account owns, public and private, with a search box and a Refresh.",
+      "A repository sits in the browser as another tree - the filter box, Find in Files and the tabs all work on it unchanged.",
+      "Open repositories reopen on the next launch, along with your folders.",
+    ],
+    changed: [
+      "The workspace rows say which source they came from, and a repository shows its owner and name rather than a path.",
+      "A repository too large for GitHub to describe in one answer says so on its row, rather than quietly showing fewer folders than it has.",
+    ],
+  },
+  {
     version: "0.60.0",
     date: "2026-09-08",
     pr: 120,

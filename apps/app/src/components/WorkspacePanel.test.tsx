@@ -2,12 +2,13 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import WorkspacePanel from "./WorkspacePanel";
+import type { WorkspaceRef } from "@trypthos/domain";
 import type { FolderState } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 
 /// Every path names the folder it is in, so the map is keyed by qualified path and the workspace's
 /// own id is the key of its root.
-const DIARIZ = { id: "Diariz", name: "Diariz", root: "D:/Diariz" };
+const DIARIZ = { id: "Diariz", name: "Diariz", ref: { kind: "local" as const, root: "D:/Diariz" }, truncated: false };
 
 const FOLDERS: Record<string, FolderState> = {
   Diariz: {
@@ -28,7 +29,12 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
   const props = {
     width: 268,
     onCollapse: vi.fn(),
-    workspaces: [DIARIZ] as readonly { id: string; name: string; root: string }[],
+    workspaces: [DIARIZ] as readonly {
+      id: string;
+      name: string;
+      ref: WorkspaceRef;
+      truncated: boolean;
+    }[],
     folders: FOLDERS,
     filter: "",
     filterStatus: { kind: "idle" } as FilterStatus,
@@ -36,6 +42,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     openPaths: [] as readonly string[],
     dirtyPaths: [] as readonly string[],
     onOpenWorkspace: vi.fn(),
+    onOpenRepo: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),
@@ -221,7 +228,7 @@ describe("choosing the folder chat maps", () => {
 /// forgetting of what was under it. With several folders open this is what makes the panel usable -
 /// two large trees at once is a lot of rows to scroll past to reach the second one.
 describe("collapsing a workspace root", () => {
-  const OTHER = { id: "Work", name: "Work", root: "D:/Work" };
+  const OTHER = { id: "Work", name: "Work", ref: { kind: "local" as const, root: "D:/Work" }, truncated: false };
 
   const rootRow = (name: string) =>
     within(screen.getByRole("complementary", { name: "Workspace" })).getByRole("button", {
@@ -359,7 +366,7 @@ describe("filtering the browser", () => {
   // user asked. The message below covers the case where none of them had anything.
   it("leaves out a folder that has no matches at all", () => {
     filtered(["Diariz/docs/plan.md"], {
-      workspaces: [DIARIZ, { id: "Notes", name: "Notes", root: "D:/Notes" }],
+      workspaces: [DIARIZ, { id: "Notes", name: "Notes", ref: { kind: "local" as const, root: "D:/Notes" }, truncated: false }],
     });
 
     // By exact name: each workspace row sits beside a "Close <name>" button of its own.
@@ -415,5 +422,65 @@ describe("filtering the browser", () => {
   it("shows the tree again when the box is cleared", () => {
     panel({ filter: "", filterStatus: { kind: "idle" } });
     expect(screen.getByRole("button", { name: /README\.md/ })).toBeDefined();
+  });
+});
+
+describe("the sources a workspace can be opened from", () => {
+  // Two buttons rather than a menu behind one: a cloud source hidden behind a click that says
+  // nothing about what is in it is a source most people never find.
+  it("offers a repository as well as a folder", () => {
+    panel();
+
+    expect(screen.getByRole("button", { name: "Open folder" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open GitHub repository" })).toBeTruthy();
+  });
+
+  it("asks for the repository picker when the repository button is pressed", async () => {
+    const props = panel();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Open GitHub repository" }));
+
+    expect(props.onOpenRepo).toHaveBeenCalled();
+    // The two are different questions: one opens the operating system's folder dialog, the other
+    // ours. A button that fired both would ask twice.
+    expect(props.onOpenWorkspace).not.toHaveBeenCalled();
+  });
+
+  // A folder and a repository sit in the same tree and behave very differently - one can be saved
+  // into and the other cannot - so the row says which it is rather than looking alike.
+  it("draws a repository's row differently from a folder's", () => {
+    panel({
+      workspaces: [
+        { id: "Notes", name: "Notes", ref: { kind: "local" as const, root: "D:/Notes" }, truncated: false },
+        { id: "essays", name: "essays", ref: { kind: "github" as const, owner: "ada", repo: "essays" }, truncated: false },
+      ],
+    });
+
+    // The tooltip is where the whole of what a workspace is gets said, since the tree shows only
+    // the name - a path for a folder, and the owner with the repository for a repository.
+    expect(screen.getByRole("button", { name: "Notes" }).getAttribute("title")).toBe("D:/Notes");
+    expect(screen.getByRole("button", { name: "essays" }).getAttribute("title")).toBe("ada/essays");
+  });
+});
+
+describe("a workspace the provider could not list in full", () => {
+  const HUGE = {
+    id: "huge",
+    name: "huge",
+    ref: { kind: "github" as const, owner: "ada", repo: "huge" },
+    truncated: true,
+  };
+
+  // GitHub cuts a very large tree short. A browser quietly missing folders is a wrong answer given
+  // confidently rather than an incomplete one, so it says so on the row it belongs to.
+  it("says so on that workspace's row", () => {
+    panel({ workspaces: [HUGE] });
+    expect(screen.getByText(/Too large to list in full/)).toBeTruthy();
+  });
+
+  it("says nothing about a workspace that was listed in full", () => {
+    panel({ workspaces: [{ ...HUGE, truncated: false }] });
+    expect(screen.queryByText(/Too large to list in full/)).toBeNull();
   });
 });

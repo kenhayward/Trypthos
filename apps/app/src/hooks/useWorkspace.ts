@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiscardChoice } from "@trypthos/domain";
-import type { DocumentSet, OpenDocument, Revision } from "@trypthos/domain";
+import type { DocumentSet, OpenDocument, Revision, WorkspaceRef } from "@trypthos/domain";
 import {
   GUIDE_PATH,
   MAX_TEXT_FILE_BYTES,
@@ -94,9 +94,15 @@ export interface WorkspaceActions {
   /// opening another one has no reason to disturb them. Opening a folder that is already open is
   /// answered with the workspace it is already open as.
   open(): Promise<void>;
-  /// Opens remembered folders on launch, without a dialog. Each is opened in turn, and one that has
-  /// since been deleted is skipped in silence.
-  reopen(roots: readonly string[]): Promise<void>;
+  /// Opens a workspace the app can already name - a repository chosen from the picker.
+  ///
+  /// The same act as `open`, without the dialog: the folder picker answers with a local reference,
+  /// and this takes one that was arrived at some other way. Everything after the reference is
+  /// identical, which is what keeps the tree, the tabs and the error banner one implementation.
+  openRef(ref: WorkspaceRef): Promise<void>;
+  /// Opens remembered workspaces on launch, without asking. Each is opened in turn, and one that has
+  /// since been deleted - or a repository that can no longer be seen - is skipped in silence.
+  reopen(refs: readonly WorkspaceRef[]): Promise<void>;
   /// Closes one folder, and every document that came from it.
   ///
   /// The documents go with it, asking about unsaved work one at a time and stopping at the first
@@ -224,6 +230,21 @@ export function failureKey(reason: string): string | null {
       return "errors.notText";
     case "unsupported-encoding":
       return "errors.unsupportedEncoding";
+    // The cloud providers' own refusals. Each is its own key because each sends the user somewhere
+    // different: wait an hour, check the connection, connect an account, or accept that this is not
+    // something Trypthos can do to a repository yet.
+    case "rate-limited":
+      return "errors.rateLimited";
+    case "offline":
+      return "errors.offline";
+    case "not-connected":
+      return "errors.notConnected";
+    case "unsupported":
+      return "errors.unsupported";
+    // The credential store refusing rather than falling back to plaintext. Its own key, because the
+    // user has to be told their token was not saved - not that it was rejected.
+    case "encryption-unavailable":
+      return "errors.encryptionUnavailable";
     default:
       return "errors.unknown";
   }
@@ -247,13 +268,34 @@ export function failureParams(failure: {
   };
 }
 
-/// The absolute root of the workspace a qualified path is in, or undefined when there is none.
+/// The absolute root of the workspace a qualified path is in, or null when there is none.
 ///
 /// What the recent-files list records: a path means nothing without the folder it is relative to,
 /// and with several open the folder is no longer "the workspace".
-function rootOf(workspaces: readonly WorkspaceInfo[], qualified: string): string | undefined {
+///
+/// **Null for a workspace that has no folder on disk**, as well as for one that is not open. A
+/// GitHub repository is not somewhere the File menu can reopen a file from - the entry would name a
+/// folder that does not exist - so it is simply not recorded, which is what the callers below do
+/// with a null.
+function rootOf(workspaces: readonly WorkspaceInfo[], qualified: string): string | null {
   const workspaceId = splitQualified(qualified)?.workspaceId;
-  return workspaces.find((workspace) => workspace.id === workspaceId)?.root;
+  const ref = workspaces.find((workspace) => workspace.id === workspaceId)?.ref;
+  return ref?.kind === "local" ? ref.root : null;
+}
+
+/// Records that a file was opened, when there is somewhere to record it FROM.
+///
+/// One place, because three call sites reach it - opening a file, opening a picture, and Save As -
+/// and each of them would otherwise carry its own copy of the null check that keeps repositories
+/// out of a menu that cannot reopen them.
+function reportIfLocal(
+  report: ReportOpened,
+  workspaces: readonly WorkspaceInfo[],
+  qualified: string,
+): void {
+  const root = rootOf(workspaces, qualified);
+  const relative = splitQualified(qualified)?.path;
+  if (root !== null && relative !== undefined) report?.({ root, path: relative });
 }
 
 /// The parent of a workspace-relative directory path. "" is the root and has no parent.
@@ -393,9 +435,7 @@ export function useWorkspace(
 
     // Save As leaves the user editing a file they have never opened. Leaving it off the list would
     // put the original there and not the one they are actually working in.
-    const root = rootOf(stateRef.current.workspaces, result.path);
-    const relative = splitQualified(result.path)?.path;
-    if (root !== undefined && relative !== undefined) reportOpened?.({ root, path: relative });
+    reportIfLocal(reportOpened, stateRef.current.workspaces, result.path);
     return true;
   }, [client, fail, reportOpened]);
 
@@ -506,6 +546,22 @@ export function useWorkspace(
     await addWorkspace(result.workspace);
   }, [addWorkspace, client, fail]);
 
+  /// Opens a workspace the app can already name. The picker's half of `open`, with no dialog.
+  ///
+  /// Reported through the same banner as everything else: a repository that has been deleted, made
+  /// private, or put behind a token that has since been revoked is an ordinary failure the user has
+  /// to be told about, and it says so in their language through `failureKey`.
+  const openRef = useCallback(
+    async (ref: WorkspaceRef) => {
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      const result = await client.openWorkspaceRef(ref);
+      if (!result.ok) return fail(result);
+
+      await addWorkspace(result.workspace);
+    },
+    [addWorkspace, client, fail],
+  );
+
   const closeWorkspace = useCallback(
     async (workspaceId: string) => {
       // Its documents first, one at a time, and the first cancel stops the whole close: a folder
@@ -570,11 +626,7 @@ export function useWorkspace(
           busy: false,
         }));
 
-        const imageRoot = rootOf(stateRef.current.workspaces, path);
-        const imageRelative = splitQualified(path)?.path;
-        if (imageRoot !== undefined && imageRelative !== undefined) {
-          reportOpened?.({ root: imageRoot, path: imageRelative });
-        }
+        reportIfLocal(reportOpened, stateRef.current.workspaces, path);
         return;
       }
 
@@ -597,9 +649,7 @@ export function useWorkspace(
       // After the read, so a file that could not be opened is not remembered as one that was. The
       // root comes from the path itself now: it names its workspace, and this is the side that knows
       // which absolute folder that workspace is.
-      const root = rootOf(stateRef.current.workspaces, path);
-      const relative = splitQualified(path)?.path;
-      if (root !== undefined && relative !== undefined) reportOpened?.({ root, path: relative });
+      reportIfLocal(reportOpened, stateRef.current.workspaces, path);
     },
     [client, fail, reportOpened],
   );
@@ -634,11 +684,16 @@ export function useWorkspace(
     async ({ root, file }: { root: string; file: string | null }) => {
       // Already open: this is another tab in a folder that is already on screen, and nothing about
       // the workspace needs disturbing.
-      let workspace = stateRef.current.workspaces.find((open) => open.root === root) ?? null;
+      let workspace =
+        stateRef.current.workspaces.find(
+          (open) => open.ref.kind === "local" && open.ref.root === root,
+        ) ?? null;
 
       if (workspace === null) {
         setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
-        const result = await client.reopenWorkspace(root);
+        // A folder handed over from outside is always a LOCAL one - File Explorer and the command
+        // line have nothing else to hand over - so the reference is built here rather than asked for.
+        const result = await client.openWorkspaceRef({ kind: "local", root });
         if (!result.ok) return fail(result);
 
         workspace = result.workspace;
@@ -654,14 +709,15 @@ export function useWorkspace(
   );
 
   const reopen = useCallback(
-    async (roots: readonly string[]) => {
+    async (refs: readonly WorkspaceRef[]) => {
       // In turn rather than at once, so the order on screen is the order they were opened in - and
-      // so one folder that has since gone cannot take the rest with it.
-      for (const root of roots) {
-        const result = await client.reopenWorkspace(root);
-        // Silent on failure: a remembered folder that has since gone is not an error the user
-        // caused, and greeting them with a warning about a path they may not remember choosing is
-        // worse than simply opening without it.
+      // so one workspace that has since gone cannot take the rest with it.
+      for (const ref of refs) {
+        const result = await client.openWorkspaceRef(ref);
+        // Silent on failure: a remembered folder that has since gone, or a repository behind a
+        // token that has since been revoked, is not an error the user caused - and greeting them at
+        // launch with a warning about something they may not remember choosing is worse than simply
+        // opening without it.
         if (result.ok) await addWorkspace(result.workspace);
       }
     },
@@ -707,6 +763,7 @@ export function useWorkspace(
 
   const actions: WorkspaceActions = {
     open,
+    openRef,
     closeWorkspace,
     reopen,
     toggleFolder,

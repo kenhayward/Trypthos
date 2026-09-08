@@ -20,7 +20,9 @@
     "footer": "{{count}} files",
     "typeCount": "{{count}} file types",
     "fileTypesHint": "Choose which file types appear here",
-    "cannotOpen": "Trypthos does not open this kind of file. Turn its type on from the File types page of Settings, if there is one."
+    "cannotOpen": "Trypthos does not open this kind of file. Turn its type on from the File types page of Settings, if there is one.",
+    "openRepo": "Open GitHub repository",
+    "truncatedRepo": "Too large to list in full - some folders are missing."
   },
   "editor": {
     "title": "Editor",
@@ -203,6 +205,11 @@
     "tooLarge": "That file is {{size}}, and Trypthos opens files up to {{limit}}. It has been left alone.",
     "notText": "That file is not text, so Trypthos has not opened it. Editing and saving it here would write over what is inside it.",
     "unsupportedEncoding": "Trypthos reads UTF-8 text, and that file is in another encoding. Opening it would replace every character Trypthos could not read, so it has been left alone.",
+    "rateLimited": "GitHub has had as many requests as it allows for now. Trypthos will work again shortly - usually within the hour.",
+    "offline": "Trypthos could not reach GitHub. Check your connection and try again.",
+    "notConnected": "No GitHub account is connected. Connect one from the Accounts page of Settings.",
+    "unsupported": "Trypthos cannot do that here. Repositories open read-only for now - saving to GitHub is not built yet.",
+    "encryptionUnavailable": "This machine could not encrypt the token, so it was not saved. Trypthos never stores a credential in plain text.",
     "unknown": "Something went wrong."
   },
   "about": {
@@ -234,7 +241,8 @@
       "ai": "AI & system prompt",
       "editor": "Editor",
       "fileTypes": "File types",
-      "about": "About"
+      "about": "About",
+      "accounts": "Accounts"
     },
     "theme": {
       "system": "System",
@@ -315,6 +323,11 @@
     },
     "about": {
       "tagline": "A desktop markdown editor for Windows and macOS, with a folder browser and an AI chat panel."
+    },
+    "accounts": {
+      "title": "Accounts",
+      "blurb": "Cloud sources Trypthos can open folders from. Tokens are encrypted by your operating system and stored outside your settings file.",
+      "github": "GitHub"
     }
   },
   "menu": {
@@ -358,5 +371,25 @@
     "added": "Added",
     "changed": "Changed",
     "fixed": "Fixed"
+  },
+  "github": {
+    "title": "Open a GitHub repository",
+    "connectBlurb": "Trypthos needs a personal access token to read your repositories. Create one at github.com/settings/tokens with read access to your repositories, then paste it here. The token is encrypted by your operating system and never leaves this machine.",
+    "tokenLabel": "Personal access token",
+    "tokenPlaceholder": "Paste your token",
+    "connect": "Connect",
+    "connecting": "Connecting...",
+    "disconnect": "Disconnect",
+    "connectedAs": "Connected as {{login}}",
+    "notConnected": "Not connected",
+    "search": "Search your repositories",
+    "loading": "Loading your repositories...",
+    "refresh": "Refresh",
+    "noRepos": "This account owns no repositories.",
+    "noMatches": "No repositories match.",
+    "private": "Private",
+    "cancel": "Cancel",
+    "readOnlyNote": "Repositories open read-only. Trypthos reads the default branch; saving back to GitHub is not built yet.",
+    "browserOnly": "Connecting to GitHub needs the desktop app. This is the browser preview."
   }
 }

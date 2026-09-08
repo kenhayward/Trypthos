@@ -9,7 +9,8 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 
 | Feature | Description |
 | --- | --- |
-| Workspace browser | Open several local folders at once. Each has its own row and tree, collapses from that row like any folder inside it, and has a close button that takes its tabs with it; every open folder reopens next time you start. The filter box searches every open folder by name - matches appear under the folders they are in, whether or not you had expanded them - and takes the Windows wildcards * and ?. A file is named by its folder as well as its path, so two files with the same name in different folders stay two documents. OneDrive, Google Drive, Dropbox and GitHub follow. |
+| Workspace browser | Open several folders at once, from your machine or from GitHub. Each has its own row and tree, collapses from that row like any folder inside it, and has a close button that takes its tabs with it; every open folder reopens next time you start. The filter box searches every open folder by name - matches appear under the folders they are in, whether or not you had expanded them - and takes the Windows wildcards * and ?. A file is named by its folder as well as its path, so two files with the same name in different folders stay two documents. OneDrive, Google Drive and Dropbox follow. |
+| GitHub repositories | Connect your GitHub account with a personal access token and open a repository as another tree beside your folders. The picker lists the repositories you own, public and private, newest push first, with a search box over them. A repository opens at the head of its default branch, pinned to the commit it was at when you opened it, and everything the browser does - the tree, the filter box, Find in Files, tabs - works on it unchanged. Read-only for now: saving to GitHub is a commit, and that is not built yet. Your token is encrypted by your operating system and never leaves the machine. |
 | File types | Choose which kinds of file Trypthos takes an interest in - markdown, plain text and thirty-odd data formats and languages, grouped, and all on to begin with. Shell, PowerShell and batch scripts are covered, down to the shell configuration files that have no extension. Turn a type off and its files grey out: still listed, not opened, not offered to chat. |
 | Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab and are shown at their own size, zoomed and panned with Shift. A picture, not a document: nothing to edit, nothing written back, and never sent to a chat model. |
 | Syntax colouring | Every type is coloured by role - keywords, strings, comments, numbers, types and names - from the same palette as the rest of the app, in light and dark. Fenced code blocks inside a markdown document are coloured by the language on the fence, in all three views and in chat replies. Grammars load only when a file needs one. |
@@ -49,8 +50,12 @@ as a card showing exactly what would be written and where; nothing reaches your 
 press Apply, and one undo takes it back. Your API key is encrypted by the operating system and stored
 outside your settings file.
 
-**Not built yet:** cloud folders (OneDrive, Google Drive, Dropbox, GitHub), chat history that
-survives closing the app, and giving chat access to the wider folder rather than one document.
+**GitHub works**, read-only: connect an account in Settings > Accounts, open one of your repositories
+from the browser, and browse and read it exactly as you would a folder.
+
+**Not built yet:** writing back to GitHub, the other cloud folders (OneDrive, Google Drive, Dropbox),
+chat history that survives closing the app, and giving chat access to the wider folder rather than
+one document.
 
 Run it in a browser tab and there is no filesystem and nowhere to keep an API key, so the workspace
 panel says so and the chat panel is not drawn at all - that is a supported way to work on the
@@ -100,7 +105,8 @@ More detail: [docs/Architecture.md](docs/Architecture.md).
    watching, and creating or renaming files.
 3. **Chat** - asking, streaming and applying proposed changes are in. Still to come: the wider
    folder as context, saved conversations, and attachments.
-4. **Cloud providers** - OneDrive, then Google Drive, Dropbox and GitHub.
+4. **Cloud providers** - GitHub reads. Still to come: writing to GitHub as a commit, then OneDrive,
+   Google Drive and Dropbox.
 5. **Signing** - Developer ID and notarization, so installs stop warning.
 
 ## Licence

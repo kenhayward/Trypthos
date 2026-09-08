@@ -6,6 +6,7 @@ import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
 import { loadPersisted, type Migration } from "./persisted";
 import { RecentFileSchema } from "./recentFiles";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
+import { WorkspaceRefSchema } from "./workspaceRef";
 
 /// Everything Trypthos remembers between launches, in one file.
 ///
@@ -16,7 +17,7 @@ import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 14;
+export const SETTINGS_VERSION = 15;
 
 export const SettingsSchema = z
   .object({
@@ -29,11 +30,16 @@ export const SettingsSchema = z
         chatCollapsed: z.boolean(),
       })
       .strict(),
-    /// Absolute paths to the folders open when the app last closed, reopened on launch.
+    /// The workspaces open when the app last closed, reopened on launch.
     ///
     /// A list since version 14: several folders are open at once, and remembering one of them would
     /// mean the app came back with less than the user left it with.
-    workspaces: z.array(z.string()),
+    ///
+    /// **References rather than paths since version 15.** A GitHub repository has no path, and the
+    /// providers after it have an account and an opaque id - so what is remembered has to say which
+    /// provider answers for it. See `workspaceRef.ts` for why that is a parsed union and not a
+    /// string with a prefix on the front.
+    workspaces: z.array(WorkspaceRefSchema),
     /// The files the File menu offers to reopen, newest first.
     ///
     /// Each names a workspace as well as a path, because a relative path means nothing without the
@@ -152,6 +158,21 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 15,
+    // Version 15 gave a remembered workspace a provider. Everything remembered before it was an
+    // absolute path, because a local folder was the only kind there was - so each becomes a local
+    // reference, in the order it was stored, and the user's folders come back exactly as they left.
+    //
+    // Anything that is not a string is dropped rather than guessed at: a settings file that had
+    // already grown a shape this migration does not recognise is not one to invent a provider for.
+    migrate: (input) => ({
+      ...input,
+      workspaces: (Array.isArray(input["workspaces"]) ? input["workspaces"] : [])
+        .filter((root): root is string => typeof root === "string")
+        .map((root) => ({ kind: "local", root })),
+    }),
+  },
   {
     to: 14,
     // Version 14 opened several folders at once. The one folder that was remembered becomes a list

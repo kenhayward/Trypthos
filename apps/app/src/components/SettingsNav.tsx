@@ -44,6 +44,10 @@ const ICONS: Record<SettingsSection, React.ReactNode> = {
       <line x1="12" y1="19" x2="20" y2="19" />
     </>
   ),
+  // A cloud, because the page is about the places outside this machine Trypthos can read from.
+  accounts: (
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10Z" />
+  ),
   editor: (
     <>
       <path d="M12 20h9" />
