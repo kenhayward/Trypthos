@@ -6,7 +6,19 @@ About box carries a shorter table again; all three change together.
 ## Workspace browser
 
 The left panel shows your open folders as trees. Open a folder from your machine, expand folders in
-place, and click a file to open it in the editor. A filter box narrows the files by name.
+place, and click a file to open it in the editor.
+
+**The filter box searches, rather than sieving what is on screen.** Type in it and every open folder
+is walked by name, however deep, and what comes back is drawn as a tree of its own: each match under
+the folders it lives in, whether or not you had ever expanded them, and folders containing nothing
+left out entirely. **Windows search wildcards work** - `*` matches any run of characters, `?` matches
+exactly one, and a filter using either has to match the whole name, so `*.md` means "ends in .md"
+rather than "contains .md". Plain text with no wildcard in it matches anywhere in a name, and case
+never matters either way. While a filter is up the panel is showing results rather than the tree, so
+those folder rows do not collapse; clearing the box leaves the tree exactly as you left it. A large
+folder takes a moment to walk, so the panel says when it is searching, and says so when a search
+stopped at its limit rather than quietly showing a short list. Hidden folders such as `.git` are not
+searched, exactly as they are not listed.
 
 **Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
 row at the top of its tree. **That row collapses like any folder inside one**: click it and the whole

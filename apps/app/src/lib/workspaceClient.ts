@@ -1,4 +1,4 @@
-import type { FileHit, FindRequest, Revision, Settings } from "@trypthos/domain";
+import type { FileHit, FilterRequest, FindRequest, Revision, Settings } from "@trypthos/domain";
 import type { ChatBridge } from "../hooks/useChat";
 import type { ChatHistoryBridge } from "../hooks/useChatHistory";
 import type { KeyBridge } from "../hooks/useApiKeys";
@@ -67,6 +67,13 @@ export type FindResult =
   | { ok: false; reason: "bad-pattern" }
   | Failure;
 
+/// What the browser's filter box came back with.
+///
+/// Qualified paths, so a row can be drawn and a file opened from one without working out which
+/// folder it came from. `truncated` is part of the answer rather than a detail, for the same reason
+/// `capped` is part of a find: a walk that stopped at its budget has to say so.
+export type FilterResult = { ok: true; paths: string[]; truncated: boolean } | Failure;
+
 export interface WorkspaceClient {
   /// The files in ONE folder of the workspace, for chat to use as a map. Paths only.
   ///
@@ -102,6 +109,12 @@ export interface WorkspaceClient {
   /// walk happens in the main process, through the provider, which is what applies the boundary
   /// guard.
   findInFiles(request: FindRequest): Promise<FindResult>;
+  /// Names of files under one folder of the workspace that match the browser's filter box.
+  ///
+  /// Names only - nothing here reads a file, which is why it is not `findInFiles` with a different
+  /// pattern. The walk happens in the main process, through the provider, which is what applies the
+  /// boundary guard.
+  filterFiles(request: FilterRequest): Promise<FilterResult>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge {
@@ -224,6 +237,7 @@ export const browserClient: WorkspaceClient = {
   saveFileAs: async () => unavailable(),
   closeWorkspace: async () => unavailable(),
   findInFiles: async () => unavailable(),
+  filterFiles: async () => unavailable(),
 };
 
 export function workspaceClient(): WorkspaceClient {

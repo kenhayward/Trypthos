@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { enabledFileTypes } from "@trypthos/domain";
-import { treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
+import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
+import type { FilterStatus } from "../hooks/useFileFilter";
 import type { RemoteNode } from "../lib/workspaceClient";
 
 interface Props {
@@ -12,6 +13,11 @@ interface Props {
   workspaces: readonly { id: string; name: string; root: string }[];
   folders: Record<string, FolderState>;
   filter: string;
+  /// What the search behind the filter box is doing, and what it found.
+  ///
+  /// A filter searches every open folder rather than sieving the rows already on screen, so while
+  /// one is typed the panel draws THAT answer instead of the tree - see `matchRows`.
+  filterStatus: FilterStatus;
   /// The document on screen, highlighted as the one you are in.
   activePath: string | null;
   /// Every open document. Marked more lightly than the active one - clicking one of these goes to
@@ -54,6 +60,7 @@ export default function WorkspacePanel({
   workspaces,
   folders,
   filter,
+  filterStatus,
   activePath,
   openPaths,
   dirtyPaths,
@@ -69,6 +76,19 @@ export default function WorkspacePanel({
   onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
+  /// Which of the two things this panel is right now: the tree, or the answer to a filter.
+  ///
+  /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
+  /// from the paths that came back rather than from the folders that happen to have been listed -
+  /// which is how a match inside a folder nobody expanded gets on screen at all.
+  const filtering = filterStatus.kind !== "idle";
+  // Memoised rather than written inline: it feeds the rows below, and a fresh `[]` on every render
+  // would rebuild every tree on every keystroke in the editor.
+  const matches = useMemo(
+    () => (filterStatus.kind === "results" ? filterStatus.paths : []),
+    [filterStatus],
+  );
+
   /// One list of rows per open folder. Separate walks rather than one, because they are separate
   /// trees on screen - each with its own root row that can be collapsed and closed.
   const trees = useMemo(
@@ -79,22 +99,23 @@ export default function WorkspacePanel({
         // listed. The map is the only record of what is open, which is what keeps expanding, its
         // failure and its retry one mechanism rather than two.
         state: folders[workspace.id],
-        // One level in from the root, because the root is a ROW now. `treeRows` measures depth from
-        // the folder it was given, so its direct children come back at zero - which is the depth the
-        // root itself is drawn at, and drew a workspace's own folders level with the workspace.
-        rows: treeRows(folders, filter, fileTypes, workspace.id).map((row) => ({
-          ...row,
-          depth: row.depth + 1,
-        })),
+        // One level in from the root, because the root is a ROW now. Both builders measure depth
+        // from the folder they were given, so direct children come back at zero - which is the depth
+        // the root itself is drawn at, and drew a workspace's own folders level with the workspace.
+        rows: (filtering
+          ? matchRows(matches, workspace.id, fileTypes)
+          : treeRows(folders, fileTypes, workspace.id)
+        ).map((row) => ({ ...row, depth: row.depth + 1 })),
       })),
-    [workspaces, folders, filter, fileTypes],
+    [workspaces, folders, filtering, matches, fileTypes],
   );
-  const rows = useMemo(() => trees.flatMap((tree) => tree.rows), [trees]);
+  // A folder with nothing matching is left out entirely while filtering. A heading with no rows
+  // under it says a folder was searched, which is not what the box was asked - and when none of them
+  // has anything, the message below is the one thing on screen.
+  const shown = filtering ? trees.filter((tree) => tree.rows.length > 0) : trees;
+  const rows = useMemo(() => shown.flatMap((tree) => tree.rows), [shown]);
   const fileCount = visibleFileCount(rows);
-  // Folders survive a filter, so the row list is never empty while any exist - which meant a filter
-  // matching nothing left folder rows on screen with no explanation at all. The message keys off the
-  // FILE count instead, and reads correctly beside folders nobody has opened yet.
-  const noMatches = filter.trim() !== "" && fileCount === 0;
+  const noMatches = filterStatus.kind === "results" && matches.length === 0;
 
   // Resolved through the domain rather than counting the stored ids, so a pinned type and an id
   // this build does not recognise are handled here exactly as the tree handles them. The footer
@@ -149,28 +170,45 @@ export default function WorkspacePanel({
               onChange={(event) => onFilterChange(event.target.value)}
               placeholder={t("workspace.filter")}
               aria-label={t("workspace.filter")}
+              // The wildcards are the one thing about this box a user cannot see. On the tooltip
+              // rather than in the placeholder, which has to stay short enough to read at this width.
+              title={t("workspace.filterHint")}
               className="w-full rounded-md border border-rule bg-app px-2 py-1 text-ui text-ink placeholder:text-faint"
             />
           </div>
 
           <div className="min-h-0 grow overflow-auto px-1 py-2">
+            {/* A walk of every open folder takes as long as those folders are big, so the panel says
+                what it is doing rather than sitting silently on rows from the last filter. */}
+            {filterStatus.kind === "searching" && (
+              <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.searching")}</p>
+            )}
+
             {noMatches && (
               <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.noMatches")}</p>
             )}
 
-            {trees.map(({ workspace, state, rows: tree }) => (
+            {/* An answer cut short that does not say so is a wrong answer given confidently. */}
+            {filterStatus.kind === "results" && filterStatus.truncated && (
+              <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.matchesCapped")}</p>
+            )}
+
+            {shown.map(({ workspace, state, rows: tree }) => (
               <div key={workspace.id}>
                 {/* The workspace's own row. It behaves like the folder it is - selecting it is what
                     points chat and Find at the whole workspace - and it is the only row that can be
                     closed, because closing is something you do to a folder you opened. */}
                 <WorkspaceRow
                   workspace={workspace}
-                  status={state?.status ?? null}
+                  status={filtering ? null : (state?.status ?? null)}
                   expanded={state !== undefined && state.status !== "error"}
+                  filtering={filtering}
                   selected={selectedFolder === workspace.id}
                   onToggle={() => {
                     onSelectFolder(workspace.id);
-                    void onToggleFolder(workspace.id);
+                    // There is nothing to collapse while filtering: what is under this row came from
+                    // the search, not from the map of folders that have been listed.
+                    if (!filtering) void onToggleFolder(workspace.id);
                   }}
                   onRetry={() => onRetryFolder(workspace.id)}
                   onClose={() => onCloseWorkspace(workspace.id)}
@@ -179,7 +217,7 @@ export default function WorkspacePanel({
                 {/* Per folder rather than once for the panel. "This folder is empty" said over two
                     open folders would be a claim about neither of them - and said about one nobody
                     has looked inside yet, a claim the panel cannot make at all. */}
-                {state?.status === "loaded" && tree.length === 0 && (
+                {!filtering && state?.status === "loaded" && tree.length === 0 && (
                   <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.emptyFolder")}</p>
                 )}
 
@@ -188,10 +226,11 @@ export default function WorkspacePanel({
                     <FolderRow
                       key={row.node.id}
                       row={row}
+                      filtering={filtering}
                       selected={selectedFolder === row.node.id}
                       onToggle={() => {
                         onSelectFolder(row.node.id);
-                        void onToggleFolder(row.node.id);
+                        if (!filtering) void onToggleFolder(row.node.id);
                       }}
                       onRetry={() => onRetryFolder(row.node.id)}
                     />
@@ -241,6 +280,7 @@ function WorkspaceRow({
   workspace,
   status,
   expanded,
+  filtering,
   selected,
   onClose,
   onToggle,
@@ -250,6 +290,11 @@ function WorkspaceRow({
   /// What is known about the root's own listing, or null when it has never been asked for.
   status: FolderState["status"] | null;
   expanded: boolean;
+  /// True while the panel is showing the answer to a filter rather than the tree.
+  ///
+  /// The rows under this one then came from a search, so there is nothing here to collapse - and the
+  /// chevron goes with the behaviour rather than staying as a control that does nothing.
+  filtering: boolean;
   selected: boolean;
   onClose: () => void;
   onToggle: () => void;
@@ -269,7 +314,9 @@ function WorkspaceRow({
         <button
           type="button"
           onClick={onToggle}
-          aria-expanded={expanded}
+          // Undefined while filtering: nothing under this row can be collapsed, and a row that
+          // announces itself as expandable and then does nothing is worse than one that does not.
+          aria-expanded={filtering ? undefined : expanded}
           // Selection and expansion are separate facts about a folder, so they are separate
           // attributes - exactly as they are on a folder inside one. A root can be the folder chat
           // is mapping while collapsed, and expanded while some other folder is chosen.
@@ -286,7 +333,7 @@ function WorkspaceRow({
               : "flex min-w-0 grow items-center gap-1.5 py-1 text-left text-base font-semibold text-ink"
           }
         >
-          <Chevron open={expanded} />
+          {filtering ? <ChevronSpace /> : <Chevron open={expanded} />}
           <Glyph className={status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
             <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
           </Glyph>
@@ -328,11 +375,14 @@ function WorkspaceRow({
 
 function FolderRow({
   row,
+  filtering,
   selected,
   onToggle,
   onRetry,
 }: {
   row: TreeRow;
+  /// True while these rows are a filter's answer rather than the tree. See `WorkspaceRow`.
+  filtering: boolean;
   selected: boolean;
   onToggle: () => void;
   onRetry: () => void;
@@ -344,7 +394,7 @@ function FolderRow({
       <button
         type="button"
         onClick={onToggle}
-        aria-expanded={row.expanded}
+        aria-expanded={filtering ? undefined : row.expanded}
         // Selection and expansion are separate facts about a folder, so they are separate
         // attributes: a folder can be the one chat is mapping while collapsed, and expanded while
         // some other folder is chosen.
@@ -356,7 +406,7 @@ function FolderRow({
             : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
         }
       >
-        <Chevron open={row.expanded} />
+        {filtering ? <ChevronSpace /> : <Chevron open={row.expanded} />}
         <Glyph className={row.status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
         </Glyph>
@@ -450,6 +500,14 @@ function FileRow({
       )}
     </button>
   );
+}
+
+/// The chevron's room, kept while filtering so the names still line up down the panel.
+///
+/// A gap rather than a greyed-out chevron: there is nothing to expand, and a disabled-looking
+/// control invites a click that will never do anything.
+function ChevronSpace() {
+  return <span aria-hidden="true" className="size-3.5 shrink-0" />;
 }
 
 function Chevron({ open }: { open: boolean }) {

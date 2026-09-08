@@ -59,6 +59,10 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// expression - never a root, for the reason at the top of this file.
   findInFiles: (request) => ipcRenderer.invoke("workspace:find", request),
 
+  /// The browser's filter box. A folder INSIDE the open workspace and a name pattern - never a root,
+  /// for the reason at the top of this file. Names only: nothing here opens a file.
+  filterFiles: (request) => ipcRenderer.invoke("workspace:filter", request),
+
   listChats: () => ipcRenderer.invoke("chats:list"),
   loadChat: (id) => ipcRenderer.invoke("chats:load", { id }),
   saveChat: (request) => ipcRenderer.invoke("chats:save", request),

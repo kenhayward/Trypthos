@@ -142,7 +142,7 @@ describe("App", () => {
   /// The parts are tested on their own; this is the wiring between them, which is the thing that can
   /// be right in every component and still wrong in the window.
   describe("open files", () => {
-    function shellWithFiles(): {
+    function shellWithFiles(overrides: Record<string, unknown> = {}): {
       reads: string[];
       asked: (string | null)[];
       savedAs: { path: string | null; content: string }[];
@@ -206,6 +206,7 @@ describe("App", () => {
             revision: { id: "r-saved-as" },
           };
         },
+        ...overrides,
       } as unknown as typeof window.trypthos;
       return { reads, asked, savedAs, menu, written };
     }
@@ -240,6 +241,32 @@ describe("App", () => {
       await user.click(row("two.md"));
       // Qualified, because a path names the folder it is in.
       expect(reads).toEqual(["Notes/one.md", "Notes/two.md"]);
+    });
+
+    /// The filter box, from the keystroke to the row.
+    ///
+    /// The matcher, the walk, the hook and the panel are each tested on their own; this is the
+    /// wiring between them, which is what can be right in every part and still wrong in the window.
+    /// The file it finds is deliberately one no listing here returns - it comes back from the
+    /// SEARCH, which is the whole point of the box.
+    it("filters the browser by searching every open folder", async () => {
+      const user = userEvent.setup();
+      shellWithFiles({
+        filterFiles: async () => ({
+          ok: true as const,
+          paths: ["Notes/deep/buried.md"],
+          truncated: false,
+        }),
+      });
+      render(<App />);
+
+      await screen.findByRole("button", { name: /one\.md/ });
+      await user.type(screen.getByLabelText("Filter files"), "buried");
+
+      expect(await screen.findByRole("button", { name: /buried\.md/ })).toBeDefined();
+      // The folder it is in comes with it, and the files that did not match do not.
+      expect(screen.getByText("deep")).toBeDefined();
+      expect(screen.queryByRole("button", { name: /one\.md/ })).toBeNull();
     });
 
     // Bound on the window rather than inside the strip, so it works wherever the caret is - which is

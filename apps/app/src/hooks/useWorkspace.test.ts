@@ -19,6 +19,8 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     workspaceOutline: async () => ({ ok: true, outline: { path: "", paths: [], truncated: false } }),
     // Find in Files, for the same reason: this hook never searches, and the client is one interface.
     findInFiles: async () => ({ ok: true, hits: [], capped: false }),
+    // The browser's filter box, which is `useFileFilter`'s - here for the same reason again.
+    filterFiles: async () => ({ ok: true, paths: [], truncated: false }),
     // The id the main process minted. It is the first segment of every path in this workspace,
     // which is what makes a path say which of the open folders it is in.
     openWorkspace: async () => ({ ok: true, workspace: { id: "ws", root: "/ws", name: "ws" } }),
@@ -251,16 +253,6 @@ describe("useWorkspace", () => {
     expect(result.current.state.workspaces[0]?.root).toBe("D:/Notes");
     // Keyed by the workspace's own id, which the fake mints from the root it was handed.
     expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
-  });
-
-  it("holds the filter text", () => {
-    const { client } = fakeClient();
-    const { result } = renderHook(() => useWorkspace(client));
-
-    act(() => {
-      result.current.actions.setFilter("plan");
-    });
-    expect(result.current.state.filter).toBe("plan");
   });
 
   it("opens a file, holding the revision it was read at", async () => {
