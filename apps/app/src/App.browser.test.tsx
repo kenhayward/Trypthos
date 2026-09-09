@@ -363,3 +363,105 @@ describe("two folders open at once", () => {
     expect(screen.getByRole("button", { name: "Close Work" })).toBeDefined();
   });
 });
+
+/// The repository picker, measured.
+///
+/// Reported as "the dialog vanishes, and pressing the button again leaves the app greyed with no
+/// dialog" - which says the backdrop is still mounted from the first press while the panel inside it
+/// is not being drawn. That is a question about BOXES: whether the panel has a size and whether it is
+/// on screen. jsdom answers zero to every measurement it is asked, so it cannot be asked here - it
+/// happily reported this dialog as open and correct.
+describe("the GitHub repository picker, on screen", () => {
+  // Enough that the natural height of the list is far taller than any plausible window. That is the
+  // condition the bug needed: with a short list the panel fits and centres correctly, which is why
+  // twelve of them passed while a real account's sixty did not.
+  const REPOS = Array.from({ length: 60 }, (_, at) => ({
+    owner: "ada",
+    name: `notes-${at}`,
+    fullName: `ada/notes-${at}`,
+    private: at % 2 === 0,
+    defaultBranch: "main",
+    description: at % 3 === 0 ? "A repository with a description on it" : null,
+    pushedAt: null,
+  }));
+
+  function shell(overrides: Record<string, unknown> = {}) {
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+      writeSettings: async () => {},
+      listDirectory: async () => ({ ok: true as const, nodes: [] }),
+      githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
+      connectGitHub: async () => ({ ok: true as const, login: "ada" }),
+      disconnectGitHub: async () => ({ ok: true }),
+      listRepositories: async () => ({ ok: true as const, repos: REPOS }),
+      openWorkspaceRef: async (ref: unknown) => ({
+        ok: true as const,
+        workspace: { id: "notes-0", name: "notes-0", ref, truncated: false },
+      }),
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      onOpenTarget: () => () => {},
+      ...overrides,
+    } as unknown as typeof window.trypthos;
+  }
+
+  /// The panel inside the backdrop - the thing the user says disappears.
+  function panelBox() {
+    const dialog = document.querySelector('[role="dialog"]');
+    const panel = dialog?.firstElementChild;
+    return panel === null || panel === undefined ? null : panel.getBoundingClientRect();
+  }
+
+  it("draws a panel with a real size, inside the window", async () => {
+    shell();
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await screen.findByRole("button", { name: /ada\/notes-0/ });
+
+    const box = panelBox();
+    expect(box).not.toBeNull();
+    // The reported symptom, stated as a measurement: a panel with no height is a dialog that is not
+    // there, over a backdrop that plainly is.
+    expect(box!.height).toBeGreaterThan(80);
+    expect(box!.width).toBeGreaterThan(200);
+    expect(box!.top).toBeGreaterThanOrEqual(0);
+    expect(box!.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
+  });
+
+  // The state the second press lands in: nothing fetched yet, one short line of text in the panel.
+  it("draws a panel while it is still checking the account", async () => {
+    shell({ githubStatus: () => new Promise(() => {}) });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await screen.findByText("Checking your GitHub account...");
+
+    const box = panelBox();
+    expect(box!.height).toBeGreaterThan(80);
+    expect(box!.width).toBeGreaterThan(200);
+  });
+
+  // A long list must scroll inside the panel rather than push the panel past the window - which
+  // would put the Cancel button, and any error message above it, off the bottom of the screen.
+  it("keeps the whole panel on screen when there are many repositories", async () => {
+    shell();
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await screen.findByRole("button", { name: /ada\/notes-59/ });
+
+    const box = panelBox();
+    // The reported failure, as a measurement. The backdrop covers the window either way - what the
+    // user sees as "the dialog vanished" is the panel being centred in a grid row sized to the whole
+    // unclipped list, which puts it below the bottom of the screen.
+    expect(box!.top).toBeGreaterThanOrEqual(0);
+    expect(box!.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
+    const cancel = screen.getByRole("button", { name: "Cancel" }).getBoundingClientRect();
+    expect(cancel.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
+    expect(cancel.height).toBeGreaterThan(0);
+  });
+});

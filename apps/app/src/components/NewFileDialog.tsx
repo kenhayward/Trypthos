@@ -51,7 +51,11 @@ export default function NewFileDialog({ fileTypes, onCancel, onCreate }: Props) 
       role="dialog"
       aria-modal="true"
       aria-label={t("newFile.title")}
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      // Flex rather than `grid place-items-center`, matching the repository picker: a grid row is
+      // sized to the item's unclipped content, so a panel taller than the window is drawn off the
+      // bottom of it. This dialog's content is short enough that it could only happen in a very
+      // short window, but there is one way to centre a dialog here rather than two.
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       // A click on the backdrop is a way out, like Escape. Checked against the target rather than
       // the currentTarget, so a click inside the panel does not close it.
       onMouseDown={(event) => {

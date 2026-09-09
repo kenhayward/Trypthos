@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.61.4",
+    date: "2026-09-09",
+    pr: 129,
+    headline: "The repository picker stays on the screen",
+    summary:
+      "If your GitHub account owned more than a screenful of repositories, the picker appeared and then seemed to vanish - leaving the window greyed over with no dialog and nothing said about why, and pressing the button again did nothing at all. It was not closing. It was being drawn below the bottom of the window, while the shade behind it still covered the screen; pressing the button again changed nothing because it had never gone away, and clicking anywhere dismissed it. The dialog was centred against the full height of your repository list rather than against the window, so the longer the list the further down it went - which is why it depended on how many repositories you have, and why it never showed up in testing until the list was made a realistic length. It is now centred against the window whatever the list, with the list scrolling inside it, and it fits a short window down to a few hundred pixels tall. The New file dialog was centred the same way and has been changed with it.",
+    fixed: [
+      "The GitHub repository picker is drawn on the screen rather than below it when your account owns more repositories than fit in the window.",
+      "Both dialogs stay within a short window, with their content scrolling inside rather than pushing the buttons out of reach.",
+    ],
+  },
+  {
     version: "0.61.3",
     date: "2026-09-08",
     pr: 127,

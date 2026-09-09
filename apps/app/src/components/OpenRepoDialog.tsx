@@ -65,7 +65,13 @@ export default function OpenRepoDialog({ bridge, onCancel, onOpen }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label={t("github.title")}
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      // **Flex, not `grid place-items-center`.** A grid's implicit row is sized to the item's
+      // UNCLIPPED content and the item's own `max-height` never constrains it - so a panel taller
+      // than the window ends up clamped and then centred inside a row several times the window's
+      // height, which draws it off the bottom of the screen while this backdrop still covers it.
+      // From the user's side that is a dialog that "vanishes" leaving the app greyed over.
+      // A flex line takes the container's height, so the item centres against the window.
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
