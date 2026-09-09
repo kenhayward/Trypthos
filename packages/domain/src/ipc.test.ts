@@ -55,6 +55,8 @@ describe("IPC_CHANNELS", () => {
       "github:disconnect",
       "github:repos",
       "github:repoInfo",
+      "github:branches",
+      "github:setBranch",
     ]);
   });
 

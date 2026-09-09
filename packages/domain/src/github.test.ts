@@ -10,10 +10,17 @@ import {
   blobEntryFor,
   blobUrl,
   branchCountUrl,
+  branchListUrl,
+  branchNameFor,
   branchUrl,
+  commitMessageFor,
   compareUrl,
+  contentsUrl,
   countFromLink,
   githubErrorFor,
+  githubWriteErrorFor,
+  isValidBranchName,
+  refsUrl,
   isSafeRef,
   matchRepos,
   ownedRepos,
@@ -547,4 +554,129 @@ describe("the schemas the extra requests are read through", () => {
     expect(parsed.name).toBe(null);
   });
 
+});
+
+/// Writing back.
+///
+/// A save to GitHub is a commit on a branch. There is no separate push: the Contents API commits on
+/// the server, so one request is the write, the commit and the push together. What is here is
+/// everything that is not that request - the addresses, the names, and what a refusal means.
+
+describe("the addresses a write is made to", () => {
+  it("names a file's contents, with and without a branch", () => {
+    expect(contentsUrl("ada", "notes", "docs/guide.md")).toBe(
+      `${GITHUB_API}/repos/ada/notes/contents/docs/guide.md`,
+    );
+    expect(contentsUrl("ada", "notes", "docs/guide.md", "trunk")).toBe(
+      `${GITHUB_API}/repos/ada/notes/contents/docs/guide.md?ref=trunk`,
+    );
+  });
+
+  // A path keeps its own separators - it names a place in the tree - while everything else about it
+  // is encoded. The same rule a branch gets, and for the same reason.
+  it("keeps a path's separators and encodes the rest", () => {
+    expect(contentsUrl("ada", "notes", "my docs/a+b.md")).toBe(
+      `${GITHUB_API}/repos/ada/notes/contents/my%20docs/a%2Bb.md`,
+    );
+  });
+
+  it("names where a branch is created, and where they are listed", () => {
+    expect(refsUrl("ada", "notes")).toBe(`${GITHUB_API}/repos/ada/notes/git/refs`);
+    expect(branchListUrl("ada", "notes", 1)).toBe(
+      `${GITHUB_API}/repos/ada/notes/branches?per_page=100&page=1`,
+    );
+  });
+});
+
+describe("what a failing write means", () => {
+  // The one that matters. A 409 from the Contents API is the sha not matching: somebody else
+  // committed to that path since it was read. It is a RESULT, never an exception - the editor must
+  // not report a save it did not make, and which version wins is the user's decision.
+  it("reads a stale sha as a conflict", () => {
+    expect(githubWriteErrorFor(409, null)).toBe("conflict");
+  });
+
+  // A branch that is already there. Its own reason, because the answer is "commit to it instead"
+  // rather than anything the user has done wrong.
+  it("reads a branch that already exists as exactly that", () => {
+    expect(githubWriteErrorFor(422, null)).toBe("branch-exists");
+  });
+
+  /// The refusal that will actually happen.
+  ///
+  /// Every token connected before writing existed can read and not write, so this is the FIRST
+  /// thing a user meets. Answered as its own reason rather than "permission denied", because the
+  /// two send someone to different places: one to make a new token, the other to wonder whether
+  /// they still have access to the repository at all.
+  it("reads a token that may not write as exactly that", () => {
+    expect(githubWriteErrorFor(403, "4999")).toBe("read-only-token");
+    // A spent budget is still a spent budget, and it comes back on its own.
+    expect(githubWriteErrorFor(403, "0")).toBe("rate-limited");
+  });
+
+  // Everything else means what it means on a read. One mapping, extended - not a second one that
+  // could come to disagree with the first about what a 404 is.
+  it("reads everything else the way a read does", () => {
+    expect(githubWriteErrorFor(404, null)).toBe("not-found");
+    expect(githubWriteErrorFor(401, null)).toBe("permission-denied");
+    expect(githubWriteErrorFor(500, null)).toBe("offline");
+  });
+});
+
+describe("naming a branch", () => {
+  it("suggests one from the file being edited", () => {
+    expect(branchNameFor("README.md")).toBe("trypthos/update-readme");
+    expect(branchNameFor("docs/Getting Started.md")).toBe("trypthos/update-getting-started");
+  });
+
+  // A name git could not accept is a request that fails at the API rather than in the dialog, which
+  // is the wrong place to find out. Every one of these is something git refuses outright.
+  it("refuses a name git would not accept", () => {
+    for (const bad of [
+      "",
+      "   ",
+      "has space",
+      "ends/",
+      "/starts",
+      "double//slash",
+      "dot..dot",
+      "tilde~",
+      "caret^",
+      "colon:",
+      "question?",
+      "star*",
+      "bracket[",
+      "back\\slash",
+      // A control character. Git forbids these outright, and no dialog would show you one.
+      "bell\u0007",
+      "ends.",
+      "ends.lock",
+      ".hidden",
+      "under/.hidden",
+      "@",
+      "-leading",
+    ]) {
+      expect(isValidBranchName(bad), `${bad} should be refused`).toBe(false);
+    }
+  });
+
+  it("accepts the names people actually use", () => {
+    for (const good of ["main", "trypthos/update-readme", "feature/ABC-123_v2", "v1.2.x", "a"]) {
+      expect(isValidBranchName(good), `${good} should be accepted`).toBe(true);
+    }
+  });
+
+  // A suggestion that its own validator refuses would be a dialog that opens refusing itself.
+  it("suggests names that pass its own check", () => {
+    for (const file of ["README.md", "a b/c d.md", "...md", "docs/-weird-.md"]) {
+      expect(isValidBranchName(branchNameFor(file)), file).toBe(true);
+    }
+  });
+});
+
+describe("the message on a commit", () => {
+  it("says what was done, and to which file", () => {
+    expect(commitMessageFor("docs/guide.md", { creating: false })).toBe("Update guide.md");
+    expect(commitMessageFor("notes.md", { creating: true })).toBe("Add notes.md");
+  });
 });

@@ -4,9 +4,13 @@ const {
   API_VERSION,
   GITHUB_API,
   GitHubBlobSchema,
+  GitHubBranchListSchema,
   GitHubBranchSchema,
   GitHubComparisonSchema,
+  GitHubContentMetaSchema,
   GitHubRefListSchema,
+  GitHubRefSchema,
+  GitHubWriteSchema,
   GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubRepoSchema,
@@ -16,12 +20,17 @@ const {
   USER_AGENT,
   blobUrl,
   branchCountUrl,
+  branchListUrl,
   branchUrl,
   compareUrl,
+  contentsUrl,
   countFromLink,
   githubErrorFor,
+  githubWriteErrorFor,
   isSafeRef,
+  isValidBranchName,
   ownedRepos,
+  refsUrl,
   repoStats,
   repoUrl,
   reposUrl,
@@ -76,7 +85,13 @@ function createGitHubApi({
   ///
   /// The schema is not optional and there is no raw variant: someone else's JSON annotated with a
   /// shape is a claim, and a listing built from a claim is a listing built from whatever arrived.
-  async function request(url, schema) {
+  ///
+  /// `method`, `payload` and `errorFor` are the write path's three differences from a read.
+  ///
+  /// `errorFor` in particular: a 409 means nothing on a read and is a conflict on a write, and a
+  /// 403 with budget left is a token that may read and not write. One request function with the
+  /// mapping passed in, rather than a second copy of the token, the timeout and the parsing.
+  async function request(url, schema, { method = "GET", payload = null, errorFor = githubErrorFor } = {}) {
     const token = await getToken();
     // Not a network failure, and it must not be reported as one: "you are not connected" and
     // "GitHub could not be reached" send the user to different places.
@@ -91,13 +106,16 @@ function createGitHubApi({
     let response;
     try {
       response = await fetch(url, {
+        method,
         signal: controller.signal,
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
           "X-GitHub-Api-Version": API_VERSION,
           "User-Agent": USER_AGENT,
+          ...(payload === null ? {} : { "Content-Type": "application/json" }),
         },
+        ...(payload === null ? {} : { body: JSON.stringify(payload) }),
       });
     } catch (error) {
       // Deliberately not logging the URL with the message: a repository name is the user's, and a
@@ -111,7 +129,7 @@ function createGitHubApi({
     }
 
     if (!response.ok) {
-      return failure(githubErrorFor(response.status, response.headers.get(RATE_LIMIT_HEADER)));
+      return failure(errorFor(response.status, response.headers.get(RATE_LIMIT_HEADER)));
     }
 
     let body;
@@ -289,7 +307,104 @@ function createGitHubApi({
     return { ok: true, bytes: Buffer.from(result.value.content, "base64") };
   }
 
-  return { whoami, ownedRepositories, defaultBranchHead, repoStatistics, tree, blob };
+  /// Which sha a path is at on a branch right now.
+  ///
+  /// Asked for exactly one reason: to say whose write won a conflict. Never used to decide whether
+  /// to write - that would be a check-then-write with a gap in the middle, which is the race the
+  /// conditional write exists to close.
+  async function currentSha(owner, repo, path, branch) {
+    const result = await request(contentsUrl(owner, repo, path, branch), GitHubContentMetaSchema);
+    return result.ok ? result.value.sha : null;
+  }
+
+  /// Commits one file to one branch.
+  ///
+  /// **This is the write, the commit and the push together.** There is no separate push in the API:
+  /// the Contents endpoint commits on the server, so when this answers the change is on GitHub.
+  ///
+  /// `sha` is the blob being REPLACED, and omitting it is how a file gets created. Sending the
+  /// wrong one - because somebody else committed since it was read - is a 409, and that comes back
+  /// as a conflict carrying the sha that won rather than as an error. The editor must never report
+  /// a save it did not make.
+  async function putFile({ owner, repo, path, message, bytes, branch, sha }) {
+    const result = await request(contentsUrl(owner, repo, path), GitHubWriteSchema, {
+      method: "PUT",
+      payload: {
+        message,
+        // Base64 is the only form this endpoint takes. The BYTES are the caller's - whether they
+        // carry a byte order mark was decided where the file was read, not here.
+        content: bytes.toString("base64"),
+        branch,
+        // Present or absent, never null: null IS a sha as far as the endpoint is concerned, and a
+        // create that sent one would be refused.
+        ...(sha === null ? {} : { sha }),
+      },
+      errorFor: githubWriteErrorFor,
+    });
+
+    if (result.ok) {
+      // Two shas, and they are different things: one identifies the file's new bytes and is what
+      // the next conditional write presents, the other identifies the commit and is what the
+      // workspace's pin advances to.
+      return { ok: true, blobSha: result.value.content.sha, commitSha: result.value.commit.sha };
+    }
+
+    if (result.reason !== "conflict") return result;
+
+    // Carried so the user can be told what they are choosing between. A conflict whose winner
+    // cannot be read is still a conflict - reporting it as anything else would let a refused write
+    // read as a save.
+    return { ok: false, reason: "conflict", theirs: await currentSha(owner, repo, path, branch) };
+  }
+
+  /// Starts a branch at a commit.
+  ///
+  /// The ref is fully qualified - `refs/heads/` is not decoration, and GitHub refuses a ref without
+  /// it. The name is checked against git's own rules first: a name git could not accept comes back
+  /// as a 422, which this reads as "already exists", and that would be a wrong answer given
+  /// confidently.
+  async function createBranch(owner, repo, name, fromSha) {
+    if (!isValidBranchName(name)) return failure("unsupported");
+
+    const result = await request(refsUrl(owner, repo), GitHubRefSchema, {
+      method: "POST",
+      payload: { ref: `refs/heads/${name}`, sha: fromSha },
+      errorFor: githubWriteErrorFor,
+    });
+
+    return result.ok ? { ok: true, branch: name, sha: result.value.object.sha } : result;
+  }
+
+  /// Every branch, with the commit at each head.
+  ///
+  /// The head is what makes a branch somewhere a workspace can be pinned: a name alone is not a
+  /// commit, and a workspace pinned to a name would move under the reader.
+  async function branches(owner, repo) {
+    const collected = [];
+    for (let page = 1; page <= MAX_REPO_PAGES; page += 1) {
+      const result = await request(branchListUrl(owner, repo, page), GitHubBranchListSchema);
+      if (!result.ok) return result;
+
+      collected.push(...result.value.map((branch) => ({ name: branch.name, sha: branch.commit.sha })));
+      // The `Link` header is what says there is another page. A short page says the same thing, but
+      // only this one is true when a repository has exactly a multiple of a hundred branches.
+      if (!/rel="next"/.test(result.headers.get("link") ?? "")) break;
+    }
+
+    return { ok: true, branches: collected };
+  }
+
+  return {
+    whoami,
+    ownedRepositories,
+    defaultBranchHead,
+    repoStatistics,
+    tree,
+    blob,
+    putFile,
+    createBranch,
+    branches,
+  };
 }
 
 module.exports = { createGitHubApi, MAX_REPO_PAGES };

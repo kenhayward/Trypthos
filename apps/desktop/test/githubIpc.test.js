@@ -300,9 +300,10 @@ test("refuses Save As into a repository rather than opening a dialog", async () 
 
 /// The refusal that matters most.
 ///
-/// Writing to GitHub is a commit on a branch, and it is not built. What must never happen is the
-/// editor reporting a save it did not make - so the channel answers honestly rather than succeeding.
-test("refuses a write to a repository rather than reporting a save it did not make", async () => {
+/// Writing to GitHub is a commit on a branch, and until the user has said WHICH branch there is no
+/// answer to where a save goes. What must never happen is the editor reporting a save it did not
+/// make - so the channel answers honestly rather than committing somewhere nobody chose.
+test("refuses a write to a repository until a branch has been chosen", async () => {
   await withHandlers(async ({ ipcMain }) => {
     await ipcMain.invoke("github:connect", { token: "ghp_good" });
     const opened = await ipcMain.invoke("workspace:openRef", {
@@ -313,10 +314,11 @@ test("refuses a write to a repository rather than reporting a save it did not ma
       path: `${opened.workspace.id}/README.md`,
       content: "changed",
       expectedRevision: { id: "b1" },
+      message: null,
     });
 
     assert.equal(written.ok, false);
-    assert.equal(written.reason, "unsupported");
+    assert.equal(written.reason, "no-branch");
   });
 });
 

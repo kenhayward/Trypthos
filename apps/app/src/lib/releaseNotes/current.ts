@@ -5,6 +5,26 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.65.0",
+    date: "2026-09-09",
+    pr: 134,
+    headline: "Saving to GitHub, at last",
+    summary:
+      "You can edit a file in a repository and save it. Until now Trypthos would open one and refuse, because there is no mutable file at a path on GitHub the way there is in a folder - a save is a commit on a branch, with history and merge conflicts rather than an overwrite. So the first time you save in a repository, Trypthos asks where those commits should go: a new branch, named after the file and yours to rename, or one that already exists, chosen from the repository's own list, along with the message for this commit. Then it asks nothing else. Every save after that commits straight to the branch you chose, with no dialog and no wait, because a document is saved every couple of minutes and a question whose answer has not changed is not worth asking twice. A new branch is the default deliberately: committing to the default branch by default is how people push to main without meaning to, and where main is protected GitHub refuses the commit anyway, which is a worse way to find out. The workspace follows the branch you commit to, so the tree, the filter box and Find in Files are all looking at the same place your saves are landing. If somebody else has committed to that file since you opened it the save is refused as a conflict, with your text exactly where it was - the same answer a local file gives when it changed on disk, and for the same reason: Trypthos will not report a save it did not make. One thing to expect: a token created for reading cannot write, and that is most tokens connected before today. The refusal says so in as many words rather than hiding behind \"permission denied\", which would send you to check whether you still have access to the repository when what you need is a new token. Opening a pull request from Trypthos is the next piece of this and is not built yet.",
+    added: [
+      "Saving a file in a GitHub repository, which makes a commit on a branch.",
+      "A dialog on the first save in a repository: a new branch or an existing one, and the commit message. Asked once, never again for that repository.",
+      "Branch names are checked against git's own rules as you type them, rather than by a request that fails.",
+    ],
+    changed: [
+      "The workspace follows the branch you commit to, so the tree and Find in Files look where your saves land.",
+      "A byte order mark a file already had is kept when it is committed, exactly as it is for a file on this machine.",
+    ],
+    fixed: [
+      "A GitHub token that can read but not write now says so, rather than reporting a refusal that reads as losing access to the repository.",
+    ],
+  },
+  {
     version: "0.64.0",
     date: "2026-09-09",
     pr: 133,

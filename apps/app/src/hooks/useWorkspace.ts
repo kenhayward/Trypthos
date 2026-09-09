@@ -8,6 +8,7 @@ import {
   activeDocument,
   anyDirty as anyDocumentDirty,
   closeDocument,
+  commitMessageFor,
   dirtyPaths as dirtyDocumentPaths,
   emptyDocumentSet,
   formatBytes,
@@ -224,6 +225,16 @@ export function failureKey(reason: string): string | null {
       return "errors.permissionDenied";
     case "conflict":
       return "errors.conflict";
+    // The three refusals that only a provider whose write is a commit can give. Each is its own key
+    // because each sends the user somewhere different: to choose a branch, to pick another name, or
+    // to make a token that may write. "Permission denied" for the last would send them to check
+    // whether they still have access to the repository at all, which is the wrong place.
+    case "no-branch":
+      return "errors.noBranch";
+    case "branch-exists":
+      return "errors.branchExists";
+    case "read-only-token":
+      return "errors.readOnlyToken";
     // Its own key rather than "permission denied". The user picked a real folder they can write to;
     // the app is the thing declining, so it has to say which of the two it means.
     case "outside-workspace":
@@ -337,13 +348,56 @@ export type ConfirmDiscard = ((name?: string | null) => Promise<DiscardChoice>) 
 /// collected those would fill with files nobody opened.
 export type ReportOpened = ((file: { root: string; path: string }) => void) | null;
 
+/// What the first save in a repository asks for.
+///
+/// A commit needs a branch and a message, and neither is something the app may decide on somebody's
+/// behalf: committing to the default branch by default is how a person pushes to main without
+/// meaning to.
+export interface CommitChoice {
+  branch: string;
+  /// True to cut the branch, false to move to one that already exists. Two acts with different
+  /// failures, told apart here rather than guessed at from whether the name is taken.
+  create: boolean;
+  message: string;
+}
+
+/// The repository a document belongs to, or null when it is not in one.
+///
+/// The workspace's REFERENCE is what says so - a repository is not a folder with a different name,
+/// it is a provider whose write is a commit - and the answer is the workspace id, which is what
+/// every channel here names a workspace by.
+function repositoryFor(state: Internal, path: string): string | null {
+  const workspaceId = splitQualified(path)?.workspaceId ?? null;
+  if (workspaceId === null) return null;
+
+  const workspace = state.workspaces.find((candidate) => candidate.id === workspaceId);
+  return workspace?.ref.kind === "github" ? workspaceId : null;
+}
+
+/// Asks where a repository's commits should go. Null answers cancellation, which is not a failure.
+///
+/// Asked ONCE per repository, on its first save. The questions belong to the branch rather than to
+/// the save: a document is saved every couple of minutes, and asking each time would be asking a
+/// question whose answer has not changed.
+export type AskCommit =
+  ((workspaceId: string, name: string) => Promise<CommitChoice | null>) | null;
+
 export function useWorkspace(
   client: WorkspaceClient,
   initialContent = "",
   confirmDiscard: ConfirmDiscard = null,
   reportOpened: ReportOpened = null,
+  askCommit: AskCommit = null,
 ) {
   const [internal, setInternal] = useState<Internal>({ ...INITIAL, scratch: initialContent });
+
+  /// The repositories whose commits already have somewhere to go.
+  ///
+  /// A ref rather than state: nothing on screen changes when it does, and a save reads it after
+  /// awaiting - where a stale closure would ask the question a second time. The shell holds the
+  /// real answer; this remembers only that it has been asked, which is what makes the FIRST save
+  /// the one with a dialog.
+  const chosenBranches = useRef<Set<string>>(new Set());
 
   /// The latest state, readable from an async callback.
   ///
@@ -465,9 +519,42 @@ export function useWorkspace(
       // than at each call site, so Ctrl+S, the menu and closing a tab all reach the same question.
       if (open.draft) return await saveAs();
 
+      /// Where this save goes, for a provider whose write is a commit.
+      ///
+      /// Null for a local folder, which has no branches and nothing to ask about - a dialog over a
+      /// local save would be a question with no answers.
+      const repository = repositoryFor(stateRef.current, open.path);
+      let message: string | null = null;
+
+      if (repository !== null) {
+        // Settled once per repository. The second save is instant, because the branch has not
+        // changed and the message is written from the file's own name.
+        if (chosenBranches.current.has(repository)) {
+          message = commitMessageFor(open.path, { creating: false });
+        } else {
+          const choice = askCommit === null ? null : await askCommit(repository, open.name);
+          // Cancelled. Nothing is committed and nothing is said: an error banner for somebody who
+          // pressed Escape would be the app complaining about a decision they were entitled to
+          // make. Their work is still on screen, still unsaved.
+          if (choice === null) return false;
+
+          setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+          const branch = await client.setRepoBranch(repository, choice.branch, choice.create);
+          if (!branch.ok) {
+            fail(branch);
+            return false;
+          }
+
+          // Remembered only once the shell agreed. Recording it before would make the next save
+          // commit to a branch that was never made.
+          chosenBranches.current.add(repository);
+          message = choice.message;
+        }
+      }
+
       setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
 
-      const result = await client.writeFile(open.path, open.content, open.revision);
+      const result = await client.writeFile(open.path, open.content, open.revision, message);
       if (!result.ok) {
         fail(result);
         // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
@@ -486,7 +573,7 @@ export function useWorkspace(
       }));
       return true;
     },
-    [client, fail, saveAs],
+    [client, fail, saveAs, askCommit],
   );
 
   /// May this one document be thrown away?

@@ -938,3 +938,85 @@ describe("pictures in a repository's README", () => {
     );
   });
 });
+
+/// Saving to a repository, through the whole window.
+///
+/// The pieces are tested on their own - the dialog, the save path, the provider. This is the wiring:
+/// that Ctrl+S on a repository file raises the question, and that answering it commits.
+describe("committing to a repository", () => {
+  it("asks where the commit goes, then commits there", async () => {
+    const branches: { branch: string; create: boolean }[] = [];
+    const writes: { message: string | null }[] = [];
+    shellWithGitHub({
+      repoBranches: async () => ({
+        ok: true as const,
+        branches: ["main"],
+        branch: null,
+        readingBranch: "main",
+      }),
+      setRepoBranch: async (_id: string, branch: string, create: boolean) => {
+        branches.push({ branch, create });
+        return { ok: true as const, branch };
+      },
+      writeFile: async (_path: string, _content: string, _revision: unknown, message: string) => {
+        writes.push({ message });
+        return { ok: true as const, revision: { id: "b2" } };
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+
+    // Ctrl+S, which is the path this is here to check. The document need not have been edited:
+    // saving an unchanged file still commits, and it is the WIRING under test.
+    await user.keyboard("{Control>}s{/Control}");
+
+    // The question, raised by the save rather than by a menu somewhere.
+    const dialog = await screen.findByRole("dialog", { name: "Save to GitHub" });
+    expect(within(dialog).getByLabelText("Branch name")).toBeTruthy();
+
+    await user.click(within(dialog).getByRole("button", { name: "Commit" }));
+
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(branches).toEqual([{ branch: "trypthos/update-readme", create: true }]);
+    expect(writes[0]!.message).toBe("Update README.md");
+  });
+
+  // Escape leaves the work on screen and unsaved. An error banner for a decision the user was
+  // entitled to make would be the app complaining about being told no.
+  it("commits nothing, and says nothing, when the question is cancelled", async () => {
+    const writes: unknown[] = [];
+    shellWithGitHub({
+      repoBranches: async () => ({
+        ok: true as const,
+        branches: ["main"],
+        branch: null,
+        readingBranch: "main",
+      }),
+      writeFile: async () => {
+        writes.push(1);
+        return { ok: true as const, revision: { id: "b2" } };
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+
+    await user.keyboard("{Control>}s{/Control}");
+
+    const dialog = await screen.findByRole("dialog", { name: "Save to GitHub" });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Save to GitHub" })).toBeNull(),
+    );
+    expect(writes).toEqual([]);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

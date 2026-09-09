@@ -5,10 +5,12 @@ const {
   blobEntryFor,
   createPathGuard,
   decodeTextFile,
+  encodeTextFile,
+  hasUtf8Bom,
   treeNodesAt,
 } = require("@trypthos/domain");
 
-/// The GitHub backend: a repository at one commit, read-only.
+/// The GitHub backend: a repository at one commit.
 ///
 /// **It answers in exactly the shapes the local backend does.** The tree, the filter box, Find in
 /// Files and the editor's read path were all written against `localWorkspace.js` and are untouched
@@ -24,10 +26,16 @@ const {
 /// **It is pinned to a commit, not a branch.** Somebody pushing while the user reads would otherwise
 /// change the tree under them, and the file they clicked would not be the file they were shown.
 ///
-/// **Nothing here writes.** A save to GitHub is a commit on a branch, with history and merge
-/// conflicts rather than overwrite, and that is a feature rather than a line of code. Until it
-/// exists, `write` refuses - an editor that reported a save it never made is precisely the failure
-/// the revision mechanism exists to prevent.
+/// **A save here is a commit on a branch**, with history and merge conflicts rather than overwrite.
+/// There is no separate push - GitHub's Contents endpoint commits on the server - so the awkward
+/// part is not the request but everything the workspace has to put right afterwards: the pin has
+/// moved and the tree in memory is stale for the path just written. Leave those and the next read
+/// fetches the blob from BEFORE the save, which is the editor reporting a save it did not make by
+/// another route.
+///
+/// **Nothing is committed until the user has said where.** `writeBranch` starts null and a write
+/// refuses until it is not, because committing to the default branch by default is how somebody
+/// pushes to main without meaning to.
 
 /// The root the path guard measures against.
 ///
@@ -48,9 +56,26 @@ function failure(reason) {
   return { ok: false, reason };
 }
 
-function createGitHubProvider({ ref, api, entries }) {
+function createGitHubProvider({ ref, api, entries, branch, sha }) {
   const guard = createPathGuard({ root: GUARD_ROOT, caseInsensitive: false });
   const cache = new Map();
+
+  /// Everything about this repository that a commit changes.
+  ///
+  /// **The tree and the pin are held, not fetched**, which is what makes every listing a read of
+  /// memory - and what makes a commit something this object has to put right afterwards rather than
+  /// something it can forget about. `tree` is replaced when a branch is switched to; `head` moves
+  /// with every commit; `writeBranch` is null until the user has said where their saves go.
+  let state = { tree: entries, head: sha, readingBranch: branch, writeBranch: null };
+
+  /// Where a save goes, and where the tree came from.
+  ///
+  /// Two branches rather than one because they are only the same once somebody has chosen. A
+  /// repository opens on its default branch and commits nowhere; the dialog is what settles it, and
+  /// the dialog needs to know both to ask a sensible question.
+  function writeTarget() {
+    return { branch: state.writeBranch, readingBranch: state.readingBranch };
+  }
 
   /// A path from the renderer, as a path inside the repository - or null when it is not one.
   ///
@@ -85,7 +110,7 @@ function createGitHubProvider({ ref, api, entries }) {
     const path = repoPath(relativePath);
     if (path === null || path === "") return failure("permission-denied");
 
-    const blob = blobEntryFor(entries, path);
+    const blob = blobEntryFor(state.tree, path);
     // Not in the tree, a directory, or a symlink - the same three things `list` declines to offer,
     // so what can be clicked and what can be read are the same set.
     return blob === null ? failure("not-found") : { ok: true, blob };
@@ -99,7 +124,7 @@ function createGitHubProvider({ ref, api, entries }) {
       const path = repoPath(relativePath ?? "");
       if (path === null) return failure("permission-denied");
 
-      return { ok: true, nodes: treeNodesAt(entries, path) };
+      return { ok: true, nodes: treeNodesAt(state.tree, path) };
     },
 
     /// Reads a document, or refuses it.
@@ -142,9 +167,113 @@ function createGitHubProvider({ ref, api, entries }) {
       return await bytesFor(sha);
     },
 
-    /// Refused, and refused honestly. See the note at the top of this file.
-    async write() {
-      return failure("unsupported");
+    writeTarget,
+
+    /// Cuts a branch at the commit this workspace stands on, and commits there from now on.
+    ///
+    /// **From the pinned commit, not from the branch's head.** The tree in memory describes that
+    /// commit, so a branch cut anywhere else would be a branch whose files are not the files on
+    /// screen - and the first save would conflict against a change nobody made here.
+    ///
+    /// Nothing is refetched: the new branch points at the same commit, so the tree already in hand
+    /// is the right one.
+    async startBranch(name) {
+      const created = await api.createBranch(ref.owner, ref.repo, name, state.head);
+      if (!created.ok) return created;
+
+      state = { ...state, writeBranch: created.branch, readingBranch: created.branch };
+      return { ok: true, branch: created.branch };
+    },
+
+    /// Moves to a branch that already exists, and takes the workspace with it.
+    ///
+    /// Not the same act as cutting one. That branch is at a different commit, so its tree is a
+    /// different tree and has to be fetched - and the workspace FOLLOWS, because commits going
+    /// somewhere the browser cannot see is how Find in Files ends up searching one branch while the
+    /// edits live on another.
+    ///
+    /// A document open from the old branch keeps its text and its revision. If that file differs on
+    /// this branch the next save conflicts, which is the correct answer and the one the user has to
+    /// be given rather than a silent overwrite.
+    async useBranch(name) {
+      const listed = await api.branches(ref.owner, ref.repo);
+      if (!listed.ok) return listed;
+
+      const found = listed.branches.find((branch) => branch.name === name);
+      // Refused rather than moved-to-nowhere. A workspace that reported a branch it is not on would
+      // commit somewhere the user was not told about.
+      if (found === undefined) return failure("not-found");
+
+      const fetched = await api.tree(ref.owner, ref.repo, found.sha);
+      if (!fetched.ok) return fetched;
+
+      state = {
+        tree: fetched.entries,
+        head: found.sha,
+        readingBranch: found.name,
+        writeBranch: found.name,
+      };
+      return { ok: true, branch: found.name };
+    },
+
+    /// Commits one file, which is the whole of a save to GitHub.
+    ///
+    /// **There is no separate push.** The Contents endpoint commits on the server, so when this
+    /// answers the change is on GitHub - which is also why nothing here may report success on
+    /// anything less than that answer.
+    ///
+    /// What makes this more than one call is what has to be put right afterwards. The workspace is
+    /// pinned to a commit and holds the whole tree in memory, and a commit makes both stale: leave
+    /// them and the next read of this path fetches the blob that was there BEFORE the save. The
+    /// user saves, reopens, and reads their old text back.
+    async write(relativePath, content, expected, { message } = {}) {
+      const path = repoPath(relativePath);
+      if (path === null || path === "") return failure("permission-denied");
+
+      // Nowhere to commit to. Refused rather than guessed at: committing to the default branch by
+      // default is how somebody pushes to main without meaning to.
+      if (state.writeBranch === null) return failure("no-branch");
+
+      // The mark is read from what is STORED - the bytes being replaced - exactly as the local
+      // backend reads it off the file on disk. Never from the renderer, which is untrusted and has
+      // no business asserting a file's encoding. A file being created has no mark.
+      const previous = expected === null ? null : cache.get(expected.id);
+      const bytes = Buffer.from(encodeTextFile(content, { bom: previous ? hasUtf8Bom(previous) : false }));
+
+      const committed = await api.putFile({
+        owner: ref.owner,
+        repo: ref.repo,
+        path,
+        message: message ?? `Update ${path}`,
+        bytes,
+        branch: state.writeBranch,
+        sha: expected?.id ?? null,
+      });
+
+      if (!committed.ok) {
+        // Passed straight through, and nothing here changes. A pin advanced on a commit that never
+        // happened would make the next save conflict against a commit nobody made.
+        return committed.reason === "conflict"
+          ? { ok: false, reason: "conflict", theirs: committed.theirs === null ? null : { id: committed.theirs } }
+          : committed;
+      }
+
+      // The tree, the pin and the cache, all moved to the commit that was just made. This is the
+      // whole reason a write here is more than a request.
+      state = {
+        ...state,
+        head: committed.commitSha,
+        tree: state.tree.map((entry) =>
+          entry.path === path && entry.type === "blob"
+            ? { ...entry, sha: committed.blobSha, size: bytes.length }
+            : entry,
+        ),
+      };
+      // Held under its new sha so reading the file back is memory rather than a request for bytes
+      // this process just sent.
+      cache.set(committed.blobSha, bytes);
+
+      return { ok: true, revision: { id: committed.blobSha } };
     },
   };
 }
@@ -169,7 +298,13 @@ async function openGitHubWorkspace({ ref, api }) {
     /// hidden: a tree cut short has folders missing from it, and a browser that showed less than the
     /// repository holds without saying so would be wrong rather than incomplete.
     truncated: tree.truncated,
-    provider: createGitHubProvider({ ref, api, entries: tree.entries }),
+    provider: createGitHubProvider({
+      ref,
+      api,
+      entries: tree.entries,
+      branch: head.branch,
+      sha: head.sha,
+    }),
   };
 }
 

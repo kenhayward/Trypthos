@@ -20,6 +20,7 @@ import {
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
+import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
 import RepoPage from "./components/RepoPage";
 import FindDialog from "./components/FindDialog";
@@ -38,6 +39,7 @@ import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import type { CommitChoice } from "./hooks/useWorkspace";
 import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind } from "./hooks/useFind";
@@ -204,7 +206,32 @@ export default function App() {
     [update],
   );
 
-  const { state, actions } = useWorkspace(client, SCRATCH, confirmDiscard, noteRecent);
+  /// The first save in a repository, which has a question to ask before it can happen.
+  ///
+  /// A promise the dialog resolves, so the save path stays one straight line: `save` awaits the
+  /// answer, sets the branch, and commits - rather than the app juggling a half-finished save while
+  /// a dialog is up. Null resolves cancellation, which is not a failure.
+  const [commitPrompt, setCommitPrompt] = useState<{
+    workspaceId: string;
+    name: string;
+    answer: (choice: CommitChoice | null) => void;
+  } | null>(null);
+
+  const askCommit = useCallback(
+    (workspaceId: string, name: string) =>
+      new Promise<CommitChoice | null>((answer) => {
+        setCommitPrompt({ workspaceId, name, answer });
+      }),
+    [],
+  );
+
+  const { state, actions } = useWorkspace(
+    client,
+    SCRATCH,
+    confirmDiscard,
+    noteRecent,
+    askCommit,
+  );
 
   /// The browser's filter box, which searches every open folder by name.
   ///
@@ -774,6 +801,24 @@ export default function App() {
             // the panel while that happens hides the thing the user just asked to see.
             setPickingRepo(false);
             void actions.openRef(ref);
+          }}
+        />
+      )}
+
+      {commitPrompt !== null && (
+        <CommitDialog
+          workspaceId={commitPrompt.workspaceId}
+          fileName={commitPrompt.name}
+          client={client}
+          // Answered either way before the dialog goes, so a save is never left waiting on a promise
+          // nothing will resolve - which would be a Ctrl+S that silently never finishes.
+          onCancel={() => {
+            commitPrompt.answer(null);
+            setCommitPrompt(null);
+          }}
+          onCommit={(choice) => {
+            commitPrompt.answer(choice);
+            setCommitPrompt(null);
           }}
         />
       )}

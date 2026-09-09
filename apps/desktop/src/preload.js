@@ -24,8 +24,10 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
   /// refuses anything binary - see the handler.
   readImage: (path) => ipcRenderer.invoke("file:readImage", { path }),
-  writeFile: (path, content, expectedRevision) =>
-    ipcRenderer.invoke("file:write", { path, content, expectedRevision }),
+  /// `message` is what a provider whose write IS a commit puts on it. Null for every backend with
+  /// no history to write it into, which is all of them but GitHub.
+  writeFile: (path, content, expectedRevision, message = null) =>
+    ipcRenderer.invoke("file:write", { path, content, expectedRevision, message }),
 
   /// Save As. Note what is NOT sent: a destination. The dialog runs in the main process and the path
   /// it answers with is checked against the open workspace there - `path` here is only where the
@@ -123,6 +125,13 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// The statistics one repository's own page draws. Named by an OPEN workspace, never by owner and
   /// repository - see the note at the top of this file.
   repoInfo: (workspaceId) => ipcRenderer.invoke("github:repoInfo", { workspaceId }),
+  /// The branches a repository has, and which one it is reading and writing. What the save dialog
+  /// needs to ask its question.
+  repoBranches: (workspaceId) => ipcRenderer.invoke("github:branches", { workspaceId }),
+  /// Where this repository's saves go from now on. `create` cuts a branch; false moves to one that
+  /// already exists, and the workspace follows it.
+  setRepoBranch: (workspaceId, branch, create) =>
+    ipcRenderer.invoke("github:setBranch", { workspaceId, branch, create }),
 
   /// Opens a native menu under the label the renderer drew.
   ///

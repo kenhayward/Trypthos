@@ -169,9 +169,11 @@ describe("OpenRepoDialog", () => {
 
   // Repositories open read-only in this build, and a user about to edit one has to know before they
   // type rather than when they press save.
-  it("says that a repository opens read-only", async () => {
+  // Saving to a repository is a commit, not an overwrite, and the dialog says so BEFORE one is
+  // opened - the surprise belongs here rather than at the moment somebody presses Ctrl+S.
+  it("says that saving to a repository makes a commit", async () => {
     draw();
-    expect(await screen.findByText(/read-only/i)).toBeTruthy();
+    expect(await screen.findByText(/makes a commit/i)).toBeTruthy();
   });
 
   it("closes on Escape without opening anything", async () => {

@@ -74,6 +74,7 @@ export const GitHubRepoListSchema = z.array(GitHubRepoSchema);
 /// **`watchers_count` is deliberately absent.** It is a legacy alias for the STAR count, not the
 /// number of people watching - real watchers are `subscribers_count`. A page drawing it beside stars
 /// would print the same number twice under two different labels.
+
 /// The repository a fork was made from.
 ///
 /// GitHub sends `parent` only on the single-repository response, and only for a fork - so its
@@ -471,6 +472,33 @@ export function blobUrl(owner: string, repo: string, sha: string): string {
   return `${repoUrl(owner, repo)}/git/blobs/${segment(sha)}`;
 }
 
+/// What GitHub answers when a file is written.
+///
+/// Two shas, and they are different things: `content.sha` identifies the FILE's new bytes and is
+/// what the next conditional write presents, while `commit.sha` identifies the commit and is what
+/// the workspace's pin advances to. Confusing them would make every second save conflict.
+export const GitHubWriteSchema = z.object({
+  content: z.object({ sha: z.string().min(1), size: z.number().nullish() }),
+  commit: z.object({ sha: z.string().min(1) }),
+});
+
+/// One file's metadata, which is asked for exactly once: to find out whose write won a conflict.
+export const GitHubContentMetaSchema = z.object({ sha: z.string().min(1) });
+
+/// A git ref, as creating a branch answers.
+export const GitHubRefSchema = z.object({
+  ref: z.string().min(1),
+  object: z.object({ sha: z.string().min(1) }),
+});
+
+/// One branch in a listing: its name, and the commit at its head.
+///
+/// The head is here because switching to a branch needs it - a workspace is pinned to a commit, so
+/// the branch's name alone is not somewhere it could be pinned.
+export const GitHubBranchListSchema = z.array(
+  z.object({ name: z.string().min(1), commit: z.object({ sha: z.string().min(1) }) }),
+);
+
 /// One account's public profile, which is the only place a display name lives.
 export function userUrl(login: string): string {
   return `${GITHUB_API}/users/${segment(login)}`;
@@ -507,6 +535,116 @@ export function compareUrl(
 ): string {
   const side = (end: { owner: string; ref: string }) => `${segment(end.owner)}:${refPath(end.ref)}`;
   return `${repoUrl(owner, repo)}/compare/${side(base)}...${side(head)}`;
+}
+
+/// One file's contents: read with a `ref`, written without one.
+///
+/// The path keeps its own separators, because it names a place in the tree, and everything else
+/// about it is encoded - the same rule a ref gets, for the same reason. The path itself has already
+/// been through the workspace guard before it reaches here; this is about the URL, not the boundary.
+export function contentsUrl(
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string | null = null,
+): string {
+  const address = `${repoUrl(owner, repo)}/contents/${refPath(path)}`;
+  return ref === null ? address : `${address}?ref=${segment(ref)}`;
+}
+
+/// Where a branch is created. A POST, with the ref name and the commit it starts at in the body.
+export function refsUrl(owner: string, repo: string): string {
+  return `${repoUrl(owner, repo)}/git/refs`;
+}
+
+/// One page of branches, for the picker. A hundred at a time, unlike the count, which wants one.
+export function branchListUrl(owner: string, repo: string, page: number): string {
+  return `${repoUrl(owner, repo)}/branches?per_page=100&page=${page}`;
+}
+
+/// What a failing WRITE means, which is not quite what a failing read means.
+///
+/// Three statuses carry a different meaning on the way out than on the way in, and each of them
+/// sends the user somewhere different:
+///
+///  - **409** is the sha not matching: somebody committed to that path since it was read. A
+///    conflict, and a result rather than an error - the editor must not report a save it did not
+///    make, and which version wins is the user's to decide.
+///  - **422** on creating a ref is a branch that already exists. "Commit to it instead" rather than
+///    anything done wrong.
+///  - **403 with budget left** is a token that may read and not write, which is EVERY token
+///    connected before this feature existed - so it is the first refusal most people will meet.
+///    Reported as itself rather than as "permission denied", because one sends you to make a new
+///    token and the other to wonder whether you still have access at all.
+///
+/// Everything else means what it means on a read, answered by the same function rather than by a
+/// second mapping that could come to disagree about what a 404 is.
+export function githubWriteErrorFor(
+  status: number,
+  rateLimitRemaining: string | null,
+): ProviderError | "conflict" | "branch-exists" | "read-only-token" {
+  if (status === 409) return "conflict";
+  if (status === 422) return "branch-exists";
+  if (status === 403 && rateLimitRemaining !== "0") return "read-only-token";
+  return githubErrorFor(status, rateLimitRemaining);
+}
+
+/// The prefix on every branch this app makes.
+///
+/// A namespace rather than decoration: it groups them in a branch list, and it says at a glance
+/// which branches came from editing prose in Trypthos and can be tidied up afterwards.
+const BRANCH_PREFIX = "trypthos/";
+
+/// A branch name to suggest, from the file being edited.
+///
+/// A suggestion, not a rule - the dialog offers it and the user types over it. It is built to pass
+/// `isValidBranchName`, which is asserted, because a dialog that opened refusing its own suggestion
+/// would be absurd.
+export function branchNameFor(filePath: string): string {
+  const name = filePath.split("/").pop() ?? "";
+  const slug = name
+    .replace(/\.[^.]*$/, "")
+    .toLowerCase()
+    // Anything that is not a letter, a digit or a separator becomes one. Deliberately narrow: git
+    // permits far more than this, and a branch nobody can type is not a branch worth suggesting.
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  // A file whose name is entirely punctuation leaves nothing to slug. "update" alone is a name.
+  return `${BRANCH_PREFIX}update${slug === "" ? "" : `-${slug}`}`;
+}
+
+/// Whether git would accept this as a branch name.
+///
+/// Asked in the dialog rather than left to the API, because a name git refuses comes back as a 422
+/// from a request that should never have been made - and the user finds out from an error banner
+/// rather than from the box they typed it in.
+///
+/// These are `git check-ref-format`'s rules, less the ones that cannot arise here. The leading `-`
+/// is not one of git's, but a branch beginning with one is a branch every command line reads as a
+/// flag.
+export function isValidBranchName(name: string): boolean {
+  if (name === "" || name.trim() !== name) return false;
+  if (name === "@") return false;
+  if (name.startsWith("-")) return false;
+  if (name.startsWith("/") || name.endsWith("/") || name.includes("//")) return false;
+  if (name.includes("..")) return false;
+  if (name.endsWith(".") || name.endsWith(".lock")) return false;
+  // Space, the five characters git reserves for its revision syntax, and a backslash.
+  if (/[\s~^:?*[\\]/.test(name)) return false;
+  // eslint-disable-next-line no-control-regex -- git forbids these outright, so they are checked.
+  if (/[\x00-\x1f\x7f]/.test(name)) return false;
+  // No component may begin with a dot, or end in .lock.
+  return name.split("/").every((part) => part !== "" && !part.startsWith(".") && !part.endsWith(".lock"));
+}
+
+/// The commit message to offer, which says what was done and to which file.
+///
+/// The file's own name rather than its path: a message is read in a list of commits where the path
+/// is a click away, and "Update guide.md" is what a person would have written.
+export function commitMessageFor(filePath: string, { creating }: { creating: boolean }): string {
+  const name = filePath.split("/").pop() ?? filePath;
+  return `${creating ? "Add" : "Update"} ${name}`;
 }
 
 /// The last page named in a `Link` header, which for a one-item page is a count.

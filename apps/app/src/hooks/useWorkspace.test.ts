@@ -2,14 +2,14 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
 import { failureKey, failureParams, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
-import type { ConfirmDiscard, WorkspaceActions } from "./useWorkspace";
+import type { CommitChoice, ConfirmDiscard, WorkspaceActions } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
 /// A hand-written fake, not a mocking library. It records what it was asked to do, which is what most
 /// of these assertions are actually about - particularly that a save presents the revision the file
 /// was read at.
 function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
-  const writes: { path: string; content: string; revision: string | null }[] = [];
+  const writes: { path: string; content: string; revision: string | null; message: string | null }[] = [];
   const reads: string[] = [];
   const saveAsCalls: { workspaceId: string; path: string | null; content: string }[] = [];
 
@@ -56,8 +56,8 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       reads.push(path);
       return { ok: true as const, dataUrl: `data:image/png;base64,${path}` };
     },
-    writeFile: async (path, content, expectedRevision): Promise<WriteResult> => {
-      writes.push({ path, content, revision: expectedRevision?.id ?? null });
+    writeFile: async (path, content, expectedRevision, message = null): Promise<WriteResult> => {
+      writes.push({ path, content, revision: expectedRevision?.id ?? null, message });
       return { ok: true, revision: { id: "r2" } };
     },
     // The dialog lives in the shell, so the fake stands in for the whole of it: what came back is
@@ -67,6 +67,10 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       return { ok: true, path: `${workspaceId}/chosen.md`, revision: { id: "r-saved-as" } };
     },
     closeWorkspace: async () => ({ ok: true }),
+    // A repository's branches. Overridden by the tests that commit; here so the fake is the whole
+    // interface rather than most of it.
+    repoBranches: async () => ({ ok: true as const, branches: ["main"], branch: null, readingBranch: "main" }),
+    setRepoBranch: async (_workspaceId: string, branch: string) => ({ ok: true as const, branch }),
     ...overrides,
   };
 
@@ -402,7 +406,7 @@ describe("useWorkspace", () => {
       await result.current.actions.save();
     });
 
-    expect(writes).toEqual([{ path: "a.md", content: "# Edited\n", revision: "r1" }]);
+    expect(writes).toEqual([{ path: "a.md", content: "# Edited\n", revision: "r1", message: null }]);
     expect(result.current.state.dirty).toBe(false);
     // The next save must compare against what was just written, not what was first read.
     expect(result.current.state.file?.revision.id).toBe("r2");
@@ -680,7 +684,7 @@ describe("open documents", () => {
       await result.current.actions.save("a.md");
     });
 
-    expect(writes).toEqual([{ path: "a.md", content: "# Mine\n", revision: "r1" }]);
+    expect(writes).toEqual([{ path: "a.md", content: "# Mine\n", revision: "r1", message: null }]);
     expect(result.current.state.dirtyPaths).toEqual([]);
   });
 
@@ -760,7 +764,7 @@ describe("open documents", () => {
         await result.current.actions.closeFile("a.md");
       });
 
-      expect(writes).toEqual([{ path: "a.md", content: "# Mine\n", revision: "r1" }]);
+      expect(writes).toEqual([{ path: "a.md", content: "# Mine\n", revision: "r1", message: null }]);
       expect(result.current.state.documents).toHaveLength(0);
     });
 
@@ -1653,7 +1657,7 @@ describe("a new document", () => {
     });
 
     expect(saveAsCalls).toHaveLength(1);
-    expect(writes).toEqual([{ path: "ws/chosen.md", content: "# More", revision: "r-saved-as" }]);
+    expect(writes).toEqual([{ path: "ws/chosen.md", content: "# More", revision: "r-saved-as", message: null }]);
   });
 
   // The dialog is where the folder is chosen, so cancelling it leaves the document exactly where it
@@ -1964,5 +1968,182 @@ describe("opening a workspace the user just chose", () => {
     });
 
     expect(result.current.state.folders["notes"]?.status).toBe("loaded");
+  });
+});
+
+/// Saving to a repository, which is a commit on a branch.
+///
+/// The rule this encodes: **the questions belong to the branch, not to the save.** The first save in
+/// a repository asks where its commits go; every save after that is instant. Asking on each one
+/// would be punishing in a document somebody saves every couple of minutes, and it would be asking a
+/// question whose answer has not changed.
+describe("committing to a repository", () => {
+  const REPO = { kind: "github" as const, owner: "ada", repo: "notes" };
+
+  /// Opens a repository and a file in it, ready to be edited.
+  async function openRepoFile(overrides: Partial<WorkspaceClient> = {}, ask = askOnce()) {
+    const { client, writes } = fakeClient({
+      listDirectory: async (path) => ({
+        ok: true,
+        nodes: [{ id: `${path}/README.md`, name: "README.md", kind: "file" as const }],
+      }),
+      ...overrides,
+    });
+    const { result } = renderHook(() => useWorkspace(client, "", null, null, ask.askCommit));
+
+    await act(async () => {
+      await result.current.actions.openRef(REPO);
+    });
+    await act(async () => {
+      await result.current.actions.openFile({
+        id: "notes/README.md",
+        name: "README.md",
+        kind: "file",
+      });
+    });
+    await act(async () => {
+      result.current.actions.edit("# Changed\n");
+    });
+
+    return { result, writes, ask, client };
+  }
+
+  /// Stands in for the dialog: records what it was asked, answers what it was told to.
+  function askOnce(answer: CommitChoice | null = {
+    branch: "trypthos/update-readme",
+    create: true,
+    message: "Update the readme",
+  }) {
+    const asked: { workspaceId: string; name: string }[] = [];
+    return {
+      asked,
+      askCommit: async (workspaceId: string, name: string) => {
+        asked.push({ workspaceId, name });
+        return answer;
+      },
+    };
+  }
+
+  it("asks where the commit goes, sets the branch, and commits with the message", async () => {
+    const branches: { branch: string; create: boolean }[] = [];
+    const { result, writes, ask } = await openRepoFile({
+      setRepoBranch: async (_id: string, branch: string, create: boolean) => {
+        branches.push({ branch, create });
+        return { ok: true as const, branch };
+      },
+    });
+
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(ask.asked).toEqual([{ workspaceId: "notes", name: "README.md" }]);
+    expect(branches).toEqual([{ branch: "trypthos/update-readme", create: true }]);
+    expect(writes).toEqual([
+      { path: "notes/README.md", content: "# Changed\n", revision: "r1", message: "Update the readme" },
+    ]);
+  });
+
+  /// Cancelling is not a failure.
+  ///
+  /// Nothing is committed and nothing is said. An error banner for somebody who pressed Escape would
+  /// be the app complaining about a decision the user was entitled to make.
+  it("commits nothing when the dialog is cancelled", async () => {
+    const { result, writes } = await openRepoFile({}, askOnce(null));
+
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await result.current.actions.save();
+    });
+
+    expect(saved).toBe(false);
+    expect(writes).toEqual([]);
+    expect(result.current.state.errorKey).toBe(null);
+    // And the work is still there, unsaved, which is the whole point of not reporting a save.
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  // The second save is instant. The branch was settled on the first one and has not changed, so
+  // there is nothing to ask - and the message is written from the file's name.
+  it("does not ask again once a branch has been chosen", async () => {
+    const { result, writes, ask } = await openRepoFile();
+
+    await act(async () => {
+      await result.current.actions.save();
+    });
+    await act(async () => {
+      result.current.actions.edit("# Changed again\n");
+    });
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(ask.asked).toHaveLength(1);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.message).toBe("Update README.md");
+  });
+
+  // A folder on this machine has no branches and nothing to ask about. A dialog over a local save
+  // would be a question with no answers.
+  it("asks nothing when saving a local file", async () => {
+    const ask = askOnce();
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client, "", null, null, ask.askCommit));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.openFile({ id: "ws/a.md", name: "a.md", kind: "file" });
+    });
+    await act(async () => {
+      result.current.actions.edit("changed");
+    });
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(ask.asked).toEqual([]);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.message).toBe(null);
+  });
+
+  /// A branch that could not be made.
+  ///
+  /// The name is already taken, or the token may not write. Reported, and nothing is committed - and
+  /// the next save asks again, because the question has not been answered yet.
+  it("says why the branch could not be made, and commits nothing", async () => {
+    const { result, writes, ask } = await openRepoFile({
+      setRepoBranch: async () => ({ ok: false as const, reason: "branch-exists" }),
+    });
+
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await result.current.actions.save();
+    });
+
+    expect(saved).toBe(false);
+    expect(writes).toEqual([]);
+    expect(result.current.state.errorKey).toBe("errors.branchExists");
+
+    await act(async () => {
+      await result.current.actions.save();
+    });
+    expect(ask.asked).toHaveLength(2);
+  });
+
+  // The refusal every existing user meets first: a token made for reading. Said as itself, because
+  // "permission denied" would send them to check their access rather than to make a new token.
+  it("says when the token may not write", async () => {
+    const { result } = await openRepoFile({
+      writeFile: async () => ({ ok: false as const, reason: "read-only-token" }),
+    });
+
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.readOnlyToken");
+    expect(result.current.state.dirty).toBe(true);
   });
 });

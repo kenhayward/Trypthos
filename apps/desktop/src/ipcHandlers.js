@@ -17,9 +17,11 @@ const {
   SetIntegrationRequest,
   SetSecretRequest,
   CloseWorkspaceRequest,
+  BranchesRequest,
   ConnectGitHubRequest,
   ListReposRequest,
   RepoInfoRequest,
+  SetBranchRequest,
   OpenWorkspaceRefRequest,
   workspaceRefKey,
   FilterRequest,
@@ -651,6 +653,54 @@ function registerIpcHandlers({
     return await github.repoStatistics(workspace.ref.owner, workspace.ref.repo);
   });
 
+  /// The branches a repository has, so the save dialog can offer them.
+  ///
+  /// Asked of the workspace rather than of GitHub directly, so the answer is about a repository
+  /// this window actually has open - and so it carries which branch is being read and which is
+  /// being written to, which is what the dialog needs to ask a sensible question.
+  ipcMain.handle("github:branches", async (_event, payload) => {
+    const parsed = BranchesRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+    if (github === null) return { ok: false, reason: "unsupported" };
+
+    const workspace = open.get(parsed.data.workspaceId);
+    if (workspace === undefined) return { ok: false, reason: "no-workspace" };
+    if (workspace.ref.kind !== "github") return { ok: false, reason: "unsupported" };
+
+    const listed = await github.branches(workspace.ref.owner, workspace.ref.repo);
+    if (!listed.ok) return listed;
+
+    return {
+      ok: true,
+      branches: listed.branches.map((branch) => branch.name),
+      ...workspace.provider.writeTarget(),
+    };
+  });
+
+  /// Where this repository's saves go from now on.
+  ///
+  /// Two acts behind one channel, told apart by `create` rather than guessed at from whether the
+  /// name is taken: cutting a branch and moving to one fail in different ways, and a guess would
+  /// race between looking and acting.
+  ///
+  /// **The workspace follows.** After this the browser, the filter box and Find in Files are all
+  /// looking at the branch being committed to - commits landing somewhere the tree cannot see is
+  /// how a user ends up searching one branch while their edits are on another.
+  ipcMain.handle("github:setBranch", async (_event, payload) => {
+    const parsed = SetBranchRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    const workspace = open.get(parsed.data.workspaceId);
+    if (workspace === undefined) return { ok: false, reason: "no-workspace" };
+    // A local folder has no branches. Refused rather than answered with a branch it does not have.
+    if (workspace.ref.kind !== "github") return { ok: false, reason: "unsupported" };
+
+    const { branch, create } = parsed.data;
+    return create
+      ? await workspace.provider.startBranch(branch)
+      : await workspace.provider.useBranch(branch);
+  });
+
   ipcMain.handle("workspace:open", async () => {
     const window = getWindow();
     const result = await dialog.showOpenDialog(window, {
@@ -825,7 +875,11 @@ function registerIpcHandlers({
   ipcMain.handle(
     "file:write",
     guarded(locateQualified, WriteRequest, (request, workspace) =>
-      workspace.provider.write(request.path, request.content, request.expectedRevision),
+      // The message is carried through and ignored by every backend with no history to write it
+      // into. A provider whose write IS a commit is the one that needs it.
+      workspace.provider.write(request.path, request.content, request.expectedRevision, {
+        message: request.message ?? undefined,
+      }),
     ),
   );
 }
