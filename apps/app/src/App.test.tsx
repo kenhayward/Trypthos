@@ -265,12 +265,22 @@ describe("App", () => {
         name: new RegExp(name),
       });
 
+    /// Expands the workspace so its files are on screen.
+    ///
+    /// A remembered workspace comes back COLLAPSED, so the panel is not filled with every folder of
+    /// every workspace before the reader has asked for anything. These tests are about what happens
+    /// to a file once it is open, so they expand first - exactly as a user does.
+    async function expandWorkspace() {
+      await userEvent.setup().click(await screen.findByRole("button", { name: "Notes" }));
+      await screen.findByRole("button", { name: /one\.md/ });
+    }
+
     it("opens each file in its own tab, and goes back to one without reading it again", async () => {
       const user = userEvent.setup();
       const { reads } = shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       await user.click(row("two.md"));
 
@@ -307,7 +317,7 @@ describe("App", () => {
       });
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.type(screen.getByLabelText("Filter files"), "buried");
 
       expect(await screen.findByRole("button", { name: /buried\.md/ })).toBeDefined();
@@ -323,7 +333,7 @@ describe("App", () => {
       shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       await user.click(row("two.md"));
       await user.keyboard("{Control>}w{/Control}");
@@ -340,7 +350,7 @@ describe("App", () => {
       const { savedAs, menu } = shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       act(() => menu.push?.("save-as"));
 
@@ -357,7 +367,7 @@ describe("App", () => {
       const { savedAs } = shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       await user.keyboard("{Control>}{Shift>}s{/Shift}{/Control}");
 
@@ -377,7 +387,7 @@ describe("App", () => {
       const { written } = shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
 
       await waitFor(() =>
@@ -390,7 +400,7 @@ describe("App", () => {
       const { written, menu } = shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       await waitFor(() => expect(written.at(-1)?.recentFiles).toHaveLength(1));
 
@@ -412,7 +422,7 @@ describe("App", () => {
       } as unknown as typeof window.trypthos;
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await act(async () => {
         push!({ root: "D:/Elsewhere", file: "two.md" });
       });
@@ -446,7 +456,7 @@ describe("App", () => {
       } as unknown as typeof window.trypthos;
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await act(async () => {
         choose!({ action: "markdown-guide" });
       });
@@ -471,7 +481,7 @@ describe("App", () => {
       const { asked } = shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       await user.click(screen.getByLabelText("Document source"));
       await user.keyboard("X");
@@ -485,7 +495,7 @@ describe("App", () => {
       shellWithFiles();
       render(<App />);
 
-      await screen.findByRole("button", { name: /one\.md/ });
+      await expandWorkspace();
       await user.click(row("one.md"));
       await user.click(screen.getByRole("button", { name: "Close one.md" }));
 
@@ -520,6 +530,9 @@ describe("App", () => {
       } as unknown as typeof window.trypthos;
       render(<App />);
 
+      // Expanded first: a remembered workspace comes back collapsed, so its one file is not on
+      // screen until the row is clicked.
+      await user.click(await screen.findByRole("button", { name: "Notes" }));
       await screen.findByRole("button", { name: /gone\.md/ });
       await user.click(row("gone.md"));
       expect(screen.getByRole("alert").textContent).toContain("no longer there");
@@ -698,8 +711,12 @@ function shellWithGitHub(overrides: Record<string, unknown> = {}) {
     }),
     readFile: async () => ({
       ok: true as const,
-      content: "# The notes repository\n\nWhat it is for.",
+      content: "# The notes repository\n\nWhat it is for.\n\n![An orb](docs/orb.png)",
       revision: { id: "b1" },
+    }),
+    readImage: async (path: string) => ({
+      ok: true as const,
+      dataUrl: `data:image/png;base64,${path}`,
     }),
     repoInfo: async () => ({
       ok: true as const,
@@ -836,5 +853,33 @@ describe("the repository page", () => {
     // Nothing here opened a local folder, so there is no second row - and the page that IS open
     // belongs to the repository that was chosen.
     expect(screen.queryByText("Forks")).toBeNull();
+  });
+});
+
+/// Pictures in a README, end to end.
+///
+/// The pieces are tested on their own - the resolution rule, the reader, the HTML rewrite. This is
+/// the wiring, and the thing none of them can see: that a picture written relative to the document
+/// ends up drawn rather than as a broken icon.
+describe("pictures in a repository's README", () => {
+  it("draws one written relative to the README", async () => {
+    shellWithGitHub();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await user.click(await screen.findByRole("button", { name: "notes" }));
+
+    // Resolved against the README's own folder and read through the provider, so the source the page
+    // draws is data rather than a path the app's origin knows nothing about.
+    //
+    // Re-queried inside the wait: putting the read picture back replaces the rendered HTML, so an
+    // element captured beforehand is a detached node whose src never changes.
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "An orb" }).getAttribute("src")).toBe(
+        "data:image/png;base64,notes/docs/orb.png",
+      ),
+    );
   });
 });

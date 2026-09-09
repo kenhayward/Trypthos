@@ -606,12 +606,14 @@ export default function App() {
           value={state.content}
           readOnly={state.readOnly}
           media={state.media}
+          readImage={client.readImage}
           page={
             repoPageId === null ? null : (
               <RepoPage
                 state={repoPage}
                 fileTypes={settings.fileTypes.enabled}
                 onOpenExternal={openExternal}
+                readImage={client.readImage}
               />
             )
           }

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RepoStats } from "@trypthos/domain";
@@ -31,11 +31,13 @@ function draw(state: Partial<RepoPageState> = {}) {
         stats: STATS,
         readme: "# Notes\n\nSome prose.",
         readmeFailed: false,
+        readmePath: "notes/README.md",
         errorKey: null,
         ...state,
       }}
       fileTypes={["markdown"]}
       onOpenExternal={onOpenExternal}
+      readImage={async () => ({ ok: false as const, reason: "not-found" })}
     />,
   );
   return { onOpenExternal };
@@ -158,5 +160,40 @@ describe("RepoPage", () => {
   it("says it is working while it loads", () => {
     draw({ loading: true, stats: null, readme: null });
     expect(screen.getByText("Loading repository information...")).toBeTruthy();
+  });
+});
+
+/// Pictures in the README.
+///
+/// A source is a path in the workspace, and this page is drawn from the app's own origin - so
+/// without resolving it every picture in every README is a broken icon.
+describe("pictures in the README", () => {
+  it("draws one written relative to the README", async () => {
+    render(
+      <RepoPage
+        state={{
+          loading: false,
+          stats: STATS,
+          readme: "# Notes\n\n![An orb](docs/orb.png)",
+          readmeFailed: false,
+          readmePath: "notes/README.md",
+          errorKey: null,
+        }}
+        fileTypes={["markdown"]}
+        onOpenExternal={vi.fn()}
+        readImage={async (path: string) => ({
+          ok: true as const,
+          dataUrl: `data:image/png;base64,${path}`,
+        })}
+      />,
+    );
+
+    // Re-queried inside the wait, never captured before it. Putting the read picture back replaces
+    // the rendered HTML, so the element found first is a detached node whose src never changes.
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "An orb" }).getAttribute("src")).toBe(
+        "data:image/png;base64,notes/docs/orb.png",
+      ),
+    );
   });
 });

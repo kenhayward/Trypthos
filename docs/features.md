@@ -21,6 +21,11 @@ folder takes a moment to walk, so the panel says when it is searching, and says 
 stopped at its limit rather than quietly showing a short list. Hidden folders such as `.git` are not
 searched, exactly as they are not listed.
 
+**Folders you left open come back put away.** A workspace reopened when the app starts is collapsed:
+three open folders filling the panel with everything inside them, before you have asked for anything,
+is worst for exactly the people who keep several open. A folder you open yourself still expands,
+because choosing a folder is asking to see what is in it.
+
 **Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
 row at the top of its tree. **That row collapses like any folder inside one**: click it and the whole
 folder folds away, which is what keeps the panel usable with two or three open - put the ones you are
@@ -90,6 +95,16 @@ stay put while you read. A repository with no README says so, and one whose READ
 says that instead - they are different facts and only one of them is a fault. If GitHub cannot be
 reached at all the README is still shown, with a note saying what is missing. The row still expands
 and collapses as it always did; opening the page does not take that over.
+
+**A repository's page is loaded once.** The statistics and the README are fetched the first time you
+open it and shown from what the app already has after that, so going back to the page is instant
+rather than another request against an hourly budget and another wait.
+
+**Pictures in a README are drawn.** An image written relative to the document is read from the
+repository the way any other file is, so one in a **private** repository appears too - a link to it
+would have needed a token. A picture that is missing, or too large to open, leaves the broken frame
+rather than quietly vanishing. The same is true of Preview for your own markdown, where images never
+appeared either.
 
 **Repositories are read-only for now.** Saving to GitHub is a commit on a branch, with history and
 merge conflicts rather than an overwrite, and that is not built yet. Rather than pretend otherwise,

@@ -6,8 +6,8 @@ export type {
   PathResolution,
 } from "./workspacePath";
 
-export { isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
-export type { LinkAction, LinkRejection } from "./markdownLink";
+export { imageSource, isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
+export type { ImageSource, LinkAction, LinkRejection } from "./markdownLink";
 
 export { normaliseEndpoint } from "./endpoints";
 

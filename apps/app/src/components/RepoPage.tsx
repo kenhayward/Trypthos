@@ -1,11 +1,15 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { RepoStats } from "@trypthos/domain";
+import type { ImageResult } from "../lib/workspaceClient";
 import MarkdownPreview from "./MarkdownPreview";
 import type { RepoPageState } from "../hooks/useRepoPage";
 
 interface Props {
   state: RepoPageState;
+  /// Reads a picture the README embeds. Without it every image in it is a broken icon - see
+  /// `useMarkdownImages`.
+  readImage: (path: string) => Promise<ImageResult>;
   /// The file types the user has turned on, so fenced code in the README is coloured on the same
   /// terms it is anywhere else.
   fileTypes: readonly string[];
@@ -21,7 +25,7 @@ interface Props {
 ///
 /// Read-only throughout, like the markdown guide: this is a document that is looked at, and there is
 /// nothing here to save.
-export default function RepoPage({ state, fileTypes, onOpenExternal }: Props) {
+export default function RepoPage({ state, fileTypes, onOpenExternal, readImage }: Props) {
   const { t, i18n } = useTranslation();
 
   return (
@@ -52,7 +56,12 @@ export default function RepoPage({ state, fileTypes, onOpenExternal }: Props) {
               the top - a flex child's default minimum is its content. */}
           <div className="flex min-h-0 grow flex-col">
             {state.readme !== null ? (
-              <MarkdownPreview source={state.readme} fileTypes={fileTypes} />
+              <MarkdownPreview
+                source={state.readme}
+                fileTypes={fileTypes}
+                readImage={readImage}
+                fromPath={state.readmePath}
+              />
             ) : (
               <p className="p-4 text-sm text-ink-3">
                 {state.readmeFailed ? t("repo.readmeFailed") : t("repo.noReadme")}

@@ -532,7 +532,7 @@ export function useWorkspace(
   /// Nothing is discarded. Every path names the folder it is in, so a second folder cannot make the
   /// documents from the first ambiguous - which is the whole reason opening one is additive now.
   const addWorkspace = useCallback(
-    async (workspace: WorkspaceInfo) => {
+    async (workspace: WorkspaceInfo, { expand = true } = {}) => {
       setInternal((prev) => ({
         ...prev,
         workspaces: prev.workspaces.some((open) => open.id === workspace.id)
@@ -540,7 +540,10 @@ export function useWorkspace(
           : [...prev.workspaces, workspace],
         busy: false,
       }));
-      await loadFolder(workspace.id);
+      // Listing a workspace is what expands it - absent from the folder map IS collapsed. Somebody
+      // who just chose a folder is asking to see inside it; somebody starting the app is not, and
+      // three workspaces expanded on launch fill the panel before they have asked for anything.
+      if (expand) await loadFolder(workspace.id);
     },
     [loadFolder],
   );
@@ -725,7 +728,10 @@ export function useWorkspace(
         // token that has since been revoked, is not an error the user caused - and greeting them at
         // launch with a warning about something they may not remember choosing is worse than simply
         // opening without it.
-        if (result.ok) await addWorkspace(result.workspace);
+        //
+        // Collapsed, unlike a workspace the user just chose. Nothing is listed, which for a cloud
+        // provider also means nothing is fetched for a workspace nobody has looked at yet.
+        if (result.ok) await addWorkspace(result.workspace, { expand: false });
       }
     },
     [addWorkspace, client],

@@ -175,3 +175,50 @@ describe("without a shell", () => {
     expect(result.current.errorKey).toBe("errors.notDesktop");
   });
 });
+
+/// Loaded once, shown every time.
+///
+/// The page is a tab: you leave it for a file and come back, over and over. Fetching again on each
+/// return spends a request on an hourly budget to redraw numbers that have not changed, and puts a
+/// loading message over a page the reader was already looking at.
+describe("returning to a page that has already loaded", () => {
+  it("does not fetch again", async () => {
+    const { github, client } = fakes();
+    const { result, rerender } = renderHook(({ id }) => useRepoPage(id, github, client), {
+      initialProps: { id: "notes" as string | null },
+    });
+
+    await waitFor(() => expect(result.current.stats).not.toBeNull());
+    expect(github.repoInfo).toHaveBeenCalledTimes(1);
+
+    // Away to a file, and back to the page.
+    rerender({ id: null });
+    rerender({ id: "notes" });
+
+    expect(github.repoInfo).toHaveBeenCalledTimes(1);
+    // And it is drawn straight away, rather than flashing a loading message at a reader who was
+    // already looking at it.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.stats).not.toBeNull();
+  });
+
+  // Two repositories are two pages, and one being loaded says nothing about the other.
+  it("keeps each repository's page apart", async () => {
+    const { github, client } = fakes();
+    const { result, rerender } = renderHook(({ id }) => useRepoPage(id, github, client), {
+      initialProps: { id: "notes" as string | null },
+    });
+
+    await waitFor(() => expect(result.current.stats).not.toBeNull());
+
+    rerender({ id: "essays" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(github.repoInfo).toHaveBeenCalledTimes(2);
+    expect(github.repoInfo).toHaveBeenLastCalledWith("essays");
+
+    // Back to the first, which is still held.
+    rerender({ id: "notes" });
+    expect(github.repoInfo).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(false);
+  });
+});
