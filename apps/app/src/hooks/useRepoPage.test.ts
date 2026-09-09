@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RepoStats } from "@trypthos/domain";
 import { useRepoPage } from "./useRepoPage";
@@ -12,6 +12,11 @@ import type { GitHubBridge, WorkspaceClient } from "../lib/workspaceClient";
 /// its numbers and no README is still worth reading, and so is the reverse.
 
 const STATS: RepoStats = {
+  owner: { login: "ada", name: "Ada Lovelace", avatarUrl: "https://avatars.example/ada.png" },
+  parent: null,
+  branches: 4,
+  tags: 2,
+  divergence: null,
   fullName: "ada/notes",
   description: "A notebook",
   private: false,
@@ -220,5 +225,67 @@ describe("returning to a page that has already loaded", () => {
     rerender({ id: "notes" });
     expect(github.repoInfo).toHaveBeenCalledTimes(2);
     expect(result.current.loading).toBe(false);
+  });
+});
+
+/// Asking again, on purpose.
+///
+/// Holding the answer is right for a page somebody keeps returning to, and wrong the moment they
+/// push a commit and want to see it. Refresh is the one way anything is asked of GitHub twice, and
+/// it exists because there is otherwise no way to see a change without restarting the app.
+describe("refreshing a page", () => {
+  it("asks again, and shows the new answer", async () => {
+    const later: RepoStats = { ...STATS, stars: 99 };
+    const github = {
+      ...fakes().github,
+      repoInfo: vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true as const, stats: STATS })
+        .mockResolvedValue({ ok: true as const, stats: later }),
+    } as unknown as GitHubBridge;
+    const { client } = fakes();
+
+    const { result } = renderHook(() => useRepoPage("notes", github, client));
+    await waitFor(() => expect(result.current.stats?.stars).toBe(12));
+
+    act(() => result.current.refresh());
+
+    await waitFor(() => expect(result.current.stats?.stars).toBe(99));
+    expect(github.repoInfo).toHaveBeenCalledTimes(2);
+  });
+
+  // The README is fetched with the statistics and goes stale with them, so a refresh is a refresh
+  // of the page rather than of half of it.
+  it("reads the README again too", async () => {
+    const { github, client } = fakes();
+    const { result } = renderHook(() => useRepoPage("notes", github, client));
+
+    await waitFor(() => expect(result.current.readme).not.toBeNull());
+    act(() => result.current.refresh());
+
+    await waitFor(() => expect(client.readFile).toHaveBeenCalledTimes(2));
+  });
+
+  // Half a second of nothing, with a page that has visibly not changed, reads as a button that does
+  // not work. The loading message is what says the request is in flight.
+  it("says it is loading while the new answer is on its way", async () => {
+    const { github, client } = fakes();
+    const { result } = renderHook(() => useRepoPage("notes", github, client));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.refresh());
+
+    expect(result.current.loading).toBe(true);
+  });
+
+  // Nothing on screen to refresh. A click that reached this would otherwise fetch a repository the
+  // reader is not looking at.
+  it("does nothing without a repository on screen", async () => {
+    const { github, client } = fakes();
+    const { result } = renderHook(() => useRepoPage(null, github, client));
+
+    act(() => result.current.refresh());
+
+    expect(github.repoInfo).not.toHaveBeenCalled();
   });
 });

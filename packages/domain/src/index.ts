@@ -315,6 +315,8 @@ export {
   GitHubBranchSchema,
   GitHubRepoDetailSchema,
   GitHubRepoListSchema,
+  GitHubComparisonSchema,
+  GitHubRefListSchema,
   GitHubRepoSchema,
   GitHubTreeSchema,
   GitHubUserSchema,
@@ -322,7 +324,10 @@ export {
   USER_AGENT,
   blobEntryFor,
   blobUrl,
+  branchCountUrl,
   branchUrl,
+  compareUrl,
+  countFromLink,
   githubErrorFor,
   isSafeRef,
   matchRepos,
@@ -331,10 +336,20 @@ export {
   repoStats,
   repoUrl,
   reposUrl,
+  tagCountUrl,
   treeNodesAt,
   treeUrl,
+  userUrl,
 } from "./github";
-export type { GitHubTreeEntry, RepoStats, RepoSummary } from "./github";
+export type {
+  GitHubTreeEntry,
+  RepoDivergence,
+  RepoExtras,
+  RepoOwner,
+  RepoParent,
+  RepoStats,
+  RepoSummary,
+} from "./github";
 
 export {
   REPO_PAGE_PREFIX,

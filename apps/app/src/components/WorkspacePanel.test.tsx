@@ -463,6 +463,30 @@ describe("the sources a workspace can be opened from", () => {
     expect(screen.getByRole("button", { name: "Notes" }).getAttribute("title")).toBe("D:/Notes");
     expect(screen.getByRole("button", { name: "essays" }).getAttribute("title")).toBe("ada/essays");
   });
+
+  /// The mark, and the colour of it.
+  ///
+  /// The shape alone is a small difference at this size, down a panel of rows that are otherwise
+  /// identical. The claim asserted here is that the two do not look the SAME - which hue each one
+  /// takes is a palette decision, and a test naming one would fail the day the palette moved.
+  it("colours a repository's mark differently from a folder's", () => {
+    panel({
+      workspaces: [
+        { id: "Notes", name: "Notes", ref: { kind: "local" as const, root: "D:/Notes" }, truncated: false },
+        { id: "essays", name: "essays", ref: { kind: "github" as const, owner: "ada", repo: "essays" }, truncated: false },
+      ],
+    });
+
+    // The last mark in the row, which is the provider's. The first is the chevron, and comparing
+    // two chevrons would be a test that can never fail.
+    const colourOf = (name: string) =>
+      [...screen.getByRole("button", { name }).querySelectorAll("svg")]
+        .at(-1)
+        ?.getAttribute("class") ?? "";
+
+    expect(colourOf("Notes")).not.toBe("");
+    expect(colourOf("essays")).not.toBe(colourOf("Notes"));
+  });
 });
 
 describe("a workspace the provider could not list in full", () => {

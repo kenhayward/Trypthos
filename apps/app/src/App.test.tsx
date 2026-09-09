@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
-import type { WorkspaceRef } from "@trypthos/domain";
+import type { RepoStats, WorkspaceRef } from "@trypthos/domain";
 import { DEFAULT_SETTINGS, type Settings } from "@trypthos/domain";
 import App from "./App";
 import { APP_VERSION } from "./lib/appInfo";
@@ -698,6 +698,29 @@ const REPOS = [
   },
 ];
 
+/// One repository, as the shell answers for it. Invented, like every fixture here.
+const REPO_STATS: RepoStats = {
+  owner: { login: "ada", name: "Ada Lovelace", avatarUrl: null },
+  parent: null,
+  branches: 4,
+  tags: 1,
+  divergence: null,
+  fullName: "ada/notes",
+  description: "A notebook",
+  private: false,
+  archived: false,
+  topics: [],
+  defaultBranch: "main",
+  url: "https://github.com/ada/notes",
+  homepage: null,
+  stars: 12,
+  forks: 3,
+  issuesAndPullRequests: 4,
+  language: "TypeScript",
+  license: "MIT",
+  pushedAt: "2026-01-02T00:00:00Z",
+};
+
 function shellWithGitHub(overrides: Record<string, unknown> = {}) {
   const opened: unknown[] = [];
   window.trypthos = {
@@ -718,25 +741,7 @@ function shellWithGitHub(overrides: Record<string, unknown> = {}) {
       ok: true as const,
       dataUrl: `data:image/png;base64,${path}`,
     }),
-    repoInfo: async () => ({
-      ok: true as const,
-      stats: {
-        fullName: "ada/notes",
-        description: "A notebook",
-        private: false,
-        archived: false,
-        topics: [],
-        defaultBranch: "main",
-        url: "https://github.com/ada/notes",
-        homepage: null,
-        stars: 12,
-        forks: 3,
-        issuesAndPullRequests: 4,
-        language: "TypeScript",
-        license: "MIT",
-        pushedAt: "2026-01-02T00:00:00Z",
-      },
-    }),
+    repoInfo: async () => ({ ok: true as const, stats: REPO_STATS }),
     githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
     connectGitHub: async () => ({ ok: true as const, login: "ada" }),
     disconnectGitHub: async () => ({ ok: true }),
@@ -853,6 +858,56 @@ describe("the repository page", () => {
     // Nothing here opened a local folder, so there is no second row - and the page that IS open
     // belongs to the repository that was chosen.
     expect(screen.queryByText("Forks")).toBeNull();
+  });
+
+  /// The wiring nothing else can see.
+  ///
+  /// The hook is tested on its own and so is the button. What neither can see is whether the
+  /// button on the page is connected to the hook holding the answer - and a Refresh that quietly
+  /// does nothing is a button a reader will keep pressing.
+  it("asks GitHub again when refreshed", async () => {
+    let asked = 0;
+    shellWithGitHub({
+      repoInfo: async () => {
+        asked += 1;
+        return { ok: true as const, stats: { ...REPO_STATS, stars: asked } };
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await user.click(await screen.findByRole("button", { name: "notes" }));
+    expect(await screen.findByText("Stars")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => expect(asked).toBe(2));
+  });
+
+  // The upstream belongs to somebody else, so it is not in the picker's list of the account's own
+  // repositories - which makes this page the only way to reach it.
+  it("opens the repository a fork came from", async () => {
+    const { opened } = shellWithGitHub({
+      repoInfo: async () => ({
+        ok: true as const,
+        stats: {
+          ...REPO_STATS,
+          parent: { fullName: "grace/notes", owner: "grace", name: "notes" },
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await user.click(await screen.findByRole("button", { name: "notes" }));
+
+    await user.click(await screen.findByRole("button", { name: "grace/notes" }));
+
+    expect(opened).toContainEqual({ kind: "github", owner: "grace", repo: "notes" });
   });
 });
 

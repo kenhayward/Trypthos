@@ -499,6 +499,31 @@ The two halves fail independently: a page with its numbers and no README is stil
 so is the reverse. `GitHubRepoDetailSchema` deliberately omits `watchers_count` - it is a legacy alias
 for the STAR count, and drawing it beside stars would print the same number twice under two labels.
 
+**`repoStatistics` is five requests, and only the first can fail the page.** Four of the figures the
+page draws are not on the repository response at all, so each is a request of its own, made together
+and each answering null rather than throwing: `/users/{login}` for the owner's display name (the
+repository carries their login and avatar but not the name they go by), `/branches?per_page=1` and
+`/tags?per_page=1` for the counts, and `/compare/{upstream}...{fork}` for how far a fork has moved.
+The comparison is skipped entirely when there is no `parent`, which is most repositories.
+
+The counts are the awkward part: **GitHub has no field anywhere saying how many branches or tags a
+repository has**, and the only way to ask is to page a listing to its end. One item per page makes the
+number of the LAST page - which GitHub names in the `Link` header of the first response - the number
+of items, so `countFromLink` turns an unbounded walk into a single request. It answers **null, never
+zero**, for a header it cannot read: a repository drawn as having no branches is impossible as well as
+wrong. Note that a `Link` header is the one place a response's HEADERS are read rather than its body,
+which is why `request` hands them back alongside the parsed value.
+
+The owner drawn on the page is the **repository's**, not the connected account's. They are the same
+for everything the picker offers and different the moment somebody opens a fork's upstream from that
+page - which is the case a header built from "whoever is signed in" would get wrong. The upstream
+opens through `openRef` as an ordinary workspace, and it is the only repository the app can reach that
+the picker cannot list.
+
+The owner's avatar is drawn from its `avatars.githubusercontent.com` URL rather than read through
+`readImage`. Unlike a picture inside a private repository, an avatar is public and unauthenticated, so
+routing it through the main process would buy nothing - and README badges already load the same way.
+
 `EditorPanel` takes the page as a **slot** (`page?: React.ReactNode`) rather than as data, so the
 editor stays ignorant of GitHub: the alternative is drilling a GitHub bridge and a workspace client
 through it. The slot's parent is a plain block with a definite height, not a flex container, so the

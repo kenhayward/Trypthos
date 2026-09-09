@@ -352,3 +352,157 @@ test("reports a repository whose statistics cannot be read", async () => {
   });
   assert.deepEqual(await api.repoStatistics("ada", "gone"), { ok: false, reason: "not-found" });
 });
+
+/// The four figures a repository response does not carry.
+///
+/// A display name, a branch count, a tag count and a comparison with the upstream are four more
+/// requests. They are made together because they do not depend on each other, and every one of them
+/// is allowed to fail on its own - the tests below are as much about the failing as the arriving.
+
+/// One repository, forked from another, as GitHub answers for it.
+const FORK_DETAIL = {
+  name: "notes",
+  full_name: "ada/notes",
+  owner: { login: "ada", avatar_url: "https://avatars.example/ada.png" },
+  private: false,
+  default_branch: "main",
+  description: "A notebook",
+  pushed_at: "2026-01-02T00:00:00Z",
+  stargazers_count: 12,
+  forks_count: 3,
+  open_issues_count: 4,
+  language: "TypeScript",
+  license: { spdx_id: "MIT", name: "MIT License" },
+  topics: ["notes"],
+  archived: false,
+  html_url: "https://github.com/ada/notes",
+  homepage: null,
+  fork: true,
+  parent: {
+    name: "notes",
+    full_name: "grace/notes",
+    owner: { login: "grace" },
+    default_branch: "trunk",
+  },
+};
+
+const REPO = "https://api.github.com/repos/ada/notes";
+const BRANCHES = `${REPO}/branches?per_page=1`;
+const TAGS = `${REPO}/tags?per_page=1`;
+const COMPARE = `${REPO}/compare/grace:trunk...ada:main`;
+const PROFILE = "https://api.github.com/users/ada";
+
+/// A one-item page that says how many pages there are, which is how many items there are.
+function pageOf(last) {
+  return jsonResponse([{ name: "main" }], {
+    headers: {
+      link: `<${BRANCHES}&page=2>; rel="next", <${BRANCHES}&page=${last}>; rel="last"`,
+    },
+  });
+}
+
+test("gathers the figures the repository response does not carry", async () => {
+  const { api } = apiWith({
+    [REPO]: jsonResponse(FORK_DETAIL),
+    [PROFILE]: jsonResponse({ login: "ada", name: "Ada Lovelace", avatar_url: "https://avatars.example/ada.png" }),
+    [BRANCHES]: pageOf(9),
+    [TAGS]: pageOf(3),
+    [COMPARE]: jsonResponse({ ahead_by: 2, behind_by: 5, status: "diverged" }),
+  });
+
+  const { stats } = await api.repoStatistics("ada", "notes");
+
+  assert.deepEqual(stats.owner, {
+    login: "ada",
+    name: "Ada Lovelace",
+    avatarUrl: "https://avatars.example/ada.png",
+  });
+  assert.equal(stats.branches, 9);
+  assert.equal(stats.tags, 3);
+  assert.deepEqual(stats.divergence, { ahead: 2, behind: 5 });
+  assert.deepEqual(stats.parent, { fullName: "grace/notes", owner: "grace", name: "notes" });
+});
+
+// A rate limit spent on the branch listing, a profile that 404s, a comparison too large to make.
+// Each of these is a request of its own, and none of them is the page. The numbers that did arrive
+// are still drawn, and the ones that did not say they are unknown rather than saying zero.
+test("draws the page when the extra figures do not arrive", async () => {
+  const { api } = apiWith({
+    [REPO]: jsonResponse(FORK_DETAIL),
+    [PROFILE]: jsonResponse({}, { status: 404 }),
+    [BRANCHES]: jsonResponse({}, { status: 403, headers: { "x-ratelimit-remaining": "0" } }),
+    [TAGS]: pageOf(3),
+    [COMPARE]: jsonResponse({}, { status: 404 }),
+  });
+
+  const result = await api.repoStatistics("ada", "notes");
+
+  assert.equal(result.ok, true, "one failing extra must not fail the page");
+  assert.equal(result.stats.stars, 12, "what did arrive is still drawn");
+  assert.equal(result.stats.branches, null, "unknown, which is not zero");
+  assert.equal(result.stats.tags, 3);
+  assert.equal(result.stats.divergence, null);
+  // The login is on the repository itself, so it is there whatever the profile did.
+  assert.equal(result.stats.owner.login, "ada");
+  assert.equal(result.stats.owner.name, null);
+});
+
+// A comparison against an upstream that is not there is a request with nothing to ask. Made anyway,
+// it would spend a round trip on an hourly budget for every repository page anybody opens.
+test("does not compare a repository that is nobody's fork", async () => {
+  const notAFork = { ...FORK_DETAIL, fork: false };
+  delete notAFork.parent;
+
+  const { api, calls } = apiWith({
+    [REPO]: jsonResponse(notAFork),
+    [PROFILE]: jsonResponse({ login: "ada", name: "Ada Lovelace" }),
+    [BRANCHES]: pageOf(9),
+    [TAGS]: pageOf(3),
+  });
+
+  const { stats } = await api.repoStatistics("ada", "notes");
+
+  assert.equal(stats.parent, null);
+  assert.equal(stats.divergence, null);
+  assert.ok(
+    !calls.some((call) => call.url.includes("/compare/")),
+    "a repository with no upstream has nothing to compare against",
+  );
+});
+
+// One item per page is the whole reason the count works: the last page number is the item count.
+// Asking for a hundred at a time would count a hundred branches as one page.
+test("asks for one branch and one tag per page", async () => {
+  const { api, calls } = apiWith({
+    [REPO]: jsonResponse(FORK_DETAIL),
+    [PROFILE]: jsonResponse({ login: "ada", name: null }),
+    [BRANCHES]: pageOf(9),
+    [TAGS]: pageOf(3),
+    [COMPARE]: jsonResponse({ ahead_by: 0, behind_by: 0 }),
+  });
+
+  await api.repoStatistics("ada", "notes");
+
+  const listings = calls.filter((call) => call.url.includes("per_page="));
+  assert.equal(listings.length, 2);
+  for (const call of listings) assert.match(call.url, /per_page=1$/);
+  // The token goes on these as much as on the repository itself: a private repository's branches
+  // are not public, and a request that forgot it would count zero rather than failing.
+  for (const call of listings) assert.equal(call.headers.Authorization, "Bearer ghp_invented");
+});
+
+// A repository with exactly one branch answers with no Link header at all, because there is no
+// page after the first. Reading that as unknown would leave every small repository blank.
+test("counts a listing that fits on one page", async () => {
+  const { api } = apiWith({
+    [REPO]: jsonResponse(FORK_DETAIL),
+    [PROFILE]: jsonResponse({ login: "ada", name: null }),
+    [BRANCHES]: jsonResponse([{ name: "main" }]),
+    [TAGS]: jsonResponse([]),
+    [COMPARE]: jsonResponse({ ahead_by: 0, behind_by: 0 }),
+  });
+
+  const { stats } = await api.repoStatistics("ada", "notes");
+  assert.equal(stats.branches, 1);
+  assert.equal(stats.tags, 0);
+});

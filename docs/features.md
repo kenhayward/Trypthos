@@ -84,11 +84,23 @@ than quietly showing fewer folders than it has. Symlinks and submodules are not 
 they are not followed in a local folder.
 
 **Every repository has a page of its own.** Clicking a repository's row in the browser opens it in a
-tab, the way its front page on GitHub would: six cards across the top - stars, forks, issues and pull
-requests, language, licence and when it was last pushed to - with the description, its topics, and a
-badge if it is private or archived. The issue figure is labelled **issues and pull requests**, because
-that is what GitHub counts there; there is no field separating them without another request, and a
-card labelled only "issues" would be a wrong answer given confidently.
+tab, the way its front page on GitHub would. The owner is at the top left - their picture, the name
+they go by, and their login - and below it the repository's name, a badge if it is private or
+archived, and the description set in the size you read rather than the size a label is set in.
+
+Eight cards run across the page, each with a mark of its own: stars, forks, branches, tags, issues
+and pull requests, language, licence and when it was last pushed to. The issue figure is labelled
+**issues and pull requests**, because that is what GitHub counts there; there is no field separating
+them without another request, and a card labelled only "issues" would be a wrong answer given
+confidently. Branches and tags are counted by asking GitHub for the listing one item at a time and
+reading where it ends, which is the only way to ask - and a count that could not be established says
+**Unknown** rather than showing zero.
+
+**A fork says where it came from.** The upstream repository is named under the title and opens in
+Trypthos when clicked, which is otherwise out of reach: the picker lists the repositories your
+account owns, and the upstream usually belongs to somebody else. Beside it, how far the fork has
+moved - so many commits ahead, so many behind. A comparison GitHub cannot make is left off rather
+than guessed at.
 
 Below the cards the repository's README is rendered as prose and scrolls under them, so the numbers
 stay put while you read. A repository with no README says so, and one whose README could not be read
@@ -96,9 +108,11 @@ says that instead - they are different facts and only one of them is a fault. If
 reached at all the README is still shown, with a note saying what is missing. The row still expands
 and collapses as it always did; opening the page does not take that over.
 
-**A repository's page is loaded once.** The statistics and the README are fetched the first time you
-open it and shown from what the app already has after that, so going back to the page is instant
-rather than another request against an hourly budget and another wait.
+**A repository's page is loaded once, and refreshed on request.** The statistics and the README are
+fetched the first time you open it and shown from what the app already has after that, so going back
+to the page is instant rather than another request against an hourly budget and another wait.
+**Refresh** at the top right throws that away and asks again, which is what you want after pushing a
+commit - and it is offered even when the figures failed to load, since a spent rate limit comes back.
 
 **Pictures in a README are drawn.** An image written relative to the document is read from the
 repository the way any other file is, so one in a **private** repository appears too - a link to it

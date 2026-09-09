@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   GITHUB_API,
+  GitHubComparisonSchema,
+  GitHubRefListSchema,
   GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubTreeSchema,
+  GitHubUserSchema,
   blobEntryFor,
   blobUrl,
+  branchCountUrl,
   branchUrl,
+  compareUrl,
+  countFromLink,
   githubErrorFor,
   isSafeRef,
   matchRepos,
@@ -15,8 +21,10 @@ import {
   repoStats,
   repoUrl,
   reposUrl,
+  tagCountUrl,
   treeNodesAt,
   treeUrl,
+  userUrl,
 } from "./github";
 
 /// A tree as the API hands one over: every path in the repository, flat, with `tree` entries for the
@@ -295,7 +303,7 @@ describe("the statistics a repository page shows", () => {
   const DETAIL = {
     name: "notes",
     full_name: "ada/notes",
-    owner: { login: "ada" },
+    owner: { login: "ada", avatar_url: "https://avatars.example/ada.png" },
     private: true,
     default_branch: "main",
     description: "A private notebook",
@@ -311,7 +319,7 @@ describe("the statistics a repository page shows", () => {
     homepage: "https://example.com",
   };
 
-  it("carries what the six cards draw", () => {
+  it("carries what the cards draw", () => {
     expect(repoStats(GitHubRepoDetailSchema.parse(DETAIL))).toEqual({
       fullName: "ada/notes",
       description: "A private notebook",
@@ -329,7 +337,72 @@ describe("the statistics a repository page shows", () => {
       language: "TypeScript",
       license: "MIT",
       pushedAt: "2026-01-02T00:00:00Z",
+      owner: { login: "ada", name: null, avatarUrl: "https://avatars.example/ada.png" },
+      parent: null,
+      branches: null,
+      tags: null,
+      divergence: null,
     });
+  });
+
+  /// The four figures that are NOT in the repository response.
+  ///
+  /// A display name, a branch count, a tag count and a comparison with the upstream are four more
+  /// requests, and every one of them can fail on its own. They arrive here rather than being read
+  /// out of the detail, so the page can draw a repository whose branch count never came back.
+  it("takes the figures that need their own requests as extras", () => {
+    const stats = repoStats(GitHubRepoDetailSchema.parse(DETAIL), {
+      ownerName: "Ada Lovelace",
+      branches: 9,
+      tags: 3,
+      divergence: { ahead: 2, behind: 5 },
+    });
+
+    expect(stats.owner).toEqual({
+      login: "ada",
+      name: "Ada Lovelace",
+      avatarUrl: "https://avatars.example/ada.png",
+    });
+    expect(stats.branches).toBe(9);
+    expect(stats.tags).toBe(3);
+    expect(stats.divergence).toEqual({ ahead: 2, behind: 5 });
+  });
+
+  // An account with no display name set, and an avatar the response did not carry. Both are absent
+  // rather than empty, so the page shows a login on its own rather than a blank line and a broken
+  // picture where a face should be.
+  it("reads a missing display name and avatar as absent", () => {
+    const stats = repoStats(
+      GitHubRepoDetailSchema.parse({ ...DETAIL, owner: { login: "ada" } }),
+      { ownerName: null },
+    );
+
+    expect(stats.owner).toEqual({ login: "ada", name: null, avatarUrl: null });
+  });
+
+  it("carries where a fork came from", () => {
+    const stats = repoStats(
+      GitHubRepoDetailSchema.parse({
+        ...DETAIL,
+        fork: true,
+        parent: {
+          name: "notes",
+          full_name: "grace/notes",
+          owner: { login: "grace" },
+          default_branch: "trunk",
+        },
+      }),
+    );
+
+    // Owner and name separately as well as the full name: the full name is what a reader sees, and
+    // the two halves are what opening it in the app needs.
+    expect(stats.parent).toEqual({ fullName: "grace/notes", owner: "grace", name: "notes" });
+  });
+
+  // GitHub sends `parent` only for a fork, and only on the single-repository response. A repository
+  // that is nobody's fork simply has no such field, which is not a missing one.
+  it("has no parent for a repository that is not a fork", () => {
+    expect(repoStats(GitHubRepoDetailSchema.parse(DETAIL)).parent).toBe(null);
   });
 
   // A repository with no licence, no language and no description is ordinary, and every one of
@@ -382,4 +455,96 @@ describe("the statistics a repository page shows", () => {
       GitHubRepoDetailSchema.parse({ ...DETAIL, some_new_field: { of: "any shape" } }),
     ).not.toThrow();
   });
+});
+
+/// How many branches, and how many tags.
+///
+/// **GitHub does not answer either question.** There is no count field on a repository and no
+/// endpoint that returns one - the only way to ask is to page a listing and see where it ends. With
+/// one item per page the number of the LAST page is the number of items, which turns an unbounded
+/// walk into a single request.
+describe("counting a paged listing from its Link header", () => {
+  const LINK =
+    '<https://api.github.com/repositories/1/branches?per_page=1&page=2>; rel="next", ' +
+    '<https://api.github.com/repositories/1/branches?per_page=1&page=7>; rel="last"';
+
+  it("reads the last page number as the count", () => {
+    expect(countFromLink(LINK, 1)).toBe(7);
+  });
+
+  // No Link header means there is no page after this one, so what came back is all there is. One
+  // branch is the ordinary case and it must not read as unknown.
+  it("counts what arrived when there is no next page", () => {
+    expect(countFromLink(null, 1)).toBe(1);
+    expect(countFromLink(null, 0)).toBe(0);
+  });
+
+  // A header in a shape this does not recognise is UNKNOWN, never zero. A repository drawn as
+  // having no branches at all would be a wrong answer given confidently.
+  it("gives up rather than guessing at a header it cannot read", () => {
+    expect(countFromLink("something else entirely", 1)).toBe(null);
+    expect(countFromLink('<https://api.github.com/x>; rel="last"', 1)).toBe(null);
+    expect(countFromLink('<https://api.github.com/x?page=nine>; rel="last"', 1)).toBe(null);
+  });
+
+  // `rel="next"` alone is a page in the middle of a listing with no last page named, which happens
+  // when a listing is walked by cursor. Nothing here can turn that into a total.
+  it("does not mistake the next page for the last one", () => {
+    expect(countFromLink('<https://api.github.com/x?page=2>; rel="next"', 1)).toBe(null);
+  });
+
+  // The rel value can be single-quoted or unquoted, and the parts can be spaced differently. It is
+  // one header written by one server, but nothing here should hang on its whitespace.
+  it("reads the header however it is spaced", () => {
+    expect(countFromLink('<https://api.github.com/x?page=4>;rel=last', 1)).toBe(4);
+  });
+});
+
+describe("the addresses the repository page asks for", () => {
+  it("asks for one branch and one tag at a time, which is what makes the count a page number", () => {
+    expect(branchCountUrl("ada", "notes")).toBe(`${GITHUB_API}/repos/ada/notes/branches?per_page=1`);
+    expect(tagCountUrl("ada", "notes")).toBe(`${GITHUB_API}/repos/ada/notes/tags?per_page=1`);
+  });
+
+  it("names a profile by login", () => {
+    expect(userUrl("ada")).toBe(`${GITHUB_API}/users/ada`);
+  });
+
+  // The fork is the head and the upstream is the base, so `ahead` counts commits this repository
+  // has that the upstream does not. The other way round would report the two numbers swapped.
+  it("compares the upstream against the fork", () => {
+    expect(
+      compareUrl("ada", "notes", { owner: "grace", ref: "trunk" }, { owner: "ada", ref: "main" }),
+    ).toBe(`${GITHUB_API}/repos/ada/notes/compare/grace:trunk...ada:main`);
+  });
+
+  // A branch is the one name here that legitimately contains separators, so its slashes are kept
+  // while everything else about it is encoded - exactly as `branchUrl` does it.
+  it("keeps a branch's own separators and encodes the rest", () => {
+    expect(
+      compareUrl("ada", "notes", { owner: "grace", ref: "release/2" }, { owner: "ada", ref: "a b" }),
+    ).toBe(`${GITHUB_API}/repos/ada/notes/compare/grace:release/2...ada:a%20b`);
+  });
+});
+
+describe("the schemas the extra requests are read through", () => {
+  it("reads a branch listing as names", () => {
+    expect(GitHubRefListSchema.parse([{ name: "main", commit: { sha: "c0ffee" } }])).toEqual([
+      { name: "main" },
+    ]);
+  });
+
+  it("reads a comparison as two counts", () => {
+    const parsed = GitHubComparisonSchema.parse({ ahead_by: 2, behind_by: 5, status: "diverged" });
+    expect(parsed.ahead_by).toBe(2);
+    expect(parsed.behind_by).toBe(5);
+  });
+
+  // An account that has never set a display name answers with null, and that is not a failure.
+  it("reads a profile with no display name", () => {
+    const parsed = GitHubUserSchema.parse({ login: "ada", name: null });
+    expect(parsed.login).toBe("ada");
+    expect(parsed.name).toBe(null);
+  });
+
 });
