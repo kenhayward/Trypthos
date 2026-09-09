@@ -253,6 +253,18 @@ describe("two folders open at once", () => {
 
   const panel = () => screen.getByRole("complementary", { name: "Workspace" });
 
+  /// Expands both roots so their files are on screen.
+  ///
+  /// A remembered workspace comes back COLLAPSED, so the panel is not filled with every folder of
+  /// every workspace before the reader has asked for anything. These tests are about how two open
+  /// folders are drawn once expanded, so they expand first - exactly as a user does.
+  async function expandBoth() {
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close Notes" })).toBeDefined());
+    for (const name of ["Notes", "Work"]) {
+      await userEvent.click(within(panel()).getByRole("button", { name }));
+    }
+  }
+
   it("draws a row for each folder, with a close button on each", async () => {
     twoFolders();
     render(<App />);
@@ -270,6 +282,7 @@ describe("two folders open at once", () => {
   it("lists both folders' files, each under its own root", async () => {
     twoFolders();
     render(<App />);
+    await expandBoth();
 
     await waitFor(() =>
       expect(within(panel()).getAllByRole("button", { name: /notes\.md/ })).toHaveLength(2),
@@ -284,6 +297,7 @@ describe("two folders open at once", () => {
   it("opens both files called notes.md, and tells the tabs apart", async () => {
     twoFolders();
     render(<App />);
+    await expandBoth();
 
     const rows = await waitFor(() => {
       const found = within(panel()).getAllByRole("button", { name: /notes\.md/ });
@@ -308,6 +322,7 @@ describe("two folders open at once", () => {
   it("collapses one folder and leaves the other listed", async () => {
     twoFolders();
     render(<App />);
+    await expandBoth();
 
     await waitFor(() =>
       expect(within(panel()).getAllByRole("button", { name: /notes\.md/ })).toHaveLength(2),
@@ -336,6 +351,7 @@ describe("two folders open at once", () => {
   it("draws a folder's contents indented from the folder", async () => {
     twoFolders();
     render(<App />);
+    await expandBoth();
 
     const rows = await waitFor(() => {
       const found = within(panel()).getAllByRole("button", { name: /notes\.md/ });

@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.63.0",
+    date: "2026-09-09",
+    pr: 132,
+    headline: "Pictures appear, and folders start put away",
+    summary:
+      "Pictures in rendered markdown are drawn. They never were: an image written beside its document was asked for from the app rather than from your folder, so every one of them was a broken icon - in a repository's README, and in Preview for your own files just the same. They are now read the way any other file is, which also means a picture in a private repository appears, where a link to it would have needed a token. A picture that is not there, or is too big to open, leaves the broken icon rather than pretending: better an empty frame where something should be than silence. Repository pages also stop reloading themselves - the page is fetched the first time you open it and shown from what it already has after that, so going back to it is instant rather than another round trip and another wait. And your folders come back put away: a workspace reopened at startup starts collapsed, so three open folders no longer fill the panel with everything in them before you have asked. Opening one yourself still expands it, because that is what asking to see a folder means.",
+    added: [
+      "Pictures in a repository's README, and in Preview for your own markdown, are drawn rather than showing a broken icon.",
+    ],
+    changed: [
+      "Workspaces reopened when the app starts come back collapsed. One you open yourself still expands.",
+      "A repository's page is loaded the first time you open it and shown from what it has after that, rather than fetched again on every visit.",
+    ],
+  },
+  {
     version: "0.62.0",
     date: "2026-09-09",
     pr: 130,

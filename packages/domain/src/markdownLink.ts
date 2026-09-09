@@ -1,4 +1,5 @@
 import { isOpenable } from "./fileTypes";
+import { isImageName } from "./imageFiles";
 import { qualifyPath, splitQualified } from "./qualifiedPath";
 
 /// What clicking a link in rendered markdown should do.
@@ -22,6 +23,15 @@ export type LinkAction =
   /// A fragment on the page being read.
   | { kind: "anchor"; fragment: string }
   /// Nothing happens, and the reason says why.
+  | { kind: "none"; reason: LinkRejection };
+
+/// Where an image reads its bytes from.
+///
+/// `image` carries a qualified workspace path, which the shell reads through the same guarded call
+/// the image viewer uses. `external` is left to the browser. Anything else is not a picture.
+export type ImageSource =
+  | { kind: "image"; path: string }
+  | { kind: "external"; url: string }
   | { kind: "none"; reason: LinkRejection };
 
 export type LinkRejection =
@@ -87,24 +97,27 @@ export function isUnsupportedScheme(href: string): boolean {
   return scheme !== null && !EXTERNAL_SCHEMES.has(scheme[0].toLowerCase());
 }
 
-/// What clicking this link should do.
+/// What a relative target in rendered markdown resolves to, before anyone asks what may be done
+/// with it.
 ///
-/// `enabled` is the user's file types, by id. It is required rather than defaulted because there is
-/// no safe default: a link the folder browser would not show must not be a link the editor opens,
-/// and a caller that cannot answer the question is a caller asking the wrong function - see
-/// `isUnsupportedScheme`.
-export function linkAction(
+/// Everything a link and an image share: the scheme allow-list, the fragment, the `..` walk, the
+/// workspace boundary. What they do NOT share is the last question - a link asks whether the editor
+/// opens that file type, and an image asks whether it is a picture - so that question is asked by
+/// each caller rather than here.
+///
+/// Extracted rather than duplicated because two walks over one rule would eventually disagree about
+/// which file `../shared/logo.png` names, and the one that was wrong would be the one nobody tested.
+type ResolvedTarget =
+  | { kind: "path"; path: string; name: string }
+  | { kind: "external"; url: string }
+  | { kind: "anchor"; fragment: string }
+  | { kind: "none"; reason: LinkRejection };
+
+function resolveTarget(
   href: string,
   fromPath: string | null,
-  enabled: readonly string[],
-  /// Which workspace a link with no folder of its own belongs to.
-  ///
-  /// Two cases need it, and both are cases where `fromPath` cannot answer: a link written with a
-  /// leading separator, which means "the root" and has to be told WHICH root, and a link in a
-  /// document that is not in a workspace at all - the scratch buffer, or a reply in the chat panel.
-  /// Null with nothing else to go on makes the link nothing at all, which is the honest answer.
-  workspaceId: string | null = null,
-): LinkAction {
+  workspaceId: string | null,
+): ResolvedTarget {
   const trimmed = href.trim();
   if (trimmed === "") return { kind: "none", reason: "empty" };
 
@@ -167,12 +180,66 @@ export function linkAction(
 
   if (segments.length === 0) return { kind: "none", reason: "empty" };
 
-  const path = qualifyPath(workspace, segments.join("/"));
+  return {
+    kind: "path",
+    path: qualifyPath(workspace, segments.join("/")),
+    name: segments[segments.length - 1]!,
+  };
+}
+
+/// What clicking this link should do.
+///
+/// `enabled` is the user's file types, by id. It is required rather than defaulted because there is
+/// no safe default: a link the folder browser would not show must not be a link the editor opens,
+/// and a caller that cannot answer the question is a caller asking the wrong function - see
+/// `isUnsupportedScheme`.
+export function linkAction(
+  href: string,
+  fromPath: string | null,
+  enabled: readonly string[],
+  /// Which workspace a link with no folder of its own belongs to.
+  ///
+  /// Two cases need it, and both are cases where `fromPath` cannot answer: a link written with a
+  /// leading separator, which means "the root" and has to be told WHICH root, and a link in a
+  /// document that is not in a workspace at all - the scratch buffer, or a reply in the chat panel.
+  /// Null with nothing else to go on makes the link nothing at all, which is the honest answer.
+  workspaceId: string | null = null,
+): LinkAction {
+  const target = resolveTarget(href, fromPath, workspaceId);
+  if (target.kind !== "path") return target;
+
   // The same catalogue the folder browser filters on, so a link the tree would not show is a link
   // the editor will not open. Two lists answering this separately is two lists that will disagree.
-  if (!isOpenable(segments[segments.length - 1]!, enabled)) {
-    return { kind: "none", reason: "not-openable" };
-  }
+  return isOpenable(target.name, enabled)
+    ? { kind: "document", path: target.path }
+    : { kind: "none", reason: "not-openable" };
+}
 
-  return { kind: "document", path };
+/// Where an image in rendered markdown reads its bytes from.
+///
+/// **The same walk a link gets** - the scheme allow-list, the `..` counting, the workspace boundary -
+/// because an image source is a relative path written by the same author in the same document.
+///
+/// The one difference is the last question, and it is the reason this is not simply `linkAction`: a
+/// picture is not a file type the editor opens, so `isOpenable` answers no for every one of them. A
+/// LINK to `orb.png` correctly does nothing; an image with that source must still be drawn.
+///
+/// A web address is passed straight through, exactly as a link is - a badge in a README is the
+/// common case, and fetching it is the browser's business rather than this app's.
+export function imageSource(
+  source: string,
+  fromPath: string | null,
+  workspaceId: string | null = null,
+): ImageSource {
+  const target = resolveTarget(source, fromPath, workspaceId);
+
+  if (target.kind === "external") return target;
+  // An anchor is not an image, and neither is a target the walk refused for a reason of its own -
+  // out of the workspace, no workspace, a scheme the app will not hand on. Those reasons are kept.
+  if (target.kind === "anchor") return { kind: "none", reason: "not-openable" };
+  if (target.kind === "none") return target;
+
+  return isImageName(target.name)
+    ? { kind: "image", path: target.path }
+    : { kind: "none", reason: "not-openable" };
 }

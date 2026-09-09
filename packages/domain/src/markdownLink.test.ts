@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
+import { isExternalUrl, isUnsupportedScheme, linkAction , imageSource} from "./markdownLink";
 
 /// Most of these cases are about schemes, traversal and encoding, and have nothing to say about file
 /// types - so they run against the types a fresh installation has, named once here. The cases that
@@ -318,5 +318,94 @@ describe("linkAction across several workspaces", () => {
       kind: "none",
       reason: "no-workspace",
     });
+  });
+});
+
+describe("resolving an image's source", () => {
+  const IMAGES = ["notes/orb.png"];
+
+  it("resolves one written beside the document", () => {
+    expect(imageSource("orb.png", "Notes/README.md")).toEqual({
+      kind: "image",
+      path: "Notes/orb.png",
+    });
+  });
+
+  it("resolves one in a folder below the document", () => {
+    expect(imageSource("docs/orb.png", "Notes/README.md")).toEqual({
+      kind: "image",
+      path: "Notes/docs/orb.png",
+    });
+  });
+
+  // The same walk links get: `..` is counted against the folders inside the workspace, so a source
+  // that climbs past the root is refused rather than becoming a plausible-looking path.
+  it("refuses one that climbs out of the workspace", () => {
+    expect(imageSource("../../secret.png", "Notes/docs/README.md")).toEqual({
+      kind: "none",
+      reason: "escapes-workspace",
+    });
+  });
+
+  it("reads a leading separator as the workspace root", () => {
+    expect(imageSource("/logo.png", "Notes/docs/README.md")).toEqual({
+      kind: "image",
+      path: "Notes/logo.png",
+    });
+  });
+
+  /// The difference from a link, and the reason this is not `linkAction`.
+  ///
+  /// A picture is not a file type the editor opens, so `isOpenable` answers no for every one of
+  /// them - a link to `orb.png` does nothing, and an image with the same source must still be drawn.
+  it("accepts a picture, which is not a file type the editor opens", () => {
+    for (const name of ["orb.png", "shot.JPEG", "anim.gif", "icon.webp"]) {
+      expect(imageSource(name, "Notes/README.md").kind).toBe("image");
+    }
+  });
+
+  // Anything that is not a picture is not one. A source naming a markdown file would be a request to
+  // read a document as bytes and draw it, which is not what an image tag means.
+  it("refuses a source that is not a picture", () => {
+    expect(imageSource("notes.md", "Notes/README.md")).toEqual({
+      kind: "none",
+      reason: "not-openable",
+    });
+  });
+
+  // A remote image is left to the browser, exactly as a remote link is left to it. Badges in a
+  // README are the common case.
+  it("passes a web address straight through", () => {
+    expect(imageSource("https://example.com/badge.svg", "Notes/README.md")).toEqual({
+      kind: "external",
+      url: "https://example.com/badge.svg",
+    });
+  });
+
+  // The same allow-list links get. `javascript:` in an image source is inert, but a scheme the app
+  // refuses for a link is one it refuses here.
+  it("refuses a scheme the app does not hand to anything", () => {
+    expect(imageSource("javascript:alert(1)", "Notes/README.md").kind).toBe("none");
+    expect(imageSource("file:///etc/passwd", "Notes/README.md").kind).toBe("none");
+  });
+
+  // A document that is in no workspace - the scratch buffer, the built-in guide, a chat reply - has
+  // nothing to resolve against, and a guess would be a read of somebody else's folder.
+  it("answers nothing for a document that is in no workspace", () => {
+    expect(imageSource("orb.png", null).kind).toBe("none");
+    expect(imageSource("orb.png", "trypthos:markdown-guide").kind).toBe("none");
+  });
+
+  // Which workspace a source with no folder of its own belongs to, when the document cannot say.
+  it("takes the workspace it is given when the document has none", () => {
+    expect(imageSource("/logo.png", null, "Notes")).toEqual({
+      kind: "image",
+      path: "Notes/logo.png",
+    });
+  });
+
+  it("ignores an empty source", () => {
+    expect(imageSource("   ", "Notes/README.md").kind).toBe("none");
+    expect(IMAGES).toHaveLength(1);
   });
 });

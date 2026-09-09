@@ -3,7 +3,16 @@ import { useMemo, useRef } from "react";
 import { useCodeHighlighting } from "../hooks/useCodeHighlighting";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { renderMarkdown } from "../lib/markdown";
+import { imageSourcesIn, withResolvedImages } from "../lib/markdownImages";
+import { useMarkdownImages } from "../hooks/useMarkdownImages";
+import type { ImageResult } from "../lib/workspaceClient";
 import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
+
+/// Stands in for a reader on a surface that has none, so the hook is called unconditionally.
+///
+/// It is never reached: `sources` is empty without a real reader, so there is nothing to read. A
+/// stable module-level function rather than a fresh one per render, which would restart the effect.
+const notRead = async (): Promise<ImageResult> => ({ ok: false, reason: "not-desktop" });
 
 interface Props {
   source: string;
@@ -14,6 +23,17 @@ interface Props {
   /// is a view of the same document rather than a different one.
   zoom?: number;
   onZoom?: (direction: ZoomDirection) => void;
+  /// Reads a picture the document embeds, so it can be drawn.
+  ///
+  /// Needed because an image's source is a path in the WORKSPACE while this page is served from the
+  /// app's own origin - so without it every `![](docs/orb.png)` is a broken icon. Optional, and
+  /// absent for the surfaces that render markdown with no workspace behind them: a chat reply and
+  /// the About box, where there is nothing for a relative path to be relative to.
+  readImage?: (path: string) => Promise<ImageResult>;
+  /// The document the sources are relative to, qualified.
+  fromPath?: string | null;
+  /// Which workspace a source with no folder of its own belongs to, when the document cannot say.
+  workspaceId?: string | null;
 }
 
 /// Preview mode: read-only rendered prose.
@@ -29,9 +49,21 @@ export default function MarkdownPreview({
   fileTypes,
   zoom = DEFAULT_ZOOM,
   onZoom,
+  readImage,
+  fromPath = null,
+  workspaceId = null,
 }: Props) {
   const { t } = useTranslation();
-  const html = useMemo(() => renderMarkdown(source), [source]);
+  const rendered = useMemo(() => renderMarkdown(source), [source]);
+
+  // Nothing to look for when there is no way to read one, which is every surface with no workspace
+  // behind it. Memoised so the resolving effect is not handed a fresh array on each render.
+  const sources = useMemo(
+    () => (readImage === undefined ? [] : imageSourcesIn(rendered)),
+    [rendered, readImage],
+  );
+  const images = useMarkdownImages(sources, fromPath, workspaceId, readImage ?? notRead);
+  const html = useMemo(() => withResolvedImages(rendered, images), [rendered, images]);
   /// The scrolling surface, which is also what the zoom and pan gestures are read on.
   ///
   /// Outside the branch below, deliberately: an empty document and a rendered one now share ONE

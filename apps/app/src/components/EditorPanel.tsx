@@ -21,6 +21,7 @@ import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
 import type { FindMatch } from "@trypthos/domain";
+import type { ImageResult } from "../lib/workspaceClient";
 import { currentPlatform } from "../lib/windowControls";
 
 interface Props {
@@ -49,6 +50,9 @@ interface Props {
   /// drilling a GitHub bridge and a workspace client through the editor, which has no business
   /// knowing either exists. Null for every ordinary document, which is nearly all of them.
   page?: React.ReactNode;
+  /// Reads a picture the document embeds, for Preview mode. Optional, and absent in the browser
+  /// preview, where there is nothing to read from.
+  readImage?: (path: string) => Promise<ImageResult>;
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
@@ -121,6 +125,7 @@ export default function EditorPanel({
   readOnly = false,
   media = null,
   page = null,
+  readImage,
   onChange,
   onActivateFile,
   onCloseFile,
@@ -329,6 +334,10 @@ export default function EditorPanel({
             fileTypes={fileTypes}
             zoom={zoom}
             onZoom={stepZoom}
+            // A picture in a local document was broken here for exactly the reason it was broken in
+            // a repository's README: nothing resolved its source against the workspace.
+            readImage={readImage}
+            fromPath={activePath}
           />
         )}
       </div>

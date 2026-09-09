@@ -269,7 +269,7 @@ describe("useWorkspace", () => {
     expect(result.current.state.errorKey).toBeNull();
   });
 
-  it("reopens a remembered folder and lists it", async () => {
+  it("reopens a remembered folder, collapsed", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -278,8 +278,9 @@ describe("useWorkspace", () => {
     });
 
     expect(workspaceRoot(result.current.state.workspaces[0])).toBe("D:/Notes");
-    // Keyed by the workspace's own id, which the fake mints from the root it was handed.
-    expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
+    // Absent from the folder map is what collapsed means - see "reopening on launch" below for why
+    // a workspace the user did not just choose comes back that way.
+    expect(result.current.state.folders["D:/Notes"]).toBeUndefined();
   });
 
   it("opens a file, holding the revision it was read at", async () => {
@@ -1896,5 +1897,72 @@ describe("several folders open at once", () => {
 
     expect(result.current.state.workspaces.map(workspaceRoot)).toEqual(["D:/Here"]);
     expect(result.current.state.errorKey).toBeNull();
+  });
+});
+
+/// What the browser looks like when the app comes back.
+///
+/// A workspace that was open last time is remembered and reopened. Expanding each of them on launch
+/// fills the panel with every folder of every workspace before the user has asked for anything -
+/// which is worst for the people who keep several open, who are the people the feature is for.
+describe("reopening on launch", () => {
+  it("brings workspaces back collapsed", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen([
+        { kind: "local", root: "D:/Notes" },
+        { kind: "local", root: "D:/Work" },
+      ]);
+    });
+
+    // Both are there to be expanded.
+    expect(result.current.state.workspaces).toHaveLength(2);
+    // And neither has been listed: absent from the map is what collapsed means.
+    expect(result.current.state.folders["D:/Notes"]).toBeUndefined();
+    expect(result.current.state.folders["D:/Work"]).toBeUndefined();
+  });
+
+  // Expanding one afterwards works exactly as it does for any folder - nothing about the launch
+  // path leaves them in a state the tree cannot open.
+  it("expands one when it is asked to", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen([{ kind: "local", root: "D:/Notes" }]);
+    });
+    await act(async () => {
+      await result.current.actions.toggleFolder("D:/Notes");
+    });
+
+    expect(result.current.state.folders["D:/Notes"]?.status).toBe("loaded");
+  });
+});
+
+describe("opening a workspace the user just chose", () => {
+  // The opposite case, and the reason this is not simply "never expand": somebody who has just
+  // picked a folder from the dialog is asking to see what is in it.
+  it("expands it", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(result.current.state.folders["ws"]?.status).toBe("loaded");
+  });
+
+  it("expands a repository chosen from the picker", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef({ kind: "github", owner: "ada", repo: "notes" });
+    });
+
+    expect(result.current.state.folders["notes"]?.status).toBe("loaded");
   });
 });

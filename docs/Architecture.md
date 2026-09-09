@@ -461,6 +461,28 @@ a network, and it is the shape the next three providers should copy.
   The refusal is honest rather than optimistic: an editor reporting a save it did not make is the
   precise failure the revision mechanism exists to prevent.
 
+### Pictures in rendered markdown
+
+An image's source is a path in the WORKSPACE; the page it is drawn on is served from the app's own
+origin. Nothing resolved that, so every `![](docs/orb.png)` was a broken icon - in a README and in
+Preview alike.
+
+`imageSource` in `markdownLink.ts` answers where one reads from. It shares `resolveTarget` with
+`linkAction` - the scheme allow-list, the `..` walk, the workspace boundary - because an image source
+is a relative path written by the same author in the same document, and two walks over one rule would
+eventually disagree. Only the last question differs: a link asks `isOpenable`, an image asks
+`isImageName`, and a picture is not a file type the editor opens.
+
+The bytes come through **`readImage`**, the same guarded call the image viewer uses, rather than from
+a URL. That applies the boundary check and the size cap, and it is what makes a picture in a
+**private** repository appear - a `raw.githubusercontent.com` link would need a token.
+
+`markdownImages.ts` finds the sources and puts the read ones back, **parsing rather than matching**:
+the HTML is generated and sanitised by the app, so a regular expression would work until it met an
+`alt` containing `src="` and rewrote an author's caption. Parsing also means the data URL is escaped
+by the DOM rather than by hand. A picture that could not be read keeps what the author wrote, because
+a broken image says something should be there where a blanked source says nothing.
+
 ### A repository's own page
 
 A tab like any other, at a reserved path - `trypthos:repo/<workspaceId>`, the same mechanism the

@@ -21,6 +21,11 @@ export interface RepoPageState {
   /// True only for the second of those. "There is no README" and "the README could not be read" are
   /// different facts, and showing the first for the second is a wrong answer given confidently.
   readmeFailed: boolean;
+  /// The qualified path the README was read from, or null when there is none.
+  ///
+  /// What a picture inside it is relative to: `![](docs/orb.png)` in `notes/README.md` means
+  /// `notes/docs/orb.png`, and only the README's own path can say that.
+  readmePath: string | null;
   /// Translation key for a failure to fetch the STATISTICS. A missing README is not a failure.
   errorKey: string | null;
 }
@@ -30,6 +35,7 @@ const IDLE: RepoPageState = {
   stats: null,
   readme: null,
   readmeFailed: false,
+  readmePath: null,
   errorKey: null,
 };
 
@@ -55,16 +61,19 @@ async function attempt<T extends { ok: boolean }>(
 async function readReadme(
   workspaceId: string,
   client: WorkspaceClient,
-): Promise<{ text: string | null; failed: boolean }> {
+): Promise<{ text: string | null; failed: boolean; path: string | null }> {
   const listed = await attempt(() => client.listDirectory(workspaceId));
-  if (!listed.ok) return { text: null, failed: true };
+  if (!listed.ok) return { text: null, failed: true, path: null };
 
   const name = readmeNameIn(listed.nodes);
   // No README at all. Ordinary, and not a failure.
-  if (name === null) return { text: null, failed: false };
+  if (name === null) return { text: null, failed: false, path: null };
 
-  const read = await attempt(() => client.readFile(`${workspaceId}/${name}`));
-  return read.ok ? { text: read.content, failed: false } : { text: null, failed: true };
+  const path = `${workspaceId}/${name}`;
+  const read = await attempt(() => client.readFile(path));
+  return read.ok
+    ? { text: read.content, failed: false, path }
+    : { text: null, failed: true, path: null };
 }
 
 export function useRepoPage(
@@ -72,16 +81,22 @@ export function useRepoPage(
   github: GitHubBridge | null,
   client: WorkspaceClient,
 ): RepoPageState {
-  /// What came back, and which repository it came back FOR.
+  /// What came back, by repository.
   ///
-  /// The id is stored with the answer rather than beside it, so "still loading" is something this
-  /// can work out during render - a page whose answer belongs to another repository has not arrived
-  /// yet. That is what keeps every state but the fetched one out of an effect: setting state
-  /// synchronously in one is a cascading render, and it is the lint rule this trips otherwise.
-  const [answer, setAnswer] = useState<{ id: string; state: RepoPageState } | null>(null);
+  /// **Held rather than refetched.** The page is a tab: the reader leaves it for a file and comes
+  /// back, over and over. Asking again on each return spends a request on an hourly budget to redraw
+  /// numbers that have not changed, and puts a loading message over a page they were already
+  /// reading. Keyed by workspace, because two repositories are two pages.
+  ///
+  /// Keeping it here rather than in an effect is also what keeps "still loading" derivable during
+  /// render: a repository with no answer yet has not arrived. Setting that synchronously in an
+  /// effect is a cascading render, and the lint rule says so.
+  const [answers, setAnswers] = useState<Readonly<Record<string, RepoPageState>>>({});
 
   useEffect(() => {
     if (workspaceId === null || github === null) return;
+    // Already have it. The page is drawn from what is held, and nothing is asked of GitHub.
+    if (workspaceId in answers) return;
 
     let live = true;
 
@@ -97,22 +112,23 @@ export function useRepoPage(
       // otherwise one repository's numbers land under another's name.
       if (!live) return;
 
-      setAnswer({
-        id: workspaceId,
-        state: {
+      setAnswers((held) => ({
+        ...held,
+        [workspaceId]: {
           loading: false,
           stats: info.ok ? info.stats : null,
           readme: readme.text,
           readmeFailed: readme.failed,
+          readmePath: readme.path,
           errorKey: info.ok ? null : failureKey(info.reason),
         },
-      });
+      }));
     })();
 
     return () => {
       live = false;
     };
-  }, [workspaceId, github, client]);
+  }, [workspaceId, github, client, answers]);
 
   // Derived rather than stored. Nothing here is a fetch, so nothing here belongs in an effect.
   if (workspaceId === null) return IDLE;
@@ -120,6 +136,6 @@ export function useRepoPage(
   // would be a page that never arrives with nothing to explain it.
   if (github === null) return { ...IDLE, errorKey: failureKey("not-desktop") };
 
-  // An answer for another repository is one that has not arrived for this one.
-  return answer !== null && answer.id === workspaceId ? answer.state : { ...IDLE, loading: true };
+  // A repository with nothing held for it has not arrived yet.
+  return answers[workspaceId] ?? { ...IDLE, loading: true };
 }
