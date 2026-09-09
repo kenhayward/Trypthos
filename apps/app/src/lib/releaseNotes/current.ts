@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.62.0",
+    date: "2026-09-09",
+    pr: 130,
+    headline: "Every repository has a page of its own",
+    summary:
+      "Click a repository's row in the browser and it opens its own page in a tab, the way its front page on GitHub would. Six figures sit across the top - stars, forks, issues, language, licence and when it was last pushed to - with the description, its topics, and a badge if it is private or archived. The issue count is labelled as issues and pull requests, because that is what GitHub counts there and a figure labelled only \"issues\" would be a wrong answer. Below them the repository's README is rendered as prose and scrolls under the cards, so the numbers stay put while you read. A repository with no README says so, and one whose README could not be read says that instead - they are different facts. If GitHub cannot be reached the README is still shown with a note about what is missing, rather than an empty page. The row still expands and collapses as it always did.",
+    added: [
+      "A page of its own for every open repository, opened by clicking its row in the browser.",
+      "Six cards: stars, forks, issues and pull requests, language, licence and last push, with the description, topics and a private or archived badge.",
+      "The repository's README, rendered as prose and scrolling under the cards.",
+    ],
+  },
+  {
     version: "0.61.4",
     date: "2026-09-09",
     pr: 129,

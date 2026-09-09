@@ -461,6 +461,27 @@ a network, and it is the shape the next three providers should copy.
   The refusal is honest rather than optimistic: an editor reporting a save it did not make is the
   precise failure the revision mechanism exists to prevent.
 
+### A repository's own page
+
+A tab like any other, at a reserved path - `trypthos:repo/<workspaceId>`, the same mechanism the
+markdown guide uses. Nothing reads or writes that path: `splitQualified` refuses the whole `trypthos:`
+prefix, which is what keeps it out of every code path that would resolve it against a provider.
+
+**What it draws is not the document's `content`.** A repository's star count is not what the editor
+holds or what chat sends, so the page fetches it when it opens - `github:repoInfo`, named by an OPEN
+workspace rather than by owner and repository, so a renderer cannot ask GitHub about repositories the
+user never opened. The README goes through the workspace provider like any other file, which keeps it
+inside the boundary guard rather than in a second read path of its own.
+
+The two halves fail independently: a page with its numbers and no README is still worth reading, and
+so is the reverse. `GitHubRepoDetailSchema` deliberately omits `watchers_count` - it is a legacy alias
+for the STAR count, and drawing it beside stars would print the same number twice under two labels.
+
+`EditorPanel` takes the page as a **slot** (`page?: React.ReactNode`) rather than as data, so the
+editor stays ignorant of GitHub: the alternative is drilling a GitHub bridge and a workspace client
+through it. The slot's parent is a plain block with a definite height, not a flex container, so the
+page fills it with `h-full` exactly as the image viewer and the editor do.
+
 ### Local
 
 `apps/desktop/src/localWorkspace.js` is the local backend. Two path checks, and both are needed:

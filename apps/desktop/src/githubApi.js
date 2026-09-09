@@ -5,6 +5,7 @@ const {
   GITHUB_API,
   GitHubBlobSchema,
   GitHubBranchSchema,
+  GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubRepoSchema,
   GitHubTreeSchema,
@@ -16,6 +17,7 @@ const {
   githubErrorFor,
   isSafeRef,
   ownedRepos,
+  repoStats,
   repoUrl,
   reposUrl,
   treeUrl,
@@ -175,6 +177,16 @@ function createGitHubApi({
     return { ok: true, branch, sha: head.value.commit.sha };
   }
 
+  /// One repository in full, for its own page.
+  ///
+  /// A separate call from the picker's listing rather than something carried on it: the listing
+  /// fetches a hundred repositories at a time and needs a name, and this needs everything about
+  /// exactly one. Made when the page opens, so a user who never opens one never asks for it.
+  async function repoStatistics(owner, repo) {
+    const result = await request(repoUrl(owner, repo), GitHubRepoDetailSchema);
+    return result.ok ? { ok: true, stats: repoStats(result.value) } : result;
+  }
+
   /// Every path in the repository at one commit, in a single request.
   ///
   /// `recursive=1` is the difference between opening a repository in one request and opening it in
@@ -202,7 +214,7 @@ function createGitHubApi({
     return { ok: true, bytes: Buffer.from(result.value.content, "base64") };
   }
 
-  return { whoami, ownedRepositories, defaultBranchHead, tree, blob };
+  return { whoami, ownedRepositories, defaultBranchHead, repoStatistics, tree, blob };
 }
 
 module.exports = { createGitHubApi, MAX_REPO_PAGES };

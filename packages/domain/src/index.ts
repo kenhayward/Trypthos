@@ -281,6 +281,7 @@ export {
   OpenWorkspaceRefRequest,
   ConnectGitHubRequest,
   ListReposRequest,
+  RepoInfoRequest,
 } from "./ipc";
 export type { ChatEvent, DiscardChoice, IpcChannel, OpenTarget, WindowState } from "./ipc";
 
@@ -312,6 +313,7 @@ export {
   GITHUB_API,
   GitHubBlobSchema,
   GitHubBranchSchema,
+  GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubRepoSchema,
   GitHubTreeSchema,
@@ -326,9 +328,18 @@ export {
   matchRepos,
   ownedRepos,
   repoRefFor,
+  repoStats,
   repoUrl,
   reposUrl,
   treeNodesAt,
   treeUrl,
 } from "./github";
-export type { GitHubTreeEntry, RepoSummary } from "./github";
+export type { GitHubTreeEntry, RepoStats, RepoSummary } from "./github";
+
+export {
+  REPO_PAGE_PREFIX,
+  isRepoPagePath,
+  readmeNameIn,
+  repoPagePath,
+  repoPageWorkspaceId,
+} from "./repoPage";

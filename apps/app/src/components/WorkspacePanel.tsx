@@ -49,6 +49,9 @@ interface Props {
   onSelectFolder: (path: string) => void;
   /// Closes one folder, and the documents that came from it. The asking happens above.
   onCloseWorkspace: (workspaceId: string) => void;
+  /// Opens a repository's own page. Only ever called for a GitHub workspace - a local folder has no
+  /// repository behind it and nothing to show.
+  onOpenRepoPage: (workspaceId: string) => void;
   /// Opens the File types page of Settings.
   ///
   /// The footer is the only place the setting is discoverable at all: every type but markdown is
@@ -81,6 +84,7 @@ export default function WorkspacePanel({
   selectedFolder,
   onSelectFolder,
   onCloseWorkspace,
+  onOpenRepoPage,
   onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
@@ -226,6 +230,10 @@ export default function WorkspacePanel({
                   selected={selectedFolder === workspace.id}
                   onToggle={() => {
                     onSelectFolder(workspace.id);
+                    // A repository's row is its home, so clicking it opens its page as well as
+                    // expanding it. Opening a tab that is already open only switches to it, so a
+                    // second click costs nothing.
+                    if (workspace.ref.kind === "github") onOpenRepoPage(workspace.id);
                     // There is nothing to collapse while filtering: what is under this row came from
                     // the search, not from the map of folders that have been listed.
                     if (!filtering) void onToggleFolder(workspace.id);

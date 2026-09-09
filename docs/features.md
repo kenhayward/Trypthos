@@ -78,6 +78,19 @@ as on a folder. A repository too large for GitHub to describe in one answer says
 than quietly showing fewer folders than it has. Symlinks and submodules are not listed, exactly as
 they are not followed in a local folder.
 
+**Every repository has a page of its own.** Clicking a repository's row in the browser opens it in a
+tab, the way its front page on GitHub would: six cards across the top - stars, forks, issues and pull
+requests, language, licence and when it was last pushed to - with the description, its topics, and a
+badge if it is private or archived. The issue figure is labelled **issues and pull requests**, because
+that is what GitHub counts there; there is no field separating them without another request, and a
+card labelled only "issues" would be a wrong answer given confidently.
+
+Below the cards the repository's README is rendered as prose and scrolls under them, so the numbers
+stay put while you read. A repository with no README says so, and one whose README could not be read
+says that instead - they are different facts and only one of them is a fault. If GitHub cannot be
+reached at all the README is still shown, with a note saying what is missing. The row still expands
+and collapses as it always did; opening the page does not take that over.
+
 **Repositories are read-only for now.** Saving to GitHub is a commit on a branch, with history and
 merge conflicts rather than an overwrite, and that is not built yet. Rather than pretend otherwise,
 Trypthos says so before you open one and refuses a save instead of reporting one it never made. Save

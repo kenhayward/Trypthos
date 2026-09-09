@@ -53,6 +53,7 @@ export const IPC_CHANNELS = [
   "github:connect",
   "github:disconnect",
   "github:repos",
+  "github:repoInfo",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -209,6 +210,15 @@ export type ConnectGitHubRequest = z.infer<typeof ConnectGitHubRequest>;
 export const ListReposRequest = z.object({ refresh: z.boolean().default(false) }).strict();
 
 export type ListReposRequest = z.infer<typeof ListReposRequest>;
+
+/// The statistics one repository's own page shows.
+///
+/// Named by the WORKSPACE the renderer already has open, never by owner and repository. That is the
+/// same rule as everywhere else here: the shell holds what is open, and a renderer that could name
+/// any repository could ask GitHub about repositories the user never opened.
+export const RepoInfoRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+export type RepoInfoRequest = z.infer<typeof RepoInfoRequest>;
 
 /// Closing one of the open workspaces.
 ///

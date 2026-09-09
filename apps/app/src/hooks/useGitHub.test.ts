@@ -22,6 +22,7 @@ function fakeBridge(overrides: Partial<GitHubBridge> = {}) {
     connectGitHub: vi.fn(async () => ({ ok: true as const, login: "ada" })),
     disconnectGitHub: vi.fn(async () => ({ ok: true })),
     listRepositories: vi.fn(async () => ({ ok: true as const, repos: REPOS })),
+    repoInfo: vi.fn(async () => ({ ok: false as const, reason: "unsupported" })),
     ...overrides,
   } satisfies GitHubBridge;
 }

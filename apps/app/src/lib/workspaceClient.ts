@@ -2,6 +2,7 @@ import type {
   FileHit,
   FilterRequest,
   FindRequest,
+  RepoStats,
   RepoSummary,
   Revision,
   Settings,
@@ -165,6 +166,7 @@ export interface GitHubStatus {
 
 export type ConnectResult = { ok: true; login: string } | Failure;
 export type RepoListResult = { ok: true; repos: RepoSummary[] } | Failure;
+export type RepoInfoResult = { ok: true; stats: RepoStats } | Failure;
 
 /// The GitHub half of the bridge.
 ///
@@ -175,6 +177,9 @@ export interface GitHubBridge {
   connectGitHub(token: string): Promise<ConnectResult>;
   disconnectGitHub(): Promise<{ ok: boolean }>;
   listRepositories(refresh?: boolean): Promise<RepoListResult>;
+  /// The statistics one repository's own page draws. Named by an OPEN workspace, never by owner and
+  /// repository - the shell holds what is open.
+  repoInfo(workspaceId: string): Promise<RepoInfoResult>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge {
@@ -267,6 +272,7 @@ export function githubBridge(): GitHubBridge | null {
     connectGitHub: bridge.connectGitHub,
     disconnectGitHub: bridge.disconnectGitHub,
     listRepositories: bridge.listRepositories,
+    repoInfo: bridge.repoInfo,
   };
 }
 

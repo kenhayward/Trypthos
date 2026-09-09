@@ -672,46 +672,75 @@ describe("making a new file", () => {
 /// The picker was reported vanishing on its own while it said it was loading, which no test of the
 /// dialog on its own could see: the dialog is mounted by App, and whether it STAYS mounted is App's
 /// business rather than the dialog's. That seam is the one thing every other test here fakes away.
-describe("opening a GitHub repository", () => {
-  const REPOS = [
-    {
-      owner: "ada",
-      name: "notes",
-      fullName: "ada/notes",
-      private: false,
-      defaultBranch: "main",
-      description: null,
-      pushedAt: null,
-    },
-  ];
 
-  function shellWithGitHub(overrides: Record<string, unknown> = {}) {
-    const opened: unknown[] = [];
-    window.trypthos = {
-      ...browserClient,
-      isDesktop: true,
-      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
-      writeSettings: async () => {},
-      listDirectory: async () => ({ ok: true as const, nodes: [] }),
-      githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
-      connectGitHub: async () => ({ ok: true as const, login: "ada" }),
-      disconnectGitHub: async () => ({ ok: true }),
-      listRepositories: async () => ({ ok: true as const, repos: REPOS }),
-      openWorkspaceRef: async (ref: unknown) => {
-        opened.push(ref);
-        return {
-          ok: true as const,
-          workspace: { id: "notes", name: "notes", ref, truncated: false },
-        };
+const REPOS = [
+  {
+    owner: "ada",
+    name: "notes",
+    fullName: "ada/notes",
+    private: false,
+    defaultBranch: "main",
+    description: null,
+    pushedAt: null,
+  },
+];
+
+function shellWithGitHub(overrides: Record<string, unknown> = {}) {
+  const opened: unknown[] = [];
+  window.trypthos = {
+    ...browserClient,
+    isDesktop: true,
+    readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+    writeSettings: async () => {},
+    listDirectory: async () => ({
+      ok: true as const,
+      nodes: [{ id: "notes/README.md", name: "README.md", kind: "file" as const }],
+    }),
+    readFile: async () => ({
+      ok: true as const,
+      content: "# The notes repository\n\nWhat it is for.",
+      revision: { id: "b1" },
+    }),
+    repoInfo: async () => ({
+      ok: true as const,
+      stats: {
+        fullName: "ada/notes",
+        description: "A notebook",
+        private: false,
+        archived: false,
+        topics: [],
+        defaultBranch: "main",
+        url: "https://github.com/ada/notes",
+        homepage: null,
+        stars: 12,
+        forks: 3,
+        issuesAndPullRequests: 4,
+        language: "TypeScript",
+        license: "MIT",
+        pushedAt: "2026-01-02T00:00:00Z",
       },
-      onWindowState: () => () => {},
-      onCloseRequested: () => () => {},
-      onMenuAction: () => () => {},
-      onOpenTarget: () => () => {},
-      ...overrides,
-    } as unknown as typeof window.trypthos;
-    return { opened };
-  }
+    }),
+    githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
+    connectGitHub: async () => ({ ok: true as const, login: "ada" }),
+    disconnectGitHub: async () => ({ ok: true }),
+    listRepositories: async () => ({ ok: true as const, repos: REPOS }),
+    openWorkspaceRef: async (ref: unknown) => {
+      opened.push(ref);
+      return {
+        ok: true as const,
+        workspace: { id: "notes", name: "notes", ref, truncated: false },
+      };
+    },
+    onWindowState: () => () => {},
+    onCloseRequested: () => () => {},
+    onMenuAction: () => () => {},
+    onOpenTarget: () => () => {},
+    ...overrides,
+  } as unknown as typeof window.trypthos;
+  return { opened };
+}
+
+describe("opening a GitHub repository", () => {
 
   it("opens the picker and keeps it open while it loads", async () => {
     shellWithGitHub();
@@ -753,5 +782,59 @@ describe("opening a GitHub repository", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByText("Trypthos is not allowed to open that.")).toBeTruthy();
+  });
+});
+
+/// A repository's own page, through the whole window.
+describe("the repository page", () => {
+  it("opens when the repository's row is clicked, and shows its statistics and README", async () => {
+    shellWithGitHub();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+
+    // The repository's own row in the browser, which is its home.
+    await user.click(await screen.findByRole("button", { name: "notes" }));
+
+    expect(await screen.findByText("Stars")).toBeTruthy();
+    expect(screen.getByText("ada/notes")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "The notes repository" })).toBeTruthy();
+  });
+
+  // The row still does what it always did. A repository that stopped collapsing because its page
+  // took the click over would be a tree you cannot put away.
+  it("still collapses and expands the repository", async () => {
+    shellWithGitHub();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    // Opening a repository lists it, so its files are already on screen.
+    expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "notes" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "README.md" })).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "notes" }));
+    expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
+  });
+
+  // A local folder has no repository behind it, so its row must not open a page that could only be
+  // empty.
+  it("is not opened by a local folder's row", async () => {
+    shellWithGitHub();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await screen.findByRole("button", { name: "notes" });
+
+    // Nothing here opened a local folder, so there is no second row - and the page that IS open
+    // belongs to the repository that was chosen.
+    expect(screen.queryByText("Forks")).toBeNull();
   });
 });

@@ -392,5 +392,26 @@
     "cancel": "Cancel",
     "readOnlyNote": "Repositories open read-only. Trypthos reads the default branch; saving back to GitHub is not built yet.",
     "browserOnly": "Connecting to GitHub needs the desktop app. This is the browser preview."
+  },
+  "repo": {
+    "loading": "Loading repository information...",
+    "stars": "Stars",
+    "forks": "Forks",
+    "issues": "Issues and pull requests",
+    "issuesHint": "GitHub counts pull requests in this figure as well as issues.",
+    "language": "Language",
+    "noLanguage": "Not detected",
+    "licence": "Licence",
+    "noLicence": "None",
+    "lastPush": "Last push",
+    "neverPushed": "Never",
+    "private": "Private",
+    "archived": "Archived",
+    "branch": "Default branch {{branch}}",
+    "viewOnGitHub": "View on GitHub",
+    "website": "Website",
+    "noDescription": "No description.",
+    "noReadme": "This repository has no README.",
+    "readmeFailed": "The README could not be read."
   }
 }
