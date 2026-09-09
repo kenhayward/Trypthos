@@ -5,6 +5,7 @@ import type { WorkspaceRef } from "@trypthos/domain";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 import type { RemoteNode } from "../lib/workspaceClient";
+import Glyph from "./Glyph";
 
 interface Props {
   /// Rendered width, resolved against the window. The panel does not choose its own size.
@@ -365,10 +366,16 @@ function WorkspaceRow({
           {filtering ? <ChevronSpace /> : <Chevron open={expanded} />}
           {/* Which provider this workspace came from. A folder and a repository sit in the same
               tree and behave very differently - one can be saved into and the other cannot - so
-              they do not look alike. */}
+              they do not look alike: a different mark, and a different colour behind it. At this
+              size the shape alone is a small difference down a panel of otherwise identical rows.
+
+              A failing workspace overrides both, because what is wrong with it matters more than
+              where it came from. */}
           <SourceGlyph
             kind={workspace.ref.kind}
-            className={status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}
+            className={
+              status === "error" ? "size-3.5 text-danger" : `size-3.5 ${sourceColour(workspace.ref.kind)}`
+            }
           />
           <span className="min-w-0 truncate">{workspace.name}</span>
           {status === "loading" && (
@@ -560,6 +567,23 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+/// The colour a provider's mark takes on a workspace row.
+///
+/// Green is the folder colour this app has always used for a folder; a repository is not one, and
+/// it takes the accent instead. A `switch` for the same reason `SourceGlyph` is one - a provider
+/// added to the schema without a colour is a type error here rather than two sources that look the
+/// same in the tree.
+///
+/// A class rather than a hex, so both themes are answered by the token the rest of the app reads.
+function sourceColour(kind: WorkspaceRef["kind"]): string {
+  switch (kind) {
+    case "github":
+      return "text-accent";
+    case "local":
+      return "text-leaf";
+  }
+}
+
 /// The mark for one provider.
 ///
 /// A `switch` over the kind rather than a lookup with a fallback, so adding a provider to the schema
@@ -581,19 +605,3 @@ function SourceGlyph({ kind, className }: { kind: WorkspaceRef["kind"]; classNam
   }
 }
 
-function Glyph({ className = "size-3.5", children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {children}
-    </svg>
-  );
-}

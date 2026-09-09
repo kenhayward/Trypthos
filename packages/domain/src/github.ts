@@ -31,12 +31,32 @@ export const API_VERSION = "2022-11-28";
 /// these responses regularly, and refusing a response because it grew a key would break the app on
 /// a day nothing here changed. What is named is what is read; the rest is dropped.
 
-export const GitHubUserSchema = z.object({ login: z.string().min(1) });
+/// One account, as `/user` and `/users/{login}` both answer.
+///
+/// The same shape for both, because they are the same endpoint with a different subject: one is the
+/// connected account and the other is whoever owns the repository on screen. `name` is the display
+/// name, which an account need never have set, and `avatar_url` is a picture GitHub serves publicly
+/// - neither is a credential, and neither is required for the app to work.
+export const GitHubUserSchema = z.object({
+  login: z.string().min(1),
+  name: z.string().nullable().catch(null),
+  avatar_url: z.string().nullable().catch(null),
+});
+
+/// A repository's owner, as it appears on the repository itself.
+///
+/// The avatar is here because a repository already carries it - asking `/users/{login}` for a
+/// picture that arrived with the repository would be a second request for something already in
+/// hand. The display name is the only part that needs one.
+const GitHubRepoOwnerSchema = z.object({
+  login: z.string().min(1),
+  avatar_url: z.string().nullable().catch(null),
+});
 
 export const GitHubRepoSchema = z.object({
   name: z.string().min(1),
   full_name: z.string().min(1),
-  owner: z.object({ login: z.string().min(1) }),
+  owner: GitHubRepoOwnerSchema,
   private: z.boolean(),
   default_branch: z.string().min(1),
   description: z.string().nullable().catch(null),
@@ -54,6 +74,18 @@ export const GitHubRepoListSchema = z.array(GitHubRepoSchema);
 /// **`watchers_count` is deliberately absent.** It is a legacy alias for the STAR count, not the
 /// number of people watching - real watchers are `subscribers_count`. A page drawing it beside stars
 /// would print the same number twice under two different labels.
+/// The repository a fork was made from.
+///
+/// GitHub sends `parent` only on the single-repository response, and only for a fork - so its
+/// absence is ordinary rather than a field that failed to arrive. The default branch is here
+/// because it is the base of the comparison that says how far the fork has moved.
+const GitHubRepoParentSchema = z.object({
+  name: z.string().min(1),
+  full_name: z.string().min(1),
+  owner: z.object({ login: z.string().min(1) }),
+  default_branch: z.string().min(1),
+});
+
 export const GitHubRepoDetailSchema = GitHubRepoSchema.extend({
   stargazers_count: z.number().catch(0),
   forks_count: z.number().catch(0),
@@ -66,10 +98,81 @@ export const GitHubRepoDetailSchema = GitHubRepoSchema.extend({
   archived: z.boolean().catch(false),
   html_url: z.string().catch(""),
   homepage: z.string().nullable().catch(null),
+  /// Absent for a repository that is nobody's fork, and absent from the LISTING even for one that
+  /// is. `nullish` rather than `nullable` for exactly that reason: a field that is not there is not
+  /// a field that failed.
+  parent: GitHubRepoParentSchema.nullish().catch(null),
 });
+
+/// A branch listing, or a tag listing - only far enough to know one arrived.
+///
+/// Nothing here reads a name. The listing is fetched one item per page purely so the LAST page
+/// number is the count, so what is wanted from the body is that it was the listing it claimed to
+/// be. Named rather than `z.array(z.unknown())`, because a response that is not a list of refs is
+/// a response this is not counting.
+export const GitHubRefListSchema = z.array(z.object({ name: z.string().min(1) }));
+
+/// How far two branches have moved apart, as `/compare` answers.
+export const GitHubComparisonSchema = z.object({
+  ahead_by: z.number(),
+  behind_by: z.number(),
+});
+
+/// Who a repository belongs to, as its page names them.
+///
+/// The login is the only part that is always there. A display name is something an account may
+/// never have set, and an avatar can be missing from a response - so both are absent rather than
+/// empty, and the page draws a login on its own rather than a blank line under a broken picture.
+export interface RepoOwner {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+/// The repository a fork was made from.
+///
+/// Owner and name as well as the full name: the full name is what a reader sees, and the two halves
+/// are what opening it in the app needs - a `WorkspaceRef` is built from them.
+export interface RepoParent {
+  fullName: string;
+  owner: string;
+  name: string;
+}
+
+/// How far a fork has moved from what it was forked from, in commits.
+export interface RepoDivergence {
+  /// Commits this repository has that the upstream does not.
+  ahead: number;
+  /// Commits the upstream has that this repository does not.
+  behind: number;
+}
+
+/// The figures that are not on the repository response, and so need requests of their own.
+///
+/// Every one of them is optional and every one of them can be null, because every one of them is a
+/// separate request that can fail on its own. A branch count that never arrived must not take the
+/// rest of the page with it - see `repoStatistics`, which is where they are gathered.
+export interface RepoExtras {
+  ownerName?: string | null;
+  branches?: number | null;
+  tags?: number | null;
+  divergence?: RepoDivergence | null;
+}
 
 /// What a repository's page draws. Our shape, not GitHub's - see `RepoSummary` for why.
 export interface RepoStats {
+  owner: RepoOwner;
+  /// Where this was forked from, or null for a repository that is nobody's fork.
+  parent: RepoParent | null;
+  /// How many branches and how many tags, or null when the count could not be established.
+  ///
+  /// **Null is not zero.** GitHub has no count field for either, so both are read off the end of a
+  /// paged listing - and a listing that did not arrive says nothing about how many there are. A
+  /// repository drawn as having no branches would be a wrong answer given confidently.
+  branches: number | null;
+  tags: number | null;
+  /// Null for anything that is not a fork, and for a fork whose comparison could not be made.
+  divergence: RepoDivergence | null;
   fullName: string;
   description: string | null;
   private: boolean;
@@ -91,10 +194,34 @@ export interface RepoStats {
 /// The identifier GitHub uses for a licence it could not recognise. Not something to print.
 const UNIDENTIFIED_LICENCE = "NOASSERTION";
 
-export function repoStats(detail: z.infer<typeof GitHubRepoDetailSchema>): RepoStats {
+/// Nothing, or only whitespace, read as absent. One rule, so a blank homepage and a blank avatar
+/// are not answered differently by two pieces of code that had the same question.
+function blankToNull(value: string | null | undefined): string | null {
+  return value === null || value === undefined || value.trim() === "" ? null : value;
+}
+
+export function repoStats(
+  detail: z.infer<typeof GitHubRepoDetailSchema>,
+  extras: RepoExtras = {},
+): RepoStats {
   const spdx = detail.license?.spdx_id ?? null;
+  const parent = detail.parent ?? null;
 
   return {
+    owner: {
+      login: detail.owner.login,
+      name: extras.ownerName ?? null,
+      // An empty string is how a response spells "no picture" as readily as a missing field, and a
+      // blank source draws a broken image rather than nothing.
+      avatarUrl: blankToNull(detail.owner.avatar_url),
+    },
+    parent:
+      parent === null
+        ? null
+        : { fullName: parent.full_name, owner: parent.owner.login, name: parent.name },
+    branches: extras.branches ?? null,
+    tags: extras.tags ?? null,
+    divergence: extras.divergence ?? null,
     fullName: detail.full_name,
     description: detail.description,
     private: detail.private,
@@ -103,7 +230,7 @@ export function repoStats(detail: z.infer<typeof GitHubRepoDetailSchema>): RepoS
     defaultBranch: detail.default_branch,
     url: detail.html_url,
     // An empty homepage is how GitHub spells "none" as often as null, and a blank link is not a link.
-    homepage: detail.homepage === null || detail.homepage.trim() === "" ? null : detail.homepage,
+    homepage: blankToNull(detail.homepage),
     stars: detail.stargazers_count,
     forks: detail.forks_count,
     issuesAndPullRequests: detail.open_issues_count,
@@ -342,6 +469,74 @@ export function treeUrl(owner: string, repo: string, sha: string): string {
 
 export function blobUrl(owner: string, repo: string, sha: string): string {
   return `${repoUrl(owner, repo)}/git/blobs/${segment(sha)}`;
+}
+
+/// One account's public profile, which is the only place a display name lives.
+export function userUrl(login: string): string {
+  return `${GITHUB_API}/users/${segment(login)}`;
+}
+
+/// The branch listing, one branch per page.
+///
+/// **`per_page=1` is the whole trick.** GitHub has no field anywhere that says how many branches a
+/// repository has, and the only way to find out is to walk the listing to its end. Asking for one
+/// item per page makes the number of the LAST page - which GitHub names in the `Link` header of the
+/// first response - the number of branches, so the walk is a single request. See `countFromLink`.
+export function branchCountUrl(owner: string, repo: string): string {
+  return `${repoUrl(owner, repo)}/branches?per_page=1`;
+}
+
+/// The tag listing, one tag per page. The same trick, for the same reason.
+export function tagCountUrl(owner: string, repo: string): string {
+  return `${repoUrl(owner, repo)}/tags?per_page=1`;
+}
+
+/// How far a fork has moved from what it was forked from.
+///
+/// `base...head` is directional and the direction is the whole answer: the upstream is the base and
+/// the fork is the head, so `ahead_by` counts what this repository has that the upstream does not.
+/// Swapped, the page would report the two numbers the wrong way round and look entirely plausible.
+///
+/// A ref is the one name here that legitimately contains separators, so its own are kept and
+/// everything else about it is encoded - the same rule `branchUrl` follows. Ask `isSafeRef` first.
+export function compareUrl(
+  owner: string,
+  repo: string,
+  base: { owner: string; ref: string },
+  head: { owner: string; ref: string },
+): string {
+  const side = (end: { owner: string; ref: string }) => `${segment(end.owner)}:${refPath(end.ref)}`;
+  return `${repoUrl(owner, repo)}/compare/${side(base)}...${side(head)}`;
+}
+
+/// The last page named in a `Link` header, which for a one-item page is a count.
+///
+/// GitHub answers a paged listing with a header naming the next, previous, first and last pages.
+/// With one item per page the last page number IS the number of items, which is what makes a count
+/// a single request instead of a walk.
+///
+/// **Null when it cannot be read, never zero.** No header at all means there is no page after this
+/// one, so what arrived is all there is - that is a real answer. A header in a shape this does not
+/// recognise is not: a repository drawn as having no branches because a header changed would be a
+/// wrong answer given confidently.
+export function countFromLink(link: string | null, returned: number): number | null {
+  // Nothing to page through. The first page was the last page, so what came back is the whole of it.
+  if (link === null || link.trim() === "") return returned;
+
+  for (const part of link.split(",")) {
+    const relation = /;\s*rel\s*=\s*"?'?last'?"?/i.exec(part);
+    if (relation === null) continue;
+
+    const address = /<([^>]*)>/.exec(part);
+    if (address === null) return null;
+
+    const page = /[?&]page=(\d+)(?:&|$)/.exec(address[1] ?? "");
+    return page === null ? null : Number(page[1]);
+  }
+
+  // A header that named other pages but not a last one. Common when a listing is walked by cursor,
+  // and nothing here can turn it into a total.
+  return null;
 }
 
 /// What a failing response means, in the provider's vocabulary.

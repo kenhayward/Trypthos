@@ -613,6 +613,10 @@ export default function App() {
                 state={repoPage}
                 fileTypes={settings.fileTypes.enabled}
                 onOpenExternal={openExternal}
+                // The one repository this page can name that the picker cannot: a fork's upstream
+                // belongs to somebody else, and the picker lists only the account's own.
+                onOpenRepo={(ref) => void actions.openRef(ref)}
+                onRefresh={repoPage.refresh}
                 readImage={client.readImage}
               />
             )

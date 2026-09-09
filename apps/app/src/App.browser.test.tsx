@@ -429,6 +429,19 @@ function shell(overrides: Record<string, unknown> = {}) {
     repoInfo: async () => ({
       ok: true as const,
       stats: {
+        // A picture and a fork line, because both are drawn above the cards - a header that grew
+        // and pushed them off the bottom is exactly what these tests are here to catch.
+        owner: {
+          login: "ada",
+          name: "Ada Lovelace",
+          // A data URL, so the picture is really drawn without the suite reaching the network.
+          avatarUrl:
+            "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%232e7d6b'/%3E%3C/svg%3E",
+        },
+        parent: { fullName: "grace/notes", owner: "grace", name: "notes" },
+        branches: 9,
+        tags: 3,
+        divergence: { ahead: 2, behind: 5 },
         fullName: "ada/notes-0",
         description: "A notebook",
         private: false,
@@ -525,8 +538,8 @@ describe("the repository page, on screen", () => {
   /// so a page that is meant to scroll inside the window instead stretches it, and the measurement
   /// below would be of the container rather than of the layout. The chat tests above do the same
   /// thing for the same reason.
-  async function openPage() {
-    await page.viewport(1280, 860);
+  async function openPage(height = 860) {
+    await page.viewport(1280, height);
     const container = document.createElement("div");
     container.style.cssText = "position:fixed;inset:0";
     document.body.append(container);
@@ -542,12 +555,50 @@ describe("the repository page, on screen", () => {
     shell();
     await openPage();
 
-    for (const label of ["Stars", "Forks", "Language", "Licence", "Last push"]) {
+    for (const label of ["Stars", "Forks", "Branches", "Tags", "Language", "Licence", "Last push"]) {
       const card = screen.getByText(label).getBoundingClientRect();
       expect(card.width, `${label} should have a size`).toBeGreaterThan(0);
       expect(card.top, `${label} should be on screen`).toBeGreaterThanOrEqual(0);
       expect(card.bottom, `${label} should be on screen`).toBeLessThanOrEqual(window.innerHeight + 1);
     }
+  });
+
+  /// The same question, asked of a window somebody actually has.
+  ///
+  /// A frameless Trypthos window on a 1080-tall screen gives the page about 700 pixels, and the
+  /// header above the cards has grown - an owner, a fork line, a description a size larger. The
+  /// picker bug was exactly this shape: content pushed below the bottom of the window, drawn
+  /// perfectly, and invisible. A generous viewport is the one that would not have caught it.
+  it("keeps every card inside a short window", async () => {
+    shell();
+    await openPage(700);
+
+    for (const label of ["Stars", "Tags", "Language", "Last push"]) {
+      const card = screen.getByText(label).getBoundingClientRect();
+      expect(card.width, `${label} should have a size`).toBeGreaterThan(0);
+      expect(card.bottom, `${label} should be on screen`).toBeLessThanOrEqual(window.innerHeight + 1);
+    }
+
+    // And the window itself has not grown a scrollbar to fit it all in, which is the other way this
+    // goes wrong: everything visible, on a page that is taller than the window.
+    expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight + 1);
+  });
+
+  /// The sentence that says what the repository is FOR.
+  ///
+  /// It was the smallest text on a page of numbers, which is backwards - the labels are glanced at
+  /// and this is read. A size is a rendering question, so it is asked here, of the computed value,
+  /// rather than of a class name in a test that would pass for a class that does nothing.
+  it("sets the description larger than the labels around it", async () => {
+    shell();
+    await openPage();
+
+    const size = (element: Element) =>
+      Number.parseFloat(window.getComputedStyle(element).fontSize);
+
+    const description = size(screen.getByText("A notebook"));
+    expect(description).toBeGreaterThan(size(screen.getByText("Stars")));
+    expect(description).toBeGreaterThan(size(screen.getByText(/Default branch/)));
   });
 
   // The README is the long part. It has to scroll inside the page rather than stretch it, or the

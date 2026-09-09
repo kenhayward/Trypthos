@@ -5,6 +5,25 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.64.0",
+    date: "2026-09-09",
+    pr: 133,
+    headline: "A repository page worth looking at",
+    summary:
+      "A repository's page now says who it belongs to. Their picture sits at the top left with the name they go by and their login beside it, and the description underneath is set in the size you read rather than the size a label is set in - it was the smallest text on a page of numbers, which was backwards. There are eight figures across the page instead of six, each with a mark of its own so they can be told apart at a glance: branches and tags have joined stars, forks, issues and pull requests, language, licence and last push. Counting branches and tags is more awkward than it sounds - GitHub has no field that says how many there are - so Trypthos asks for the listing one at a time and reads where it ends. If that request does not come back the card says Unknown rather than showing a repository with no branches, which is impossible as well as wrong. A fork now says what it was forked from, with how far it has moved: so many commits ahead, so many behind. That upstream opens in Trypthos when you click it, which is otherwise out of reach, since the picker lists the repositories you own and the upstream usually belongs to somebody else. Refresh at the top right throws away what the page is holding and asks GitHub again, which is what you want after pushing a commit - and it is there even when the figures failed to load, because a spent rate limit comes back. In the workspace panel, a repository's mark is now a different colour from a folder's: they behave very differently, one can be saved into and the other cannot, and at that size the shape alone was too small a difference down a panel of otherwise identical rows.",
+    added: [
+      "The repository owner's picture, the name they go by and their login, at the top of the page.",
+      "Branch and tag counts, as two more cards. A count that could not be established says Unknown rather than zero.",
+      "A mark on every card, so the figures can be told apart at a glance.",
+      "What a fork was forked from, with how far ahead and behind it has moved. Clicking it opens that repository in Trypthos.",
+      "Refresh, which asks GitHub again rather than showing what the page has been holding since you opened it.",
+    ],
+    changed: [
+      "The description on a repository's page is set in the reading size rather than the label size.",
+      "A repository's mark in the workspace panel is a different colour from a folder's.",
+    ],
+  },
+  {
     version: "0.63.0",
     date: "2026-09-09",
     pr: 132,

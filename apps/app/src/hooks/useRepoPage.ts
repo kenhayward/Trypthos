@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { readmeNameIn, type RepoStats } from "@trypthos/domain";
 import { failureKey } from "./useWorkspace";
 import type { GitHubBridge, WorkspaceClient } from "../lib/workspaceClient";
@@ -28,6 +28,15 @@ export interface RepoPageState {
   readmePath: string | null;
   /// Translation key for a failure to fetch the STATISTICS. A missing README is not a failure.
   errorKey: string | null;
+}
+
+export interface RepoPageActions {
+  /// Throws away what is held for the repository on screen, which is what makes it load again.
+  ///
+  /// The one way anything here is asked of GitHub twice. Holding the answer is right for a page
+  /// somebody keeps returning to and wrong the moment they push a commit - and without this the
+  /// only way to see that commit is to restart the app.
+  refresh(): void;
 }
 
 const IDLE: RepoPageState = {
@@ -80,7 +89,7 @@ export function useRepoPage(
   workspaceId: string | null,
   github: GitHubBridge | null,
   client: WorkspaceClient,
-): RepoPageState {
+): RepoPageState & RepoPageActions {
   /// What came back, by repository.
   ///
   /// **Held rather than refetched.** The page is a tab: the reader leaves it for a file and comes
@@ -130,12 +139,30 @@ export function useRepoPage(
     };
   }, [workspaceId, github, client, answers]);
 
+  /// Forgetting is the whole of refreshing.
+  ///
+  /// Dropping the held answer is what the effect above is watching for - a repository with nothing
+  /// held has not arrived, so it fetches, and the page says it is loading while it does. That is
+  /// one path into the request rather than two, which is what keeps a refresh and a first load from
+  /// drifting into behaving differently.
+  const refresh = useCallback(() => {
+    if (workspaceId === null) return;
+    setAnswers((held) => {
+      // Already on its way. Asking again would start a second request for the same page.
+      if (!(workspaceId in held)) return held;
+
+      const rest = { ...held };
+      delete rest[workspaceId];
+      return rest;
+    });
+  }, [workspaceId]);
+
   // Derived rather than stored. Nothing here is a fetch, so nothing here belongs in an effect.
-  if (workspaceId === null) return IDLE;
+  if (workspaceId === null) return { ...IDLE, refresh };
   // The browser preview has no GitHub half at all. Said plainly rather than left loading, which
   // would be a page that never arrives with nothing to explain it.
-  if (github === null) return { ...IDLE, errorKey: failureKey("not-desktop") };
+  if (github === null) return { ...IDLE, errorKey: failureKey("not-desktop"), refresh };
 
   // A repository with nothing held for it has not arrived yet.
-  return answers[workspaceId] ?? { ...IDLE, loading: true };
+  return { ...(answers[workspaceId] ?? { ...IDLE, loading: true }), refresh };
 }

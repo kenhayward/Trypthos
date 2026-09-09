@@ -5,6 +5,8 @@ const {
   GITHUB_API,
   GitHubBlobSchema,
   GitHubBranchSchema,
+  GitHubComparisonSchema,
+  GitHubRefListSchema,
   GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubRepoSchema,
@@ -13,14 +15,19 @@ const {
   RATE_LIMIT_HEADER,
   USER_AGENT,
   blobUrl,
+  branchCountUrl,
   branchUrl,
+  compareUrl,
+  countFromLink,
   githubErrorFor,
   isSafeRef,
   ownedRepos,
   repoStats,
   repoUrl,
   reposUrl,
+  tagCountUrl,
   treeUrl,
+  userUrl,
 } = require("@trypthos/domain");
 
 /// The calls to GitHub, and nothing else.
@@ -123,7 +130,59 @@ function createGitHubApi({
       return failure("offline");
     }
 
-    return { ok: true, value: parsed.data };
+    // The headers come back with the body because one caller needs them: a branch count is read off
+    // the `Link` header rather than out of the JSON, and GitHub has no field anywhere that carries
+    // it. Nothing else looks at them.
+    return { ok: true, value: parsed.data, headers: response.headers };
+  }
+
+  /// How many items a listing holds, asked as one request.
+  ///
+  /// **Null for anything that did not work.** A count is a decoration on a page that is worth
+  /// reading without it, so a spent rate limit or a repository whose branches this token may not
+  /// list takes the number away rather than the page - and null says "unknown", which is a
+  /// different thing from a repository with no branches.
+  async function countOf(url) {
+    const result = await request(url, GitHubRefListSchema);
+    if (!result.ok) return null;
+    return countFromLink(result.headers.get("link"), result.value.length);
+  }
+
+  /// The display name on an account, or null.
+  ///
+  /// A separate request because a repository does not carry one: it names its owner's login and
+  /// serves their picture, and the name they go by lives only on the profile. Null when the profile
+  /// could not be read, which leaves the page showing a login on its own.
+  async function displayName(login) {
+    const result = await request(userUrl(login), GitHubUserSchema);
+    return result.ok ? result.value.name : null;
+  }
+
+  /// How far a fork has moved from what it was forked from, or null.
+  ///
+  /// Null for a repository that is nobody's fork, which is most of them - and the request is not
+  /// made at all in that case, because a comparison against an upstream that is not there is a
+  /// round trip spent on an hourly budget for no answer.
+  ///
+  /// Null too when the comparison cannot be made: two histories with no common ancestor, or a
+  /// difference too large for GitHub to compute, both of which are ordinary rather than broken.
+  async function aheadBehind(owner, repo, detail) {
+    const parent = detail.parent;
+    if (parent === null || parent === undefined) return null;
+
+    const base = parent.default_branch;
+    const head = detail.default_branch;
+    // A ref git could not have made did not come from GitHub, and is not turned into a URL.
+    if (!isSafeRef(base) || !isSafeRef(head)) return null;
+
+    const url = compareUrl(
+      owner,
+      repo,
+      { owner: parent.owner.login, ref: base },
+      { owner: detail.owner.login, ref: head },
+    );
+    const result = await request(url, GitHubComparisonSchema);
+    return result.ok ? { ahead: result.value.ahead_by, behind: result.value.behind_by } : null;
   }
 
   /// Who the stored token belongs to.
@@ -182,9 +241,25 @@ function createGitHubApi({
   /// A separate call from the picker's listing rather than something carried on it: the listing
   /// fetches a hundred repositories at a time and needs a name, and this needs everything about
   /// exactly one. Made when the page opens, so a user who never opens one never asks for it.
+  /// **Five requests, and only the first of them can fail the page.** The repository itself is what
+  /// the page IS; the display name, the two counts and the comparison with an upstream are figures
+  /// GitHub keeps nowhere else, and every one of them is a decoration on a page that is worth
+  /// reading without it. So they are gathered together - they do not depend on each other, and a
+  /// page that waited for each in turn would take four times as long for no reason - and each one
+  /// answers null rather than throwing.
   async function repoStatistics(owner, repo) {
     const result = await request(repoUrl(owner, repo), GitHubRepoDetailSchema);
-    return result.ok ? { ok: true, stats: repoStats(result.value) } : result;
+    if (!result.ok) return result;
+
+    const detail = result.value;
+    const [ownerName, branches, tags, divergence] = await Promise.all([
+      displayName(detail.owner.login),
+      countOf(branchCountUrl(owner, repo)),
+      countOf(tagCountUrl(owner, repo)),
+      aheadBehind(owner, repo, detail),
+    ]);
+
+    return { ok: true, stats: repoStats(detail, { ownerName, branches, tags, divergence }) };
   }
 
   /// Every path in the repository at one commit, in a single request.
