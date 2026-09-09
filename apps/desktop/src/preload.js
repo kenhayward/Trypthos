@@ -120,6 +120,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// The repositories the connected account owns. Fetched in the main process, where the token is,
   /// and held for the session - `refresh` is for a user who has just made one.
   listRepositories: (refresh = false) => ipcRenderer.invoke("github:repos", { refresh }),
+  /// The statistics one repository's own page draws. Named by an OPEN workspace, never by owner and
+  /// repository - see the note at the top of this file.
+  repoInfo: (workspaceId) => ipcRenderer.invoke("github:repoInfo", { workspaceId }),
 
   /// Opens a native menu under the label the renderer drew.
   ///

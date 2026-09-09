@@ -63,6 +63,10 @@ function fakeGitHubFactory({ valid = "ghp_good", repos = [], calls = {} } = {}) 
       return { ok: true, repos };
     },
     defaultBranchHead: async () => ({ ok: true, branch: "main", sha: "c0ffee" }),
+    repoStatistics: async (owner, repo) => ({
+      ok: true,
+      stats: { fullName: `${owner}/${repo}`, stars: 12, forks: 3, issuesAndPullRequests: 4 },
+    }),
     tree: async () => ({ ok: true, entries: TREE, truncated: false }),
     blob: async (_owner, _repo, sha) =>
       sha === "b2" ? { ok: true, bytes: Buffer.from("guide") } : { ok: false, reason: "not-found" },
@@ -362,6 +366,10 @@ test("tells the renderer when a repository could not be listed in full", async (
         whoami: async () => ({ ok: true, login: "ada" }),
         ownedRepositories: async () => ({ ok: true, repos: [] }),
         defaultBranchHead: async () => ({ ok: true, branch: "main", sha: "c0ffee" }),
+    repoStatistics: async (owner, repo) => ({
+      ok: true,
+      stats: { fullName: `${owner}/${repo}`, stars: 12, forks: 3, issuesAndPullRequests: 4 },
+    }),
         tree: async () => ({ ok: true, entries: TREE, truncated: true }),
         blob: async () => ({ ok: false, reason: "not-found" }),
       }),
@@ -426,4 +434,47 @@ test("the shell makes its GitHub requests through Electron's network stack", () 
     /createGitHubApi\(\{[^}]*fetch:[^}]*net\.fetch/,
     "createGitHubApi must be given net.fetch",
   );
+});
+
+/// The repository page's statistics.
+test("answers with the statistics for an open repository", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    await ipcMain.invoke("github:connect", { token: "ghp_good" });
+    const opened = await ipcMain.invoke("workspace:openRef", {
+      ref: { kind: "github", owner: "ada", repo: "statsrepo" },
+    });
+
+    const info = await ipcMain.invoke("github:repoInfo", { workspaceId: opened.workspace.id });
+    assert.equal(info.ok, true);
+    assert.equal(info.stats.fullName, "ada/statsrepo");
+    assert.equal(info.stats.stars, 12);
+  });
+});
+
+// A local folder has no repository behind it. Refused rather than answered with empty numbers,
+// which would read as a repository with nothing in it.
+test("refuses statistics for a folder that is not a repository", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-stats-local-"));
+    try {
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "local", root: dir } });
+      assert.deepEqual(await ipcMain.invoke("github:repoInfo", { workspaceId: opened.workspace.id }), {
+        ok: false,
+        reason: "unsupported",
+      });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// The renderer names a workspace id, which is a thing this side made up - and one it has closed, or
+// never minted, names nothing.
+test("refuses statistics for a workspace that is not open", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    assert.deepEqual(await ipcMain.invoke("github:repoInfo", { workspaceId: "never-opened" }), {
+      ok: false,
+      reason: "no-workspace",
+    });
+  });
 });

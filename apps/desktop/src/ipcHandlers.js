@@ -19,6 +19,7 @@ const {
   CloseWorkspaceRequest,
   ConnectGitHubRequest,
   ListReposRequest,
+  RepoInfoRequest,
   OpenWorkspaceRefRequest,
   workspaceRefKey,
   FilterRequest,
@@ -629,6 +630,25 @@ function registerIpcHandlers({
 
     repositories = result.repos;
     return { ok: true, repos: result.repos };
+  });
+
+  /// The statistics one repository's own page draws.
+  ///
+  /// Named by an OPEN workspace, never by owner and repository: the shell holds what is open, and a
+  /// renderer that could name any repository could ask GitHub about ones the user never opened. The
+  /// reference on that workspace is where the owner and name come from.
+  ipcMain.handle("github:repoInfo", async (_event, payload) => {
+    const parsed = RepoInfoRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+    if (github === null) return { ok: false, reason: "unsupported" };
+
+    const workspace = open.get(parsed.data.workspaceId);
+    if (workspace === undefined) return { ok: false, reason: "no-workspace" };
+    // A local folder has no repository behind it. Refused rather than answered with empty numbers,
+    // which would read as a repository with nothing in it.
+    if (workspace.ref.kind !== "github") return { ok: false, reason: "unsupported" };
+
+    return await github.repoStatistics(workspace.ref.owner, workspace.ref.repo);
   });
 
   ipcMain.handle("workspace:open", async () => {

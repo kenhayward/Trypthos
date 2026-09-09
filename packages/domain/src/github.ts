@@ -45,6 +45,74 @@ export const GitHubRepoSchema = z.object({
 
 export const GitHubRepoListSchema = z.array(GitHubRepoSchema);
 
+/// One repository in full, as its own page shows it.
+///
+/// A separate schema from `GitHubRepoSchema` rather than more optional fields on it: the picker
+/// needs a name and an owner for a hundred repositories at a time, and this needs everything about
+/// exactly one. Two shapes say which call each belongs to.
+///
+/// **`watchers_count` is deliberately absent.** It is a legacy alias for the STAR count, not the
+/// number of people watching - real watchers are `subscribers_count`. A page drawing it beside stars
+/// would print the same number twice under two different labels.
+export const GitHubRepoDetailSchema = GitHubRepoSchema.extend({
+  stargazers_count: z.number().catch(0),
+  forks_count: z.number().catch(0),
+  /// **Issues AND pull requests.** GitHub counts both here, and there is no field that separates
+  /// them without a second request - so the card is labelled for what this actually is.
+  open_issues_count: z.number().catch(0),
+  language: z.string().nullable().catch(null),
+  license: z.object({ spdx_id: z.string(), name: z.string() }).nullable().catch(null),
+  topics: z.array(z.string()).catch([]),
+  archived: z.boolean().catch(false),
+  html_url: z.string().catch(""),
+  homepage: z.string().nullable().catch(null),
+});
+
+/// What a repository's page draws. Our shape, not GitHub's - see `RepoSummary` for why.
+export interface RepoStats {
+  fullName: string;
+  description: string | null;
+  private: boolean;
+  archived: boolean;
+  topics: readonly string[];
+  defaultBranch: string;
+  url: string;
+  homepage: string | null;
+  stars: number;
+  forks: number;
+  /// GitHub counts pull requests in this as well as issues, and the card says so. A figure labelled
+  /// "issues" that silently included pull requests would be a wrong answer given confidently.
+  issuesAndPullRequests: number;
+  language: string | null;
+  license: string | null;
+  pushedAt: string | null;
+}
+
+/// The identifier GitHub uses for a licence it could not recognise. Not something to print.
+const UNIDENTIFIED_LICENCE = "NOASSERTION";
+
+export function repoStats(detail: z.infer<typeof GitHubRepoDetailSchema>): RepoStats {
+  const spdx = detail.license?.spdx_id ?? null;
+
+  return {
+    fullName: detail.full_name,
+    description: detail.description,
+    private: detail.private,
+    archived: detail.archived,
+    topics: detail.topics,
+    defaultBranch: detail.default_branch,
+    url: detail.html_url,
+    // An empty homepage is how GitHub spells "none" as often as null, and a blank link is not a link.
+    homepage: detail.homepage === null || detail.homepage.trim() === "" ? null : detail.homepage,
+    stars: detail.stargazers_count,
+    forks: detail.forks_count,
+    issuesAndPullRequests: detail.open_issues_count,
+    language: detail.language,
+    license: spdx === null || spdx === UNIDENTIFIED_LICENCE ? null : spdx,
+    pushedAt: detail.pushed_at,
+  };
+}
+
 /// One entry of a git tree. `mode` matters as much as `type`: a symlink and a document are both
 /// blobs, and only the mode tells them apart.
 export const GitHubTreeEntrySchema = z.object({

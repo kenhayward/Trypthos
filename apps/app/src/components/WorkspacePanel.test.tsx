@@ -43,6 +43,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     dirtyPaths: [] as readonly string[],
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
+    onOpenRepoPage: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),

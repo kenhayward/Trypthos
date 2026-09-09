@@ -316,3 +316,39 @@ test("passes an abort signal on every request", async () => {
   assert.equal(signals.length, 1);
   assert.ok(signals[0] instanceof AbortSignal, "a request must be abortable");
 });
+
+test("fetches one repository in full, as its own page shows it", async () => {
+  const { api } = apiWith({
+    "https://api.github.com/repos/ada/notes": jsonResponse({
+      name: "notes",
+      full_name: "ada/notes",
+      owner: { login: "ada" },
+      private: false,
+      default_branch: "main",
+      description: "A notebook",
+      pushed_at: "2026-01-02T00:00:00Z",
+      stargazers_count: 12,
+      forks_count: 3,
+      open_issues_count: 4,
+      language: "TypeScript",
+      license: { spdx_id: "MIT", name: "MIT License" },
+      topics: ["notes"],
+      archived: false,
+      html_url: "https://github.com/ada/notes",
+      homepage: null,
+    }),
+  });
+
+  const result = await api.repoStatistics("ada", "notes");
+  assert.equal(result.ok, true);
+  assert.equal(result.stats.stars, 12);
+  assert.equal(result.stats.license, "MIT");
+  assert.equal(result.stats.issuesAndPullRequests, 4);
+});
+
+test("reports a repository whose statistics cannot be read", async () => {
+  const { api } = apiWith({
+    "https://api.github.com/repos/ada/gone": jsonResponse({}, { status: 404 }),
+  });
+  assert.deepEqual(await api.repoStatistics("ada", "gone"), { ok: false, reason: "not-found" });
+});

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GITHUB_API,
+  GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubTreeSchema,
   blobEntryFor,
@@ -11,6 +12,7 @@ import {
   matchRepos,
   ownedRepos,
   repoRefFor,
+  repoStats,
   repoUrl,
   reposUrl,
   treeNodesAt,
@@ -286,5 +288,98 @@ describe("what a failing response means", () => {
     expect(githubErrorFor(500, null)).toBe("offline");
     expect(githubErrorFor(502, null)).toBe("offline");
     expect(githubErrorFor(418, null)).toBe("offline");
+  });
+});
+
+describe("the statistics a repository page shows", () => {
+  const DETAIL = {
+    name: "notes",
+    full_name: "ada/notes",
+    owner: { login: "ada" },
+    private: true,
+    default_branch: "main",
+    description: "A private notebook",
+    pushed_at: "2026-01-02T00:00:00Z",
+    stargazers_count: 1234,
+    forks_count: 56,
+    open_issues_count: 7,
+    language: "TypeScript",
+    license: { spdx_id: "MIT", name: "MIT License" },
+    topics: ["notes", "markdown"],
+    archived: false,
+    html_url: "https://github.com/ada/notes",
+    homepage: "https://example.com",
+  };
+
+  it("carries what the six cards draw", () => {
+    expect(repoStats(GitHubRepoDetailSchema.parse(DETAIL))).toEqual({
+      fullName: "ada/notes",
+      description: "A private notebook",
+      private: true,
+      archived: false,
+      topics: ["notes", "markdown"],
+      defaultBranch: "main",
+      url: "https://github.com/ada/notes",
+      homepage: "https://example.com",
+      stars: 1234,
+      forks: 56,
+      // GitHub counts pull requests in this number as well as issues. The card says so, because a
+      // figure labelled "issues" that silently includes pull requests is a wrong answer.
+      issuesAndPullRequests: 7,
+      language: "TypeScript",
+      license: "MIT",
+      pushedAt: "2026-01-02T00:00:00Z",
+    });
+  });
+
+  // A repository with no licence, no language and no description is ordinary, and every one of
+  // these is absent rather than zero - the card says so rather than drawing a blank.
+  it("reads an absent licence, language and description as absent", () => {
+    const bare = repoStats(
+      GitHubRepoDetailSchema.parse({
+        ...DETAIL,
+        description: null,
+        language: null,
+        license: null,
+        topics: [],
+        homepage: null,
+      }),
+    );
+
+    expect(bare.license).toBe(null);
+    expect(bare.language).toBe(null);
+    expect(bare.description).toBe(null);
+    expect(bare.homepage).toBe(null);
+    expect(bare.topics).toEqual([]);
+  });
+
+  // A licence GitHub cannot identify comes back with the spdx id "NOASSERTION", which is not
+  // something to print on a card.
+  it("treats an unidentified licence as none", () => {
+    const parsed = GitHubRepoDetailSchema.parse({
+      ...DETAIL,
+      license: { spdx_id: "NOASSERTION", name: "Other" },
+    });
+    expect(repoStats(parsed).license).toBe(null);
+  });
+
+  /// The trap in GitHub's API.
+  ///
+  /// `watchers_count` is a legacy alias for the STAR count - it is not the number of people
+  /// watching. Real watchers are `subscribers_count`. A page showing `watchers_count` beside stars
+  /// would print the same number twice under two different labels, which is why neither the schema
+  /// nor the statistics carry it.
+  it("does not mistake the legacy watchers field for anything", () => {
+    const parsed = GitHubRepoDetailSchema.parse({ ...DETAIL, watchers_count: 1234, subscribers_count: 9 });
+    const stats = repoStats(parsed);
+    expect(Object.keys(stats)).not.toContain("watchers");
+    expect(JSON.stringify(stats)).not.toContain("9");
+  });
+
+  // Someone else's JSON: fields we do not read are dropped, and fields that grow do not break it.
+  it("tolerates a response that has grown fields", () => {
+    expect(() =>
+      GitHubRepoDetailSchema.parse({ ...DETAIL, some_new_field: { of: "any shape" } }),
+    ).not.toThrow();
   });
 });

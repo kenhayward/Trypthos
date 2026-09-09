@@ -12,6 +12,7 @@ import {
   parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
+  repoPageWorkspaceId,
   sameWorkspaceRef,
   splitQualified,
   type FindMatch,
@@ -20,6 +21,7 @@ import {
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
+import RepoPage from "./components/RepoPage";
 import FindDialog from "./components/FindDialog";
 import EditorPanel from "./components/EditorPanel";
 import type { EditorHandle, EditorSelection } from "./components/DocumentEditor";
@@ -36,6 +38,7 @@ import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind } from "./hooks/useFind";
 import { builtInTitleKey } from "./lib/builtInDocuments";
@@ -519,6 +522,13 @@ export default function App() {
   );
   const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
 
+  /// The repository whose page is on screen, or null for every ordinary document.
+  ///
+  /// Read from the ACTIVE PATH rather than held as its own state: the path is the document's
+  /// identity, so there is one answer to "what is on screen" rather than two that can disagree.
+  const repoPageId = repoPageWorkspaceId(state.activePath ?? "");
+  const repoPage = useRepoPage(repoPageId, github, client);
+
   /// What the window is called after the app's own name: the file on screen, or the built-in
   /// document's title. Its path is not a name a user would recognise.
   const titleKey = builtInTitleKey(state.activePath);
@@ -573,6 +583,7 @@ export default function App() {
           selectedFolder={state.selectedFolder}
           onSelectFolder={actions.selectFolder}
           onCloseWorkspace={(workspaceId) => void actions.closeWorkspace(workspaceId)}
+          onOpenRepoPage={actions.openRepoPage}
           onOpenFileTypes={() => setSettingsOn("fileTypes")}
         />
             <PanelDivider
@@ -595,6 +606,15 @@ export default function App() {
           value={state.content}
           readOnly={state.readOnly}
           media={state.media}
+          page={
+            repoPageId === null ? null : (
+              <RepoPage
+                state={repoPage}
+                fileTypes={settings.fileTypes.enabled}
+                onOpenExternal={openExternal}
+              />
+            )
+          }
           defaultMode={settings.editor.defaultViewMode}
           fileTypes={settings.fileTypes.enabled}
           onActivateFile={actions.activateFile}

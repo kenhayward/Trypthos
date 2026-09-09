@@ -17,6 +17,7 @@ import {
   draftPath,
   openDocument,
   qualifyPath,
+  repoPagePath,
   renameDocument,
   splitQualified,
   updateContent,
@@ -131,6 +132,12 @@ export interface WorkspaceActions {
   /// workspace, and nothing here should have to know how to find it. Read-only and never written,
   /// which is what keeps it out of the save path and out of the prompt about unsaved work.
   openGuide(content: string): void;
+  /// Opens a repository's own page, or goes to it if it is already open.
+  ///
+  /// A document like the markdown guide: a reserved path, read-only, and nothing behind it on disk.
+  /// What it shows is fetched by the page itself when it opens - a repository's star count is not
+  /// the sort of thing a document's `content` holds.
+  openRepoPage(workspaceId: string): void;
   /// Opens a document that has never been saved - File > New.
   ///
   /// It has a name and nowhere to be. Where it goes is answered by the save dialog the first time it
@@ -790,6 +797,20 @@ export function useWorkspace(
           }),
         };
       }),
+    openRepoPage: (workspaceId: string) =>
+      setInternal((prev) => ({
+        ...prev,
+        documents: openDocument(prev.documents, {
+          path: repoPagePath(workspaceId),
+          // Nothing, deliberately. The page fetches what it draws; `content` is what the editor
+          // holds and what chat sends, and neither wants a repository's statistics.
+          content: "",
+          // A revision nothing will ever present: this page is never read from disk and never
+          // written back, so it exists only because every document carries one.
+          revision: { id: "repository" },
+          readOnly: true,
+        }),
+      })),
     openGuide: (content: string) =>
       setInternal((prev) => ({
         ...prev,

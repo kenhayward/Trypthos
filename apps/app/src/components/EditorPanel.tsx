@@ -43,6 +43,12 @@ interface Props {
   /// A data URL when the document is looked at rather than read - an image. Null otherwise, which
   /// is nearly always, and which is what makes every branch below read as "unless it is a picture".
   media?: string | null;
+  /// A document that is a PAGE rather than a file - a repository's own page.
+  ///
+  /// A slot rather than data, so this component stays ignorant of what is in it: the alternative is
+  /// drilling a GitHub bridge and a workspace client through the editor, which has no business
+  /// knowing either exists. Null for every ordinary document, which is nearly all of them.
+  page?: React.ReactNode;
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
@@ -114,6 +120,7 @@ export default function EditorPanel({
   value,
   readOnly = false,
   media = null,
+  page = null,
   onChange,
   onActivateFile,
   onCloseFile,
@@ -269,19 +276,25 @@ export default function EditorPanel({
         />
         {/* Nothing to switch between for an image, and a header offering three views of a
             photograph would be three buttons that do nothing. */}
-        {media === null && (
+        {media === null && page === null && (
           <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
         )}
       </div>
 
       {/* Source only. Live hides the markers a press writes, so the same button in that view would
           insert punctuation that disappears as it lands, and Preview has nothing to write into. */}
-      {media === null && mode === "source" && !readOnly && fileType.id === "markdown" && (
-        <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
-      )}
+      {page === null &&
+        media === null &&
+        mode === "source" &&
+        !readOnly &&
+        fileType.id === "markdown" && (
+          <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
+        )}
 
       <div className="min-h-0 grow">
-        {media !== null ? (
+        {page !== null ? (
+          page
+        ) : media !== null ? (
           // A picture, drawn rather than edited. It scrolls within the panel at its own size rather
           // than being scaled to fit, because a screenshot shrunk to a panel is a screenshot you
           // cannot read - and Shift and the wheel are how you get it back.
@@ -322,7 +335,7 @@ export default function EditorPanel({
 
       {/* A word count and a caret position are questions about text. For a picture the status bar
           would be four fields, three of which are lies about a file with no lines in it. */}
-      {media === null && (
+      {media === null && page === null && (
         <EditorStatusBar
           mode={mode}
           fileTypeKey={fileType.labelKey}

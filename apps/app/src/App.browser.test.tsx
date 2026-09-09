@@ -371,42 +371,73 @@ describe("two folders open at once", () => {
 /// is not being drawn. That is a question about BOXES: whether the panel has a size and whether it is
 /// on screen. jsdom answers zero to every measurement it is asked, so it cannot be asked here - it
 /// happily reported this dialog as open and correct.
-describe("the GitHub repository picker, on screen", () => {
-  // Enough that the natural height of the list is far taller than any plausible window. That is the
-  // condition the bug needed: with a short list the panel fits and centres correctly, which is why
-  // twelve of them passed while a real account's sixty did not.
-  const REPOS = Array.from({ length: 60 }, (_, at) => ({
-    owner: "ada",
-    name: `notes-${at}`,
-    fullName: `ada/notes-${at}`,
-    private: at % 2 === 0,
-    defaultBranch: "main",
-    description: at % 3 === 0 ? "A repository with a description on it" : null,
-    pushedAt: null,
-  }));
+// Enough that the natural height of the list is far taller than any plausible window. That is the
+// condition the bug needed: with a short list the panel fits and centres correctly, which is why
+// twelve of them passed while a real account's sixty did not.
+const REPOS = Array.from({ length: 60 }, (_, at) => ({
+  owner: "ada",
+  name: `notes-${at}`,
+  fullName: `ada/notes-${at}`,
+  private: at % 2 === 0,
+  defaultBranch: "main",
+  description: at % 3 === 0 ? "A repository with a description on it" : null,
+  pushedAt: null,
+}));
 
-  function shell(overrides: Record<string, unknown> = {}) {
-    window.trypthos = {
-      ...browserClient,
-      isDesktop: true,
-      readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
-      writeSettings: async () => {},
-      listDirectory: async () => ({ ok: true as const, nodes: [] }),
-      githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
-      connectGitHub: async () => ({ ok: true as const, login: "ada" }),
-      disconnectGitHub: async () => ({ ok: true }),
-      listRepositories: async () => ({ ok: true as const, repos: REPOS }),
-      openWorkspaceRef: async (ref: unknown) => ({
-        ok: true as const,
-        workspace: { id: "notes-0", name: "notes-0", ref, truncated: false },
-      }),
-      onWindowState: () => () => {},
-      onCloseRequested: () => () => {},
-      onMenuAction: () => () => {},
-      onOpenTarget: () => () => {},
-      ...overrides,
-    } as unknown as typeof window.trypthos;
-  }
+function shell(overrides: Record<string, unknown> = {}) {
+  window.trypthos = {
+    ...browserClient,
+    isDesktop: true,
+    readSettings: async () => ({ ok: true as const, settings: DEFAULT_SETTINGS }),
+    writeSettings: async () => {},
+    listDirectory: async () => ({
+      ok: true as const,
+      nodes: [{ id: "notes-0/README.md", name: "README.md", kind: "file" as const }],
+    }),
+    githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
+    connectGitHub: async () => ({ ok: true as const, login: "ada" }),
+    disconnectGitHub: async () => ({ ok: true }),
+    listRepositories: async () => ({ ok: true as const, repos: REPOS }),
+    openWorkspaceRef: async (ref: unknown) => ({
+      ok: true as const,
+      workspace: { id: "notes-0", name: "notes-0", ref, truncated: false },
+    }),
+    readFile: async () => ({
+      ok: true as const,
+      // Long enough that it must scroll rather than stretch the page.
+      content: ["# The repository", ...Array.from({ length: 120 }, (_, at) => `Paragraph ${at}.`)].join(
+        "\n\n",
+      ),
+      revision: { id: "b1" },
+    }),
+    repoInfo: async () => ({
+      ok: true as const,
+      stats: {
+        fullName: "ada/notes-0",
+        description: "A notebook",
+        private: false,
+        archived: false,
+        topics: ["notes"],
+        defaultBranch: "main",
+        url: "https://github.com/ada/notes-0",
+        homepage: null,
+        stars: 1234,
+        forks: 56,
+        issuesAndPullRequests: 7,
+        language: "TypeScript",
+        license: "MIT",
+        pushedAt: "2026-01-02T00:00:00Z",
+      },
+    }),
+    onWindowState: () => () => {},
+    onCloseRequested: () => () => {},
+    onMenuAction: () => () => {},
+    onOpenTarget: () => () => {},
+    ...overrides,
+  } as unknown as typeof window.trypthos;
+}
+
+describe("the GitHub repository picker, on screen", () => {
 
   /// The panel inside the backdrop - the thing the user says disappears.
   function panelBox() {
@@ -463,5 +494,69 @@ describe("the GitHub repository picker, on screen", () => {
     const cancel = screen.getByRole("button", { name: "Cancel" }).getBoundingClientRect();
     expect(cancel.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
     expect(cancel.height).toBeGreaterThan(0);
+  });
+});
+
+/// A repository's own page, measured.
+///
+/// The cards are pinned and the README scrolls under them. That is a question about boxes, and it is
+/// the one that went wrong last time a panel was added: jsdom answers zero to every measurement and
+/// reported the picker as correct while it was drawn off the bottom of the window.
+describe("the repository page, on screen", () => {
+  /// Renders the app into a container the size of the window.
+  ///
+  /// Testing library's own container is an unsized div, in which every panel sizes to its content -
+  /// so a page that is meant to scroll inside the window instead stretches it, and the measurement
+  /// below would be of the container rather than of the layout. The chat tests above do the same
+  /// thing for the same reason.
+  async function openPage() {
+    await page.viewport(1280, 860);
+    const container = document.createElement("div");
+    container.style.cssText = "position:fixed;inset:0";
+    document.body.append(container);
+    render(<App />, { container });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await userEvent.click(await screen.findByRole("button", { name: /ada\/notes-0/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "notes-0" }));
+    await screen.findByText("Stars");
+  }
+
+  it("keeps every card inside the window", async () => {
+    shell();
+    await openPage();
+
+    for (const label of ["Stars", "Forks", "Language", "Licence", "Last push"]) {
+      const card = screen.getByText(label).getBoundingClientRect();
+      expect(card.width, `${label} should have a size`).toBeGreaterThan(0);
+      expect(card.top, `${label} should be on screen`).toBeGreaterThanOrEqual(0);
+      expect(card.bottom, `${label} should be on screen`).toBeLessThanOrEqual(window.innerHeight + 1);
+    }
+  });
+
+  // The README is the long part. It has to scroll inside the page rather than stretch it, or the
+  // cards are pushed off the top and the window grows a scrollbar of its own.
+  it("scrolls the README under the cards, rather than stretching the page", async () => {
+    shell();
+    await openPage();
+
+    const heading = await screen.findByRole("heading", { name: "The repository" });
+    // The nearest ancestor that actually scrolls.
+    let scroller: HTMLElement | null = heading.parentElement;
+    while (scroller !== null && scroller.scrollHeight <= scroller.clientHeight + 1) {
+      scroller = scroller.parentElement;
+    }
+
+    expect(scroller, "the README should sit in something that scrolls").not.toBeNull();
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight);
+
+    // The cards stay where they are while the prose moves under them - which is the whole point of
+    // pinning them.
+    const before = screen.getByText("Stars").getBoundingClientRect().top;
+    scroller!.scrollTop = 400;
+    expect(screen.getByText("Stars").getBoundingClientRect().top).toBe(before);
+
+    // And the scrolling region ends inside the window rather than running past the bottom of it.
+    expect(scroller!.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1);
   });
 });
