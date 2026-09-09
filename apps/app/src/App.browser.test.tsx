@@ -627,3 +627,55 @@ describe("the repository page, on screen", () => {
     expect(scroller!.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1);
   });
 });
+
+/// The commit dialog, measured.
+///
+/// A new dialog is exactly the shape of the bug that cost three releases: drawn perfectly, below the
+/// bottom of the window, with the backdrop still covering the screen so it reads as having vanished.
+/// It is centred the same way the repository picker now is, and this is what says so.
+describe("the commit dialog, on screen", () => {
+  function panel() {
+    const dialog = document.querySelector('[role="dialog"][aria-label="Save to GitHub"]');
+    return dialog?.firstElementChild?.getBoundingClientRect() ?? null;
+  }
+
+  async function saveARepositoryFile(height: number) {
+    await page.viewport(1280, height);
+    const container = document.createElement("div");
+    container.style.cssText = "position:fixed;inset:0";
+    document.body.append(container);
+    render(<App />, { container });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await userEvent.click(await screen.findByRole("button", { name: /ada\/notes-0/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "README.md" }));
+    await userEvent.keyboard("{Control>}s{/Control}");
+    await screen.findByRole("dialog", { name: "Save to GitHub" });
+  }
+
+  it("draws the whole dialog inside the window", async () => {
+    shell();
+    await saveARepositoryFile(860);
+
+    const box = panel();
+    expect(box).not.toBeNull();
+    expect(box!.height, "a dialog with no height is one that is not there").toBeGreaterThan(80);
+    expect(box!.top).toBeGreaterThanOrEqual(0);
+    expect(box!.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
+  });
+
+  // A short window is where a dialog goes off the bottom, and it is the case a generous viewport
+  // would never catch. Commit in particular has to stay reachable: a dialog whose only button is
+  // below the screen is a save that cannot be finished or cancelled.
+  it("keeps Commit reachable in a short window", async () => {
+    shell();
+    await saveARepositoryFile(560);
+
+    const commit = screen
+      .getByRole("button", { name: "Commit" })
+      .getBoundingClientRect();
+    expect(commit.height).toBeGreaterThan(0);
+    expect(commit.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
+    expect(commit.top).toBeGreaterThanOrEqual(0);
+  });
+});

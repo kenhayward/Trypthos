@@ -208,7 +208,10 @@
     "rateLimited": "GitHub has had as many requests as it allows for now. Trypthos will work again shortly - usually within the hour.",
     "offline": "Trypthos could not reach GitHub. Check your connection and try again.",
     "notConnected": "No GitHub account is connected. Connect one from the Accounts page of Settings.",
-    "unsupported": "Trypthos cannot do that here. Repositories open read-only for now - saving to GitHub is not built yet.",
+    "unsupported": "Trypthos cannot do that here.",
+    "noBranch": "Saving to a repository makes a commit, and nowhere has been chosen for it to go. Save again to choose a branch.",
+    "branchExists": "That branch already exists. Choose another name, or commit to the branch that is already there.",
+    "readOnlyToken": "Your GitHub token can read but not write. Create one at github.com/settings/tokens with write access to your repositories, then reconnect from the Accounts page of Settings.",
     "encryptionUnavailable": "This machine could not encrypt the token, so it was not saved. Trypthos never stores a credential in plain text.",
     "unknown": "Something went wrong."
   },
@@ -390,8 +393,22 @@
     "noMatches": "No repositories match.",
     "private": "Private",
     "cancel": "Cancel",
-    "readOnlyNote": "Repositories open read-only. Trypthos reads the default branch; saving back to GitHub is not built yet.",
+    "readOnlyNote": "A repository opens at its default branch. Saving makes a commit - Trypthos asks which branch it goes to the first time you save.",
     "browserOnly": "Connecting to GitHub needs the desktop app. This is the browser preview."
+  },
+  "commit": {
+    "title": "Save to GitHub",
+    "blurb": "Saving {{name}} to a repository makes a commit. Choose where it goes - this is asked once per repository.",
+    "commitTo": "Commit to",
+    "newBranch": "A new branch",
+    "branchName": "Branch name",
+    "existingBranch": "An existing branch",
+    "chooseBranch": "Choose a branch",
+    "message": "Message",
+    "invalidBranch": "Git will not accept that name. Avoid spaces, and the characters ~ ^ : ? * and backslash.",
+    "note": "Every save after this one commits straight to the chosen branch.",
+    "cancel": "Cancel",
+    "commit": "Commit"
   },
   "repo": {
     "loading": "Loading repository information...",

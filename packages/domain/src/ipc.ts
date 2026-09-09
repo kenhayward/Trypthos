@@ -54,6 +54,8 @@ export const IPC_CHANNELS = [
   "github:disconnect",
   "github:repos",
   "github:repoInfo",
+  "github:branches",
+  "github:setBranch",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -220,6 +222,31 @@ export const RepoInfoRequest = z.object({ workspaceId: z.string().min(1) }).stri
 
 export type RepoInfoRequest = z.infer<typeof RepoInfoRequest>;
 
+/// Where a repository's saves should go.
+///
+/// Named by the open workspace for the same reason everything else here is: the shell holds what is
+/// open, and a renderer that could name a repository could commit to one the user never opened.
+///
+/// `create` is what tells cutting a branch from moving to one. They are different acts with
+/// different failures - one can find the name already taken, the other can find no such branch -
+/// and a single call that guessed from whether the name exists would race between the guess and the
+/// act.
+export const SetBranchRequest = z
+  .object({
+    workspaceId: z.string().min(1),
+    /// Bounded, and checked against git's own rules in the main process before it becomes a URL.
+    branch: z.string().min(1).max(255),
+    create: z.boolean(),
+  })
+  .strict();
+
+export type SetBranchRequest = z.infer<typeof SetBranchRequest>;
+
+/// The branches a repository has, for the picker in the save dialog.
+export const BranchesRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+export type BranchesRequest = z.infer<typeof BranchesRequest>;
+
 /// Closing one of the open workspaces.
 ///
 /// A workspace is named by the id the MAIN PROCESS minted for it, never by its root. That is the
@@ -245,6 +272,12 @@ export const WriteRequest = z
     /// "overwrite whatever is there", which is the precise accident the revision exists to prevent -
     /// so creating a file has to say so.
     expectedRevision: RevisionSchema.nullable(),
+    /// What the commit should say, for a provider whose write IS a commit.
+    ///
+    /// Null everywhere else, and ignored by every backend that has no history. Bounded because a
+    /// commit message is a line, not a document, and the renderer is untrusted about length as much
+    /// as about anything else.
+    message: z.string().min(1).max(500).nullable().default(null),
   })
   .strict();
 

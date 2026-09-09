@@ -361,7 +361,7 @@ character too far right.
 
 ## Storage providers
 
-Order: local (**built**), GitHub (**built, read-only**), OneDrive, Google Drive, Dropbox.
+Order: local (**built**), GitHub (**built; reads, and commits to a branch**), OneDrive, Google Drive, Dropbox.
 
 ### A workspace is named by a reference
 
@@ -528,6 +528,46 @@ routing it through the main process would buy nothing - and README badges alread
 editor stays ignorant of GitHub: the alternative is drilling a GitHub bridge and a workspace client
 through it. The slot's parent is a plain block with a definite height, not a flex container, so the
 page fills it with `h-full` exactly as the image viewer and the editor do.
+
+### Writing to a repository
+
+A save is a **commit on a branch**, and there is no separate push: GitHub's Contents endpoint
+(`PUT /repos/{o}/{r}/contents/{path}`) commits on the server, so the write, the commit and the push
+are one request. Creating a branch is `POST /git/refs` with `refs/heads/<name>` and the commit to
+start at. The whole flow is at most two requests.
+
+**The awkward part is not the request.** A repository holds its whole tree in memory and is pinned to
+a commit, and a commit makes both stale: the blob sha for the path just written is now the OLD one.
+Leave it and the next read of that file fetches the bytes from before the save - the user saves,
+reopens, and reads their old text back, which is the editor reporting a save it did not make by
+another route. So `write` advances the pin to `commit.sha`, replaces that path's entry with
+`content.sha`, and caches the bytes it just sent. The two shas are different things and confusing
+them would make every second save conflict.
+
+**Nothing is committed until the user has said where.** `writeBranch` starts null and `write` refuses
+with `no-branch` until it is not - committing to the default branch by default is how somebody pushes
+to `main` without meaning to. `startBranch` cuts a branch at the pinned commit (no refetch: the new
+branch points at the same commit, so the tree in hand is the right one); `useBranch` moves to an
+existing one and refetches the tree, and **the workspace follows**, because commits landing where the
+browser cannot see them is how Find in Files ends up searching one branch while the edits are on
+another.
+
+A conflict is GitHub's 409 - the sha presented is not current - and it comes back as a
+`WriteResult` conflict carrying the sha that won, never as an exception. A 403 with rate-limit budget
+left is `read-only-token`, its own reason rather than `permission-denied`: every token connected
+before this feature existed can read and not write, so it is the first refusal most people meet, and
+the two send a user to different places. `githubWriteErrorFor` extends `githubErrorFor` rather than
+duplicating it.
+
+The byte order mark is read from the **bytes being replaced**, which the blob cache already holds -
+the same rule the local backend follows by reading it off the file on disk. Never from the renderer,
+which is untrusted and has no business asserting a file's encoding.
+
+The question the user answers is asked **once per repository**, on the first save: `useWorkspace`
+holds a ref of which repositories have been settled and calls `askCommit`, a promise `App` resolves
+from `CommitDialog`. That keeps the save path one straight line - await the answer, set the branch,
+commit - rather than the app juggling a half-finished save while a dialog is up. A branch is state
+and a message is per-commit, which is why only the first is held in the provider.
 
 ### Local
 

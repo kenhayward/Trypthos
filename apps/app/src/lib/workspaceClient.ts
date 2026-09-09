@@ -62,7 +62,18 @@ export type ReadResult =
   | Failure;
 export type WriteResult =
   | { ok: true; revision: Revision }
-  | { ok: false; reason: "conflict"; theirs: Revision }
+  /// Somebody else committed to that path since it was read. `theirs` is what won, or null when
+  /// even that could not be established - which is still a conflict, and still not a save.
+  | { ok: false; reason: "conflict"; theirs: Revision | null }
+  | Failure;
+
+/// The branches a repository has, and where it currently stands.
+///
+/// `branch` is where saves go and is null until somebody has said; `readingBranch` is where the tree
+/// came from. They differ only before the question has been answered, which is exactly when the
+/// dialog needs to know both.
+export type BranchesResult =
+  | { ok: true; branches: readonly string[]; branch: string | null; readingBranch: string }
   | Failure;
 
 /// What came back from Save As. The path is where the file ACTUALLY went, in workspace terms - the
@@ -119,7 +130,31 @@ export interface WorkspaceClient {
   readFile(path: string): Promise<ReadResult>;
   /// Reads an image, which does not go through `readFile` - see `ImageResult`.
   readImage(path: string): Promise<ImageResult>;
-  writeFile(path: string, content: string, expectedRevision: Revision | null): Promise<WriteResult>;
+  /// `message` is what a provider whose write IS a commit puts on it, and null everywhere else.
+  ///
+  /// Carried on the write rather than set beforehand because it belongs to this change: a branch is
+  /// chosen once and a message is written per commit, which is why only one of the two is state.
+  writeFile(
+    path: string,
+    content: string,
+    expectedRevision: Revision | null,
+    message?: string | null,
+  ): Promise<WriteResult>;
+  /// The branches a repository has, and which of them it is reading and writing.
+  ///
+  /// On the workspace client rather than the GitHub bridge because it is an operation on an OPEN
+  /// workspace, addressed by the id the main process minted - the same family as `closeWorkspace`.
+  /// The bridge keeps what is about the account: who is connected, and which repositories they own.
+  repoBranches(workspaceId: string): Promise<BranchesResult>;
+  /// Where this repository's saves go from now on.
+  ///
+  /// `create` cuts a branch at the commit the workspace stands on; false moves to one that already
+  /// exists, and the workspace follows it - tree, filter box and Find in Files included.
+  setRepoBranch(
+    workspaceId: string,
+    branch: string,
+    create: boolean,
+  ): Promise<{ ok: true; branch: string } | { ok: false; reason: string }>;
   /// Asks the shell for a save dialog and writes the document wherever it landed.
   ///
   /// **There is no destination argument, and there must never be one.** The path comes from the
@@ -316,6 +351,8 @@ export const browserClient: WorkspaceClient = {
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),
+  repoBranches: async () => unavailable(),
+  setRepoBranch: async () => unavailable(),
   saveFileAs: async () => unavailable(),
   closeWorkspace: async () => unavailable(),
   findInFiles: async () => unavailable(),

@@ -506,3 +506,208 @@ test("counts a listing that fits on one page", async () => {
   assert.equal(stats.branches, 1);
   assert.equal(stats.tags, 0);
 });
+
+/// Writing back.
+///
+/// There is no separate push: the Contents API commits on the server, so one request is the write,
+/// the commit and the push together. What these check is the request that goes out, the two shas
+/// that come back, and that a refusal is a result rather than an exception.
+
+const CONTENTS = "https://api.github.com/repos/ada/notes/contents/docs/guide.md";
+const REFS = "https://api.github.com/repos/ada/notes/git/refs";
+
+test("commits a file, and hands back both shas", async () => {
+  const sent = [];
+  const fetch = async (url, options) => {
+    sent.push({ url, method: options?.method, body: JSON.parse(options?.body ?? "{}") });
+    return jsonResponse({ content: { sha: "newblob", size: 12 }, commit: { sha: "newcommit" } });
+  };
+  const api = createGitHubApi({
+    getToken: async () => "ghp_invented",
+    fetch,
+    logger: { warn: () => {}, error: () => {} },
+  });
+
+  const result = await api.putFile({
+    owner: "ada",
+    repo: "notes",
+    path: "docs/guide.md",
+    message: "Update guide.md",
+    bytes: Buffer.from("hello"),
+    branch: "trypthos/update-guide",
+    sha: "oldblob",
+  });
+
+  assert.deepEqual(result, { ok: true, blobSha: "newblob", commitSha: "newcommit" });
+  assert.equal(sent[0].url, CONTENTS);
+  assert.equal(sent[0].method, "PUT");
+  assert.equal(sent[0].body.message, "Update guide.md");
+  assert.equal(sent[0].body.branch, "trypthos/update-guide");
+  // The sha of what is being REPLACED. Without it GitHub takes the write unconditionally, which is
+  // the silent overwrite the whole revision mechanism exists to prevent.
+  assert.equal(sent[0].body.sha, "oldblob");
+  // Base64 of the bytes, which is the only form the endpoint takes.
+  assert.equal(Buffer.from(sent[0].body.content, "base64").toString(), "hello");
+});
+
+// Creating a file rather than replacing one. GitHub tells the two apart by whether a sha is sent,
+// and sending null would be sending a sha.
+test("omits the sha entirely when the file is being created", async () => {
+  const sent = [];
+  const api = createGitHubApi({
+    getToken: async () => "ghp_invented",
+    fetch: async (url, options) => {
+      sent.push(JSON.parse(options?.body ?? "{}"));
+      return jsonResponse({ content: { sha: "b" }, commit: { sha: "c" } });
+    },
+    logger: { warn: () => {}, error: () => {} },
+  });
+
+  await api.putFile({
+    owner: "ada",
+    repo: "notes",
+    path: "docs/guide.md",
+    message: "Add guide.md",
+    bytes: Buffer.from("x"),
+    branch: "main",
+    sha: null,
+  });
+
+  assert.equal("sha" in sent[0], false, "a created file must not present a sha");
+});
+
+/// The reason the interface returns a result rather than throwing.
+///
+/// Somebody committed to that path since it was read. What is on the screen is still the user's
+/// work, and which version wins is theirs to decide - so this comes back carrying the sha that
+/// actually won.
+test("reads a stale sha as a conflict, and says what is there now", async () => {
+  const api = apiWith({
+    [CONTENTS]: jsonResponse({ message: "does not match" }, { status: 409 }),
+    [`${CONTENTS}?ref=main`]: jsonResponse({ sha: "theirs" }),
+  }).api;
+
+  const result = await api.putFile({
+    owner: "ada",
+    repo: "notes",
+    path: "docs/guide.md",
+    message: "Update guide.md",
+    bytes: Buffer.from("x"),
+    branch: "main",
+    sha: "mine",
+  });
+
+  assert.deepEqual(result, { ok: false, reason: "conflict", theirs: "theirs" });
+});
+
+// A conflict whose winner cannot be established is still a conflict. Reporting it as anything else
+// would let the editor treat a refused write as a save.
+test("still reports a conflict when the winning sha cannot be read", async () => {
+  const api = apiWith({
+    [CONTENTS]: jsonResponse({}, { status: 409 }),
+    [`${CONTENTS}?ref=main`]: jsonResponse({}, { status: 500 }),
+  }).api;
+
+  const result = await api.putFile({
+    owner: "ada",
+    repo: "notes",
+    path: "docs/guide.md",
+    message: "m",
+    bytes: Buffer.from("x"),
+    branch: "main",
+    sha: "mine",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "conflict");
+  assert.equal(result.theirs, null);
+});
+
+/// The refusal every existing user will meet first.
+///
+/// Every token connected before this feature existed can read and cannot write. Said as itself,
+/// because "permission denied" sends somebody to check whether they still have access to the
+/// repository when what they need is a new token.
+test("reads a token that may not write as exactly that", async () => {
+  const api = apiWith({
+    [CONTENTS]: jsonResponse({ message: "Resource not accessible" }, {
+      status: 403,
+      headers: { "x-ratelimit-remaining": "4998" },
+    }),
+  }).api;
+
+  const result = await api.putFile({
+    owner: "ada",
+    repo: "notes",
+    path: "docs/guide.md",
+    message: "m",
+    bytes: Buffer.from("x"),
+    branch: "main",
+    sha: null,
+  });
+
+  assert.deepEqual(result, { ok: false, reason: "read-only-token" });
+});
+
+test("creates a branch at a commit", async () => {
+  const sent = [];
+  const api = createGitHubApi({
+    getToken: async () => "ghp_invented",
+    fetch: async (url, options) => {
+      sent.push({ url, method: options?.method, body: JSON.parse(options?.body ?? "{}") });
+      return jsonResponse({ ref: "refs/heads/trypthos/update-guide", object: { sha: "c0ffee" } });
+    },
+    logger: { warn: () => {}, error: () => {} },
+  });
+
+  const result = await api.createBranch("ada", "notes", "trypthos/update-guide", "c0ffee");
+
+  assert.deepEqual(result, { ok: true, branch: "trypthos/update-guide", sha: "c0ffee" });
+  assert.equal(sent[0].url, REFS);
+  assert.equal(sent[0].method, "POST");
+  // Fully qualified. `refs/heads/` is not decoration - without it GitHub refuses the ref outright.
+  assert.equal(sent[0].body.ref, "refs/heads/trypthos/update-guide");
+  assert.equal(sent[0].body.sha, "c0ffee");
+});
+
+// Its own reason, because the answer is "commit to it instead" rather than anything done wrong.
+test("says when the branch is already there", async () => {
+  const api = apiWith({ [REFS]: jsonResponse({}, { status: 422 }) }).api;
+  assert.deepEqual(await api.createBranch("ada", "notes", "existing", "c0ffee"), {
+    ok: false,
+    reason: "branch-exists",
+  });
+});
+
+// A name git could not accept never becomes a request. It would come back a 422 that reads as
+// "already exists", which is a wrong answer given confidently.
+test("refuses a branch name git could not accept, without asking GitHub", async () => {
+  const { api, calls } = apiWith({});
+  assert.deepEqual(await api.createBranch("ada", "notes", "has space", "c0ffee"), {
+    ok: false,
+    reason: "unsupported",
+  });
+  assert.equal(calls.length, 0);
+});
+
+test("lists the branches, following the pages", async () => {
+  const page = (name, more) =>
+    jsonResponse([{ name, commit: { sha: `sha-${name}` } }], {
+      headers: more
+        ? { link: '<https://api.github.com/x?page=2>; rel="next"' }
+        : {},
+    });
+
+  const api = apiWith({
+    "https://api.github.com/repos/ada/notes/branches?per_page=100&page=1": page("main", true),
+    "https://api.github.com/repos/ada/notes/branches?per_page=100&page=2": page("trunk", false),
+  }).api;
+
+  assert.deepEqual(await api.branches("ada", "notes"), {
+    ok: true,
+    branches: [
+      { name: "main", sha: "sha-main" },
+      { name: "trunk", sha: "sha-trunk" },
+    ],
+  });
+});

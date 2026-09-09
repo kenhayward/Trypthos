@@ -199,17 +199,16 @@ test("refuses bytes over the caller's own limit", async () => {
   assert.equal(read.limitBytes, 2);
 });
 
-/// Writing is not built yet, and says so.
+/// Writing, before anywhere has been chosen to write TO.
 ///
-/// A save to GitHub is a commit on a branch, with history and merge conflicts rather than overwrite -
-/// which is a feature, not a line of code. What matters until then is that the refusal is HONEST: an
-/// editor that reported a save it never made is the failure the whole revision mechanism exists to
-/// prevent, and a user would only discover it when their work was gone.
-test("refuses to write, rather than reporting a save it did not make", async () => {
+/// A save to GitHub is a commit on a branch, and until the user has said which branch there is no
+/// answer to where it goes. Refused rather than guessed at: committing to the default branch by
+/// default is how somebody pushes to main without meaning to.
+test("refuses to write until a branch has been chosen", async () => {
   const { opened } = await openFake();
   const written = await opened.provider.write("README.md", "changed", { id: "b1" });
 
-  assert.deepEqual(written, { ok: false, reason: "unsupported" });
+  assert.deepEqual(written, { ok: false, reason: "no-branch" });
 });
 
 test("says when the tree GitHub sent was cut short", async () => {
@@ -218,4 +217,223 @@ test("says when the tree GitHub sent was cut short", async () => {
   });
 
   assert.equal(opened.truncated, true);
+});
+
+/// Committing, once somewhere has been chosen.
+///
+/// The awkward part is not the request - that is one call. It is everything the workspace has to
+/// put right afterwards: it is pinned to a commit and holds the whole tree in memory, and both are
+/// stale the moment a commit lands. Get that wrong and the bug is the worst kind - save, reopen the
+/// file, and read your old text back.
+
+function writingApi(overrides = {}) {
+  const { api, calls } = fakeApi();
+  const written = [];
+
+  return {
+    written,
+    calls,
+    api: {
+      ...api,
+      createBranch: async (_owner, _repo, name, sha) => ({ ok: true, branch: name, sha }),
+      putFile: async (request) => {
+        written.push(request);
+        return { ok: true, blobSha: "b1-new", commitSha: "commit-2" };
+      },
+      branches: async () => ({
+        ok: true,
+        branches: [
+          { name: "main", sha: "c0ffee" },
+          { name: "trunk", sha: "decaf" },
+        ],
+      }),
+      ...overrides,
+    },
+  };
+}
+
+async function openWritable(overrides) {
+  const { api, written, calls } = writingApi(overrides);
+  const opened = await openGitHubWorkspace({ ref: REF, api });
+  return { provider: opened.provider, written, calls };
+}
+
+test("starts a branch at the commit the workspace is pinned to", async () => {
+  const started = [];
+  const { provider } = await openWritable({
+    createBranch: async (_owner, _repo, name, sha) => {
+      started.push({ name, sha });
+      return { ok: true, branch: name, sha };
+    },
+  });
+
+  const result = await provider.startBranch("trypthos/update-readme");
+
+  assert.deepEqual(result, { ok: true, branch: "trypthos/update-readme" });
+  // The commit the tree in memory describes. A branch cut from anywhere else would be a branch
+  // whose files are not the files on screen.
+  assert.deepEqual(started, [{ name: "trypthos/update-readme", sha: "c0ffee" }]);
+  assert.equal(provider.writeTarget().branch, "trypthos/update-readme");
+});
+
+// A new branch points at the same commit, so the tree is the same tree. Refetching it would be a
+// request whose answer is already in memory.
+test("does not refetch the tree for a branch cut from where it stands", async () => {
+  let trees = 0;
+  const { provider } = await openWritable({
+    tree: async () => {
+      trees += 1;
+      return { ok: true, entries: TREE, truncated: false };
+    },
+  });
+
+  await provider.startBranch("trypthos/update-readme");
+  assert.equal(trees, 1, "the tree fetched at open is still the right one");
+});
+
+test("commits a save to the chosen branch", async () => {
+  const { provider, written } = await openWritable();
+  await provider.startBranch("trypthos/update-readme");
+
+  const result = await provider.write("README.md", "changed", { id: "b1" }, { message: "Update" });
+
+  assert.deepEqual(result, { ok: true, revision: { id: "b1-new" } });
+  assert.equal(written[0].path, "README.md");
+  assert.equal(written[0].branch, "trypthos/update-readme");
+  assert.equal(written[0].sha, "b1");
+  assert.equal(written[0].message, "Update");
+  assert.equal(written[0].bytes.toString(), "changed");
+});
+
+/// The bug this exists to prevent.
+///
+/// The tree is fetched once at open and every listing is a read of memory, so the blob sha for a
+/// path is whatever it was when the repository opened. Leave it there after a commit and the next
+/// read of that file fetches the OLD blob - the user saves, reopens, and their work is gone.
+test("reads back what was just written, not what was there before", async () => {
+  const { provider, calls } = await openWritable();
+  await provider.startBranch("trypthos/update-readme");
+  await provider.write("README.md", "changed", { id: "b1" }, { message: "Update" });
+
+  const read = await provider.read("README.md");
+
+  assert.equal(read.ok, true);
+  assert.equal(read.content, "changed");
+  assert.equal(read.revision.id, "b1-new");
+  // And it came from memory rather than from another request: the bytes that were just written are
+  // the bytes that are there.
+  assert.equal(calls.blob.includes("b1-new"), false, "the new blob should not be fetched back");
+});
+
+// The workspace is pinned to a commit, and a commit moved it. A branch cut after this one has to
+// start from the new head or it would leave the change behind.
+test("advances the pin to the commit it just made", async () => {
+  const started = [];
+  const { provider } = await openWritable({
+    createBranch: async (_owner, _repo, name, sha) => {
+      started.push(sha);
+      return { ok: true, branch: name, sha };
+    },
+  });
+
+  await provider.startBranch("one");
+  await provider.write("README.md", "changed", { id: "b1" }, { message: "m" });
+  await provider.startBranch("two");
+
+  assert.deepEqual(started, ["c0ffee", "commit-2"]);
+});
+
+/// A mark the editor never showed must not be lost by saving.
+///
+/// The same rule the local backend follows, reached the same way: the mark is read from what is
+/// STORED - the bytes being replaced - never carried by the renderer, which is untrusted and has no
+/// business asserting a file's encoding.
+test("keeps a byte order mark the file already had", async () => {
+  const withBom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("hello")]);
+  const { api } = writingApi();
+  const written = [];
+
+  const opened = await openGitHubWorkspace({
+    ref: REF,
+    api: {
+      ...api,
+      blob: async () => ({ ok: true, bytes: withBom }),
+      putFile: async (request) => {
+        written.push(request);
+        return { ok: true, blobSha: "b1-new", commitSha: "commit-2" };
+      },
+    },
+  });
+
+  await opened.provider.startBranch("trypthos/update-readme");
+  // Read first, which is what an editor does before it can have edited anything.
+  await opened.provider.read("README.md");
+  await opened.provider.write("README.md", "changed", { id: "b1" }, { message: "m" });
+
+  assert.deepEqual([...written[0].bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+  assert.equal(written[0].bytes.subarray(3).toString(), "changed");
+});
+
+test("passes a conflict straight through rather than resolving it", async () => {
+  const { provider } = await openWritable({
+    putFile: async () => ({ ok: false, reason: "conflict", theirs: "theirs" }),
+  });
+  await provider.startBranch("trypthos/update-readme");
+
+  const result = await provider.write("README.md", "changed", { id: "b1" }, { message: "m" });
+
+  assert.deepEqual(result, { ok: false, reason: "conflict", theirs: { id: "theirs" } });
+});
+
+// A refused write must leave everything exactly as it was. A pin advanced on a commit that never
+// happened would make the next save conflict against a commit nobody made.
+test("changes nothing when the commit was refused", async () => {
+  const { provider } = await openWritable({
+    putFile: async () => ({ ok: false, reason: "read-only-token" }),
+  });
+  await provider.startBranch("trypthos/update-readme");
+
+  const result = await provider.write("README.md", "changed", { id: "b1" }, { message: "m" });
+  assert.deepEqual(result, { ok: false, reason: "read-only-token" });
+
+  const read = await provider.read("README.md");
+  assert.equal(read.content, "hello", "the file is still what GitHub holds");
+});
+
+/// Moving to a branch that already exists.
+///
+/// Not the same as cutting one: that branch is at a different commit, so its tree is a different
+/// tree and has to be fetched. The workspace follows, because commits going somewhere the browser
+/// cannot see is how Find in Files ends up searching one branch while the edits are on another.
+test("switches to an existing branch, and takes the tree with it", async () => {
+  const OTHER = [{ path: "README.md", mode: "100644", type: "blob", sha: "other-b1", size: 5 }];
+  const asked = [];
+  const { provider } = await openWritable({
+    tree: async (_owner, _repo, sha) => {
+      asked.push(sha);
+      return { ok: true, entries: sha === "decaf" ? OTHER : TREE, truncated: false };
+    },
+  });
+
+  const result = await provider.useBranch("trunk");
+
+  assert.deepEqual(result, { ok: true, branch: "trunk" });
+  assert.deepEqual(asked, ["c0ffee", "decaf"]);
+  const listed = await provider.list("");
+  assert.deepEqual(
+    listed.nodes.map((node) => node.name),
+    ["README.md"],
+  );
+});
+
+test("refuses a branch that is not there rather than pretending to move", async () => {
+  const { provider } = await openWritable();
+  assert.deepEqual(await provider.useBranch("nowhere"), { ok: false, reason: "not-found" });
+  assert.equal(provider.writeTarget().branch, null);
+});
+
+// Nothing has been chosen at open. The dialog is what chooses, and it needs to know that.
+test("starts with nowhere to write to, and says which branch it is reading", async () => {
+  const { provider } = await openWritable();
+  assert.deepEqual(provider.writeTarget(), { branch: null, readingBranch: "main" });
 });

@@ -120,10 +120,36 @@ would have needed a token. A picture that is missing, or too large to open, leav
 rather than quietly vanishing. The same is true of Preview for your own markdown, where images never
 appeared either.
 
-**Repositories are read-only for now.** Saving to GitHub is a commit on a branch, with history and
-merge conflicts rather than an overwrite, and that is not built yet. Rather than pretend otherwise,
-Trypthos says so before you open one and refuses a save instead of reporting one it never made. Save
-As is refused for the same reason: there is no folder to save into.
+**Saving to a repository makes a commit.** There is no mutable file at a path on GitHub the way
+there is in a folder: a save is a commit on a branch, with history and merge conflicts rather than an
+overwrite. So the first time you save in a repository, Trypthos asks where those commits should go -
+**a new branch**, named after the file and yours to rename, or **one that already exists**, chosen
+from the repository's own list - along with the message for this commit.
+
+**It asks once.** Every save after that commits straight to the branch you chose, with no dialog and
+no wait: a document is saved every couple of minutes, and a question whose answer has not changed is
+not worth asking twice. The message on those later commits is written from the file's name.
+
+A new branch is the default, deliberately. Committing to the default branch by default is how people
+push to `main` without meaning to - and on a repository where `main` is protected, GitHub refuses the
+commit anyway, which is a worse way to find out.
+
+The workspace **follows the branch you commit to**, so the tree, the filter box and Find in Files are
+all looking at the same place your saves are landing. Choosing a branch that already exists refetches
+the repository at that branch; a document you had open keeps your unsaved text, and if that file
+differs on the new branch the next save is reported as a conflict rather than overwriting it.
+
+If somebody else commits to the same file between your opening it and your saving, the save is
+**refused as a conflict** and your text stays exactly where it is. That is the same answer a local
+file gives when it changed on disk, for the same reason: Trypthos will not report a save it did not
+make.
+
+**Your token needs write access.** A token created for reading gets a clear refusal naming exactly
+that, because "permission denied" would send you to check whether you still have access to the
+repository when what you need is a new token.
+
+**Opening a pull request is not built yet**, nor are new files inside a repository. Save As is still
+refused for a repository: there is no folder to save into.
 
 Open repositories reopen the next time you start, exactly as your folders do.
 
