@@ -18,13 +18,16 @@ const {
 /// shape, a read is `{ ok, content, revision }`, and a refusal is one of the same reasons. Any new
 /// provider has this as its contract.
 ///
-/// **The whole tree is fetched once, at open.** GitHub will describe every path in a repository in
+/// **The whole tree is fetched once, at open** - and again only when a refresh finds the branch has
+/// moved on. GitHub will describe every path in a repository in
 /// one request, so every listing after that is a read of memory. The alternative - a request per
 /// folder - would make expanding the browser slow, and would make the filter box, which walks every
 /// folder, spend an hourly budget on a single keystroke.
 ///
 /// **It is pinned to a commit, not a branch.** Somebody pushing while the user reads would otherwise
-/// change the tree under them, and the file they clicked would not be the file they were shown.
+/// change the tree under them, and the file they clicked would not be the file they were shown. The
+/// pin moves only when the user asks - Refresh, after a confirmation that says what it changes - or
+/// when a commit of their own lands.
 ///
 /// **A save here is a commit on a branch**, with history and merge conflicts rather than overwrite.
 /// There is no separate push - GitHub's Contents endpoint commits on the server - so the awkward
@@ -56,7 +59,7 @@ function failure(reason) {
   return { ok: false, reason };
 }
 
-function createGitHubProvider({ ref, api, entries, branch, sha }) {
+function createGitHubProvider({ ref, api, entries, branch, sha, truncated = false }) {
   const guard = createPathGuard({ root: GUARD_ROOT, caseInsensitive: false });
   const cache = new Map();
 
@@ -64,9 +67,10 @@ function createGitHubProvider({ ref, api, entries, branch, sha }) {
   ///
   /// **The tree and the pin are held, not fetched**, which is what makes every listing a read of
   /// memory - and what makes a commit something this object has to put right afterwards rather than
-  /// something it can forget about. `tree` is replaced when a branch is switched to; `head` moves
-  /// with every commit; `writeBranch` is null until the user has said where their saves go.
-  let state = { tree: entries, head: sha, readingBranch: branch, writeBranch: null };
+  /// something it can forget about. `tree` is replaced when a branch is switched to or the workspace
+  /// is refreshed; `head` moves with every commit; `writeBranch` is null until the user has said
+  /// where their saves go. `truncated` belongs to the tree, so it moves when the tree does.
+  let state = { tree: entries, head: sha, readingBranch: branch, writeBranch: null, truncated };
 
   /// Where a save goes, and where the tree came from.
   ///
@@ -169,6 +173,40 @@ function createGitHubProvider({ ref, api, entries, branch, sha }) {
 
     writeTarget,
 
+    /// The branch being read and the commit the workspace is pinned to. What the repository page
+    /// describes, and asks GitHub how far behind it is.
+    pin() {
+      return { branch: state.readingBranch, sha: state.head };
+    },
+
+    /// Moves the pin to the newest commit on the branch being read, and takes the tree with it.
+    ///
+    /// The one deliberate exception to being pinned: the user asked for what has been pushed since.
+    /// **The branch being read, not the default one** - after a branch has been chosen for saves that
+    /// is where the workspace stands, and a refresh that went back to main would move the tree away
+    /// from the commits it is about to make.
+    ///
+    /// Where saves go is untouched. A document already open keeps the revision it was read at; if
+    /// that file has changed on the branch, its next save conflicts, which is the right answer and the
+    /// one the user has to be given rather than a silent overwrite.
+    ///
+    /// **All or nothing.** The tree and the commit it describes move together: a pin advanced over a
+    /// tree that never arrived would list one commit's files while reading another's.
+    async refresh() {
+      const head = await api.branchHead(ref.owner, ref.repo, state.readingBranch);
+      if (!head.ok) return head;
+
+      // Nobody has pushed since. The tree in hand is the right one, and it is the largest thing
+      // asked of GitHub - so it is not asked for again.
+      if (head.sha === state.head) return { ok: true, truncated: state.truncated };
+
+      const fetched = await api.tree(ref.owner, ref.repo, head.sha);
+      if (!fetched.ok) return fetched;
+
+      state = { ...state, tree: fetched.entries, head: head.sha, truncated: fetched.truncated };
+      return { ok: true, truncated: fetched.truncated };
+    },
+
     /// Cuts a branch at the commit this workspace stands on, and commits there from now on.
     ///
     /// **From the pinned commit, not from the branch's head.** The tree in memory describes that
@@ -212,6 +250,7 @@ function createGitHubProvider({ ref, api, entries, branch, sha }) {
         head: found.sha,
         readingBranch: found.name,
         writeBranch: found.name,
+        truncated: fetched.truncated,
       };
       return { ok: true, branch: found.name };
     },
@@ -304,6 +343,7 @@ async function openGitHubWorkspace({ ref, api }) {
       entries: tree.entries,
       branch: head.branch,
       sha: head.sha,
+      truncated: tree.truncated,
     }),
   };
 }

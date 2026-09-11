@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { RepoParent, RepoStats, WorkspaceRef } from "@trypthos/domain";
+import type { RepoCommit, RepoParent, RepoPin, RepoStats, WorkspaceRef } from "@trypthos/domain";
 import type { ImageResult } from "../lib/workspaceClient";
 import Glyph from "./Glyph";
 import MarkdownPreview from "./MarkdownPreview";
@@ -62,6 +62,10 @@ export default function RepoPage({
               onOpenRepo={onOpenRepo}
               onRefresh={onRefresh}
             />
+
+            {state.pin !== null && (
+              <PinLines pin={state.pin} language={i18n.language || "en"} onOpenExternal={onOpenExternal} />
+            )}
 
             {/* The numbers are gone but the README is not, so the page says which half failed
                 rather than showing an empty grid of dashes. */}
@@ -268,6 +272,136 @@ function ForkLine({
         </span>
       )}
     </p>
+  );
+}
+
+/// Which commit the workspace is on, and the newest on its branch.
+///
+/// A repository opens pinned to a commit so its files cannot change under somebody reading them -
+/// which is invisible unless something says WHICH commit, and that the branch has since moved on.
+/// Two lines: where the workspace is, and what the branch's latest is and how it got there.
+///
+/// Unknown is never drawn as up to date. A comparison that did not come back says nothing about
+/// how far behind this is, so neither mark is drawn - and a branch that could not be read is said
+/// to have been unreadable rather than left out, which would read as nothing newer.
+function PinLines({
+  pin,
+  language,
+  onOpenExternal,
+}: {
+  pin: RepoPin;
+  language: string;
+  onOpenExternal: (url: string) => void;
+}) {
+  const { t } = useTranslation();
+  // A date AND a time. Commits land several times a day, and "3 Sep" twice says nothing about which
+  // came first. Absolute rather than "2 hours ago", for the reason the Last push card gives.
+  const when = useMemo(
+    () => new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }),
+    [language],
+  );
+
+  /// Who and when, whichever of the two arrived.
+  const byline = (commit: RepoCommit) =>
+    [commit.author, commit.date === null ? null : when.format(new Date(commit.date))]
+      .filter((part) => part !== null)
+      .join(" · ");
+
+  const latest = pin.latest;
+  const arrival = latest?.arrival ?? null;
+
+  return (
+    <div className="mt-3 space-y-1 text-xs text-ink-3">
+      <p className="flex flex-wrap items-center gap-1.5">
+        <Glyph className="size-3.5 shrink-0">
+          <circle cx="12" cy="12" r="3.5" />
+          <path d="M3 12h5.5M15.5 12H21" />
+        </Glyph>
+        <span>{t("repo.onCommit")}</span>
+        <Sha commit={pin.commit} onOpen={onOpenExternal} />
+        {pin.commit.headline !== "" && <span className="text-ink-2">{pin.commit.headline}</span>}
+        {byline(pin.commit) !== "" && <span className="text-ink-4">{byline(pin.commit)}</span>}
+        {pin.newer === 0 && <Badge>{t("repo.upToDate")}</Badge>}
+        {pin.newer !== null && pin.newer > 0 && (
+          // The way to catch up is the panel's right-click menu, which is where Refresh lives and
+          // where it asks first - so the hint names it rather than offering a second way in here.
+          <span
+            title={t("repo.behindHint", { branch: pin.branch })}
+            className="rounded border border-accent px-1.5 py-0.5 text-2xs text-accent"
+          >
+            {t("repo.behind", { newer: pin.newer })}
+          </span>
+        )}
+      </p>
+
+      {latest === null ? (
+        <p className="pl-5">{t("repo.latestUnknown", { branch: pin.branch })}</p>
+      ) : (
+        <p className="flex flex-wrap items-center gap-1.5">
+          {arrival?.kind === "merge" ? (
+            <>
+              <Glyph className="size-3.5 shrink-0">
+                <circle cx="6" cy="6" r="2.5" />
+                <circle cx="6" cy="18" r="2.5" />
+                <circle cx="18" cy="15" r="2.5" />
+                <path d="M6 8.5v7" />
+                <path d="M6 8.5c0 4 4 6.5 9.5 6.5" />
+              </Glyph>
+              <span>{t("repo.latestMerged", { branch: pin.branch, number: arrival.number })}</span>
+              {/* The pull request's title is what says what landed. It links to the pull request
+                  rather than the merge commit: the discussion is what somebody would want to read. */}
+              {arrival.url !== null ? (
+                <ExternalLink url={arrival.url} onOpen={onOpenExternal}>
+                  {arrival.title}
+                </ExternalLink>
+              ) : (
+                <span className="text-ink-2">{arrival.title}</span>
+              )}
+            </>
+          ) : (
+            <>
+              <Glyph className="size-3.5 shrink-0">
+                <path d="M12 19V6" />
+                <path d="M6 11l6-6 6 6" />
+              </Glyph>
+              <span>
+                {arrival?.kind === "push"
+                  ? t("repo.latestPushed", { branch: pin.branch })
+                  : t("repo.latestOn", { branch: pin.branch })}
+              </span>
+              <Sha commit={latest.commit} onOpen={onOpenExternal} />
+              {latest.commit.headline !== "" && (
+                <span className="text-ink-2">{latest.commit.headline}</span>
+              )}
+            </>
+          )}
+          {byline(latest.commit) !== "" && (
+            <span className="text-ink-4">{byline(latest.commit)}</span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/// A commit named by its short sha, which opens the commit on GitHub when there is a page to open.
+///
+/// Seven characters, as git and GitHub both abbreviate - enough to be unique in any repository a
+/// person reads, and the form they will recognise from everywhere else.
+function Sha({ commit, onOpen }: { commit: RepoCommit; onOpen: (url: string) => void }) {
+  const { t } = useTranslation();
+  const short = commit.sha.slice(0, 7);
+
+  if (commit.url === null) return <code className="font-mono text-ink-2">{short}</code>;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(commit.url!)}
+      title={t("repo.openCommit")}
+      className="font-mono text-accent hover:underline"
+    >
+      {short}
+    </button>
   );
 }
 

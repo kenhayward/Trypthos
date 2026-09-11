@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.66.0",
+    date: "2026-09-11",
+    pr: 135,
+    headline: "Refresh a folder or a repository, and see which commit you are on",
+    summary:
+      "The workspace panel shows a folder as it was when you opened it, and nothing was watching for changes after that - so a file you added, renamed or deleted in File Explorer, or that another program wrote, did not appear until you closed the folder and opened it again. Right-click anywhere in a folder's tree now and choose Refresh. Every folder you have open in it is read again, and what you had expanded stays expanded: new files appear where they belong, and a folder that has been deleted simply goes, rather than being drawn as one that could not be read with a Retry offering to find it. Collapsed folders are left alone, so refreshing a large tree does not walk parts of it you never asked to see, and the rows stay on screen while it happens rather than emptying and redrawing. The menu is about the whole folder wherever you right-click in it, so you do not have to scroll back up to its top row to find it. A GitHub repository refreshes too. It opens pinned to one commit, so the files cannot change while you read them - and until now the only way to see what had been pushed since was to close it and open it again. Refresh moves it to the newest commit on the branch it is reading, and because that changes what the workspace is, it asks first and says what happens: the tree becomes that commit's, and tabs you already have open keep their text, so if one of those files changed on GitHub, saving it is refused as a conflict rather than written over the newer version. If you have unsaved changes in that repository, the question says so. When nobody has pushed, nothing is downloaded again. The repository's own page now says which commit you are on - its short sha, which opens the commit on GitHub, its message, who made it and when - and whether that is the newest on the branch or how many commits behind it is. Below that is the latest update on the branch and how it got there: pushed, or a pull request merged, with the pull request's title linking to it. When GitHub could not be asked, the page says it could not check rather than implying there is nothing newer, and refreshing the repository from the panel reloads the page so it never goes on naming a commit you have left.",
+    added: [
+      "A right-click menu on each open folder and repository in the workspace panel, with Refresh as its first entry. It reads the open subfolders again, keeping what you had expanded.",
+      "Refreshing a GitHub repository moves it to the newest commit on its branch, after a confirmation that explains what that changes for your open tabs.",
+      "The repository page names the commit you are on, says whether it is up to date or how many commits behind, and shows the latest update on the branch - pushed, or a merged pull request.",
+    ],
+  },
+  {
     version: "0.65.0",
     date: "2026-09-09",
     pr: 134,

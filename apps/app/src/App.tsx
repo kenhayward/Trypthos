@@ -22,6 +22,7 @@ import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
+import RefreshRepoDialog from "./components/RefreshRepoDialog";
 import RepoPage from "./components/RepoPage";
 import FindDialog from "./components/FindDialog";
 import EditorPanel from "./components/EditorPanel";
@@ -556,6 +557,28 @@ export default function App() {
   const repoPageId = repoPageWorkspaceId(state.activePath ?? "");
   const repoPage = useRepoPage(repoPageId, github, client);
 
+  /// The repository whose Refresh is waiting on an answer, or null.
+  ///
+  /// A repository asks first and a folder does not - see `RefreshRepoDialog`. Held by id, so a
+  /// repository closed while the question is up takes the question with it.
+  const [confirmingRefresh, setConfirmingRefresh] = useState<string | null>(null);
+  const confirmingWorkspace =
+    confirmingRefresh === null
+      ? undefined
+      : state.workspaces.find((workspace) => workspace.id === confirmingRefresh);
+
+  const refreshWorkspace = async (workspaceId: string) => {
+    // The page names the commit a repository is on, so it is told once that has moved - and asks
+    // again rather than going on naming one the workspace has left.
+    if (await actions.refreshWorkspace(workspaceId)) repoPage.invalidate(workspaceId);
+  };
+
+  const askToRefresh = (workspaceId: string) => {
+    const workspace = state.workspaces.find((open) => open.id === workspaceId);
+    if (workspace?.ref.kind === "github") setConfirmingRefresh(workspaceId);
+    else void refreshWorkspace(workspaceId);
+  };
+
   /// What the window is called after the app's own name: the file on screen, or the built-in
   /// document's title. Its path is not a name a user would recognise.
   const titleKey = builtInTitleKey(state.activePath);
@@ -605,6 +628,7 @@ export default function App() {
           onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
+          onRefreshWorkspace={askToRefresh}
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}
@@ -819,6 +843,20 @@ export default function App() {
           onCommit={(choice) => {
             commitPrompt.answer(choice);
             setCommitPrompt(null);
+          }}
+        />
+      )}
+
+      {confirmingWorkspace !== undefined && (
+        <RefreshRepoDialog
+          name={confirmingWorkspace.name}
+          unsaved={state.dirtyPaths.some(
+            (path) => splitQualified(path)?.workspaceId === confirmingWorkspace.id,
+          )}
+          onCancel={() => setConfirmingRefresh(null)}
+          onConfirm={() => {
+            setConfirmingRefresh(null);
+            void refreshWorkspace(confirmingWorkspace.id);
           }}
         />
       )}

@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enabledFileTypes, workspaceRefLabel } from "@trypthos/domain";
 import type { WorkspaceRef } from "@trypthos/domain";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 import type { RemoteNode } from "../lib/workspaceClient";
+import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 import Glyph from "./Glyph";
 
 interface Props {
@@ -37,6 +38,9 @@ interface Props {
   onFilterChange: (filter: string) => void;
   onToggleFolder: (path: string) => void;
   onRetryFolder: (path: string) => void;
+  /// Lists a workspace's open folders again, from its right-click menu - for a repository, after
+  /// moving it to the newest commit on its branch, which is asked about before it happens.
+  onRefreshWorkspace: (workspaceId: string) => void;
   onOpenFile: (node: RemoteNode) => void;
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
   /// the footer names them.
@@ -80,6 +84,7 @@ export default function WorkspacePanel({
   onFilterChange,
   onToggleFolder,
   onRetryFolder,
+  onRefreshWorkspace,
   onOpenFile,
   fileTypes,
   selectedFolder,
@@ -89,6 +94,14 @@ export default function WorkspacePanel({
   onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
+  /// The workspace the right-click menu is about, and where to draw it. Null when it is closed.
+  ///
+  /// The ID rather than the workspace, so one closed while the menu is open takes the menu with it
+  /// instead of leaving it acting on a workspace that is no longer there.
+  const [menu, setMenu] = useState<{ workspaceId: string; x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const menuWorkspace =
+    menu === null ? undefined : workspaces.find((workspace) => workspace.id === menu.workspaceId);
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.
   ///
   /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
@@ -219,7 +232,16 @@ export default function WorkspacePanel({
             )}
 
             {shown.map(({ workspace, state, rows: tree }) => (
-              <div key={workspace.id}>
+              <div
+                key={workspace.id}
+                // On the whole of the workspace's section rather than its root row, so the menu is
+                // found by right-clicking whatever you are looking at - not by scrolling up to the
+                // root first. Right-clicking asks; it does not open, select or toggle anything.
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setMenu({ workspaceId: workspace.id, x: event.clientX, y: event.clientY });
+                }}
+              >
                 {/* The workspace's own row. It behaves like the folder it is - selecting it is what
                     points chat and Find at the whole workspace - and it is the only row that can be
                     closed, because closing is something you do to a folder you opened. */}
@@ -277,6 +299,21 @@ export default function WorkspacePanel({
               </div>
             ))}
           </div>
+
+          {menuWorkspace !== undefined && menu !== null && (
+            <ContextMenu label={menuWorkspace.name} x={menu.x} y={menu.y} onDismiss={closeMenu}>
+              {/* The same entry for a folder and a repository. What refreshing a repository changes
+                  is asked about above this panel, which is where the open documents are known. */}
+              <ContextMenuItem
+                onClick={() => {
+                  setMenu(null);
+                  onRefreshWorkspace(menuWorkspace.id);
+                }}
+              >
+                {t("workspace.refresh")}
+              </ContextMenuItem>
+            </ContextMenu>
+          )}
 
           <div className="flex items-center gap-1 border-t border-rule px-3 py-1 text-xs text-faint">
             <button

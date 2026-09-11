@@ -260,11 +260,125 @@ export const GitHubTreeSchema = z.object({
   tree: z.array(GitHubTreeEntrySchema),
 });
 
+/// Who made a commit or landed it, as git recorded them. Either half can be absent.
+const GitHubGitPersonSchema = z
+  .object({
+    name: z.string().nullable().catch(null),
+    date: z.string().nullable().catch(null),
+  })
+  .nullable()
+  .catch(null);
+
+/// One commit, as `/commits/{sha}` answers and as a single branch carries its head.
+///
+/// **Only the sha is required.** A branch LISTING describes its head with a sha and a URL and
+/// nothing else, and the same commit fetched on its own carries the message, the people and the
+/// dates - so everything past the sha is caught rather than demanded, and a commit that arrived as
+/// a sha alone is still a commit.
+///
+/// Two authors, and they are different things: `commit.author` is the name git recorded, and the
+/// top-level `author` is the GitHub ACCOUNT that email belongs to - null when it matches none.
+export const GitHubCommitSchema = z.object({
+  sha: z.string().min(1),
+  html_url: z.string().catch(""),
+  commit: z
+    .object({
+      message: z.string().catch(""),
+      author: GitHubGitPersonSchema,
+      committer: GitHubGitPersonSchema,
+    })
+    .catch({ message: "", author: null, committer: null }),
+  author: z.object({ login: z.string().min(1) }).nullable().catch(null),
+});
+
 /// One branch, of which only the commit at its head is read. That commit is what a workspace is
 /// pinned to: a branch name would move under the user while they read it.
+///
+/// The head is a whole commit because that is what `/branches/{name}` answers with - which makes the
+/// newest commit on a branch, message and date included, one request rather than two.
 export const GitHubBranchSchema = z.object({
-  commit: z.object({ sha: z.string().min(1) }),
+  commit: GitHubCommitSchema,
 });
+
+/// The pull requests GitHub associates with a commit.
+///
+/// Associated means CONTAINS - an open pull request whose branch has this commit on it is in the
+/// list too - so what is read is enough to tell a merge that produced this commit from one that
+/// merely includes it. See `arrivalOf`.
+export const GitHubCommitPullsSchema = z.array(
+  z.object({
+    number: z.number(),
+    title: z.string().catch(""),
+    html_url: z.string().catch(""),
+    merged_at: z.string().nullable().catch(null),
+    merge_commit_sha: z.string().nullable().catch(null),
+  }),
+);
+
+/// One commit, as the repository page names it. Our shape, not GitHub's - see `RepoSummary` for why.
+export interface RepoCommit {
+  sha: string;
+  /// The first line of the message, which is what a list of commits shows. Empty when the commit
+  /// arrived as a sha alone.
+  headline: string;
+  /// The account that made it, or the name git recorded when no account matches.
+  author: string | null;
+  /// When it reached the branch - the committer's date, not the author's. A pull request written on
+  /// the first and merged on the second landed on the second, and that is the question asked here.
+  date: string | null;
+  /// The commit's own page on GitHub.
+  url: string | null;
+}
+
+/// How a commit reached its branch: pushed straight to it, or by merging a pull request.
+export type RepoArrival =
+  | { kind: "push" }
+  | { kind: "merge"; number: number; title: string; url: string | null };
+
+/// Where a repository workspace is reading from, and how that compares with the branch now.
+///
+/// The workspace is pinned to a commit so the files cannot change while somebody reads them, which
+/// means it falls behind whenever anybody else pushes. This is what says how far, and what arrived.
+export interface RepoPin {
+  /// The branch the workspace is reading.
+  branch: string;
+  /// The commit it is pinned to. Always named by its sha, even when nothing else about it arrived.
+  commit: RepoCommit;
+  /// The newest commit on the branch and how it got there, or null when that could not be asked.
+  latest: { commit: RepoCommit; arrival: RepoArrival | null } | null;
+  /// Commits on the branch since the pinned one: zero when it is the newest, null when unknown.
+  ///
+  /// **Null is not zero**, for the same reason a branch count is not: a comparison that did not come
+  /// back says nothing about how far behind this is, and "up to date" would be a wrong answer given
+  /// confidently.
+  newer: number | null;
+}
+
+export function commitSummary(commit: z.infer<typeof GitHubCommitSchema>): RepoCommit {
+  const { message, author, committer } = commit.commit;
+  return {
+    sha: commit.sha,
+    headline: message.split("\n")[0]?.trim() ?? "",
+    author: commit.author?.login ?? blankToNull(author?.name),
+    date: committer?.date ?? author?.date ?? null,
+    url: blankToNull(commit.html_url),
+  };
+}
+
+/// Whether a commit arrived by a pull request, and which one.
+///
+/// A merge only when a MERGED pull request produced exactly this commit. GitHub associates a commit
+/// with every pull request that contains it, so a commit pushed to the branch that also sits on some
+/// open pull request's branch would otherwise be reported as that request's merge.
+export function arrivalOf(
+  sha: string,
+  pulls: readonly z.infer<typeof GitHubCommitPullsSchema>[number][],
+): RepoArrival {
+  const merged = pulls.find((pull) => pull.merged_at !== null && pull.merge_commit_sha === sha);
+  return merged === undefined
+    ? { kind: "push" }
+    : { kind: "merge", number: merged.number, title: merged.title, url: blankToNull(merged.html_url) };
+}
 
 export const GitHubBlobSchema = z.object({
   sha: z.string().min(1),
@@ -535,6 +649,25 @@ export function compareUrl(
 ): string {
   const side = (end: { owner: string; ref: string }) => `${segment(end.owner)}:${refPath(end.ref)}`;
   return `${repoUrl(owner, repo)}/compare/${side(base)}...${side(head)}`;
+}
+
+/// One commit in full: its message, who made it and when it landed.
+///
+/// A sha rather than a ref, so it is one segment with nothing of its own to keep - and encoded like
+/// any other, because it is still somebody else's string on its way into a URL.
+export function commitUrl(owner: string, repo: string, sha: string): string {
+  return `${repoUrl(owner, repo)}/commits/${segment(sha)}`;
+}
+
+/// The pull requests GitHub associates with one commit - which is how a merge is told from a push.
+export function commitPullsUrl(owner: string, repo: string, sha: string): string {
+  return `${commitUrl(owner, repo, sha)}/pulls`;
+}
+
+/// How far apart two commits in one repository are. `base...head`, so `ahead_by` counts what the
+/// head has that the base does not - with the pinned commit as the base, the commits since it.
+export function commitCompareUrl(owner: string, repo: string, base: string, head: string): string {
+  return `${repoUrl(owner, repo)}/compare/${segment(base)}...${segment(head)}`;
 }
 
 /// One file's contents: read with a `ref`, written without one.

@@ -22,7 +22,17 @@
     "fileTypesHint": "Choose which file types appear here",
     "cannotOpen": "Trypthos does not open this kind of file. Turn its type on from the File types page of Settings, if there is one.",
     "openRepo": "Open GitHub repository",
-    "truncatedRepo": "Too large to list in full - some folders are missing."
+    "truncatedRepo": "Too large to list in full - some folders are missing.",
+    "refresh": "Refresh"
+  },
+  "refreshRepo": {
+    "title": "Refresh {{name}} from GitHub",
+    "blurb": "This repository is held at the commit it was opened on, so its files do not change while you read them. Refreshing moves it to the newest commit on the branch it is reading.",
+    "files": "The workspace panel will list the folders and files of that commit. Anything added or deleted on GitHub since you opened the repository appears or goes.",
+    "tabs": "Tabs you already have open keep the text they have. If one of those files has changed on GitHub, saving it will be refused as a conflict rather than overwriting the newer version.",
+    "unsaved": "You have unsaved changes in this repository. They are kept.",
+    "cancel": "Cancel",
+    "confirm": "Refresh"
   },
   "editor": {
     "title": "Editor",
@@ -437,6 +447,15 @@
     "website": "Website",
     "noDescription": "No description.",
     "noReadme": "This repository has no README.",
-    "readmeFailed": "The README could not be read."
+    "readmeFailed": "The README could not be read.",
+    "onCommit": "On commit",
+    "openCommit": "Open this commit on GitHub",
+    "upToDate": "Up to date",
+    "behind": "Behind by {{newer}}",
+    "behindHint": "Commits have landed on {{branch}} since this was opened. Right-click the repository in the workspace panel and choose Refresh to move to them.",
+    "latestPushed": "Latest on {{branch}}: pushed",
+    "latestMerged": "Latest on {{branch}}: pull request #{{number}} merged",
+    "latestOn": "Latest on {{branch}}:",
+    "latestUnknown": "Could not check {{branch}} for newer commits."
   }
 }

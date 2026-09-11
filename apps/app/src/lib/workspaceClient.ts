@@ -2,6 +2,7 @@ import type {
   FileHit,
   FilterRequest,
   FindRequest,
+  RepoPin,
   RepoStats,
   RepoSummary,
   Revision,
@@ -167,6 +168,13 @@ export interface WorkspaceClient {
   saveFileAs(workspaceId: string, path: string | null, content: string): Promise<SaveAsResult>;
   /// Closes one open workspace. What happens to the tabs that came from it is decided above.
   closeWorkspace(workspaceId: string): Promise<{ ok: boolean; reason?: string }>;
+  /// Asks the shell to look again at where one open workspace reads from, and answers with the
+  /// workspace as it now stands.
+  ///
+  /// For a local folder nothing moves - re-listing its folders is this side's half. A repository is
+  /// pinned to a commit, and this moves it to the newest one on its branch; whether that should
+  /// happen is asked of the user before this is called, never by it.
+  refreshWorkspace(workspaceId: string): Promise<OpenResult>;
   /// Searches the files under one folder of the workspace.
   ///
   /// A folder INSIDE the open workspace, never a root - the same rule as everything else here. The
@@ -201,7 +209,11 @@ export interface GitHubStatus {
 
 export type ConnectResult = { ok: true; login: string } | Failure;
 export type RepoListResult = { ok: true; repos: RepoSummary[] } | Failure;
-export type RepoInfoResult = { ok: true; stats: RepoStats } | Failure;
+/// A repository's statistics, and where the workspace open on it stands.
+///
+/// `pin` is null only if a shell does not send one. The shell always knows which commit it is on;
+/// what it could not ask GitHub is left out INSIDE the pin rather than taking the pin away.
+export type RepoInfoResult = { ok: true; stats: RepoStats; pin: RepoPin | null } | Failure;
 
 /// The GitHub half of the bridge.
 ///
@@ -355,6 +367,7 @@ export const browserClient: WorkspaceClient = {
   setRepoBranch: async () => unavailable(),
   saveFileAs: async () => unavailable(),
   closeWorkspace: async () => unavailable(),
+  refreshWorkspace: async () => unavailable(),
   findInFiles: async () => unavailable(),
   filterFiles: async () => unavailable(),
 };

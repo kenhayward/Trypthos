@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   GITHUB_API,
+  GitHubBranchSchema,
+  GitHubCommitPullsSchema,
+  GitHubCommitSchema,
   GitHubComparisonSchema,
+  arrivalOf,
+  commitCompareUrl,
+  commitPullsUrl,
+  commitSummary,
+  commitUrl,
   GitHubRefListSchema,
   GitHubRepoDetailSchema,
   GitHubRepoListSchema,
@@ -678,5 +686,106 @@ describe("the message on a commit", () => {
   it("says what was done, and to which file", () => {
     expect(commitMessageFor("docs/guide.md", { creating: false })).toBe("Update guide.md");
     expect(commitMessageFor("notes.md", { creating: true })).toBe("Add notes.md");
+  });
+});
+
+/// A commit as the repository page names it: which one, what it said, who made it, and when.
+describe("a commit, as the repository page names it", () => {
+  const COMMIT = GitHubCommitSchema.parse({
+    sha: "abc1234def5678",
+    html_url: "https://github.com/ada/notes/commit/abc1234def5678",
+    commit: {
+      message: "Tidy the guide\n\nA longer explanation nobody reads in a list.",
+      author: { name: "Ada Lovelace", date: "2026-09-01T10:00:00Z" },
+      committer: { name: "GitHub", date: "2026-09-02T12:00:00Z" },
+    },
+    author: { login: "ada" },
+  });
+
+  it("keeps the first line of the message, who made it, and where to see it", () => {
+    expect(commitSummary(COMMIT)).toEqual({
+      sha: "abc1234def5678",
+      headline: "Tidy the guide",
+      author: "ada",
+      date: "2026-09-02T12:00:00Z",
+      url: "https://github.com/ada/notes/commit/abc1234def5678",
+    });
+  });
+
+  // The COMMITTER's date, not the author's. A pull request written on the first and merged on the
+  // second reached the branch on the second, and "when did this land" is the question the page asks.
+  it("dates a commit by when it reached the branch, not when it was written", () => {
+    expect(commitSummary(COMMIT).date).toBe("2026-09-02T12:00:00Z");
+  });
+
+  // An email git recorded that matches no GitHub account comes back with no `author` object at all.
+  it("falls back to the name git recorded when GitHub has no account for the author", () => {
+    const parsed = GitHubCommitSchema.parse({ ...COMMIT, author: null });
+    expect(commitSummary(parsed).author).toBe("Ada Lovelace");
+  });
+
+  // What a branch LISTING carries for its head is a sha and nothing else. It still names a commit.
+  it("describes a commit that arrived as nothing but its sha", () => {
+    const branch = GitHubBranchSchema.parse({ commit: { sha: "c0ffee" } });
+    expect(commitSummary(branch.commit)).toEqual({
+      sha: "c0ffee",
+      headline: "",
+      author: null,
+      date: null,
+      url: null,
+    });
+  });
+});
+
+/// How the newest commit on a branch got there: somebody pushed it, or a pull request was merged.
+describe("how a commit reached its branch", () => {
+  const pull = (overrides: Record<string, unknown> = {}) => ({
+    number: 42,
+    title: "Tidy the guide",
+    html_url: "https://github.com/ada/notes/pull/42",
+    merged_at: "2026-09-02T12:00:00Z",
+    merge_commit_sha: "abc",
+    ...overrides,
+  });
+
+  it("is a merge when a merged pull request produced exactly this commit", () => {
+    const pulls = GitHubCommitPullsSchema.parse([pull()]);
+    expect(arrivalOf("abc", pulls)).toEqual({
+      kind: "merge",
+      number: 42,
+      title: "Tidy the guide",
+      url: "https://github.com/ada/notes/pull/42",
+    });
+  });
+
+  it("is a push when no pull request is associated with it", () => {
+    expect(arrivalOf("abc", [])).toEqual({ kind: "push" });
+  });
+
+  // GitHub associates a commit with every pull request that CONTAINS it, open ones included. Only a
+  // merge that produced this very commit means it arrived by one.
+  it("is a push when the pull requests that contain it did not merge it", () => {
+    const pulls = GitHubCommitPullsSchema.parse([
+      pull({ merged_at: null, merge_commit_sha: null }),
+      pull({ number: 7, merge_commit_sha: "somewhere-else" }),
+    ]);
+    expect(arrivalOf("abc", pulls)).toEqual({ kind: "push" });
+  });
+});
+
+describe("the addresses for one commit", () => {
+  it("names a commit, the pull requests behind it, and the distance between two", () => {
+    expect(commitUrl("ada", "notes", "abc")).toBe(`${GITHUB_API}/repos/ada/notes/commits/abc`);
+    expect(commitPullsUrl("ada", "notes", "abc")).toBe(
+      `${GITHUB_API}/repos/ada/notes/commits/abc/pulls`,
+    );
+    expect(commitCompareUrl("ada", "notes", "old", "new")).toBe(
+      `${GITHUB_API}/repos/ada/notes/compare/old...new`,
+    );
+  });
+
+  // A sha arrives from GitHub, but it is still somebody else's string on its way into a URL.
+  it("keeps a sha to one segment", () => {
+    expect(commitUrl("ada", "notes", "a/../b")).toBe(`${GITHUB_API}/repos/ada/notes/commits/a%2F..%2Fb`);
   });
 });

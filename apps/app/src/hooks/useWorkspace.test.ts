@@ -67,6 +67,11 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       return { ok: true, path: `${workspaceId}/chosen.md`, revision: { id: "r-saved-as" } };
     },
     closeWorkspace: async () => ({ ok: true }),
+    // Nothing moves for a local folder, so the shell answers with the workspace as it stands.
+    refreshWorkspace: async (workspaceId) => ({
+      ok: true,
+      workspace: { id: workspaceId, name: "ws", ref: { kind: "local" as const, root: `/${workspaceId}` }, truncated: false },
+    }),
     // A repository's branches. Overridden by the tests that commit; here so the fake is the whole
     // interface rather than most of it.
     repoBranches: async () => ({ ok: true as const, branches: ["main"], branch: null, readingBranch: "main" }),
@@ -2145,5 +2150,267 @@ describe("committing to a repository", () => {
 
     expect(result.current.state.errorKey).toBe("errors.readOnlyToken");
     expect(result.current.state.dirty).toBe(true);
+  });
+});
+
+/// Refresh, from the workspace's right-click menu.
+///
+/// The tree is a listing taken when each folder was opened, and nothing watches the disk - so a file
+/// added or deleted outside the app is not there until something asks again. Refresh is that asking,
+/// for every folder the user has open, without collapsing what they had expanded.
+describe("refreshing a workspace", () => {
+  /// A folder on disk the tests can change between listings. Keyed by qualified path, answering the
+  /// same shapes the shell does - and a folder that is not in it answers "not found", which is what
+  /// listing a deleted folder does.
+  function disk(initial: Record<string, { name: string; kind: "file" | "directory" }[]>) {
+    const folders = { ...initial };
+    const listed: string[] = [];
+    const listDirectory: WorkspaceClient["listDirectory"] = async (path) => {
+      listed.push(path);
+      const entries = folders[path];
+      if (entries === undefined) return { ok: false, reason: "not-found" };
+      return {
+        ok: true,
+        nodes: entries.map((entry) => ({ id: `${path}/${entry.name}`, ...entry })),
+      };
+    };
+    return { folders, listed, listDirectory };
+  }
+
+  const names = (state: { folders: Record<string, { children?: { name: string }[] }> }, path: string) =>
+    state.folders[path]?.children?.map((node) => node.name).sort();
+
+  async function openWithNotesExpanded(fs: ReturnType<typeof disk>) {
+    const { client } = fakeClient({ listDirectory: fs.listDirectory });
+    const hook = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await hook.result.current.actions.open();
+    });
+    await act(async () => {
+      await hook.result.current.actions.toggleFolder("ws/notes");
+    });
+    return hook;
+  }
+
+  it("picks up files added since each open folder was listed", async () => {
+    const fs = disk({
+      ws: [
+        { name: "a.md", kind: "file" },
+        { name: "notes", kind: "directory" },
+      ],
+      "ws/notes": [{ name: "one.md", kind: "file" }],
+    });
+    const { result } = await openWithNotesExpanded(fs);
+
+    fs.folders.ws = [...fs.folders.ws!, { name: "b.md", kind: "file" }];
+    fs.folders["ws/notes"] = [...fs.folders["ws/notes"]!, { name: "two.md", kind: "file" }];
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(names(result.current.state, "ws")).toEqual(["a.md", "b.md", "notes"]);
+    expect(names(result.current.state, "ws/notes")).toEqual(["one.md", "two.md"]);
+  });
+
+  it("forgets a folder that has been deleted, and says nothing about it", async () => {
+    const fs = disk({
+      ws: [{ name: "notes", kind: "directory" }],
+      "ws/notes": [{ name: "one.md", kind: "file" }],
+    });
+    const { result } = await openWithNotesExpanded(fs);
+
+    fs.folders.ws = [];
+    delete fs.folders["ws/notes"];
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    // Gone rather than drawn as a failure: a folder that is not there any more is not a folder that
+    // could not be read, and a Retry beside it would be offering to find something that was deleted.
+    expect(result.current.state.folders["ws/notes"]).toBeUndefined();
+    expect(result.current.state.folders.ws?.status).toBe("loaded");
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  // Refresh re-reads what is open. Listing a collapsed folder would expand it, and on a large tree
+  // would walk folders nobody asked to see.
+  it("leaves collapsed folders collapsed, and does not list them", async () => {
+    const fs = disk({
+      ws: [
+        { name: "notes", kind: "directory" },
+        { name: "archive", kind: "directory" },
+      ],
+      "ws/notes": [],
+      "ws/archive": [],
+    });
+    const { result } = await openWithNotesExpanded(fs);
+    fs.listed.length = 0;
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(fs.listed.sort()).toEqual(["ws", "ws/notes"]);
+    expect(result.current.state.folders["ws/archive"]).toBeUndefined();
+    expect(result.current.state.folders["ws/notes"]?.status).toBe("loaded");
+  });
+
+  // A refresh swaps the new listing in when it arrives. Dropping each folder to "loading" first
+  // would empty the tree and redraw it, which is a flash and a lost scroll position for a list that
+  // is usually unchanged.
+  it("keeps the rows on screen while the folders are being listed again", async () => {
+    let release: () => void = () => {};
+    let hold = false;
+    let holding = false;
+    const fs = disk({ ws: [{ name: "a.md", kind: "file" }] });
+    const { client } = fakeClient({
+      listDirectory: async (path) => {
+        if (hold) {
+          holding = true;
+          await new Promise<void>((resolve) => (release = resolve));
+        }
+        return await fs.listDirectory(path);
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    hold = true;
+    let refreshing: Promise<boolean> = Promise.resolve(true);
+    act(() => {
+      refreshing = result.current.actions.refreshWorkspace("ws");
+    });
+    // The listing is out and has not come back - which is the moment a "loading" would be drawn.
+    await waitFor(() => expect(holding).toBe(true));
+
+    expect(result.current.state.folders.ws?.status).toBe("loaded");
+    expect(names(result.current.state, "ws")).toEqual(["a.md"]);
+
+    await act(async () => {
+      release();
+      await refreshing;
+    });
+  });
+
+  // A root that has been deleted or unmounted fails like any other listing: on its own row, with the
+  // Retry that is already there for it.
+  it("records a root that can no longer be listed on its row", async () => {
+    const fs = disk({ ws: [{ name: "notes", kind: "directory" }], "ws/notes": [] });
+    const { result } = await openWithNotesExpanded(fs);
+
+    delete fs.folders.ws;
+    delete fs.folders["ws/notes"];
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(result.current.state.folders.ws?.status).toBe("error");
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  // For a repository the shell moves the pin to the newest commit first, so the listings that follow
+  // describe that commit rather than the one the workspace opened on.
+  it("asks the shell to look again before listing anything", async () => {
+    const order: string[] = [];
+    const fs = disk({ ws: [] });
+    const { client } = fakeClient({
+      listDirectory: async (path) => {
+        order.push(`list ${path}`);
+        return await fs.listDirectory(path);
+      },
+    });
+    const refreshWorkspace = client.refreshWorkspace;
+    client.refreshWorkspace = async (workspaceId) => {
+      order.push(`refresh ${workspaceId}`);
+      return await refreshWorkspace(workspaceId);
+    };
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    order.length = 0;
+
+    let refreshed: boolean | undefined;
+    await act(async () => {
+      refreshed = await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(order).toEqual(["refresh ws", "list ws"]);
+    expect(refreshed).toBe(true);
+  });
+
+  // `truncated` describes the TREE, and a newer commit's tree can be cut short where the old one was
+  // not - so what the shell says now replaces what it said at open.
+  it("takes what the shell now says about the workspace", async () => {
+    const { client } = fakeClient({
+      refreshWorkspace: async () => ({
+        ok: true,
+        workspace: { id: "ws", name: "ws", ref: { kind: "local" as const, root: "/ws" }, truncated: true },
+      }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(result.current.state.workspaces[0]?.truncated).toBe(true);
+  });
+
+  // A repository that could not be moved on is still on the commit it was - so its listings are still
+  // right, nothing is re-listed, and the user is told why in the banner every other failure uses.
+  it("says why the shell could not refresh it, and lists nothing", async () => {
+    const fs = disk({ ws: [{ name: "a.md", kind: "file" }] });
+    const { client } = fakeClient({
+      listDirectory: fs.listDirectory,
+      refreshWorkspace: async () => ({ ok: false, reason: "rate-limited" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    fs.listed.length = 0;
+
+    let refreshed: boolean | undefined;
+    await act(async () => {
+      refreshed = await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(refreshed).toBe(false);
+    expect(fs.listed).toEqual([]);
+    expect(result.current.state.errorKey).toBe("errors.rateLimited");
+    expect(names(result.current.state, "ws")).toEqual(["a.md"]);
+  });
+
+  // "ws" must not refresh "ws-archive" - the same prefix trap `withoutSubtree` guards against.
+  it("leaves every other open workspace alone", async () => {
+    const fs = disk({
+      ws: [{ name: "a.md", kind: "file" }],
+      "ws-archive": [{ name: "old.md", kind: "file" }],
+    });
+    const { client } = fakeClient({ listDirectory: fs.listDirectory });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef({ kind: "local", root: "/ws" });
+    });
+    await act(async () => {
+      await result.current.actions.openRef({ kind: "local", root: "/ws-archive" });
+    });
+    fs.listed.length = 0;
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(fs.listed).toEqual(["ws"]);
+    expect(names(result.current.state, "ws-archive")).toEqual(["old.md"]);
   });
 });

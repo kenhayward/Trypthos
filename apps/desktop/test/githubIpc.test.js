@@ -67,6 +67,12 @@ function fakeGitHubFactory({ valid = "ghp_good", repos = [], calls = {} } = {}) 
       ok: true,
       stats: { fullName: `${owner}/${repo}`, stars: 12, forks: 3, issuesAndPullRequests: 4 },
     }),
+    repoPin: async (_owner, _repo, pin) => ({
+      branch: pin.branch,
+      commit: { sha: pin.sha, headline: "", author: null, date: null, url: null },
+      latest: null,
+      newer: null,
+    }),
     tree: async () => ({ ok: true, entries: TREE, truncated: false }),
     blob: async (_owner, _repo, sha) =>
       sha === "b2" ? { ok: true, bytes: Buffer.from("guide") } : { ok: false, reason: "not-found" },
@@ -477,6 +483,146 @@ test("refuses statistics for a workspace that is not open", async () => {
     assert.deepEqual(await ipcMain.invoke("github:repoInfo", { workspaceId: "never-opened" }), {
       ok: false,
       reason: "no-workspace",
+    });
+  });
+});
+
+/// Refreshing a workspace, and the commit a repository is on.
+///
+/// A repository is pinned to the commit it opened at, so its tree cannot change while somebody
+/// reads it. Refresh is what moves it on, and the page is what says where it stands.
+
+/// A GitHub whose branch can be moved on between requests, as somebody pushing would.
+function movingGitHub() {
+  const branch = { head: "c0ffee", fail: null };
+  const pins = [];
+  const NEWER = [{ path: "added.md", mode: "100644", type: "blob", sha: "b9", size: 5 }];
+
+  const factory = () => ({
+    whoami: async () => ({ ok: true, login: "ada" }),
+    ownedRepositories: async () => ({ ok: true, repos: [] }),
+    defaultBranchHead: async () => ({ ok: true, branch: "main", sha: "c0ffee" }),
+    branchHead: async () =>
+      branch.fail !== null
+        ? { ok: false, reason: branch.fail }
+        : {
+            ok: true,
+            sha: branch.head,
+            commit: { sha: branch.head, headline: "", author: null, date: null, url: null },
+          },
+    repoStatistics: async (owner, repo) => ({ ok: true, stats: { fullName: `${owner}/${repo}` } }),
+    repoPin: async (_owner, _repo, pin) => {
+      pins.push(pin);
+      return {
+        branch: pin.branch,
+        commit: { sha: pin.sha, headline: "", author: null, date: null, url: null },
+        latest: null,
+        newer: null,
+      };
+    },
+    tree: async (_owner, _repo, sha) => ({
+      ok: true,
+      entries: sha === "c0ffee" ? TREE : NEWER,
+      truncated: sha !== "c0ffee",
+    }),
+    blob: async () => ({ ok: false, reason: "not-found" }),
+  });
+
+  return { branch, pins, factory };
+}
+
+test("says which branch and commit an open repository is reading", async () => {
+  const github = movingGitHub();
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", {
+        ref: { kind: "github", owner: "ada", repo: "pinned" },
+      });
+
+      const info = await ipcMain.invoke("github:repoInfo", { workspaceId: opened.workspace.id });
+
+      assert.equal(info.ok, true);
+      assert.deepEqual(github.pins, [{ branch: "main", sha: "c0ffee" }]);
+      assert.equal(info.pin.commit.sha, "c0ffee");
+    },
+    { createGitHub: github.factory },
+  );
+});
+
+test("refreshing a repository moves it to the newest commit on its branch", async () => {
+  const github = movingGitHub();
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", {
+        ref: { kind: "github", owner: "ada", repo: "moving" },
+      });
+      github.branch.head = "f00d";
+
+      const refreshed = await ipcMain.invoke("workspace:refresh", { workspaceId: opened.workspace.id });
+
+      assert.equal(refreshed.ok, true);
+      assert.equal(refreshed.workspace.id, opened.workspace.id);
+      // A fact about the new listing, so it travels with the answer rather than staying stale.
+      assert.equal(refreshed.workspace.truncated, true);
+
+      const listed = await ipcMain.invoke("workspace:list", { path: opened.workspace.id });
+      assert.deepEqual(
+        listed.nodes.map((node) => node.name),
+        ["added.md"],
+      );
+
+      await ipcMain.invoke("github:repoInfo", { workspaceId: opened.workspace.id });
+      assert.equal(github.pins.at(-1).sha, "f00d");
+    },
+    { createGitHub: github.factory },
+  );
+});
+
+// Passed through as a result, and nothing moves: the tree still describes the commit it came from.
+test("says why a repository could not be refreshed", async () => {
+  const github = movingGitHub();
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", {
+        ref: { kind: "github", owner: "ada", repo: "unreachable" },
+      });
+      github.branch.fail = "rate-limited";
+
+      assert.deepEqual(
+        await ipcMain.invoke("workspace:refresh", { workspaceId: opened.workspace.id }),
+        { ok: false, reason: "rate-limited" },
+      );
+    },
+    { createGitHub: github.factory },
+  );
+});
+
+// A folder on disk is always current - re-listing it is the renderer's half - so there is nothing to
+// move, and the answer is simply the workspace as it stands.
+test("refreshing a local folder moves nothing and answers with the folder", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-refresh-local-"));
+    try {
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "local", root: dir } });
+      assert.deepEqual(
+        await ipcMain.invoke("workspace:refresh", { workspaceId: opened.workspace.id }),
+        { ok: true, workspace: opened.workspace },
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("refuses to refresh a workspace that is not open, or a request it cannot read", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    assert.deepEqual(await ipcMain.invoke("workspace:refresh", { workspaceId: "never-opened" }), {
+      ok: false,
+      reason: "no-workspace",
+    });
+    assert.deepEqual(await ipcMain.invoke("workspace:refresh", { path: "anything" }), {
+      ok: false,
+      reason: "bad-request",
     });
   });
 });

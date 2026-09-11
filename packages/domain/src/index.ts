@@ -283,6 +283,7 @@ export {
   BranchesRequest,
   ListReposRequest,
   RepoInfoRequest,
+  RefreshWorkspaceRequest,
   SetBranchRequest,
 } from "./ipc";
 export type { ChatEvent, DiscardChoice, IpcChannel, OpenTarget, WindowState } from "./ipc";
@@ -315,6 +316,8 @@ export {
   GITHUB_API,
   GitHubBlobSchema,
   GitHubBranchSchema,
+  GitHubCommitPullsSchema,
+  GitHubCommitSchema,
   GitHubRepoDetailSchema,
   GitHubRepoListSchema,
   GitHubBranchListSchema,
@@ -334,7 +337,12 @@ export {
   branchListUrl,
   branchNameFor,
   branchUrl,
+  arrivalOf,
+  commitCompareUrl,
   commitMessageFor,
+  commitPullsUrl,
+  commitSummary,
+  commitUrl,
   compareUrl,
   contentsUrl,
   countFromLink,
@@ -356,6 +364,9 @@ export {
 } from "./github";
 export type {
   GitHubTreeEntry,
+  RepoArrival,
+  RepoCommit,
+  RepoPin,
   RepoDivergence,
   RepoExtras,
   RepoOwner,
