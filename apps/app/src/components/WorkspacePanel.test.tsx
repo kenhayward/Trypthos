@@ -47,6 +47,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),
+    onRefreshWorkspace: vi.fn(),
     onOpenFile: vi.fn(),
     fileTypes: ["markdown"] as readonly string[],
     selectedFolder: "",
@@ -486,6 +487,97 @@ describe("the sources a workspace can be opened from", () => {
 
     expect(colourOf("Notes")).not.toBe("");
     expect(colourOf("essays")).not.toBe(colourOf("Notes"));
+  });
+});
+
+/// The right-click menu on a workspace.
+///
+/// About the whole workspace wherever in it the click lands - its own row or any row beneath it - so
+/// the menu is found by right-clicking the thing you are looking at rather than scrolling up to the
+/// root first. Refresh is its first entry, and at present its only one.
+describe("the workspace menu", () => {
+  const WORK = { id: "Work", name: "Work", ref: { kind: "local" as const, root: "D:/Work" }, truncated: false };
+  const ESSAYS = {
+    id: "essays",
+    name: "essays",
+    ref: { kind: "github" as const, owner: "ada", repo: "essays" },
+    truncated: false,
+  };
+
+  async function rightClick(target: HTMLElement) {
+    const user = userEvent.setup();
+    await user.pointer({ keys: "[MouseRight]", target });
+    return user;
+  }
+
+  it("opens on a right-click of the workspace's row, with Refresh first", async () => {
+    panel();
+    await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
+
+    expect(screen.getByRole("menu", { name: "Diariz" })).toBeDefined();
+    expect(screen.getAllByRole("menuitem")[0]?.textContent).toBe("Refresh");
+  });
+
+  it("refreshes that workspace when Refresh is chosen, and closes", async () => {
+    const onRefreshWorkspace = vi.fn();
+    panel({ onRefreshWorkspace });
+    const user = await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
+
+    await user.click(screen.getByRole("menuitem", { name: "Refresh" }));
+
+    expect(onRefreshWorkspace).toHaveBeenCalledWith("Diariz");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  // Right-clicking asks about a row; it does not act on it. Opening the file or collapsing the
+  // folder as well would mean reading the options costs you what you were looking at.
+  it("opens from any row inside the workspace, without opening or toggling it", async () => {
+    const props = panel();
+
+    await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+    expect(screen.getByRole("menu", { name: "Diariz" })).toBeDefined();
+
+    await rightClick(screen.getByRole("button", { name: /docs/ }));
+    expect(props.onOpenFile).not.toHaveBeenCalled();
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+    expect(props.onSelectFolder).not.toHaveBeenCalled();
+  });
+
+  it("is about the workspace that was right-clicked, not the first one open", async () => {
+    const onRefreshWorkspace = vi.fn();
+    panel({
+      workspaces: [DIARIZ, WORK],
+      folders: { ...FOLDERS, Work: { status: "loaded", children: [{ id: "Work/a.md", name: "a.md", kind: "file" }] } },
+      onRefreshWorkspace,
+    });
+    const user = await rightClick(screen.getByRole("button", { name: /a\.md/ }));
+
+    await user.click(screen.getByRole("menuitem", { name: "Refresh" }));
+    expect(onRefreshWorkspace).toHaveBeenCalledWith("Work");
+  });
+
+  it("closes on Escape, having done nothing", async () => {
+    const onRefreshWorkspace = vi.fn();
+    panel({ onRefreshWorkspace });
+    const user = await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
+    expect(screen.getByRole("menu")).toBeDefined();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(onRefreshWorkspace).not.toHaveBeenCalled();
+  });
+
+  // A repository is held at the commit it was opened on, so asking again answers from the same
+  // tree. Offered greyed rather than hidden: an entry that comes and goes by workspace is harder to
+  // learn than one that says it does not apply here, and the tooltip says why.
+  it("cannot refresh a repository", async () => {
+    panel({ workspaces: [ESSAYS], folders: {} });
+    await rightClick(screen.getByRole("button", { name: /^essays$/ }));
+
+    const refresh = screen.getByRole("menuitem", { name: "Refresh" }) as HTMLButtonElement;
+    expect(refresh.disabled).toBe(true);
+    expect(refresh.getAttribute("title")).not.toBeNull();
   });
 });
 

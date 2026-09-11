@@ -605,6 +605,7 @@ export default function App() {
           onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
+          onRefreshWorkspace={(workspaceId) => void actions.refreshWorkspace(workspaceId)}
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}

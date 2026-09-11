@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.66.0",
+    date: "2026-09-11",
+    pr: 135,
+    headline: "Refresh a folder from its right-click menu",
+    summary:
+      "The workspace panel shows a folder as it was when you opened it, and nothing was watching for changes after that - so a file you added, renamed or deleted in File Explorer, or that another program wrote, did not appear until you closed the folder and opened it again. Right-click anywhere in a folder's tree now and choose Refresh. Every folder you have open in it is read again, and what you had expanded stays expanded: new files appear where they belong, and a folder that has been deleted simply goes, rather than being drawn as one that could not be read with a Retry offering to find it. Collapsed folders are left alone, so refreshing a large tree does not walk parts of it you never asked to see, and the rows stay on screen while it happens rather than emptying and redrawing. The menu is about the whole folder wherever you right-click in it, so you do not have to scroll back up to its top row to find it. A GitHub repository is held at the commit it was opened on, so there is nothing new for Refresh to find there - the entry is greyed for a repository, and its tooltip says to close and reopen it to see newer commits.",
+    added: [
+      "A right-click menu on each open folder in the workspace panel, with Refresh as its first entry. It reads the folder's open subfolders again, keeping what you had expanded.",
+    ],
+  },
+  {
     version: "0.65.0",
     date: "2026-09-09",
     pr: 134,

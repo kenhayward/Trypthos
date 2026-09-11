@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TAB_CLOSE_ACTIONS, documentName, tabLabels, tabsToClose } from "@trypthos/domain";
 import type { TabCloseAction } from "@trypthos/domain";
 import { builtInTitleKey } from "../lib/builtInDocuments";
+import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 
 interface Props {
   /// Qualifies the hover text, because "docs/notes.md" alone does not say which folder it is in.
@@ -55,27 +56,8 @@ export default function EditorTabs({
   /// Short names, lengthened only where two open files would otherwise read the same.
   const labels = useMemo(() => tabLabels(paths), [paths]);
   const strip = useRef<HTMLDivElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-
-  // Dismissed the way every other popover in the app is - a click outside, or Escape. Registered
-  // only while it is open, so there are no listeners on the document for a menu nobody opened.
-  useEffect(() => {
-    if (menu === null) return;
-
-    function onDocument(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setMenu(null);
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenu(null);
-    }
-
-    document.addEventListener("mousedown", onDocument);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocument);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [menu]);
+  // Stable, so the menu's document listeners are registered once per opening rather than per render.
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   // The active tab can be off the end of the strip - opened from a link, or reached by keyboard with
   // twenty files open. Scrolled into view rather than left for the user to find.
@@ -220,23 +202,12 @@ export default function EditorTabs({
           rather than cleared from an effect on `paths`, which is a cascading render expressing
           something the data can say itself. */}
       {menu !== null && paths.includes(menu.path) && (
-        // Fixed to the pointer, like a menu rather than a dropdown: it is about the tab under the
-        // cursor, and anchoring it to the strip would put it somewhere else entirely on a tab that
-        // has scrolled.
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label={t("editor.tabMenu")}
-          style={{ left: menu.x, top: menu.y }}
-          className="fixed z-50 min-w-44 rounded-md border border-rule bg-app p-1 shadow-menu"
-        >
+        <ContextMenu label={t("editor.tabMenu")} x={menu.x} y={menu.y} onDismiss={closeMenu}>
           {TAB_CLOSE_ACTIONS.map((action) => {
             const targets = tabsToClose(action, paths, dirtyPaths, menu.path);
             return (
-              <button
+              <ContextMenuItem
                 key={action}
-                type="button"
-                role="menuitem"
                 // Greyed from the same function that does the work, so "would close nothing" and
                 // "does nothing" cannot come to mean different things.
                 disabled={targets.length === 0}
@@ -244,13 +215,12 @@ export default function EditorTabs({
                   setMenu(null);
                   onCloseMany(targets);
                 }}
-                className="block w-full rounded px-2 py-1 text-left text-ui text-ink hover:bg-hover disabled:text-ink-4 disabled:hover:bg-transparent"
               >
                 {t(MENU_LABELS[action])}
-              </button>
+              </ContextMenuItem>
             );
           })}
-        </div>
+        </ContextMenu>
       )}
     </div>
   );

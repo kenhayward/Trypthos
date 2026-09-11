@@ -26,6 +26,15 @@ three open folders filling the panel with everything inside them, before you hav
 is worst for exactly the people who keep several open. A folder you open yourself still expands,
 because choosing a folder is asking to see what is in it.
 
+**Refresh picks up what changed outside the app.** A folder is listed when you open it, and nothing
+watches it after that - so a file added, renamed or deleted in File Explorer or by another program
+is not there until you ask. Right-click anywhere in a folder's tree and choose **Refresh**: every
+folder you have open in it is read again, what you had expanded stays expanded, and a folder that
+has since been deleted is dropped rather than shown as one that could not be read. Collapsed folders
+are left alone, and the rows stay on screen while it happens rather than emptying and redrawing.
+Refresh is the first entry on that menu. It is greyed on a GitHub repository, which is held at the
+commit it was opened on - close and reopen one to see newer commits.
+
 **Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
 row at the top of its tree. **That row collapses like any folder inside one**: click it and the whole
 folder folds away, which is what keeps the panel usable with two or three open - put the ones you are

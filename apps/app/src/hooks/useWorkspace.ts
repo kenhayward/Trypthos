@@ -115,6 +115,9 @@ export interface WorkspaceActions {
   toggleFolder(path: string): Promise<void>;
   /// Re-lists a folder whose listing failed.
   retryFolder(path: string): Promise<void>;
+  /// Re-lists every open folder in one workspace, so changes made outside the app appear. What was
+  /// expanded stays expanded; a folder that has gone is dropped rather than reported as a failure.
+  refreshWorkspace(workspaceId: string): Promise<void>;
   /// Chooses the folder chat maps. Expanding a folder is a separate act - see `toggleFolder`.
   selectFolder(path: string): void;
   openFile(node: RemoteNode): Promise<void>;
@@ -334,6 +337,42 @@ export function withoutSubtree(
   return Object.fromEntries(
     Object.entries(folders).filter(([key]) => key !== path && !key.startsWith(prefix)),
   );
+}
+
+/// The folders of one workspace, and whether each belongs to it. Its root is its id.
+///
+/// With the trailing separator, so "ws" does not claim "ws-archive" - the same prefix trap
+/// `withoutSubtree` has.
+function inWorkspace(path: string, workspaceId: string): boolean {
+  return path === workspaceId || path.startsWith(`${workspaceId}/`);
+}
+
+/// Drops every folder in one workspace that its parent no longer lists.
+///
+/// What a refresh leaves behind otherwise: a folder deleted outside the app is still in the map, and
+/// its failed listing would draw it as a folder that could not be READ - with a Retry offering to
+/// find something that is gone. Walked from the root down, so a folder that goes takes everything
+/// beneath it, and a parent that could not be listed says nothing about what is inside it.
+function withoutOrphans(
+  folders: Record<string, FolderState>,
+  workspaceId: string,
+): Record<string, FolderState> {
+  const inside = Object.keys(folders)
+    .filter((path) => inWorkspace(path, workspaceId))
+    .sort((a, b) => a.split("/").length - b.split("/").length);
+  const kept = Object.fromEntries(
+    Object.entries(folders).filter(([path]) => !inWorkspace(path, workspaceId)),
+  );
+
+  for (const path of inside) {
+    const parent = kept[parentOf(path)];
+    const listed =
+      path === workspaceId ||
+      (parent?.status === "loaded" &&
+        (parent.children ?? []).some((node) => node.kind === "directory" && node.id === path));
+    if (listed) kept[path] = folders[path]!;
+  }
+  return kept;
 }
 
 /// Asks the user what to do about unsaved work in the named document. Null outside the desktop
@@ -836,6 +875,40 @@ export function useWorkspace(
     [loadFolder],
   );
 
+  /// Lists every folder the user has open in one workspace again, keeping what is expanded expanded.
+  ///
+  /// Nothing watches the disk, so this is how a file added or deleted outside the app reaches the
+  /// tree. Only the folders already open are asked about: listing a collapsed one would expand it.
+  ///
+  /// **No "loading" in between.** Each new listing replaces the old one when it arrives, so a tree
+  /// that has usually not changed is not emptied and redrawn - a flash, and a lost scroll position.
+  const refreshWorkspace = useCallback(
+    async (workspaceId: string) => {
+      const open = Object.entries(stateRef.current.folders)
+        // A folder mid-listing already has a fresh answer on its way.
+        .filter(([path, folder]) => inWorkspace(path, workspaceId) && folder.status !== "loading")
+        .map(([path]) => path);
+
+      const listings = await Promise.all(
+        open.map(async (path) => [path, await client.listDirectory(path)] as const),
+      );
+
+      setInternal((prev) => {
+        const folders = { ...prev.folders };
+        for (const [path, result] of listings) {
+          // Collapsed, or its workspace closed, while the listing was out. What the user did since
+          // is newer than this answer, and writing it back would expand the folder again.
+          if (prev.folders[path] === undefined) continue;
+          folders[path] = result.ok
+            ? { status: "loaded", children: result.nodes }
+            : { status: "error" };
+        }
+        return { ...prev, folders: withoutOrphans(folders, workspaceId) };
+      });
+    },
+    [client],
+  );
+
   const active = activeDocument(internal.documents);
 
   const state: WorkspaceState = useMemo(
@@ -868,6 +941,7 @@ export function useWorkspace(
     reopen,
     toggleFolder,
     retryFolder: loadFolder,
+    refreshWorkspace,
     selectFolder: (path: string) => setInternal((prev) => ({ ...prev, selectedFolder: path })),
     openFile,
     openPath,
