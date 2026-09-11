@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RepoStats } from "@trypthos/domain";
+import type { RepoPin, RepoStats } from "@trypthos/domain";
 import { useRepoPage } from "./useRepoPage";
 import { expectsConsoleError } from "../test-setup";
 import type { GitHubBridge, WorkspaceClient } from "../lib/workspaceClient";
@@ -39,7 +39,7 @@ function fakes(overrides: { github?: Partial<GitHubBridge>; client?: Partial<Wor
     connectGitHub: vi.fn(async () => ({ ok: true as const, login: "ada" })),
     disconnectGitHub: vi.fn(async () => ({ ok: true })),
     listRepositories: vi.fn(async () => ({ ok: true as const, repos: [] })),
-    repoInfo: vi.fn(async () => ({ ok: true as const, stats: STATS })),
+    repoInfo: vi.fn(async () => ({ ok: true as const, stats: STATS, pin: null })),
     ...overrides.github,
   } as GitHubBridge;
 
@@ -240,8 +240,8 @@ describe("refreshing a page", () => {
       ...fakes().github,
       repoInfo: vi
         .fn()
-        .mockResolvedValueOnce({ ok: true as const, stats: STATS })
-        .mockResolvedValue({ ok: true as const, stats: later }),
+        .mockResolvedValueOnce({ ok: true as const, stats: STATS, pin: null })
+        .mockResolvedValue({ ok: true as const, stats: later, pin: null }),
     } as unknown as GitHubBridge;
     const { client } = fakes();
 
@@ -287,5 +287,65 @@ describe("refreshing a page", () => {
     act(() => result.current.refresh());
 
     expect(github.repoInfo).not.toHaveBeenCalled();
+  });
+});
+
+/// Which commit the workspace is on, and how that compares with its branch now.
+describe("where a repository workspace stands", () => {
+  const PIN: RepoPin = {
+    branch: "main",
+    commit: { sha: "abc1234", headline: "Tidy the guide", author: "ada", date: null, url: null },
+    latest: null,
+    newer: 0,
+  };
+
+  it("holds the commit the workspace is on", async () => {
+    const { github, client } = fakes({
+      github: { repoInfo: vi.fn(async () => ({ ok: true as const, stats: STATS, pin: PIN })) },
+    });
+    const { result } = renderHook(() => useRepoPage("notes", github, client));
+
+    await waitFor(() => expect(result.current.pin).toEqual(PIN));
+  });
+
+  it("has nothing to say about it when the statistics could not be fetched", async () => {
+    const { github, client } = fakes({
+      github: { repoInfo: vi.fn(async () => ({ ok: false as const, reason: "offline" })) },
+    });
+    const { result } = renderHook(() => useRepoPage("notes", github, client));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.pin).toBeNull();
+  });
+
+  /// Refreshing a repository from the workspace panel moves it to a newer commit, which makes what
+  /// the page is holding wrong - so the page is told, and loads again rather than naming a commit
+  /// the workspace is no longer on.
+  it("loads a repository again once it has moved", async () => {
+    const { github, client } = fakes();
+    const { result } = renderHook(() => useRepoPage("notes", github, client));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => result.current.invalidate("notes"));
+
+    await waitFor(() => expect(github.repoInfo).toHaveBeenCalledTimes(2));
+  });
+
+  // Held pages for repositories that are not on screen go stale just the same. Forgotten now, and
+  // fetched when the reader next goes to them - not fetched now for a page nobody is looking at.
+  it("forgets a repository that is not on screen, and fetches it only when it is", async () => {
+    const { github, client } = fakes();
+    const { result, rerender } = renderHook(({ id }) => useRepoPage(id, github, client), {
+      initialProps: { id: "notes" as string | null },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    rerender({ id: "essays" });
+    await waitFor(() => expect(github.repoInfo).toHaveBeenCalledTimes(2));
+
+    act(() => result.current.invalidate("notes"));
+    expect(github.repoInfo).toHaveBeenCalledTimes(2);
+
+    rerender({ id: "notes" });
+    await waitFor(() => expect(github.repoInfo).toHaveBeenCalledTimes(3));
   });
 });

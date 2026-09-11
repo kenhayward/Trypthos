@@ -44,6 +44,7 @@ export const IPC_CHANNELS = [
   "workspace:find",
   "workspace:filter",
   "workspace:close",
+  "workspace:refresh",
   "document:dirty",
   "document:confirmDiscard",
   "shell:openExternal",
@@ -253,6 +254,13 @@ export type BranchesRequest = z.infer<typeof BranchesRequest>;
 /// same rule as everywhere else here: a renderer that could name a root could name any directory on
 /// the machine, and closing is only the reverse of an opening this side performed.
 export const CloseWorkspaceRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+/// Asking one open workspace to look again at where it reads from.
+///
+/// Named by id for the same reason closing one is. For a local folder there is nothing to move -
+/// the disk is always current, and re-listing is the renderer's half - but a repository is pinned to
+/// a commit, and this is what moves it to the newest one on its branch.
+export const RefreshWorkspaceRequest = z.object({ workspaceId: z.string().min(1) }).strict();
 
 /// Reading an image, which does not go through `file:read`.
 ///

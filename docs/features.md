@@ -32,8 +32,8 @@ is not there until you ask. Right-click anywhere in a folder's tree and choose *
 folder you have open in it is read again, what you had expanded stays expanded, and a folder that
 has since been deleted is dropped rather than shown as one that could not be read. Collapsed folders
 are left alone, and the rows stay on screen while it happens rather than emptying and redrawing.
-Refresh is the first entry on that menu. It is greyed on a GitHub repository, which is held at the
-commit it was opened on - close and reopen one to see newer commits.
+Refresh is the first entry on that menu. On a GitHub repository it also moves the repository to the
+newest commit on its branch, and asks first - see below.
 
 **Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
 row at the top of its tree. **That row collapses like any folder inside one**: click it and the whole
@@ -86,7 +86,12 @@ with no network. Refresh goes back to GitHub, which is what you want just after 
 repository.
 
 **A repository opens at the head of its default branch, pinned to the commit it was on** when you
-opened it. Nobody pushing while you read can change a file underneath you. The whole listing arrives
+opened it. Nobody pushing while you read can change a file underneath you. To catch up with what has
+been pushed since, right-click the repository and choose **Refresh**: Trypthos first says what that
+changes - the tree moves to the newest commit on the branch it is reading, and a tab already open
+keeps its text, so if that file changed on GitHub saving it is refused as a conflict rather than
+overwriting the newer version - and moves only once you confirm. If nobody has pushed, nothing is
+downloaded again. The whole listing arrives
 in one request, so expanding folders, the filter box and Find in Files are as quick on a repository
 as on a folder. A repository too large for GitHub to describe in one answer says so on its row rather
 than quietly showing fewer folders than it has. Symlinks and submodules are not listed, exactly as
@@ -104,6 +109,15 @@ them without another request, and a card labelled only "issues" would be a wrong
 confidently. Branches and tags are counted by asking GitHub for the listing one item at a time and
 reading where it ends, which is the only way to ask - and a count that could not be established says
 **Unknown** rather than showing zero.
+
+**The page says which commit you are on.** Under the description: the commit the workspace is pinned
+to, by its short sha - click it to open the commit on GitHub - with its message, who made it and
+when. Beside it, **Up to date** when that is the newest commit on the branch, or **Behind by** so
+many commits when it is not, with a tooltip saying how to catch up. The line below names the latest
+update on the branch and how it arrived: **pushed**, with that commit's sha and message, or **pull
+request #n merged**, with the pull request's title linking to it. When GitHub could not be asked,
+the page says it could not check rather than implying there is nothing newer. Refreshing the
+repository from the panel reloads the page, so it never goes on naming a commit you have left.
 
 **A fork says where it came from.** The upstream repository is named under the title and opens in
 Trypthos when clicked, which is otherwise out of reach: the picker lists the repositories your

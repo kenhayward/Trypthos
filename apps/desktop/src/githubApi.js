@@ -6,6 +6,8 @@ const {
   GitHubBlobSchema,
   GitHubBranchListSchema,
   GitHubBranchSchema,
+  GitHubCommitPullsSchema,
+  GitHubCommitSchema,
   GitHubComparisonSchema,
   GitHubContentMetaSchema,
   GitHubRefListSchema,
@@ -18,7 +20,12 @@ const {
   GitHubUserSchema,
   RATE_LIMIT_HEADER,
   USER_AGENT,
+  arrivalOf,
   blobUrl,
+  commitCompareUrl,
+  commitPullsUrl,
+  commitSummary,
+  commitUrl,
   branchCountUrl,
   branchListUrl,
   branchUrl,
@@ -245,13 +252,68 @@ function createGitHubApi({
     if (!found.ok) return found;
 
     const branch = found.value.default_branch;
+    const head = await branchHead(owner, repo, branch);
+    return head.ok ? { ok: true, branch, sha: head.sha } : head;
+  }
+
+  /// The newest commit on one branch, described.
+  ///
+  /// One request: GitHub answers `/branches/{name}` with the whole head commit, message and dates
+  /// included - which is both what a refresh moves the pin to and what the page calls the newest.
+  async function branchHead(owner, repo, branch) {
     // A branch git could not have made did not come from GitHub, and is not turned into a URL.
     if (!isSafeRef(branch)) return failure("unsupported");
 
     const head = await request(branchUrl(owner, repo, branch), GitHubBranchSchema);
     if (!head.ok) return head;
 
-    return { ok: true, branch, sha: head.value.commit.sha };
+    return { ok: true, sha: head.value.commit.sha, commit: commitSummary(head.value.commit) };
+  }
+
+  /// One commit described, or null when it could not be.
+  async function commitDetails(owner, repo, sha) {
+    const result = await request(commitUrl(owner, repo, sha), GitHubCommitSchema);
+    return result.ok ? commitSummary(result.value) : null;
+  }
+
+  /// How a commit reached its branch - pushed, or a pull request merged - or null when GitHub would
+  /// not say. See `arrivalOf` for why an associated pull request is not necessarily the answer.
+  async function commitArrival(owner, repo, sha) {
+    const result = await request(commitPullsUrl(owner, repo, sha), GitHubCommitPullsSchema);
+    return result.ok ? arrivalOf(sha, result.value) : null;
+  }
+
+  /// How many commits `head` has that `base` does not, or null when that could not be established.
+  async function commitsSince(owner, repo, base, head) {
+    const result = await request(commitCompareUrl(owner, repo, base, head), GitHubComparisonSchema);
+    return result.ok ? result.value.ahead_by : null;
+  }
+
+  /// Where a repository workspace stands: the commit it is pinned to, the newest on its branch, how
+  /// that one arrived, and how many commits lie between them.
+  ///
+  /// **Never a failure.** Every part is a decoration on a page worth reading without it, so each
+  /// request that fails leaves its part out rather than taking the rest - and the pinned commit is
+  /// always named, by its sha if by nothing else, because the shell holds that without asking.
+  ///
+  /// Up to four requests, and fewer when the workspace is already on the newest commit: the head
+  /// then IS the pinned commit, so it is described once and nothing is compared.
+  async function repoPin(owner, repo, { branch, sha }) {
+    const head = await branchHead(owner, repo, branch);
+    const current = head.ok && head.sha === sha;
+
+    const [pinned, arrival, newer] = await Promise.all([
+      current ? head.commit : commitDetails(owner, repo, sha),
+      head.ok ? commitArrival(owner, repo, head.sha) : null,
+      !head.ok ? null : current ? 0 : commitsSince(owner, repo, sha, head.sha),
+    ]);
+
+    return {
+      branch,
+      commit: pinned ?? { sha, headline: "", author: null, date: null, url: null },
+      latest: head.ok ? { commit: head.commit, arrival } : null,
+      newer,
+    };
   }
 
   /// One repository in full, for its own page.
@@ -398,6 +460,8 @@ function createGitHubApi({
     whoami,
     ownedRepositories,
     defaultBranchHead,
+    branchHead,
+    repoPin,
     repoStatistics,
     tree,
     blob,

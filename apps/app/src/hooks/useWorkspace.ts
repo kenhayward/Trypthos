@@ -117,7 +117,8 @@ export interface WorkspaceActions {
   retryFolder(path: string): Promise<void>;
   /// Re-lists every open folder in one workspace, so changes made outside the app appear. What was
   /// expanded stays expanded; a folder that has gone is dropped rather than reported as a failure.
-  refreshWorkspace(workspaceId: string): Promise<void>;
+  /// A repository is moved to the newest commit on its branch first. True when it worked.
+  refreshWorkspace(workspaceId: string): Promise<boolean>;
   /// Chooses the folder chat maps. Expanding a folder is a separate act - see `toggleFolder`.
   selectFolder(path: string): void;
   openFile(node: RemoteNode): Promise<void>;
@@ -880,10 +881,32 @@ export function useWorkspace(
   /// Nothing watches the disk, so this is how a file added or deleted outside the app reaches the
   /// tree. Only the folders already open are asked about: listing a collapsed one would expand it.
   ///
+  /// **The shell first.** A repository is pinned to a commit, and the shell is what moves it to the
+  /// newest one - so the listings that follow have to wait for that, or they describe the commit the
+  /// workspace just left. A folder on disk has nothing to move and is answered as it stands.
+  ///
   /// **No "loading" in between.** Each new listing replaces the old one when it arrives, so a tree
   /// that has usually not changed is not emptied and redrawn - a flash, and a lost scroll position.
+  ///
+  /// True when it worked. A repository that could not be moved on is still where it was, so nothing
+  /// is re-listed and the banner says why.
   const refreshWorkspace = useCallback(
-    async (workspaceId: string) => {
+    async (workspaceId: string): Promise<boolean> => {
+      const moved = await client.refreshWorkspace(workspaceId);
+      if (!moved.ok) {
+        fail(moved);
+        return false;
+      }
+
+      // What the shell says now replaces what it said at open: `truncated` describes the TREE, and
+      // a newer commit's tree can differ.
+      setInternal((prev) => ({
+        ...prev,
+        workspaces: prev.workspaces.map((workspace) =>
+          workspace.id === moved.workspace.id ? moved.workspace : workspace,
+        ),
+      }));
+
       const open = Object.entries(stateRef.current.folders)
         // A folder mid-listing already has a fresh answer on its way.
         .filter(([path, folder]) => inWorkspace(path, workspaceId) && folder.status !== "loading")
@@ -905,8 +928,9 @@ export function useWorkspace(
         }
         return { ...prev, folders: withoutOrphans(folders, workspaceId) };
       });
+      return true;
     },
-    [client],
+    [client, fail],
   );
 
   const active = activeDocument(internal.documents);

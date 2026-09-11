@@ -568,16 +568,17 @@ describe("the workspace menu", () => {
     expect(onRefreshWorkspace).not.toHaveBeenCalled();
   });
 
-  // A repository is held at the commit it was opened on, so asking again answers from the same
-  // tree. Offered greyed rather than hidden: an entry that comes and goes by workspace is harder to
-  // learn than one that says it does not apply here, and the tooltip says why.
-  it("cannot refresh a repository", async () => {
-    panel({ workspaces: [ESSAYS], folders: {} });
-    await rightClick(screen.getByRole("button", { name: /^essays$/ }));
+  // A repository refreshes too - to the newest commit on its branch. What that changes is asked
+  // about above this panel; the menu only says which workspace it is about.
+  it("refreshes a repository as well as a folder", async () => {
+    const onRefreshWorkspace = vi.fn();
+    panel({ workspaces: [ESSAYS], folders: {}, onRefreshWorkspace });
+    const user = await rightClick(screen.getByRole("button", { name: /^essays$/ }));
 
     const refresh = screen.getByRole("menuitem", { name: "Refresh" }) as HTMLButtonElement;
-    expect(refresh.disabled).toBe(true);
-    expect(refresh.getAttribute("title")).not.toBeNull();
+    expect(refresh.disabled).toBe(false);
+    await user.click(refresh);
+    expect(onRefreshWorkspace).toHaveBeenCalledWith("essays");
   });
 });
 

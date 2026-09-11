@@ -106,6 +106,18 @@ label until two files differ, which is exactly the case this feature creates.
   one, after which a path naming it is refused like any other unknown workspace.
 - **Listings answer with qualified ids**, so the renderer never works out which workspace a row
   belongs to - it hands back what it was given.
+- **Refresh is two halves, shell first.** Nothing watches the disk, so a workspace's right-click
+  menu offers Refresh. `workspace:refresh` (by id) asks the provider to look again - a no-op for a
+  local folder, and for a repository `refresh()` moves the pin to the newest commit on the branch it
+  is reading, fetching a new tree only when the head has moved. It answers with the workspace, since
+  `truncated` belongs to the tree and a new tree can differ. The renderer then re-lists every folder
+  it has EXPANDED in that workspace, in parallel, swapping each listing in when it arrives (no
+  "loading" in between, so the tree does not flash) and dropping any folder its parent no longer
+  lists (`withoutOrphans`), so a deleted folder disappears rather than showing a Retry. Collapsed
+  folders are not listed. A repository asks before any of this - `RefreshRepoDialog`, from `App` -
+  because open tabs were read from the old commit; their saves conflict if the file has moved on,
+  which is the existing conflict path rather than anything new. A refresh that fails moves nothing
+  and re-lists nothing.
 - **Save As names its workspace outright.** A document that has never been saved has no path to read
   one from, and two fields that could each answer "which workspace" would be two answers waiting to
   disagree - so `SaveAsRequest.workspaceId` is the authority and `path` only says where the dialog
@@ -505,6 +517,21 @@ and each answering null rather than throwing: `/users/{login}` for the owner's d
 repository carries their login and avatar but not the name they go by), `/branches?per_page=1` and
 `/tags?per_page=1` for the counts, and `/compare/{upstream}...{fork}` for how far a fork has moved.
 The comparison is skipped entirely when there is no `parent`, which is most repositories.
+
+**The same answer carries a `pin`**: which commit the workspace is on, and how that compares with
+its branch now. The handler takes `provider.pin()` - `{ branch, sha }`, which only the shell knows,
+since GitHub has no idea what the app is reading - and `repoPin` asks `/branches/{branch}` for the
+newest commit (the branch endpoint answers with the whole head commit, message and dates included),
+`/commits/{sha}/pulls` for how that commit arrived, and, only when the pin is behind,
+`/commits/{sha}` to describe the pinned commit and `/compare/{pinned}...{head}` for how many commits
+lie between. **`repoPin` never fails**: each part that could not be asked is null inside the pin,
+and `newer` is null rather than zero when the comparison did not come back - unknown is never drawn
+as up to date. A commit counts as a **merge** only when a merged pull request's `merge_commit_sha` is
+that commit (`arrivalOf`); GitHub associates a commit with every pull request that CONTAINS it, open
+ones included, so "has an associated pull request" would call pushes merges. Dates are the
+committer's, which is when a commit reached the branch rather than when it was written. The page
+holds its answer per repository, so `useRepoPage.invalidate(id)` is called after a successful
+refresh from the panel - otherwise the page would go on naming a commit the workspace has left.
 
 The counts are the awkward part: **GitHub has no field anywhere saying how many branches or tags a
 repository has**, and the only way to ask is to page a listing to its end. One item per page makes the
@@ -1847,7 +1874,7 @@ no corrections while the chat box and settings fields had them, and nothing woul
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
-`workspace:filter`, `workspace:close`), cloud accounts (`github:status`, `github:connect`,
+`workspace:filter`, `workspace:close`, `workspace:refresh`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys

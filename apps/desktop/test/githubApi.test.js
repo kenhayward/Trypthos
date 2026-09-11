@@ -711,3 +711,122 @@ test("lists the branches, following the pages", async () => {
     ],
   });
 });
+
+/// Where a repository workspace stands, for its page.
+///
+/// A workspace is pinned to a commit so its files cannot change while somebody reads them, which is
+/// exactly why it falls behind. The page says which commit it is on, what the newest on the branch
+/// is and how that got there, and how far apart the two are - every part of it a decoration that
+/// can fail on its own without taking the rest.
+
+const MAIN = `${REPO}/branches/main`;
+
+/// A commit as GitHub sends one, invented.
+function commitBody(sha, message, { login = "ada", date = "2026-09-02T12:00:00Z" } = {}) {
+  return {
+    sha,
+    html_url: `https://github.com/ada/notes/commit/${sha}`,
+    commit: {
+      message,
+      author: { name: "Ada", date },
+      committer: { name: "Ada", date },
+    },
+    author: { login },
+  };
+}
+
+test("reads the newest commit on a branch in one request", async () => {
+  const { api, calls } = apiWith({
+    [MAIN]: jsonResponse({ name: "main", commit: commitBody("new", "Tidy the guide") }),
+  });
+
+  const head = await api.branchHead("ada", "notes", "main");
+
+  assert.equal(head.ok, true);
+  assert.equal(head.sha, "new");
+  assert.equal(head.commit.headline, "Tidy the guide");
+  assert.equal(calls.length, 1);
+});
+
+test("refuses a branch name git could not have made, without asking", async () => {
+  const { api, calls } = apiWith({});
+  assert.deepEqual(await api.branchHead("ada", "notes", "../main"), { ok: false, reason: "unsupported" });
+  assert.equal(calls.length, 0);
+});
+
+test("says a workspace on the newest commit is up to date, and how that commit arrived", async () => {
+  const { api, calls } = apiWith({
+    [MAIN]: jsonResponse({ name: "main", commit: commitBody("abc", "Merge the guide") }),
+    [`${REPO}/commits/abc/pulls`]: jsonResponse([
+      {
+        number: 42,
+        title: "Tidy the guide",
+        html_url: "https://github.com/ada/notes/pull/42",
+        merged_at: "2026-09-02T12:00:00Z",
+        merge_commit_sha: "abc",
+      },
+    ]),
+  });
+
+  const pin = await api.repoPin("ada", "notes", { branch: "main", sha: "abc" });
+
+  assert.equal(pin.branch, "main");
+  assert.equal(pin.commit.sha, "abc");
+  assert.equal(pin.commit.headline, "Merge the guide");
+  assert.equal(pin.newer, 0);
+  assert.deepEqual(pin.latest.arrival, {
+    kind: "merge",
+    number: 42,
+    title: "Tidy the guide",
+    url: "https://github.com/ada/notes/pull/42",
+  });
+  // The pinned commit IS the head, so it is not fetched a second time and nothing is compared.
+  assert.equal(calls.some((call) => call.url.includes("/compare/")), false);
+  assert.equal(calls.some((call) => call.url.endsWith("/commits/abc")), false);
+});
+
+test("says how far behind a workspace is, and what the newest commit is", async () => {
+  const { api } = apiWith({
+    [MAIN]: jsonResponse({ name: "main", commit: commitBody("new", "Add a chapter") }),
+    [`${REPO}/commits/old`]: jsonResponse(commitBody("old", "Start the guide")),
+    [`${REPO}/commits/new/pulls`]: jsonResponse([]),
+    [`${REPO}/compare/old...new`]: jsonResponse({ ahead_by: 3, behind_by: 0 }),
+  });
+
+  const pin = await api.repoPin("ada", "notes", { branch: "main", sha: "old" });
+
+  assert.equal(pin.commit.headline, "Start the guide");
+  assert.equal(pin.latest.commit.sha, "new");
+  assert.deepEqual(pin.latest.arrival, { kind: "push" });
+  assert.equal(pin.newer, 3);
+});
+
+// Every part is a decoration. A branch that could not be read leaves the pinned commit named by its
+// sha, and says nothing about how far behind it is rather than claiming it is up to date.
+test("still names the pinned commit when nothing else could be asked", async () => {
+  const offline = () => jsonResponse({ message: "nope" }, { status: 500 });
+  const { api } = apiWith({
+    [MAIN]: offline,
+    [`${REPO}/commits/old`]: offline,
+  });
+
+  const pin = await api.repoPin("ada", "notes", { branch: "main", sha: "old" });
+
+  assert.deepEqual(pin, {
+    branch: "main",
+    commit: { sha: "old", headline: "", author: null, date: null, url: null },
+    latest: null,
+    newer: null,
+  });
+});
+
+test("leaves out how a commit arrived when GitHub will not say", async () => {
+  const { api } = apiWith({
+    [MAIN]: jsonResponse({ name: "main", commit: commitBody("abc", "Tidy") }),
+    [`${REPO}/commits/abc/pulls`]: () => jsonResponse({ message: "nope" }, { status: 500 }),
+  });
+
+  const pin = await api.repoPin("ada", "notes", { branch: "main", sha: "abc" });
+  assert.equal(pin.latest.arrival, null);
+  assert.equal(pin.latest.commit.sha, "abc");
+});

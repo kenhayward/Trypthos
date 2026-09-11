@@ -45,6 +45,7 @@ describe("IPC_CHANNELS", () => {
       "workspace:find",
     "workspace:filter",
       "workspace:close",
+      "workspace:refresh",
       "document:dirty",
       "document:confirmDiscard",
       "shell:openExternal",

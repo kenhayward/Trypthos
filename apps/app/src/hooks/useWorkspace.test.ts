@@ -67,6 +67,11 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       return { ok: true, path: `${workspaceId}/chosen.md`, revision: { id: "r-saved-as" } };
     },
     closeWorkspace: async () => ({ ok: true }),
+    // Nothing moves for a local folder, so the shell answers with the workspace as it stands.
+    refreshWorkspace: async (workspaceId) => ({
+      ok: true,
+      workspace: { id: workspaceId, name: "ws", ref: { kind: "local" as const, root: `/${workspaceId}` }, truncated: false },
+    }),
     // A repository's branches. Overridden by the tests that commit; here so the fake is the whole
     // interface rather than most of it.
     repoBranches: async () => ({ ok: true as const, branches: ["main"], branch: null, readingBranch: "main" }),
@@ -2258,10 +2263,14 @@ describe("refreshing a workspace", () => {
   it("keeps the rows on screen while the folders are being listed again", async () => {
     let release: () => void = () => {};
     let hold = false;
+    let holding = false;
     const fs = disk({ ws: [{ name: "a.md", kind: "file" }] });
     const { client } = fakeClient({
       listDirectory: async (path) => {
-        if (hold) await new Promise<void>((resolve) => (release = resolve));
+        if (hold) {
+          holding = true;
+          await new Promise<void>((resolve) => (release = resolve));
+        }
         return await fs.listDirectory(path);
       },
     });
@@ -2271,10 +2280,12 @@ describe("refreshing a workspace", () => {
     });
 
     hold = true;
-    let refreshing: Promise<void> = Promise.resolve();
+    let refreshing: Promise<boolean> = Promise.resolve(true);
     act(() => {
       refreshing = result.current.actions.refreshWorkspace("ws");
     });
+    // The listing is out and has not come back - which is the moment a "loading" would be drawn.
+    await waitFor(() => expect(holding).toBe(true));
 
     expect(result.current.state.folders.ws?.status).toBe("loaded");
     expect(names(result.current.state, "ws")).toEqual(["a.md"]);
@@ -2300,6 +2311,83 @@ describe("refreshing a workspace", () => {
 
     expect(result.current.state.folders.ws?.status).toBe("error");
     expect(result.current.state.errorKey).toBeNull();
+  });
+
+  // For a repository the shell moves the pin to the newest commit first, so the listings that follow
+  // describe that commit rather than the one the workspace opened on.
+  it("asks the shell to look again before listing anything", async () => {
+    const order: string[] = [];
+    const fs = disk({ ws: [] });
+    const { client } = fakeClient({
+      listDirectory: async (path) => {
+        order.push(`list ${path}`);
+        return await fs.listDirectory(path);
+      },
+    });
+    const refreshWorkspace = client.refreshWorkspace;
+    client.refreshWorkspace = async (workspaceId) => {
+      order.push(`refresh ${workspaceId}`);
+      return await refreshWorkspace(workspaceId);
+    };
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    order.length = 0;
+
+    let refreshed: boolean | undefined;
+    await act(async () => {
+      refreshed = await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(order).toEqual(["refresh ws", "list ws"]);
+    expect(refreshed).toBe(true);
+  });
+
+  // `truncated` describes the TREE, and a newer commit's tree can be cut short where the old one was
+  // not - so what the shell says now replaces what it said at open.
+  it("takes what the shell now says about the workspace", async () => {
+    const { client } = fakeClient({
+      refreshWorkspace: async () => ({
+        ok: true,
+        workspace: { id: "ws", name: "ws", ref: { kind: "local" as const, root: "/ws" }, truncated: true },
+      }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    await act(async () => {
+      await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(result.current.state.workspaces[0]?.truncated).toBe(true);
+  });
+
+  // A repository that could not be moved on is still on the commit it was - so its listings are still
+  // right, nothing is re-listed, and the user is told why in the banner every other failure uses.
+  it("says why the shell could not refresh it, and lists nothing", async () => {
+    const fs = disk({ ws: [{ name: "a.md", kind: "file" }] });
+    const { client } = fakeClient({
+      listDirectory: fs.listDirectory,
+      refreshWorkspace: async () => ({ ok: false, reason: "rate-limited" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    fs.listed.length = 0;
+
+    let refreshed: boolean | undefined;
+    await act(async () => {
+      refreshed = await result.current.actions.refreshWorkspace("ws");
+    });
+
+    expect(refreshed).toBe(false);
+    expect(fs.listed).toEqual([]);
+    expect(result.current.state.errorKey).toBe("errors.rateLimited");
+    expect(names(result.current.state, "ws")).toEqual(["a.md"]);
   });
 
   // "ws" must not refresh "ws-archive" - the same prefix trap `withoutSubtree` guards against.

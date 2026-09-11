@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { RepoStats } from "@trypthos/domain";
+import type { RepoCommit, RepoPin, RepoStats } from "@trypthos/domain";
 import RepoPage from "./RepoPage";
 import type { RepoPageState } from "../hooks/useRepoPage";
 
@@ -40,6 +40,7 @@ function draw(state: Partial<RepoPageState> = {}) {
         readmeFailed: false,
         readmePath: "notes/README.md",
         errorKey: null,
+        pin: null,
         ...state,
       }}
       fileTypes={["markdown"]}
@@ -305,6 +306,96 @@ describe("refreshing", () => {
   });
 });
 
+/// Which commit the workspace is on, and what has landed on its branch since.
+///
+/// A repository opens pinned to a commit so its files cannot change while somebody reads them. That
+/// is invisible until now: nothing said WHICH commit, or that the branch had moved on.
+describe("the commit the workspace is on", () => {
+  const PINNED: RepoCommit = {
+    sha: "abc1234def5678",
+    headline: "Start the guide",
+    author: "ada",
+    date: "2026-09-01T10:00:00Z",
+    url: "https://github.com/ada/notes/commit/abc1234def5678",
+  };
+  const NEWEST: RepoCommit = {
+    sha: "fed9876cba5432",
+    headline: "Add a chapter",
+    author: "grace",
+    date: "2026-09-03T09:30:00Z",
+    url: "https://github.com/ada/notes/commit/fed9876cba5432",
+  };
+  const pin = (overrides: Partial<RepoPin> = {}): RepoPin => ({
+    branch: "main",
+    commit: PINNED,
+    latest: { commit: PINNED, arrival: { kind: "push" } },
+    newer: 0,
+    ...overrides,
+  });
+
+  it("names the commit by its short sha, with what it said", () => {
+    draw({ pin: pin() });
+    expect(screen.getAllByRole("button", { name: "abc1234" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Start the guide/).length).toBeGreaterThan(0);
+  });
+
+  it("opens the commit on GitHub from its sha", async () => {
+    const { onOpenExternal } = draw({ pin: pin({ latest: null, newer: null }) });
+    await userEvent.click(screen.getByRole("button", { name: "abc1234" }));
+    expect(onOpenExternal).toHaveBeenCalledWith(PINNED.url);
+  });
+
+  it("says when the workspace is on the newest commit", () => {
+    draw({ pin: pin() });
+    expect(screen.getByText("Up to date")).toBeTruthy();
+  });
+
+  // How far behind, and the way to catch up - which is the panel's right-click menu, since that is
+  // where Refresh lives and where it asks first.
+  it("says how many commits have landed since, and which is newest", () => {
+    draw({
+      pin: pin({ latest: { commit: NEWEST, arrival: { kind: "push" } }, newer: 3 }),
+    });
+    expect(screen.getByText("Behind by 3").getAttribute("title")).toMatch(/Refresh/);
+    expect(screen.getByRole("button", { name: "fed9876" })).toBeTruthy();
+    expect(screen.getByText(/Add a chapter/)).toBeTruthy();
+  });
+
+  it("says the newest commit was pushed", () => {
+    draw({ pin: pin({ latest: { commit: NEWEST, arrival: { kind: "push" } }, newer: 1 }) });
+    expect(screen.getByText("Latest on main: pushed")).toBeTruthy();
+  });
+
+  it("says the newest commit came from a merged pull request, and opens it", async () => {
+    const { onOpenExternal } = draw({
+      pin: pin({
+        latest: {
+          commit: NEWEST,
+          arrival: { kind: "merge", number: 42, title: "Tidy the guide", url: "https://github.com/ada/notes/pull/42" },
+        },
+        newer: 1,
+      }),
+    });
+
+    expect(screen.getByText("Latest on main: pull request #42 merged")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Tidy the guide" }));
+    expect(onOpenExternal).toHaveBeenCalledWith("https://github.com/ada/notes/pull/42");
+  });
+
+  // Unknown is not "up to date". A comparison that never came back says nothing about how far
+  // behind this is, and the page says it could not look rather than implying there is nothing new.
+  it("says it could not look, rather than implying there is nothing newer", () => {
+    draw({ pin: pin({ latest: null, newer: null }) });
+    expect(screen.queryByText("Up to date")).toBeNull();
+    expect(screen.getByText("Could not check main for newer commits.")).toBeTruthy();
+  });
+
+  it("draws nothing about commits for a page that has no pin", () => {
+    draw({ pin: null });
+    expect(screen.queryByText(/On commit/)).toBeNull();
+  });
+});
+
 /// Pictures in the README.
 ///
 /// A source is a path in the workspace, and this page is drawn from the app's own origin - so
@@ -320,6 +411,7 @@ describe("pictures in the README", () => {
           readmeFailed: false,
           readmePath: "notes/README.md",
           errorKey: null,
+          pin: null,
         }}
         fileTypes={["markdown"]}
         onOpenExternal={vi.fn()}

@@ -437,3 +437,101 @@ test("starts with nowhere to write to, and says which branch it is reading", asy
   const { provider } = await openWritable();
   assert.deepEqual(provider.writeTarget(), { branch: null, readingBranch: "main" });
 });
+
+/// Refreshing: moving the pin to the newest commit on the branch.
+///
+/// Pinned is right while somebody reads and wrong once they want what has been pushed since - and
+/// until now the only way to get that was closing the repository and opening it again. What moves
+/// is the tree and the commit; where saves go does not, and a refresh that failed moves nothing.
+
+const NEWER = [{ path: "added.md", mode: "100644", type: "blob", sha: "b9", size: 5 }];
+
+function headAt(sha) {
+  return async (_owner, _repo, branch) => ({
+    ok: true,
+    sha,
+    branch,
+    commit: { sha, headline: "", author: null, date: null, url: null },
+  });
+}
+
+test("says which branch and commit it is reading", async () => {
+  const { provider } = await openWritable();
+  assert.deepEqual(provider.pin(), { branch: "main", sha: "c0ffee" });
+});
+
+test("moves to the newest commit on its branch, and takes the tree with it", async () => {
+  const { provider } = await openWritable({
+    branchHead: headAt("f00d"),
+    tree: async (_owner, _repo, sha) => ({
+      ok: true,
+      entries: sha === "f00d" ? NEWER : TREE,
+      truncated: false,
+    }),
+  });
+
+  assert.deepEqual(await provider.refresh(), { ok: true, truncated: false });
+  assert.deepEqual(provider.pin(), { branch: "main", sha: "f00d" });
+  const listed = await provider.list("");
+  assert.deepEqual(
+    listed.nodes.map((node) => node.name),
+    ["added.md"],
+  );
+});
+
+// A tree is the largest thing asked of GitHub. A branch nobody has pushed to since has the same one.
+test("does not fetch the tree again when the branch has not moved", async () => {
+  const asked = [];
+  const { provider } = await openWritable({
+    branchHead: headAt("c0ffee"),
+    tree: async (_owner, _repo, sha) => {
+      asked.push(sha);
+      return { ok: true, entries: TREE, truncated: true };
+    },
+  });
+
+  assert.deepEqual(await provider.refresh(), { ok: true, truncated: true });
+  assert.deepEqual(asked, ["c0ffee"], "only the tree fetched at open");
+});
+
+// The branch being read is the one saves go to once one is chosen. Refreshing follows it, and does
+// not quietly go back to the default branch the repository opened on.
+test("refreshes the branch it is committing to, and keeps committing there", async () => {
+  const heads = [];
+  const { provider } = await openWritable({
+    branchHead: async (owner, repo, branch) => {
+      heads.push(branch);
+      return await headAt("c0ffee")(owner, repo, branch);
+    },
+  });
+  await provider.startBranch("trypthos/update-guide");
+
+  await provider.refresh();
+
+  assert.deepEqual(heads, ["trypthos/update-guide"]);
+  assert.equal(provider.writeTarget().branch, "trypthos/update-guide");
+});
+
+test("moves nothing when the branch could not be read", async () => {
+  const { provider } = await openWritable({
+    branchHead: async () => ({ ok: false, reason: "offline" }),
+  });
+
+  assert.deepEqual(await provider.refresh(), { ok: false, reason: "offline" });
+  assert.deepEqual(provider.pin(), { branch: "main", sha: "c0ffee" });
+});
+
+// A pin moved to a commit whose tree never arrived would list the old files while reading the new
+// ones - the tree and the commit it describes have to move together or not at all.
+test("moves nothing when the newer tree could not be read", async () => {
+  const { provider } = await openWritable({
+    branchHead: headAt("f00d"),
+    tree: async (_owner, _repo, sha) =>
+      sha === "f00d" ? { ok: false, reason: "rate-limited" } : { ok: true, entries: TREE, truncated: false },
+  });
+
+  assert.deepEqual(await provider.refresh(), { ok: false, reason: "rate-limited" });
+  assert.deepEqual(provider.pin(), { branch: "main", sha: "c0ffee" });
+  const listed = await provider.list("");
+  assert.ok(listed.nodes.some((node) => node.name === "README.md"));
+});

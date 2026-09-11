@@ -38,8 +38,8 @@ interface Props {
   onFilterChange: (filter: string) => void;
   onToggleFolder: (path: string) => void;
   onRetryFolder: (path: string) => void;
-  /// Lists a workspace's open folders again, from its right-click menu. Only ever called for a
-  /// local folder - a repository is held at one commit, so asking again answers from the same tree.
+  /// Lists a workspace's open folders again, from its right-click menu - for a repository, after
+  /// moving it to the newest commit on its branch, which is asked about before it happens.
   onRefreshWorkspace: (workspaceId: string) => void;
   onOpenFile: (node: RemoteNode) => void;
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
@@ -302,11 +302,9 @@ export default function WorkspacePanel({
 
           {menuWorkspace !== undefined && menu !== null && (
             <ContextMenu label={menuWorkspace.name} x={menu.x} y={menu.y} onDismiss={closeMenu}>
-              {/* Greyed for a repository rather than left out: an entry that comes and goes by
-                  workspace is harder to learn than one that says it does not apply here. */}
+              {/* The same entry for a folder and a repository. What refreshing a repository changes
+                  is asked about above this panel, which is where the open documents are known. */}
               <ContextMenuItem
-                disabled={menuWorkspace.ref.kind === "github"}
-                title={menuWorkspace.ref.kind === "github" ? t("workspace.refreshRepoHint") : undefined}
                 onClick={() => {
                   setMenu(null);
                   onRefreshWorkspace(menuWorkspace.id);

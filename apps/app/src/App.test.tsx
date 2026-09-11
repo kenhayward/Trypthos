@@ -741,7 +741,7 @@ function shellWithGitHub(overrides: Record<string, unknown> = {}) {
       ok: true as const,
       dataUrl: `data:image/png;base64,${path}`,
     }),
-    repoInfo: async () => ({ ok: true as const, stats: REPO_STATS }),
+    repoInfo: async () => ({ ok: true as const, stats: REPO_STATS, pin: null }),
     githubStatus: async () => ({ ok: true as const, connected: true, login: "ada", reason: null }),
     connectGitHub: async () => ({ ok: true as const, login: "ada" }),
     disconnectGitHub: async () => ({ ok: true }),
@@ -908,6 +908,98 @@ describe("the repository page", () => {
     await user.click(await screen.findByRole("button", { name: "grace/notes" }));
 
     expect(opened).toContainEqual({ kind: "github", owner: "grace", repo: "notes" });
+  });
+});
+
+/// Refreshing a repository, through the whole window.
+///
+/// The menu, the dialog and the hook are tested on their own. This is the wiring: that a repository
+/// asks before it moves, that a folder does not, and that the page stops naming the old commit.
+describe("refreshing a repository", () => {
+  async function openRepoAndRefresh(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: "notes" }) });
+    await user.click(screen.getByRole("menuitem", { name: "Refresh" }));
+  }
+
+  it("asks before moving to the newest commit, and moves when told to", async () => {
+    const refreshed: string[] = [];
+    shellWithGitHub({
+      refreshWorkspace: async (workspaceId: string) => {
+        refreshed.push(workspaceId);
+        return {
+          ok: true as const,
+          workspace: { id: "notes", name: "notes", ref: { kind: "github", owner: "ada", repo: "notes" }, truncated: false },
+        };
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openRepoAndRefresh(user);
+
+    const dialog = await screen.findByRole("dialog", { name: "Refresh notes from GitHub" });
+    expect(refreshed).toEqual([]);
+
+    await user.click(within(dialog).getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => expect(refreshed).toEqual(["notes"]));
+    expect(screen.queryByRole("dialog", { name: "Refresh notes from GitHub" })).toBeNull();
+  });
+
+  it("moves nothing when the question is cancelled", async () => {
+    const refreshed: string[] = [];
+    shellWithGitHub({
+      refreshWorkspace: async (workspaceId: string) => {
+        refreshed.push(workspaceId);
+        return { ok: false as const, reason: "unknown" };
+      },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openRepoAndRefresh(user);
+    const dialog = await screen.findByRole("dialog", { name: "Refresh notes from GitHub" });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog", { name: "Refresh notes from GitHub" })).toBeNull();
+    expect(refreshed).toEqual([]);
+  });
+
+  // The page names the commit the workspace is on. Once it has moved, what the page is holding is
+  // about a commit the workspace has left - so it asks again rather than going on saying so.
+  it("loads the repository's page again once it has moved", async () => {
+    let asked = 0;
+    shellWithGitHub({
+      repoInfo: async () => {
+        asked += 1;
+        return { ok: true as const, stats: REPO_STATS, pin: null };
+      },
+      refreshWorkspace: async () => ({
+        ok: true as const,
+        workspace: { id: "notes", name: "notes", ref: { kind: "github", owner: "ada", repo: "notes" }, truncated: false },
+      }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+    // The row's own click opens the page, which loads once.
+    await user.click(await screen.findByRole("button", { name: "notes" }));
+    expect(await screen.findByText("Stars")).toBeTruthy();
+    expect(asked).toBe(1);
+
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("button", { name: "notes" }) });
+    await user.click(screen.getByRole("menuitem", { name: "Refresh" }));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "Refresh notes from GitHub" })).getByRole("button", {
+        name: "Refresh",
+      }),
+    );
+
+    await waitFor(() => expect(asked).toBe(2));
   });
 });
 

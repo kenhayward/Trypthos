@@ -21,6 +21,7 @@ const {
   ConnectGitHubRequest,
   ListReposRequest,
   RepoInfoRequest,
+  RefreshWorkspaceRequest,
   SetBranchRequest,
   OpenWorkspaceRefRequest,
   workspaceRefKey,
@@ -650,7 +651,16 @@ function registerIpcHandlers({
     // which would read as a repository with nothing in it.
     if (workspace.ref.kind !== "github") return { ok: false, reason: "unsupported" };
 
-    return await github.repoStatistics(workspace.ref.owner, workspace.ref.repo);
+    const { owner, repo } = workspace.ref;
+    // Together: the two are independent, and the pin comes from THIS workspace - which commit it is
+    // on is something only the shell knows, since GitHub has no idea what the app is reading.
+    const [statistics, pin] = await Promise.all([
+      github.repoStatistics(owner, repo),
+      github.repoPin(owner, repo, workspace.provider.pin()),
+    ]);
+    if (!statistics.ok) return statistics;
+
+    return { ...statistics, pin };
   });
 
   /// The branches a repository has, so the save dialog can offer them.
@@ -725,6 +735,35 @@ function registerIpcHandlers({
     // the state the caller wanted, not a failure to report.
     open.delete(parsed.data.workspaceId);
     return { ok: true };
+  });
+
+  /// Looking again at where one open workspace reads from.
+  ///
+  /// A local folder has nothing to move - the disk is always current, and re-listing its folders is
+  /// the renderer's half - so it is answered as it stands. A repository is pinned to a commit, and
+  /// this is what moves it to the newest one on its branch; the renderer asks the user first, since
+  /// the files under their open tabs may have changed.
+  ///
+  /// Answered with the workspace, because `truncated` describes the TREE and a new tree can differ.
+  ipcMain.handle("workspace:refresh", async (_event, payload) => {
+    const parsed = RefreshWorkspaceRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    const workspace = open.get(parsed.data.workspaceId);
+    if (workspace === undefined) return { ok: false, reason: "no-workspace" };
+    // Nothing pinned, so nothing to move.
+    if (typeof workspace.provider.refresh !== "function") {
+      return { ok: true, workspace: described(workspace) };
+    }
+
+    const moved = await workspace.provider.refresh();
+    // Passed straight through. The provider moved nothing, so the tree still describes the commit
+    // it came from and there is nothing here to put back.
+    if (!moved.ok) return moved;
+
+    const refreshed = { ...workspace, truncated: moved.truncated };
+    open.set(workspace.id, refreshed);
+    return { ok: true, workspace: described(refreshed) };
   });
 
   /// Opening a workspace the app already knows how to name.

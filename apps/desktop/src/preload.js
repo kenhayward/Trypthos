@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// Closes one open workspace, by the id the main process minted for it. Never by its root - see
   /// the note at the top of this file.
   closeWorkspace: (workspaceId) => ipcRenderer.invoke("workspace:close", { workspaceId }),
+  /// Looks again at where one open workspace reads from - for a repository, the newest commit on its
+  /// branch. By id, like closing, for the same reason.
+  refreshWorkspace: (workspaceId) => ipcRenderer.invoke("workspace:refresh", { workspaceId }),
   listDirectory: (path) => ipcRenderer.invoke("workspace:list", { path }),
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
