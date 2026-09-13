@@ -48,6 +48,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),
     onRefreshWorkspace: vi.fn(),
+    onNewFile: vi.fn(),
     onOpenFile: vi.fn(),
     fileTypes: ["markdown"] as readonly string[],
     selectedFolder: "",
@@ -518,6 +519,16 @@ describe("the workspace menu", () => {
     expect(screen.getAllByRole("menuitem")[0]?.textContent).toBe("Refresh");
   });
 
+  it("offers a new file in the selected local folder", async () => {
+    const onNewFile = vi.fn();
+    panel({ selectedFolder: "Diariz/docs", onNewFile });
+    const user = await rightClick(screen.getByRole("button", { name: /docs/ }));
+
+    await user.click(screen.getByRole("menuitem", { name: "New File ..." }));
+
+    expect(onNewFile).toHaveBeenCalledWith("Diariz/docs");
+  });
+
   it("refreshes that workspace when Refresh is chosen, and closes", async () => {
     const onRefreshWorkspace = vi.fn();
     panel({ onRefreshWorkspace });
@@ -579,6 +590,13 @@ describe("the workspace menu", () => {
     expect(refresh.disabled).toBe(false);
     await user.click(refresh);
     expect(onRefreshWorkspace).toHaveBeenCalledWith("essays");
+  });
+
+  it("does not offer a new file for a repository", async () => {
+    panel({ workspaces: [ESSAYS], folders: {}, selectedFolder: "essays" });
+    await rightClick(screen.getByRole("button", { name: /^essays$/ }));
+
+    expect(screen.queryByRole("menuitem", { name: "New File ..." })).toBeNull();
   });
 });
 

@@ -117,8 +117,10 @@ export default function App() {
   /// Appearance, the Help menu on About, the chat panel's Configure on the models. Mounting only
   /// while open is what makes `openOn` mean "open here" rather than "opened here once".
   const [settingsOn, setSettingsOn] = useState<SettingsSection | null>(null);
-  /// True while File > New is asking for a name. Nothing is created until it answers.
-  const [namingFile, setNamingFile] = useState(false);
+  /// True while the usual File > New is asking for a name; a directory when the workspace menu is
+  /// asking for one that must be created there. False means no dialog. Nothing is created until it
+  /// answers.
+  const [namingFile, setNamingFile] = useState<string | boolean>(false);
   /// True while the repository picker is open. Its own flag rather than a settings page: choosing a
   /// repository is an act like opening a folder, not a preference.
   const [pickingRepo, setPickingRepo] = useState(false);
@@ -629,6 +631,7 @@ export default function App() {
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
           onRefreshWorkspace={askToRefresh}
+          onNewFile={(directory) => setNamingFile(directory)}
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}
@@ -866,8 +869,10 @@ export default function App() {
           fileTypes={settings.fileTypes.enabled}
           onCancel={() => setNamingFile(false)}
           onCreate={(name) => {
+            const directory = namingFile;
             setNamingFile(false);
-            actions.newDocument(name);
+            if (typeof directory === "string") void actions.createEmptyFile(directory, name);
+            else actions.newDocument(name);
           }}
         />
       )}

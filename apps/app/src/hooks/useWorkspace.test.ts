@@ -1685,6 +1685,41 @@ describe("a new document", () => {
   });
 });
 
+/// The workspace menu's New File action names both a directory and a file, so it creates a saved
+/// document immediately instead of going through File > New's intentionally locationless draft.
+describe("creating a file in a workspace folder", () => {
+  it("creates only an empty file in the chosen local folder and opens it", async () => {
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.toggleFolder("ws/notes");
+    });
+    await act(async () => {
+      await result.current.actions.createEmptyFile("ws/notes", "plan.md");
+    });
+
+    expect(writes).toEqual([
+      { path: "ws/notes/plan.md", content: "", revision: null, message: null },
+    ]);
+    expect(result.current.state.file).toEqual({
+      path: "ws/notes/plan.md",
+      name: "plan.md",
+      revision: { id: "r2" },
+    });
+    expect(result.current.state.content).toBe("");
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.folders["ws/notes"]?.children).toContainEqual({
+      id: "ws/notes/plan.md",
+      name: "plan.md",
+      kind: "file",
+    });
+  });
+});
+
 /// Opening an image, which is read by a different call and held in a different field.
 describe("opening an image", () => {
   const PNG = { id: "shot.png", name: "shot.png", kind: "file" as const };

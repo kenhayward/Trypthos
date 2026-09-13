@@ -41,6 +41,9 @@ interface Props {
   /// Lists a workspace's open folders again, from its right-click menu - for a repository, after
   /// moving it to the newest commit on its branch, which is asked about before it happens.
   onRefreshWorkspace: (workspaceId: string) => void;
+  /// Opens the existing new-file dialog for this local directory. A repository is deliberately not
+  /// an option here: creating there would be a commit, which needs its own branch and message.
+  onNewFile: (directory: string) => void;
   onOpenFile: (node: RemoteNode) => void;
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
   /// the footer names them.
@@ -85,6 +88,7 @@ export default function WorkspacePanel({
   onToggleFolder,
   onRetryFolder,
   onRefreshWorkspace,
+  onNewFile,
   onOpenFile,
   fileTypes,
   selectedFolder,
@@ -102,6 +106,14 @@ export default function WorkspacePanel({
   const closeMenu = useCallback(() => setMenu(null), []);
   const menuWorkspace =
     menu === null ? undefined : workspaces.find((workspace) => workspace.id === menu.workspaceId);
+  // A right-click does not change the selected folder. The action therefore names the folder the
+  // user already chose, rather than quietly changing a folder chat or Find may be using just to
+  // decide where a file goes.
+  const newFileDirectory =
+    menuWorkspace?.ref.kind === "local" &&
+    (selectedFolder === menuWorkspace.id || selectedFolder.startsWith(`${menuWorkspace.id}/`))
+      ? selectedFolder
+      : null;
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.
   ///
   /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
@@ -302,6 +314,16 @@ export default function WorkspacePanel({
 
           {menuWorkspace !== undefined && menu !== null && (
             <ContextMenu label={menuWorkspace.name} x={menu.x} y={menu.y} onDismiss={closeMenu}>
+              {newFileDirectory !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onNewFile(newFileDirectory);
+                  }}
+                >
+                  {t("workspace.newFile")}
+                </ContextMenuItem>
+              )}
               {/* The same entry for a folder and a repository. What refreshing a repository changes
                   is asked about above this panel, which is where the open documents are known. */}
               <ContextMenuItem
