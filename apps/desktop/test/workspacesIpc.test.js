@@ -107,6 +107,16 @@ test("lists each workspace separately, and says which one every row is in", asyn
   });
 });
 
+test("creates a directory in the workspace the qualified path names", async () => {
+  await withTwoWorkspaces({ "a.md": null }, { "b.md": null }, async ({ ipcMain, one, roots }) => {
+    assert.deepEqual(
+      await ipcMain.invoke("workspace:createDirectory", { path: `${one.id}/archive` }),
+      { ok: true },
+    );
+    assert.equal((await fs.stat(path.join(roots[0], "archive"))).isDirectory(), true);
+  });
+});
+
 /// The boundary, restated for the thing that is new. Each workspace has its own guard, and a path
 /// naming one cannot climb into the other even though both are open.
 test("a path cannot climb from one workspace into another", async () => {

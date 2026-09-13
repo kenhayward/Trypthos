@@ -615,9 +615,16 @@ describe("slash commands", () => {
 
 /// File > New, from the menu to a tab with a name and nowhere to be.
 describe("making a new file", () => {
-  function shell(): { menu: { push: ((action: string) => void) | null }; savedAs: unknown[] } {
+  function shell(): {
+    menu: { push: ((action: string) => void) | null };
+    savedAs: unknown[];
+    writes: unknown[];
+    directories: unknown[];
+  } {
     const menu: { push: ((action: string) => void) | null } = { push: null };
     const savedAs: unknown[] = [];
+    const writes: unknown[] = [];
+    const directories: unknown[] = [];
     window.trypthos = {
       ...browserClient,
       isDesktop: true,
@@ -644,8 +651,16 @@ describe("making a new file", () => {
         savedAs.push({ path, content });
         return { ok: true as const, path: `${workspaceId}/notes.md`, revision: { id: "r1" } };
       },
+      writeFile: async (path: string, content: string, revision: unknown) => {
+        writes.push({ path, content, revision });
+        return { ok: true as const, revision: { id: "r2" } };
+      },
+      createDirectory: async (path: string) => {
+        directories.push(path);
+        return { ok: true as const };
+      },
     } as unknown as typeof window.trypthos;
-    return { menu, savedAs };
+    return { menu, savedAs, writes, directories };
   }
 
   it("opens a tab for a file that does not exist yet", async () => {
@@ -677,6 +692,38 @@ describe("making a new file", () => {
 
     // The dialog opens at the name the file was given, not at the identity it holds a tab with.
     await waitFor(() => expect(savedAs).toEqual([{ path: "notes.md", content: "" }]));
+  });
+
+  it("creates an empty file in the selected workspace folder from its context menu", async () => {
+    const user = userEvent.setup();
+    const { writes } = shell();
+    render(<App />);
+
+    const root = await screen.findByRole("button", { name: "Notes" });
+    await user.click(root);
+    await user.pointer({ keys: "[MouseRight]", target: root });
+    await user.click(screen.getByRole("menuitem", { name: "New File ..." }));
+    await user.type(screen.getByLabelText("Name"), "today");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(writes).toEqual([{ path: "Notes/today.md", content: "", revision: null }]),
+    );
+    expect(await screen.findByRole("tab", { name: /today\.md/ })).toBeDefined();
+  });
+
+  it("creates a folder from the workspace context menu", async () => {
+    const user = userEvent.setup();
+    const { directories } = shell();
+    render(<App />);
+
+    const root = await screen.findByRole("button", { name: "Notes" });
+    await user.pointer({ keys: "[MouseRight]", target: root });
+    await user.click(screen.getByRole("menuitem", { name: "New Folder ..." }));
+    await user.type(screen.getByLabelText("Name"), "Archive");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(directories).toEqual(["Notes/Archive"]));
   });
 });
 

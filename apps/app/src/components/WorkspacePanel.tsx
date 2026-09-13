@@ -41,6 +41,11 @@ interface Props {
   /// Lists a workspace's open folders again, from its right-click menu - for a repository, after
   /// moving it to the newest commit on its branch, which is asked about before it happens.
   onRefreshWorkspace: (workspaceId: string) => void;
+  /// Opens the existing new-file dialog for this local directory. A repository is deliberately not
+  /// an option here: creating there would be a commit, which needs its own branch and message.
+  onNewFile: (directory: string) => void;
+  /// Prompts for and creates one directory in the local folder whose context menu was opened.
+  onNewFolder: (directory: string) => void;
   onOpenFile: (node: RemoteNode) => void;
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
   /// the footer names them.
@@ -85,6 +90,8 @@ export default function WorkspacePanel({
   onToggleFolder,
   onRetryFolder,
   onRefreshWorkspace,
+  onNewFile,
+  onNewFolder,
   onOpenFile,
   fileTypes,
   selectedFolder,
@@ -98,10 +105,31 @@ export default function WorkspacePanel({
   ///
   /// The ID rather than the workspace, so one closed while the menu is open takes the menu with it
   /// instead of leaving it acting on a workspace that is no longer there.
-  const [menu, setMenu] = useState<{ workspaceId: string; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    workspaceId: string;
+    directory: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  const openMenu = useCallback(
+    (event: React.MouseEvent, workspaceId: string, directory: string) => {
+      event.preventDefault();
+      setMenu({ workspaceId, directory, x: event.clientX, y: event.clientY });
+    },
+    [],
+  );
   const menuWorkspace =
     menu === null ? undefined : workspaces.find((workspace) => workspace.id === menu.workspaceId);
+  // A right-click does not change the selected folder. The action therefore names the folder the
+  // user already chose, rather than quietly changing a folder chat or Find may be using just to
+  // decide where a file goes.
+  const newFileDirectory =
+    menuWorkspace?.ref.kind === "local" &&
+    (selectedFolder === menuWorkspace.id || selectedFolder.startsWith(`${menuWorkspace.id}/`))
+      ? selectedFolder
+      : null;
+  const newFolderDirectory = menuWorkspace?.ref.kind === "local" ? menu?.directory ?? null : null;
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.
   ///
   /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
@@ -234,12 +262,11 @@ export default function WorkspacePanel({
             {shown.map(({ workspace, state, rows: tree }) => (
               <div
                 key={workspace.id}
-                // On the whole of the workspace's section rather than its root row, so the menu is
-                // found by right-clicking whatever you are looking at - not by scrolling up to the
-                // root first. Right-clicking asks; it does not open, select or toggle anything.
+                // A file has no directory of its own, so its menu belongs to the workspace root.
+                // Folder rows stop this event and name themselves instead. Right-clicking asks; it
+                // does not open, select or toggle anything.
                 onContextMenu={(event) => {
-                  event.preventDefault();
-                  setMenu({ workspaceId: workspace.id, x: event.clientX, y: event.clientY });
+                  openMenu(event, workspace.id, workspace.id);
                 }}
               >
                 {/* The workspace's own row. It behaves like the folder it is - selecting it is what
@@ -284,6 +311,10 @@ export default function WorkspacePanel({
                         if (!filtering) void onToggleFolder(row.node.id);
                       }}
                       onRetry={() => onRetryFolder(row.node.id)}
+                      onContextMenu={(event) => {
+                        event.stopPropagation();
+                        openMenu(event, workspace.id, row.node.id);
+                      }}
                     />
                   ) : (
                     <FileRow
@@ -302,6 +333,26 @@ export default function WorkspacePanel({
 
           {menuWorkspace !== undefined && menu !== null && (
             <ContextMenu label={menuWorkspace.name} x={menu.x} y={menu.y} onDismiss={closeMenu}>
+              {newFileDirectory !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onNewFile(newFileDirectory);
+                  }}
+                >
+                  {t("workspace.newFile")}
+                </ContextMenuItem>
+              )}
+              {newFolderDirectory !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onNewFolder(newFolderDirectory);
+                  }}
+                >
+                  {t("workspace.newFolder")}
+                </ContextMenuItem>
+              )}
               {/* The same entry for a folder and a repository. What refreshing a repository changes
                   is asked about above this panel, which is where the open documents are known. */}
               <ContextMenuItem
@@ -465,6 +516,7 @@ function FolderRow({
   selected,
   onToggle,
   onRetry,
+  onContextMenu,
 }: {
   row: TreeRow;
   /// True while these rows are a filter's answer rather than the tree. See `WorkspaceRow`.
@@ -472,6 +524,7 @@ function FolderRow({
   selected: boolean;
   onToggle: () => void;
   onRetry: () => void;
+  onContextMenu: (event: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
 
@@ -480,6 +533,7 @@ function FolderRow({
       <button
         type="button"
         onClick={onToggle}
+        onContextMenu={onContextMenu}
         aria-expanded={filtering ? undefined : row.expanded}
         // Selection and expansion are separate facts about a folder, so they are separate
         // attributes: a folder can be the one chat is mapping while collapsed, and expanded while

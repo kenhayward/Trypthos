@@ -48,6 +48,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
             { id: `${path}/a.md`, name: "a.md", kind: "file" },
           ],
     }),
+    createDirectory: async () => ({ ok: true }),
     readFile: async (path): Promise<ReadResult> => {
       reads.push(path);
       return { ok: true, content: "# On disk\n", revision: { id: "r1" } };
@@ -1682,6 +1683,68 @@ describe("a new document", () => {
     expect(result.current.state.file?.name).toBe("notes.md");
     expect(result.current.state.dirty).toBe(true);
     expect(result.current.state.content).toBe("# Notes");
+  });
+});
+
+/// The workspace menu's New File action names both a directory and a file, so it creates a saved
+/// document immediately instead of going through File > New's intentionally locationless draft.
+describe("creating a file in a workspace folder", () => {
+  it("creates only an empty file in the chosen local folder and opens it", async () => {
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.toggleFolder("ws/notes");
+    });
+    await act(async () => {
+      await result.current.actions.createEmptyFile("ws/notes", "plan.md");
+    });
+
+    expect(writes).toEqual([
+      { path: "ws/notes/plan.md", content: "", revision: null, message: null },
+    ]);
+    expect(result.current.state.file).toEqual({
+      path: "ws/notes/plan.md",
+      name: "plan.md",
+      revision: { id: "r2" },
+    });
+    expect(result.current.state.content).toBe("");
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.folders["ws/notes"]?.children).toContainEqual({
+      id: "ws/notes/plan.md",
+      name: "plan.md",
+      kind: "file",
+    });
+  });
+});
+
+describe("creating a folder in a workspace", () => {
+  it("creates the directory at the named local parent and adds it to the tree", async () => {
+    const created: string[] = [];
+    const { client } = fakeClient({
+      createDirectory: async (path) => {
+        created.push(path);
+        return { ok: true as const };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.createDirectory("ws", "ideas");
+    });
+
+    expect(created).toEqual(["ws/ideas"]);
+    expect(result.current.state.folders.ws?.children).toContainEqual({
+      id: "ws/ideas",
+      name: "ideas",
+      kind: "directory",
+    });
   });
 });
 

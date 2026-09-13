@@ -9,6 +9,7 @@ import {
   IPC_CHANNELS,
   OpenExternalRequest,
   ListRequest,
+  CreateDirectoryRequest,
   ReadRequest,
   SaveAsRequest,
   SetSecretRequest,
@@ -21,6 +22,7 @@ describe("IPC_CHANNELS", () => {
     expect([...IPC_CHANNELS]).toEqual([
       "workspace:open",
       "workspace:list",
+      "workspace:createDirectory",
       "file:read",
       "file:write",
       "file:saveAs",
@@ -126,6 +128,16 @@ describe("ListRequest", () => {
   // extra fields is a sign something is wrong rather than something to quietly ignore.
   it("rejects unknown fields", () => {
     expect(() => ListRequest.parse({ path: "notes", root: "/etc" })).toThrow();
+  });
+});
+
+describe("CreateDirectoryRequest", () => {
+  it("accepts a path inside an open workspace", () => {
+    expect(CreateDirectoryRequest.parse({ path: "notes/archive" })).toEqual({ path: "notes/archive" });
+  });
+
+  it("requires a directory below the workspace root", () => {
+    expect(() => CreateDirectoryRequest.parse({ path: "" })).toThrow();
   });
 });
 

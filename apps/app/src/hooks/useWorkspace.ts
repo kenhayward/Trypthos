@@ -149,6 +149,11 @@ export interface WorkspaceActions {
   /// is saved, not here: two dialogs asking the same question would be two answers that can
   /// disagree, and the one that decided first would be the one with the least information.
   newDocument(name: string): void;
+  /// Creates an empty file in a local directory and opens the saved file. This differs from File >
+  /// New, whose document has no location until its first Save As.
+  createEmptyFile(directory: string, name: string): Promise<void>;
+  /// Creates one local directory and adds it to its already-loaded parent in the workspace tree.
+  createDirectory(directory: string, name: string): Promise<void>;
   /// Opens what the app was handed from outside - a folder from File Explorer, or a markdown file
   /// within one. A file names both, because every path here is relative to one open folder.
   openTarget(target: { root: string; file: string | null }): Promise<void>;
@@ -616,6 +621,98 @@ export function useWorkspace(
     [client, fail, saveAs, askCommit],
   );
 
+  /// Makes a file where the folder browser already points, rather than a draft whose location is
+  /// decided later. `null` is the create-only revision: the provider rejects an existing file
+  /// atomically instead of checking first and risking a replacement between check and write.
+  const createEmptyFile = useCallback(
+    async (directory: string, name: string) => {
+      const parent = splitQualified(directory);
+      const workspace = parent === null
+        ? undefined
+        : stateRef.current.workspaces.find((candidate) => candidate.id === parent.workspaceId);
+      if (parent === null || workspace?.ref.kind !== "local") {
+        fail({ reason: "unsupported" });
+        return;
+      }
+
+      const path = qualifyPath(
+        parent.workspaceId,
+        parent.path === "" ? name : `${parent.path}/${name}`,
+      );
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      const result = await client.writeFile(path, "", null);
+      if (!result.ok) {
+        fail(result);
+        return;
+      }
+
+      setInternal((prev) => {
+        const folder = prev.folders[directory];
+        const folders =
+          folder?.status === "loaded"
+            ? {
+                ...prev.folders,
+                [directory]: {
+                  ...folder,
+                  children: [...(folder.children ?? []), { id: path, name, kind: "file" as const }],
+                },
+              }
+            : prev.folders;
+        return {
+          ...prev,
+          folders,
+          documents: openDocument(prev.documents, { path, content: "", revision: result.revision }),
+          busy: false,
+        };
+      });
+      reportIfLocal(reportOpened, stateRef.current.workspaces, path);
+    },
+    [client, fail, reportOpened],
+  );
+
+  /// Makes one folder at the context-menu target. It is intentionally separate from `loadFolder`:
+  /// a new folder is known to be empty, so listing it immediately would be unnecessary I/O and
+  /// would expand a folder the person did not ask to inspect.
+  const createDirectory = useCallback(
+    async (directory: string, name: string) => {
+      const parent = splitQualified(directory);
+      const workspace = parent === null
+        ? undefined
+        : stateRef.current.workspaces.find((candidate) => candidate.id === parent.workspaceId);
+      if (parent === null || workspace?.ref.kind !== "local") {
+        fail({ reason: "unsupported" });
+        return;
+      }
+
+      const path = qualifyPath(
+        parent.workspaceId,
+        parent.path === "" ? name : `${parent.path}/${name}`,
+      );
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      const result = await client.createDirectory(path);
+      if (!result.ok) {
+        fail(result);
+        return;
+      }
+
+      setInternal((prev) => {
+        const folder = prev.folders[directory];
+        const folders =
+          folder?.status === "loaded"
+            ? {
+                ...prev.folders,
+                [directory]: {
+                  ...folder,
+                  children: [...(folder.children ?? []), { id: path, name, kind: "directory" as const }],
+                },
+              }
+            : prev.folders;
+        return { ...prev, folders, busy: false };
+      });
+    },
+    [client, fail],
+  );
+
   /// May this one document be thrown away?
   ///
   /// One implementation for every path that would discard it - closing its tab, opening another
@@ -988,6 +1085,8 @@ export function useWorkspace(
           }),
         };
       }),
+    createEmptyFile,
+    createDirectory,
     openRepoPage: (workspaceId: string) =>
       setInternal((prev) => ({
         ...prev,

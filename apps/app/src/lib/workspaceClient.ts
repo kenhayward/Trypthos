@@ -55,6 +55,7 @@ export type Failure = { ok: false; reason: string };
 
 export type OpenResult = { ok: true; workspace: WorkspaceInfo } | Failure;
 export type ListResult = { ok: true; nodes: RemoteNode[] } | Failure;
+export type CreateDirectoryResult = { ok: true } | Failure;
 export type ReadResult =
   | { ok: true; content: string; revision: Revision }
   /// Carries its numbers, so the refusal can name the file's size and the app's limit. Mirrors the
@@ -128,6 +129,9 @@ export interface WorkspaceClient {
   /// refused rather than trusted.
   openWorkspaceRef(ref: WorkspaceRef): Promise<OpenResult>;
   listDirectory(path: string): Promise<ListResult>;
+  /// Makes one new directory at this qualified path. The shell knows the workspace root; the
+  /// renderer can only name a child of one it already has open.
+  createDirectory(path: string): Promise<CreateDirectoryResult>;
   readFile(path: string): Promise<ReadResult>;
   /// Reads an image, which does not go through `readFile` - see `ImageResult`.
   readImage(path: string): Promise<ImageResult>;
@@ -360,6 +364,7 @@ export const browserClient: WorkspaceClient = {
   openWorkspace: async () => unavailable(),
   openWorkspaceRef: async () => unavailable(),
   listDirectory: async () => unavailable(),
+  createDirectory: async () => unavailable(),
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),

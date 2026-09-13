@@ -32,6 +32,7 @@ const {
   workspaceIdFor,
   imageMediaType,
   ListRequest,
+  CreateDirectoryRequest,
   OutlineRequest,
   MAX_IMAGE_FILE_BYTES,
   ReadImageRequest,
@@ -794,6 +795,19 @@ function registerIpcHandlers({
         ok: true,
         nodes: result.nodes.map((node) => ({ ...node, id: qualifyPath(workspace.id, node.id) })),
       };
+    }),
+  );
+
+  /// A folder is a filesystem feature, not a GitHub commit. The provider has the path guard and
+  /// performs the creation; this boundary only makes the operation unavailable where no folder is
+  /// present, rather than presenting a question whose every answer would be refused.
+  ipcMain.handle(
+    "workspace:createDirectory",
+    guarded(locateQualified, CreateDirectoryRequest, (request, workspace) => {
+      if (workspace.root === null || typeof workspace.provider.createDirectory !== "function") {
+        return { ok: false, reason: "unsupported" };
+      }
+      return workspace.provider.createDirectory(request.path);
     }),
   );
 

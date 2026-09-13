@@ -37,6 +37,7 @@ function failure(reason) {
 /// reported to the user as "not found".
 function mapError(error) {
   if (error.code === "ENOENT") return failure("not-found");
+  if (error.code === "EEXIST") return failure("conflict");
   if (error.code === "EACCES" || error.code === "EPERM") return failure("permission-denied");
   if (error.code === "ENOTDIR") return failure("not-found");
   throw error;
@@ -115,6 +116,21 @@ function createLocalWorkspace({ root, guard }) {
         }));
 
       return { ok: true, nodes };
+    },
+
+    /// Makes one directory and never fills in missing parents. The resolved parent is checked
+    /// before the syscall, so a path that exists only through a symlink outside the workspace is
+    /// refused just as a file write there would be.
+    async createDirectory(relativePath) {
+      const resolved = await resolve(relativePath, { mustExist: false });
+      if (!resolved.ok) return resolved;
+
+      try {
+        await fs.mkdir(resolved.path);
+        return { ok: true };
+      } catch (error) {
+        return mapError(error);
+      }
     },
 
     /// Reads a file, or refuses it.
