@@ -20,6 +20,7 @@ import { isExternalUrl } from "./markdownLink";
 export const IPC_CHANNELS = [
   "workspace:open",
   "workspace:list",
+  "workspace:createDirectory",
   "file:read",
   "file:write",
   "file:saveAs",
@@ -168,6 +169,10 @@ export const RevisionSchema = z.object({ id: z.string().min(1) }).strict();
 const relativePath = z.string();
 
 export const ListRequest = z.object({ path: relativePath }).strict();
+
+/// Makes exactly one directory inside an open workspace. The provider owns the actual boundary
+/// check; this contract only says which workspace-relative target it was asked to make.
+export const CreateDirectoryRequest = z.object({ path: relativePath.min(1) }).strict();
 
 /// The folder chat should map. "" is the workspace root.
 ///
@@ -420,6 +425,7 @@ export const WriteSettingsRequest = SettingsSchema;
 export type SetSecretRequest = z.infer<typeof SetSecretRequest>;
 export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
+export type CreateDirectoryRequest = z.infer<typeof CreateDirectoryRequest>;
 export type OutlineRequest = z.infer<typeof OutlineRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
 export type CloseWorkspaceRequest = z.infer<typeof CloseWorkspaceRequest>;

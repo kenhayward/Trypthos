@@ -24,7 +24,8 @@
     "openRepo": "Open GitHub repository",
     "truncatedRepo": "Too large to list in full - some folders are missing.",
     "refresh": "Refresh",
-    "newFile": "New File ..."
+    "newFile": "New File ...",
+    "newFolder": "New Folder ..."
   },
   "refreshRepo": {
     "title": "Refresh {{name}} from GitHub",
@@ -95,6 +96,13 @@
     "name": "Name",
     "type": "Type",
     "needsName": "Type a name for the file.",
+    "cancel": "Cancel",
+    "create": "Create"
+  },
+  "newFolder": {
+    "title": "New folder",
+    "name": "Name",
+    "needsName": "Type a name for the folder.",
     "cancel": "Cancel",
     "create": "Create"
   },

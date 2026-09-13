@@ -619,10 +619,12 @@ describe("making a new file", () => {
     menu: { push: ((action: string) => void) | null };
     savedAs: unknown[];
     writes: unknown[];
+    directories: unknown[];
   } {
     const menu: { push: ((action: string) => void) | null } = { push: null };
     const savedAs: unknown[] = [];
     const writes: unknown[] = [];
+    const directories: unknown[] = [];
     window.trypthos = {
       ...browserClient,
       isDesktop: true,
@@ -653,8 +655,12 @@ describe("making a new file", () => {
         writes.push({ path, content, revision });
         return { ok: true as const, revision: { id: "r2" } };
       },
+      createDirectory: async (path: string) => {
+        directories.push(path);
+        return { ok: true as const };
+      },
     } as unknown as typeof window.trypthos;
-    return { menu, savedAs, writes };
+    return { menu, savedAs, writes, directories };
   }
 
   it("opens a tab for a file that does not exist yet", async () => {
@@ -704,6 +710,20 @@ describe("making a new file", () => {
       expect(writes).toEqual([{ path: "Notes/today.md", content: "", revision: null }]),
     );
     expect(await screen.findByRole("tab", { name: /today\.md/ })).toBeDefined();
+  });
+
+  it("creates a folder from the workspace context menu", async () => {
+    const user = userEvent.setup();
+    const { directories } = shell();
+    render(<App />);
+
+    const root = await screen.findByRole("button", { name: "Notes" });
+    await user.pointer({ keys: "[MouseRight]", target: root });
+    await user.click(screen.getByRole("menuitem", { name: "New Folder ..." }));
+    await user.type(screen.getByLabelText("Name"), "Archive");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(directories).toEqual(["Notes/Archive"]));
   });
 });
 

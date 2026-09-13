@@ -48,6 +48,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
             { id: `${path}/a.md`, name: "a.md", kind: "file" },
           ],
     }),
+    createDirectory: async () => ({ ok: true }),
     readFile: async (path): Promise<ReadResult> => {
       reads.push(path);
       return { ok: true, content: "# On disk\n", revision: { id: "r1" } };
@@ -1716,6 +1717,33 @@ describe("creating a file in a workspace folder", () => {
       id: "ws/notes/plan.md",
       name: "plan.md",
       kind: "file",
+    });
+  });
+});
+
+describe("creating a folder in a workspace", () => {
+  it("creates the directory at the named local parent and adds it to the tree", async () => {
+    const created: string[] = [];
+    const { client } = fakeClient({
+      createDirectory: async (path) => {
+        created.push(path);
+        return { ok: true as const };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.createDirectory("ws", "ideas");
+    });
+
+    expect(created).toEqual(["ws/ideas"]);
+    expect(result.current.state.folders.ws?.children).toContainEqual({
+      id: "ws/ideas",
+      name: "ideas",
+      kind: "directory",
     });
   });
 });

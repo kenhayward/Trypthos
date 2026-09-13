@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
-import { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes } from "./newFile";
+import { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes, newFolderName } from "./newFile";
 
 /// Naming a file that does not exist yet.
 ///
@@ -51,6 +51,18 @@ describe("newFileName", () => {
   // every "Meeting notes.md" anybody has ever written.
   it("takes a name with a space in it", () => {
     expect(newFileName("Meeting notes", "md")).toBe("Meeting notes.md");
+  });
+});
+
+describe("newFolderName", () => {
+  it("keeps an ordinary folder name", () => {
+    expect(newFolderName("  Project notes  ")).toBe("Project notes");
+  });
+
+  it("refuses names that are really a path or a special directory", () => {
+    for (const name of ["", " ", ".", "..", "new/folder", "new\\folder"]) {
+      expect(newFolderName(name)).toBeNull();
+    }
   });
 });
 

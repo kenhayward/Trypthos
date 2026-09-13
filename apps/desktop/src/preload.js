@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// branch. By id, like closing, for the same reason.
   refreshWorkspace: (workspaceId) => ipcRenderer.invoke("workspace:refresh", { workspaceId }),
   listDirectory: (path) => ipcRenderer.invoke("workspace:list", { path }),
+  createDirectory: (path) => ipcRenderer.invoke("workspace:createDirectory", { path }),
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
   /// refuses anything binary - see the handler.

@@ -168,7 +168,7 @@ export {
   imageMediaType,
   isImageName,
 } from "./imageFiles";
-export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes } from "./newFile";
+export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes, newFolderName } from "./newFile";
 export type { NewFileType } from "./newFile";
 
 export { CHAT_COMMANDS, CHAT_TOOLS, parseChatCommand } from "./chatCommands";
@@ -265,6 +265,7 @@ export {
   OpenTargetSchema,
   SetIntegrationRequest,
   ListRequest,
+  CreateDirectoryRequest,
   OutlineRequest,
   OpenExternalRequest,
   SendChatRequest,

@@ -49,6 +49,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onRetryFolder: vi.fn(),
     onRefreshWorkspace: vi.fn(),
     onNewFile: vi.fn(),
+    onNewFolder: vi.fn(),
     onOpenFile: vi.fn(),
     fileTypes: ["markdown"] as readonly string[],
     selectedFolder: "",
@@ -495,7 +496,7 @@ describe("the sources a workspace can be opened from", () => {
 ///
 /// About the whole workspace wherever in it the click lands - its own row or any row beneath it - so
 /// the menu is found by right-clicking the thing you are looking at rather than scrolling up to the
-/// root first. Refresh is its first entry, and at present its only one.
+/// root first. A local menu starts with its creation actions, while a repository remains refresh-only.
 describe("the workspace menu", () => {
   const WORK = { id: "Work", name: "Work", ref: { kind: "local" as const, root: "D:/Work" }, truncated: false };
   const ESSAYS = {
@@ -511,12 +512,12 @@ describe("the workspace menu", () => {
     return user;
   }
 
-  it("opens on a right-click of the workspace's row, with Refresh first", async () => {
+  it("opens on a right-click of the workspace's row, with New Folder first", async () => {
     panel();
     await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
 
     expect(screen.getByRole("menu", { name: "Diariz" })).toBeDefined();
-    expect(screen.getAllByRole("menuitem")[0]?.textContent).toBe("Refresh");
+    expect(screen.getAllByRole("menuitem")[0]?.textContent).toBe("New Folder ...");
   });
 
   it("offers a new file in the selected local folder", async () => {
@@ -527,6 +528,26 @@ describe("the workspace menu", () => {
     await user.click(screen.getByRole("menuitem", { name: "New File ..." }));
 
     expect(onNewFile).toHaveBeenCalledWith("Diariz/docs");
+  });
+
+  it("offers a new folder in the workspace menu", async () => {
+    const onNewFolder = vi.fn();
+    panel({ onNewFolder });
+    const user = await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
+
+    await user.click(screen.getByRole("menuitem", { name: "New Folder ..." }));
+
+    expect(onNewFolder).toHaveBeenCalledWith("Diariz");
+  });
+
+  it("offers a new folder inside the folder whose menu was opened", async () => {
+    const onNewFolder = vi.fn();
+    panel({ onNewFolder });
+    const user = await rightClick(screen.getByRole("button", { name: /docs/ }));
+
+    await user.click(screen.getByRole("menuitem", { name: "New Folder ..." }));
+
+    expect(onNewFolder).toHaveBeenCalledWith("Diariz/docs");
   });
 
   it("refreshes that workspace when Refresh is chosen, and closes", async () => {

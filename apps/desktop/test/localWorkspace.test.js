@@ -126,6 +126,22 @@ test("refuses to create over a file that already exists", async () => {
   });
 });
 
+test("creates one new directory inside the workspace", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    assert.deepEqual(await workspace.createDirectory("notes/archive"), { ok: true });
+    assert.deepEqual(
+      (await workspace.list("notes")).nodes.find((node) => node.name === "archive"),
+      { id: "notes/archive", name: "archive", kind: "directory" },
+    );
+  });
+});
+
+test("does not create a directory that already exists", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    assert.deepEqual(await workspace.createDirectory("notes"), { ok: false, reason: "conflict" });
+  });
+});
+
 /// Save As, where the user has already been asked.
 ///
 /// The conflict check exists to catch a change the user did not know about. A native save dialog

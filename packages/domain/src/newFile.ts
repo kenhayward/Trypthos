@@ -53,15 +53,22 @@ export function newFileTypes(enabled: readonly string[]): NewFileType[] {
 /// a dialog that refused one would be wrong about most of the files people actually make.
 const UNUSABLE = /[\\/:*?"<>|]/;
 
+/// A single filesystem path segment. Both new files and new folders need this rule: a name carrying
+/// a path would choose a destination through a field that promises to name only one thing.
+export function newFolderName(typed: string): string | null {
+  const name = typed.trim();
+  if (name === "" || name === "." || name === "..") return null;
+  return UNUSABLE.test(name) ? null : name;
+}
+
 /// The file name a dialog's two answers make, or null when they make none.
 ///
 /// Null rather than a thrown error or a corrected guess: the dialog has a button to disable and a
 /// user who can see what they typed, and quietly rewriting a name is how somebody ends up with a
 /// file they did not ask for.
 export function newFileName(typed: string, extension: string): string | null {
-  const name = typed.trim();
-  if (name === "" || name === "." || name === "..") return null;
-  if (UNUSABLE.test(name)) return null;
+  const name = newFolderName(typed);
+  if (name === null) return null;
 
   // An extension the name already carries is one the user typed on purpose, whether or not it is the
   // one the dropdown says. The name is the more specific answer of the two.

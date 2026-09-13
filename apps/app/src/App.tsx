@@ -20,6 +20,7 @@ import {
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
+import NewFolderDialog from "./components/NewFolderDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
@@ -121,6 +122,8 @@ export default function App() {
   /// asking for one that must be created there. False means no dialog. Nothing is created until it
   /// answers.
   const [namingFile, setNamingFile] = useState<string | boolean>(false);
+  /// The directory a workspace context menu chose for a new folder, or false with no prompt open.
+  const [namingFolder, setNamingFolder] = useState<string | false>(false);
   /// True while the repository picker is open. Its own flag rather than a settings page: choosing a
   /// repository is an act like opening a folder, not a preference.
   const [pickingRepo, setPickingRepo] = useState(false);
@@ -632,6 +635,7 @@ export default function App() {
           onRetryFolder={(path) => void actions.retryFolder(path)}
           onRefreshWorkspace={askToRefresh}
           onNewFile={(directory) => setNamingFile(directory)}
+          onNewFolder={(directory) => setNamingFolder(directory)}
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}
@@ -873,6 +877,17 @@ export default function App() {
             setNamingFile(false);
             if (typeof directory === "string") void actions.createEmptyFile(directory, name);
             else actions.newDocument(name);
+          }}
+        />
+      )}
+
+      {namingFolder && (
+        <NewFolderDialog
+          onCancel={() => setNamingFolder(false)}
+          onCreate={(name) => {
+            const directory = namingFolder;
+            setNamingFolder(false);
+            void actions.createDirectory(directory, name);
           }}
         />
       )}
