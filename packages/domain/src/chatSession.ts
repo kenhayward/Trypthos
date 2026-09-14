@@ -20,7 +20,7 @@ import { loadPersisted, type Migration } from "./persisted";
 /// conversation: replacing an unreadable chat with an empty one would look exactly like a chat that
 /// had been lost, so it reports failure instead and the caller can say so.
 
-export const CHAT_SESSION_VERSION = 4;
+export const CHAT_SESSION_VERSION = 5;
 
 /// How much of a reply's thinking a saved chat keeps, in characters.
 ///
@@ -33,7 +33,17 @@ export const SAVED_REASONING_LIMIT = 4_000;
 /// One turn as a saved chat holds it.
 ///
 /// One tool call a reply made, as the panel lists it: the tool, and what it was aimed at.
-const SessionToolCallSchema = z.object({ name: z.string(), detail: z.string() }).strict();
+const SessionToolCallSchema = z
+  .object({
+    name: z.string(),
+    detail: z.string(),
+    /// Present when a read was cut to the model's budget: how much of the file was sent.
+    cut: z
+      .object({ sent: z.number().int().nonnegative(), total: z.number().int().nonnegative() })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
 /// NOT `ChatTurnSchema`, which is strict and describes what a PROVIDER receives. A saved chat is a
 /// record of what the panel showed, so it keeps the two things the panel records for itself - what
@@ -106,6 +116,14 @@ export interface ChatSessionSummary {
 
 /// No migrations yet. The first shape change writes one here, in the PR that makes it.
 export const CHAT_SESSION_MIGRATIONS: Migration[] = [
+  {
+    to: 5,
+    // Version 5 lets a tool call record that its read was cut to the model's budget. Optional in the
+    // schema, and reads were never cut before, so a version 4 file loads as it was - the version
+    // exists for the OTHER direction: a chat written here and read by the previous build would fail
+    // its strict tool call schema and take the conversation with it.
+    migrate: (input) => input,
+  },
   {
     to: 4,
     // Version 4 records every tool call a reply made, not only the files it read. Up to version 3

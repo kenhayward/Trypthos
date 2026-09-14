@@ -187,6 +187,8 @@
     "readingFile": "Reading {{path}}...",
     "usingTool": "Using {{tool}}...",
     "toolCalls": "Tool calls ({{calls}})",
+    "toolCallsCut": "Tool calls ({{calls}}) - {{cut}} cut short",
+    "toolCallCut": "- cut short: {{sent}} of {{total}} characters sent",
     "context": {
       "used": "About {{tokens}} of {{limit}} tokens used",
       "unknown": "About {{tokens}} tokens. Set this model's context window in Settings to see how much is left.",

@@ -610,6 +610,90 @@ test("says what a folder tool was aimed at", async () => {
   );
 });
 
+/// A read held to the model's budget - the same one attachments get - and marked when it is cut.
+///
+/// Reads used to send the whole file whatever its size: the 20,000-character limit written for them
+/// was never applied.
+test("cuts a file the model reads to its budget, tells the model, and reports the cut", async () => {
+  const calls = [];
+  const { events, onEvent } = collect();
+  // An 1,000-token window: nine tenths at four characters each is a budget of 3,600 characters.
+  const profile = { ...TOOLS_PROFILE, contextWindow: 1_000 };
+  const content = `${"x".repeat(5_000)}END`;
+  const fetchImpl = scriptedFetch(
+    [
+      [readCall("plan.md"), "data: [DONE]\n\n"],
+      [says("Read it."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": content }),
+  });
+
+  const result = calls[1].body.messages.at(-1);
+  assert.equal(result.role, "tool");
+  assert.ok(result.content.startsWith("x".repeat(3_600)));
+  assert.ok(!result.content.includes("END"), "the part past the budget must not be sent");
+  assert.match(result.content, /only the first 3600 of its 5003 characters/i);
+
+  // After the call it belongs to, so the panel can mark that call.
+  const at = events.findIndex((event) => event.type === "tool");
+  assert.deepEqual(events[at + 1], { type: "tool-cut", sent: 3_600, total: 5_003 });
+});
+
+test("sends a file within the budget whole, with no cut reported", async () => {
+  const calls = [];
+  const { events, onEvent } = collect();
+  const fetchImpl = scriptedFetch(
+    [
+      [readCall("plan.md"), "data: [DONE]\n\n"],
+      [says("Read it."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: { ...TOOLS_PROFILE, contextWindow: 262_000 },
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": "x".repeat(100_000) }),
+  });
+
+  assert.equal(calls[1].body.messages.at(-1).content, "x".repeat(100_000));
+  assert.equal(events.some((event) => event.type === "tool-cut"), false);
+});
+
+// A model nobody has sized gets the fixed budget attachments get, rather than any file at all.
+test("holds a model with no window to the fixed budget", async () => {
+  const calls = [];
+  const { events, onEvent } = collect();
+  const fetchImpl = scriptedFetch(
+    [
+      [readCall("plan.md"), "data: [DONE]\n\n"],
+      [says("Read it."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": "x".repeat(60_001) }),
+  });
+
+  assert.deepEqual(events.find((event) => event.type === "tool-cut"), {
+    type: "tool-cut",
+    sent: 60_000,
+    total: 60_001,
+  });
+});
+
 /// The allowlist. A path the outline never named must not reach the filesystem.
 test("refuses a file that was never offered, and tells the model why", async () => {
   const calls = [];
@@ -811,6 +895,35 @@ test("serves a file the model asked for in a fenced block", async () => {
   const second = calls[1].body.messages;
   assert.equal(second.at(-1).role, "user");
   assert.ok(second.at(-1).content.includes("# Plan for notes/plan.md"));
+});
+
+// The same budget however the model asked: a fenced read is the same read.
+test("cuts a file asked for in a fenced block to the same budget", async () => {
+  const { events, onEvent } = collect();
+  const calls = [];
+  const fetchImpl = roundsFetch(
+    [
+      [say(READ_BLOCK), "data: [DONE]\n\n"],
+      [say("Read it."), "data: [DONE]\n\n"],
+    ],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: { ...PROFILE, contextWindow: 1_000 },
+    turns: TURNS,
+    onEvent,
+    readFile: async () => ({ ok: true, content: `${"x".repeat(5_000)}END` }),
+  });
+
+  const sent = calls[1].body.messages.at(-1).content;
+  assert.ok(!sent.includes("END"));
+  assert.match(sent, /only the first 3600 of its 5003 characters/i);
+  assert.deepEqual(events.find((e) => e.type === "tool-cut"), {
+    type: "tool-cut",
+    sent: 3_600,
+    total: 5_003,
+  });
 });
 
 test("tells the model when the file it asked for cannot be read", async () => {

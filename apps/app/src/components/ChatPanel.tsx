@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   READ_TOOL_NAME,
@@ -121,7 +121,9 @@ export default function ChatPanel({
   onOpenChat,
   onDeleteChat,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  /// Character counts in a cut read's warning, grouped the way the reader's language groups them.
+  const numbers = useMemo(() => new Intl.NumberFormat(i18n.language), [i18n.language]);
   const [input, setInput] = useState("");
   /// Which proposals have been applied, so a card cannot be clicked twice.
   ///
@@ -450,14 +452,33 @@ export default function ChatPanel({
                       two controls for one fact. */}
                   {turn.role === "assistant" && !waiting && (turn.tools?.length ?? 0) > 0 && (
                     <details data-testid="turn-tools" className="mt-1.5 text-xs text-ink-4">
+                      {/* A read cut to the model's budget is said on this line as well as on the
+                          call, because the block starts closed and a warning inside it would be one
+                          nobody sees. */}
                       <summary className="cursor-pointer">
-                        {t("chat.toolCalls", { calls: turn.tools?.length ?? 0 })}
+                        {cutCount(turn.tools) === 0
+                          ? t("chat.toolCalls", { calls: turn.tools?.length ?? 0 })
+                          : t("chat.toolCallsCut", {
+                              calls: turn.tools?.length ?? 0,
+                              cut: cutCount(turn.tools),
+                            })}
                       </summary>
                       <ol className="mt-1 max-h-48 space-y-0.5 overflow-auto">
                         {(turn.tools ?? []).map((call, at) => (
-                          <li key={at} className="break-all">
+                          <li key={at} className="break-words">
                             <code className="rounded bg-hover px-1 text-ink-3">{call.name}</code>
-                            {call.detail !== "" && ` ${call.detail}`}
+                            {/* Only the path may break anywhere - it has no spaces to wrap at. The
+                                warning beside it is words, and breaking those mid-word is unreadable. */}
+                            {call.detail !== "" && <span className="break-all">{` ${call.detail}`}</span>}
+                            {call.cut !== undefined && (
+                              <span className="text-danger">
+                                {" "}
+                                {t("chat.toolCallCut", {
+                                  sent: numbers.format(call.cut.sent),
+                                  total: numbers.format(call.cut.total),
+                                })}
+                              </span>
+                            )}
                           </li>
                         ))}
                       </ol>
@@ -566,4 +587,9 @@ export default function ChatPanel({
       </div>
     </aside>
   );
+}
+
+/// How many of a reply's tool calls read a file that had to be cut to the model's budget.
+function cutCount(tools: readonly ToolCall[] | undefined): number {
+  return (tools ?? []).filter((call) => call.cut !== undefined).length;
 }
