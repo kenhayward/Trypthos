@@ -17,6 +17,7 @@ import ChatEditCard from "./ChatEditCard";
 import ChatHistoryMenu from "./ChatHistoryMenu";
 import ChatModelPicker from "./ChatModelPicker";
 import ChatScope from "./ChatScope";
+import { TREE_FILE_TYPE } from "../lib/treeDrag";
 
 interface Props {
   width: number;
@@ -74,6 +75,8 @@ interface Props {
     onNeedFiles: () => void;
     onAttach: (path: string) => void;
     onDetach: (path: string) => void;
+    /// Why the last file could not be attached, as a failure reason, or null.
+    attachFailure?: string | null;
   };
   onOpenChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
@@ -124,6 +127,14 @@ export default function ChatPanel({
   /// once the turns behind them are gone.
   const [applied, setApplied] = useState<ReadonlySet<string>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
+  /// True while a file from the folder browser is held over the panel, so it can say it will take
+  /// it - a drop target that gives no sign until the drop is one people do not try.
+  const [dropping, setDropping] = useState(false);
+
+  /// Whether a drag is something this panel takes: a file from the tree, and only when a question
+  /// could be asked with it. The same conditions the Attach button has.
+  const takesDrop = (event: React.DragEvent) =>
+    models.length > 0 && !streaming && Array.from(event.dataTransfer.types).includes(TREE_FILE_TYPE);
 
   // A reply arrives a token at a time, so this runs often. It is cheap when it does: a coloured
   // block is marked, and a pass over an unchanged thread is one query.
@@ -193,8 +204,37 @@ export default function ChatPanel({
     <aside
       aria-label={t("chat.title")}
       style={{ width }}
-      className="flex shrink-0 flex-col overflow-hidden bg-panel"
+      className="relative flex shrink-0 flex-col overflow-hidden bg-panel"
+      // A file dragged from the folder browser is added to the conversation, as Attach a file does.
+      // Anything else - text, a file from outside the app - is not taken: this panel reads files by
+      // their path in an open folder, and only the tree's own drag type carries one.
+      onDragOver={(event) => {
+        if (!takesDrop(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        // Leaving for a child of the panel is not leaving the panel.
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDropping(false);
+      }}
+      onDrop={(event) => {
+        setDropping(false);
+        if (!takesDrop(event)) return;
+        event.preventDefault();
+        const path = event.dataTransfer.getData(TREE_FILE_TYPE);
+        if (path !== "") scope.onAttach(path);
+      }}
     >
+      {dropping && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-1 z-30 flex items-center justify-center rounded-md border-2 border-dashed border-accent bg-app/80 text-ui text-ink"
+        >
+          {t("chat.scope.dropHere")}
+        </div>
+      )}
       <h2 className="flex items-center gap-1 border-b border-rule px-3 py-2 text-xs font-semibold tracking-wide text-ink-4 uppercase">
         {t("chat.title")}
         <span className="ml-auto flex items-center gap-1">
@@ -456,6 +496,7 @@ export default function ChatPanel({
           onNeedFiles={scope.onNeedFiles}
           onAttach={scope.onAttach}
           onDetach={scope.onDetach}
+          attachFailure={scope.attachFailure ?? null}
         />
       )}
 

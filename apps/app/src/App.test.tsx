@@ -614,6 +614,82 @@ describe("slash commands", () => {
   });
 });
 
+/// Adding a file to the chat from the folder browser, end to end: the tree's menu, the read, and a
+/// chip on the chat's scope bar.
+describe("adding a file to the chat from the folder browser", () => {
+  function shell({ chatCollapsed }: { chatCollapsed: boolean }): { reads: string[] } {
+    const reads: string[] = [];
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          panels: { ...DEFAULT_SETTINGS.panels, chatCollapsed },
+          chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] },
+          workspaces: [{ kind: "local" as const, root: "D:/Notes" }],
+        },
+      }),
+      writeSettings: async () => {},
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
+        ok: true as const,
+        workspace: { id: "Notes", name: "Notes", ref },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [{ id: "Notes/plan.md", name: "plan.md", kind: "file" as const }],
+      }),
+      // Only the qualified path answers, as the shell does.
+      readFile: async (path: string) => {
+        reads.push(path);
+        return path === "Notes/plan.md"
+          ? { ok: true as const, content: "# Plan", revision: { id: "r1" } }
+          : { ok: false as const, reason: "no-workspace" };
+      },
+      sendChat: async () => ({ ok: true as const, streamId: "s1" }),
+      cancelChat: async () => {},
+      onChatEvent: () => () => {},
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+    return { reads };
+  }
+
+  async function addToChat() {
+    const user = userEvent.setup();
+    // Reopened workspaces start collapsed; expanding one lists it.
+    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    const row = await screen.findByRole("button", { name: /plan\.md/ });
+    await user.pointer({ keys: "[MouseRight]", target: row });
+    await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
+  }
+
+  it("attaches the file, where the chat can be seen", async () => {
+    const { reads } = shell({ chatCollapsed: false });
+    render(<App />);
+
+    await addToChat();
+
+    const chat = screen.getByRole("complementary", { name: "Chat" });
+    expect(await within(chat).findByRole("button", { name: "Remove Notes/plan.md" })).toBeDefined();
+    expect(reads).toEqual(["Notes/plan.md"]);
+  });
+
+  // Added to a chat nobody can see is added nowhere, as far as the user can tell.
+  it("opens the chat panel when it was collapsed", async () => {
+    shell({ chatCollapsed: true });
+    render(<App />);
+
+    await addToChat();
+
+    const chat = await screen.findByRole("complementary", { name: "Chat" });
+    expect(await within(chat).findByRole("button", { name: "Remove Notes/plan.md" })).toBeDefined();
+  });
+});
+
 /// File > New, from the menu to a tab with a name and nowhere to be.
 describe("making a new file", () => {
   function shell(): {

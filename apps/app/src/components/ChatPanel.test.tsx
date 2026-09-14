@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ChatProfileSchema, type ChatSessionSummary } from "@trypthos/domain";
@@ -762,11 +763,22 @@ describe("ChatPanel: scope", () => {
 
   it("lists what is attached, and removes one", async () => {
     const user = userEvent.setup();
-    const props = withScope({ attachments: ["notes/risks.md"] });
+    const props = withScope({ attachments: ["Notes/research/risks.md"] });
 
-    expect(screen.getByText("notes/risks.md")).toBeDefined();
-    await user.click(screen.getByRole("button", { name: "Remove notes/risks.md" }));
-    expect(props.scope.onDetach).toHaveBeenCalledWith("notes/risks.md");
+    expect(screen.getByText("risks.md")).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Remove Notes/research/risks.md" }));
+    expect(props.scope.onDetach).toHaveBeenCalledWith("Notes/research/risks.md");
+  });
+
+  // The chip is narrow and a path is cut from the right, so the whole path left the NAME - the part
+  // that says which file it is - behind the ellipsis. The name is shown; the path is on hover, where
+  // two files called notes.md in different folders can still be told apart.
+  it("names an attachment by its file, with the whole path on hover", () => {
+    withScope({ attachments: ["Notes/research/risks.md"] });
+
+    expect(screen.getByText("risks.md").closest("[title]")?.getAttribute("title")).toBe(
+      "Notes/research/risks.md",
+    );
   });
 
   it("says when there is nothing left to attach", async () => {
@@ -803,6 +815,87 @@ describe("ChatPanel: scope", () => {
   it("offers no scope at all when no model is configured", () => {
     panel({ models: [], selectedId: null });
     expect(screen.queryByRole("button", { name: "Folder" })).toBeNull();
+  });
+});
+
+/// Adding a file to the conversation by dragging it from the folder browser.
+///
+/// The tree marks what it drags with its own type, so only a file from the tree is taken - text or a
+/// file dragged in from outside the app is not something this panel can read by name.
+describe("ChatPanel: dropping a file from the folder browser", () => {
+  const scopeWith = (over: Record<string, unknown> = {}) => ({
+    attachments: [] as string[],
+    files: [] as string[],
+    includeFolder: false,
+    folderPath: "",
+    canUseFolder: true,
+    onToggleFolder: vi.fn(),
+    onNeedFiles: vi.fn(),
+    onAttach: vi.fn(),
+    onDetach: vi.fn(),
+    ...over,
+  });
+
+  /// A DataTransfer as far as a drop needs one. jsdom has none of its own.
+  const carrying = (entries: Record<string, string>) => ({
+    types: Object.keys(entries),
+    getData: (type: string) => entries[type] ?? "",
+    dropEffect: "none",
+  });
+
+  it("attaches a file dropped from the tree", () => {
+    const scope = scopeWith();
+    panel({ scope });
+    const target = screen.getByRole("complementary", { name: "Chat" });
+
+    const dataTransfer = carrying({ [TREE_FILE_TYPE]: "ws/notes/risks.md" });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+
+    expect(scope.onAttach).toHaveBeenCalledWith("ws/notes/risks.md");
+  });
+
+  // While something is held over the panel it says it will take it, so a drop is not a guess.
+  it("shows that it will take the file while one is held over it", () => {
+    panel({ scope: scopeWith() });
+    const target = screen.getByRole("complementary", { name: "Chat" });
+
+    fireEvent.dragOver(target, { dataTransfer: carrying({ [TREE_FILE_TYPE]: "ws/a.md" }) });
+    expect(screen.getByText("Drop to add to the chat")).toBeDefined();
+
+    fireEvent.dragLeave(target, { dataTransfer: carrying({ [TREE_FILE_TYPE]: "ws/a.md" }) });
+    expect(screen.queryByText("Drop to add to the chat")).toBeNull();
+  });
+
+  it("ignores anything that did not come from the tree", () => {
+    const scope = scopeWith();
+    panel({ scope });
+    const target = screen.getByRole("complementary", { name: "Chat" });
+
+    const dataTransfer = carrying({ "text/plain": "ws/notes/risks.md" });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+
+    expect(scope.onAttach).not.toHaveBeenCalled();
+    expect(screen.queryByText("Drop to add to the chat")).toBeNull();
+  });
+
+  // The same rule the Attach button follows: what an answer is based on does not change mid-reply.
+  it("does not attach while a reply is arriving", () => {
+    const scope = scopeWith();
+    panel({ scope, streaming: true });
+    const target = screen.getByRole("complementary", { name: "Chat" });
+
+    fireEvent.drop(target, { dataTransfer: carrying({ [TREE_FILE_TYPE]: "ws/a.md" }) });
+    expect(scope.onAttach).not.toHaveBeenCalled();
+  });
+
+  // A file that could not be attached says why, beside the attachments it did not join.
+  it("says why a file could not be attached", () => {
+    panel({ scope: scopeWith({ attachFailure: "not-text" }) });
+    expect(screen.getByRole("alert").textContent).toBe(
+      "That file is not a text file, so it cannot be added to the chat.",
+    );
   });
 });
 

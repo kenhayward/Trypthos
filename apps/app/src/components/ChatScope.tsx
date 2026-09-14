@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContextUsage } from "@trypthos/domain";
 import ContextDial from "./ContextDial";
+import { attachFailureKey } from "../lib/attachFailure";
 
 interface Props {
   /// Files attached to the conversation, workspace-relative.
@@ -25,6 +26,8 @@ interface Props {
   onAttach: (path: string) => void;
   /// How full the model's context is with everything on this bar, plus what is typed.
   usage: ContextUsage;
+  /// Why the last file could not be attached, as a failure reason, or null.
+  attachFailure?: string | null;
 }
 
 /// What chat can see, beyond the open document.
@@ -43,6 +46,7 @@ export default function ChatScope({
   onNeedFiles,
   onAttach,
   usage,
+  attachFailure = null,
 }: Props) {
   const { t } = useTranslation();
   const [picking, setPicking] = useState(false);
@@ -106,9 +110,12 @@ export default function ChatScope({
       {attachments.map((path) => (
         <span
           key={path}
+          // The whole path on hover. The chip has room for a name, and a path cut from the right
+          // leaves the name - the part that says which file this is - behind the ellipsis.
+          title={path}
           className="flex max-w-48 items-center gap-1 rounded bg-sunken px-2 py-0.5 text-xs text-ink"
         >
-          <span className="truncate">{path}</span>
+          <span className="truncate">{folderName(path)}</span>
           <button
             type="button"
             onClick={() => onDetach(path)}
@@ -183,11 +190,20 @@ export default function ChatScope({
       </div>
 
       <ContextDial usage={usage} />
+
+      {/* On its own line, beside the attachments it did not join. A file that could not be added
+          used to vanish without a word - which is what made a broken picker look like a list whose
+          entries did nothing. */}
+      {attachFailure !== null && (
+        <p role="alert" className="w-full px-1 text-xs text-danger">
+          {t(attachFailureKey(attachFailure))}
+        </p>
+      )}
     </div>
   );
 }
 
-/// The last segment of a workspace-relative path - what a person calls that folder.
+/// The last segment of a path - what a person calls that folder, or that file.
 ///
 /// The whole path would be more precise and less readable, on a button beside a composer where
 /// width is the scarce thing.

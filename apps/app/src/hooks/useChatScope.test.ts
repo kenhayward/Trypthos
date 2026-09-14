@@ -64,6 +64,23 @@ describe("attachments", () => {
     expect(result.current.attachments).toEqual([]);
   });
 
+  // Silence is what made a broken picker look like a button that did nothing. A file that cannot be
+  // attached - too large, not text, gone - says why.
+  it("says why a file could not be attached, until the next attach works", async () => {
+    const bridge = fakeBridge({ "notes/risks.md": "# Risks" });
+    const { result } = scope(bridge);
+
+    await act(async () => {
+      await result.current.attach("notes/gone.md");
+    });
+    expect(result.current.attachFailure).toBe("not-found");
+
+    await act(async () => {
+      await result.current.attach("notes/risks.md");
+    });
+    expect(result.current.attachFailure).toBeNull();
+  });
+
   it("removes an attachment", async () => {
     const bridge = fakeBridge({ "notes/risks.md": "# Risks" });
     const { result } = scope(bridge);
@@ -177,6 +194,37 @@ describe("the folder chat maps", () => {
 
     act(() => result.current.setIncludeFolder(true));
     await waitFor(() => expect(bridge.workspaceOutline).toHaveBeenCalledWith(""));
+  });
+
+  /// The picker, against a bridge that answers the way the shell does.
+  ///
+  /// The shell names an outline's files from the WORKSPACE ROOT - that list is what the model is
+  /// shown - but reads a file only by its qualified path, because several folders can be open. The
+  /// fake above shares one namespace between the two, which is how choosing a file from the picker
+  /// silently read nothing for as long as it did.
+  it("attaches a file chosen from the picker", async () => {
+    const bridge = {
+      workspaceOutline: vi.fn(async (path: string) => ({
+        ok: true as const,
+        outline: { path: "notes", workspacePath: path, paths: ["notes/risks.md"], truncated: false },
+      })),
+      readFile: vi.fn(async (path: string) =>
+        path === "ws/notes/risks.md"
+          ? { ok: true as const, content: "# Risks" }
+          : { ok: false as const, reason: "no-workspace" },
+      ),
+    } satisfies ScopeBridge;
+    const { result } = scope(bridge, SOURCE, "ws/notes");
+
+    await act(async () => {
+      await result.current.loadFiles();
+    });
+    await act(async () => {
+      await result.current.attach(result.current.files[0]!);
+    });
+
+    expect(result.current.attachments).toEqual(["ws/notes/risks.md"]);
+    expect(result.current.context().attachments[0]).toMatchObject({ text: "# Risks" });
   });
 
   // A list describing one folder must not survive into another. The picker's files are loaded on

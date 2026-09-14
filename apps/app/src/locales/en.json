@@ -26,7 +26,8 @@
     "refresh": "Refresh",
     "newFile": "New File ...",
       "newFolder": "New Folder ...",
-      "openInNewWindow": "Open in New Window ..."
+      "openInNewWindow": "Open in New Window ...",
+      "addToChat": "Add to Chat"
   },
   "refreshRepo": {
     "title": "Refresh {{name}} from GitHub",
@@ -170,7 +171,14 @@
       "attach": "Attach a file",
       "detach": "Remove {{path}}",
       "filter": "Find a file",
-      "noFiles": "No other files to attach."
+      "noFiles": "No other files to attach.",
+      "dropHere": "Drop to add to the chat",
+      "attachFailed": {
+        "tooLarge": "That file is too large to add to the chat.",
+        "notText": "That file is not a text file, so it cannot be added to the chat.",
+        "notFound": "That file could not be found, so it was not added to the chat.",
+        "unknown": "That file could not be added to the chat."
+      }
     },
     "readingFile": "Reading {{path}}...",
     "usingTool": "Using {{tool}}...",

@@ -637,6 +637,17 @@ export default function App() {
           onNewFile={(directory) => setNamingFile(directory)}
           onNewFolder={(directory) => setNamingFolder(directory)}
           onOpenInNewWindow={(path) => void actions.openInNewWindow(path)}
+          // Only where there is a chat to add to, and not while a reply is arriving - the same rule
+          // the chat's own Attach button follows. Absent, the menu entry and the drag both go.
+          onAddToChat={
+            showChat && scopeBridge !== null && !chat.streaming
+              ? (path) => {
+                  // Added to a chat nobody can see is added nowhere, as far as the user can tell.
+                  if (panels.chatCollapsed) updatePanels({ chatCollapsed: false });
+                  void scope.attach(path);
+                }
+              : undefined
+          }
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}
@@ -785,6 +796,7 @@ export default function App() {
                   onNeedFiles: () => void scope.loadFiles(),
                   onAttach: (path) => void scope.attach(path),
                   onDetach: scope.detach,
+                  attachFailure: scope.attachFailure,
                 }}
                 onSaveChat={() =>
                   // The panel's turns, not the wire ones: a saved chat is a record of what was

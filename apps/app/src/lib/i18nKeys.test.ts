@@ -85,6 +85,9 @@ const DYNAMIC_PREFIXES = [
   // model's own vocabulary - low, medium, high - and iterating them keeps the control and the
   // schema's enum from drifting into different sets.
   "settings.chat.reasoning.",
+  // Chosen by `attachFailureKey` from the reason a read was refused, so the chat's scope bar can say
+  // why a file was not added. `attachFailure.test` checks the other direction against the catalogue.
+  "chat.scope.attachFailed.",
 ];
 
 function usedKeys(): Map<string, string[]> {
