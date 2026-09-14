@@ -77,6 +77,7 @@ test("answers with the files at the workspace root", async () => {
     assert.equal(result.ok, true);
     assert.deepEqual(result.outline.paths, ["top.md"]);
     assert.equal(result.outline.path, "");
+    assert.equal(result.outline.workspacePath, q(""));
   });
 });
 
@@ -90,6 +91,7 @@ test("answers with the files in the folder it was given", async () => {
       assert.equal(result.ok, true);
       assert.deepEqual(result.outline.paths, ["notes/inner.md", "notes/other.md"]);
       assert.equal(result.outline.path, "notes");
+      assert.equal(result.outline.workspacePath, q("notes"));
     },
   );
 });

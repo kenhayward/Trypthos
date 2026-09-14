@@ -512,11 +512,13 @@ test("lets the model read an enabled file below the attached folder", async () =
     await withHandlers(
       async ({ ipcMain }) => {
         const opened = await ipcMain.invoke("workspace:open");
+        const outlined = await ipcMain.invoke("workspace:outline", { path: opened.workspace.id });
+        assert.equal(outlined.ok, true);
         await ipcMain.invoke(
           "chat:send",
           send({
             context: withDocument({
-              folder: { path: opened.workspace.id, paths: [], truncated: false },
+              folder: outlined.outline,
             }),
           }),
         );
@@ -556,7 +558,12 @@ test("refuses a model read from a sibling of the attached folder", async () => {
           "chat:send",
           send({
             context: withDocument({
-              folder: { path: `${opened.workspace.id}/docs`, paths: ["docs/README.md"], truncated: false },
+              folder: {
+                path: "docs",
+                workspacePath: `${opened.workspace.id}/docs`,
+                paths: ["docs/README.md"],
+                truncated: false,
+              },
             }),
           }),
         );

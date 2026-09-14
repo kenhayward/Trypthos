@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.68.2",
+    date: "2026-09-14",
+    pr: 140,
+    headline: "Let the folder you attach reach chat tools",
+    summary:
+      "A model could see the folder you attached, and it could ask to read a file inside it, but the app lost which open workspace that folder belonged to before handling the request. It then answered as though the file was not available. The folder now keeps a private workspace identity for tool requests while the model sees only the ordinary folder path, so reads, listings, searches and comparisons reach the folder you chose without exposing an internal workspace ID in the chat context.",
+    fixed: [
+      "Chat tools now resolve the attached folder in the correct open workspace, including files a directory listing finds below it.",
+    ],
+  },
+  {
     version: "0.68.1",
     date: "2026-09-14",
     pr: 139,

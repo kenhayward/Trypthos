@@ -234,6 +234,15 @@ describe("the folder outline", () => {
     expect(outline?.content).toContain("notes/risks.md");
   });
 
+  it("keeps the desktop workspace routing path out of model context", () => {
+    const [outline] = turns({
+      selection: "",
+      file,
+      folder: { ...folder, workspacePath: "workspace-123/notes" },
+    });
+    expect(outline?.content).not.toContain("workspace-123");
+  });
+
   // The whole point of an outline. Left unsaid, a model will answer as though it had read them.
   it("says plainly that the contents were not sent", () => {
     const [outline] = turns({ selection: "", file, folder });
