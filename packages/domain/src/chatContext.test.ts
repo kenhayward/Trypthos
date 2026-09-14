@@ -246,11 +246,11 @@ describe("the folder outline", () => {
     expect(outline?.content).toMatch(/get_file_contents/);
   });
 
-  // The allowlist, stated to the model as well as enforced in the shell. Saying it here means a
-  // model that would otherwise guess at a path is told not to bother.
-  it("says that only these paths can be read", () => {
+  // A listing can reveal a file below the first outline. The model is told the folder, rather than
+  // the one-level menu, is the boundary it can read inside.
+  it("says that files below the attached folder can be read", () => {
     const [outline] = turns({ selection: "", file, folder });
-    expect(outline?.content).toMatch(/only these paths/i);
+    expect(outline?.content).toMatch(/attached folder.*below|inside the attached folder/i);
   });
 
   it("comes first, being the map the rest sits inside", () => {
@@ -365,9 +365,9 @@ describe("how the outline says to read a file", () => {
     expect(folder("fenced")).toContain("notes/plan.md");
   });
 
-  it("says either way that only the listed paths can be read", () => {
+  it("says either way that files below the attached folder can be read", () => {
     for (const reads of ["tool", "fenced"] as const) {
-      expect(folder(reads)).toMatch(/only these paths/i);
+      expect(folder(reads)).toMatch(/attached folder.*below|inside the attached folder/i);
     }
   });
 });

@@ -70,7 +70,7 @@ async function withHandlers(body, options = {}) {
     const { sent, runs, chat, window } = harness(options);
     registerIpcHandlers({
       ipcMain,
-      dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
+      dialog: options.dialog ?? { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
       getWindow: () => window,
       userDataDir: dir,
       secrets: {
@@ -493,6 +493,87 @@ test("sends the folder outline before the document", async () => {
     },
     { systemPrompt: "" },
   );
+});
+
+// A directory listing can find a file below the initial one-level outline. Its name must be enough
+// to read it: the attached folder and workspace guards, not that initial menu, are the boundary.
+test("lets the model read an enabled file below the attached folder", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-chat-folder-"));
+  const nested = "docs/specification/requirements/README.md";
+  await fs.mkdir(path.join(root, "docs", "specification", "requirements"), { recursive: true });
+  await fs.writeFile(path.join(root, ...nested.split("/")), "# Requirements\n", "utf8");
+
+  let finishRead;
+  const read = new Promise((resolve) => {
+    finishRead = resolve;
+  });
+
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        const opened = await ipcMain.invoke("workspace:open");
+        await ipcMain.invoke(
+          "chat:send",
+          send({
+            context: withDocument({
+              folder: { path: opened.workspace.id, paths: [], truncated: false },
+            }),
+          }),
+        );
+
+        assert.deepEqual(await read, { ok: true, content: "# Requirements\n" });
+      },
+      {
+        dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [root] }) },
+        run: async ({ readFile, onEvent }) => {
+          finishRead(await readFile(nested));
+          onEvent({ type: "end" });
+        },
+      },
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+// The wider nested-read capability ends at the folder the user attached, not at the workspace root.
+test("refuses a model read from a sibling of the attached folder", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-chat-folder-"));
+  await fs.mkdir(path.join(root, "docs"));
+  await fs.writeFile(path.join(root, "docs", "README.md"), "# Docs\n", "utf8");
+  await fs.writeFile(path.join(root, "private.md"), "Do not share\n", "utf8");
+
+  let finishRead;
+  const read = new Promise((resolve) => {
+    finishRead = resolve;
+  });
+
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        const opened = await ipcMain.invoke("workspace:open");
+        await ipcMain.invoke(
+          "chat:send",
+          send({
+            context: withDocument({
+              folder: { path: `${opened.workspace.id}/docs`, paths: ["docs/README.md"], truncated: false },
+            }),
+          }),
+        );
+
+        assert.deepEqual(await read, { ok: false, reason: "not-allowed" });
+      },
+      {
+        dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [root] }) },
+        run: async ({ readFile, onEvent }) => {
+          finishRead(await readFile("private.md"));
+          onEvent({ type: "end" });
+        },
+      },
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test("sends an attached file, named", async () => {

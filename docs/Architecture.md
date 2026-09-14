@@ -1367,10 +1367,11 @@ rather than `fs`** - it inherits the lexical guard and the realpath check every 
 boundary is the workspace root; which folder inside it is a choice, not a permission. A folder that
 cannot be listed answers with an empty outline rather than an error nobody can act on.
 
-The outline is still the **allowlist**, so `chat:send` rebuilds it in the main process from
-`context.folder.path` rather than trusting the paths in the request - the folder is the user's
-choice, the guard is what keeps that choice inside the workspace, and the file types and size come
-from settings read there.
+The outline is the model's initial map, not the whole read permission. `chat:send` resolves the
+attached folder in the main process and allows an enabled file anywhere inside it; a directory
+listing can therefore discover a nested file and `get_file_contents` can read it. The folder fence
+and the workspace provider's guard both apply to every request, and the enabled file types and size
+come from settings read there.
 
 `FolderOutline` carries its `path` so the turn can name the folder, and the picker's file list is
 stored WITH the folder it came from - staleness derived rather than reset, since clearing it from an
@@ -1542,9 +1543,9 @@ Three things make it small enough to trust:
 
 ### The folder tools, and how far they reach
 
-`list_directory`, `search_contents` and `diff_files` are the first tools that let a model reach a
-file **it was not given**. Until them the allowlist was the outline - ten paths from one level of the
-attached folder - and `get_file_contents` answered for those and nothing else.
+`list_directory`, `search_contents` and `diff_files` let a model find a file **it was not given**.
+The initial outline remains a short, one-level map, but a file that `list_directory` finds can then
+be read with `get_file_contents`.
 
 **The bound is the folder the user attached, not the workspace.** Attaching a folder is the consent
 gesture this app has, and honouring it is the difference between "you showed me this folder" and
@@ -1705,10 +1706,10 @@ proposal is structured output - the call IS the answer, nothing runs, the user p
 read is carried out by the app and the result sent back, so the model can read a file and keep
 going. Chat is a loop from here on, and the bounds are the design:
 
-- **The allowlist is recomputed in the main process, never taken from the request.** The renderer's
-  copy of the outline came from this same function; trusting it back would let a renderer widen what
-  the model may read by sending a longer list. The workspace provider then resolves the path against
-  the open root, so an allowed name still goes through the boundary check every other read does.
+- **The folder boundary and enabled file types are checked in the main process, never taken from the
+  request.** A model can read a file that a directory listing discovered, but only inside the folder
+  the user attached and only if its type is enabled. The workspace provider then resolves the path
+  against the open root, so every name still goes through the boundary check every other read does.
 - **A refusal is told to the model, not turned into an error.** It can pick a different file or
   answer without one, and a turn that ended on the model's first bad guess would be worse than one
   that continued.
@@ -1729,7 +1730,7 @@ would invite calls that could only be refused.
 a home directory, and the result was far too long to be a menu. It is sorted, so the same folder
 produces the same menu twice running: without that, which files the model could read would drift
 between turns with nothing having changed. `settings.chat.folderFileLimit` sets how many it names,
-defaulting to ten, because every entry is a file the model might ask for.
+defaulting to ten, because this is an initial map rather than a recursive walk.
 
 **What chat does not do yet:** it cannot CHANGE a file without the user pressing Apply. Reading files
 in subfolders arrived with the folder tools above, and `create_file` is the one exception to the

@@ -149,10 +149,10 @@ describe("readTools", () => {
     expect(tool.function.parameters.required).toEqual(["path"]);
   });
 
-  // The allowlist stated to the model as well as enforced in the shell. A model told it can read
-  // anything will try, and every attempt is a wasted turn.
-  it("says that only the listed files can be read", () => {
-    expect(tool.function.description).toMatch(/only the paths in that list|anything else is refused/i);
+  // The attached folder is the model's boundary. A listed directory can reveal a nested file, and
+  // the model needs to know that file can then be read without a second permission prompt.
+  it("says that files below the attached folder can be read", () => {
+    expect(tool.function.description).toMatch(/folder attached.*below|inside the attached folder/i);
   });
 
   it("says it can be called more than once", () => {

@@ -802,7 +802,7 @@ Attaching a folder gives the model more than a list of names. It can:
 
 | Tool | What it does |
 | --- | --- |
-| `get_file_contents` | Read one of the files on the list. |
+| `get_file_contents` | Read an enabled file in the attached folder, including one that a directory listing found below it. |
 | `list_directory` | List what is in a directory of that folder, or one below it. |
 | `search_contents` | Search the text of those files for a word or a pattern, and say which file and line each match is on. |
 | `diff_files` | Compare two of those files line by line. |
