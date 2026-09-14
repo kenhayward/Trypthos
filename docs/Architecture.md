@@ -1367,11 +1367,12 @@ rather than `fs`** - it inherits the lexical guard and the realpath check every 
 boundary is the workspace root; which folder inside it is a choice, not a permission. A folder that
 cannot be listed answers with an empty outline rather than an error nobody can act on.
 
-The outline is the model's initial map, not the whole read permission. `chat:send` resolves the
-attached folder in the main process and allows an enabled file anywhere inside it; a directory
-listing can therefore discover a nested file and `get_file_contents` can read it. The folder fence
-and the workspace provider's guard both apply to every request, and the enabled file types and size
-come from settings read there.
+The outline is the model's initial map, not the whole read permission. Its relative `path` names the
+folder for the model, while its opaque qualified `workspacePath` identifies that folder to the main
+process and is never included in model context. `chat:send` resolves that workspace path and allows
+an enabled file anywhere inside its relative folder; a directory listing can therefore discover a
+nested file and `get_file_contents` can read it. The folder fence and the workspace provider's guard
+both apply to every request, and the enabled file types and size come from settings read there.
 
 `FolderOutline` carries its `path` so the turn can name the folder, and the picker's file list is
 stored WITH the folder it came from - staleness derived rather than reset, since clearing it from an

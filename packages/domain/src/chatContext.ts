@@ -68,9 +68,11 @@ export interface FolderOutline {
   /// The folder this describes, workspace-relative. "" is the workspace root.
   ///
   /// Carried rather than assumed, because the user chooses it in the tree: the turn names it so the
-  /// model knows which folder it is reading, and the main process uses it to serve exactly the same
-  /// list it offered - the outline being the allowlist means those two must be one answer.
+  /// model knows which folder it is reading.
   path: string;
+  /// The qualified desktop routing path for this folder. This opaque identity is never rendered in
+  /// model context: it only lets the main process find the correct workspace for a tool call.
+  workspacePath?: string;
   /// Paths from the workspace ROOT, so a file can be read back by the path it is named by.
   paths: string[];
   /// True when the folder holds more than the outline may name.
@@ -122,6 +124,7 @@ export const ChatContextSchema = z
     folder: z
       .object({
         path: z.string(),
+        workspacePath: z.string().min(1).optional(),
         paths: z.array(z.string()).max(OUTLINE_PATH_LIMIT),
         truncated: z.boolean(),
       })

@@ -368,9 +368,11 @@ function registerIpcHandlers({
       parsed.data.context.folder === null
         ? null
         : async (wanted) => {
-            // Which workspace, from the folder the user attached - it names one. Several folders
-            // are open at once, so "the workspace" is not a thing this side has any more.
-            const attached = locateQualified(parsed.data.context.folder);
+            // Which workspace, from the opaque path attached to the folder. Several folders are
+            // open at once, so "the workspace" is not a thing this side has any more.
+            const attached = locateQualified({
+              path: parsed.data.context.folder.workspacePath ?? "",
+            });
             if (!attached) return { ok: false, reason: "no-workspace" };
             const { workspace } = attached;
 
@@ -399,7 +401,9 @@ function registerIpcHandlers({
       parsed.data.context.folder === null
         ? null
         : async (name, argumentsJson) => {
-            const attached = locateQualified(parsed.data.context.folder);
+            const attached = locateQualified({
+              path: parsed.data.context.folder.workspacePath ?? "",
+            });
             if (!attached) return null;
             const { workspace } = attached;
 
@@ -472,15 +476,16 @@ function registerIpcHandlers({
     // therefore validated by the provider, which applies the same guard every other path gets. The
     // file types and the size come from settings read here, never from the renderer.
     const settings = await readSettings(userDataDir);
+    const outline = await outlineWorkspace(workspace.provider, {
+      path: found.path,
+      // Both from settings read HERE, never from the renderer: this list is the model's initial
+      // map, not the read permission boundary.
+      fileTypes: settings.fileTypes.enabled,
+      limit: settings.chat.folderFileLimit,
+    });
     return {
       ok: true,
-      outline: await outlineWorkspace(workspace.provider, {
-        path: found.path,
-        // Both from settings read HERE, never from the renderer: this list is the allowlist the
-        // model reads from, so widening it is a decision the main process makes.
-        fileTypes: settings.fileTypes.enabled,
-        limit: settings.chat.folderFileLimit,
-      }),
+      outline: { ...outline, workspacePath: parsed.data.path },
     };
   });
 
