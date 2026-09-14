@@ -32,6 +32,7 @@ export interface ProfileDraft {
   contextWindow: string;
   supportsImages: boolean;
   supportsTools: boolean;
+  stream: boolean;
   /// Whether to ask this model to reason before answering, and how much.
   ///
   /// Two fields, not one four-valued one, so turning thinking off and on again does not lose the
@@ -67,6 +68,7 @@ export function blankDraft(): ProfileDraft {
     contextWindow: "",
     supportsImages: false,
     supportsTools: false,
+    stream: true,
     thinking: false,
     reasoningEffort: "medium",
     isDefault: false,
@@ -86,6 +88,7 @@ export function draftFrom(profile: ChatProfile): ProfileDraft {
     contextWindow: profile.contextWindow === null ? "" : String(profile.contextWindow),
     supportsImages: profile.supportsImages,
     supportsTools: profile.supportsTools,
+    stream: profile.stream,
     thinking: profile.thinking,
     reasoningEffort: profile.reasoningEffort,
     isDefault: profile.isDefault,
@@ -132,6 +135,7 @@ export function toProfile(draft: ProfileDraft): DraftResult {
     contextWindow: typeof contextWindow === "number" ? contextWindow : null,
     supportsImages: draft.supportsImages,
     supportsTools: draft.supportsTools,
+    stream: draft.stream,
     thinking: draft.thinking,
     reasoningEffort: draft.reasoningEffort,
     isDefault: draft.isDefault,

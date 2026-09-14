@@ -45,6 +45,21 @@ function streamingFetch(frames, { status = 200, calls = [] } = {}) {
   };
 }
 
+/// A complete OpenAI-compatible response for a profile that has streaming switched off.
+function completionFetch(responses, { calls = [] } = {}) {
+  return async (url, init) => {
+    const response = responses[Math.min(calls.length, responses.length - 1)];
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    return {
+      ok: true,
+      status: 200,
+      body: null,
+      json: async () => response,
+      text: async () => JSON.stringify(response),
+    };
+  };
+}
+
 function collect() {
   const events = [];
   return { events, onEvent: (event) => events.push(event) };
@@ -427,6 +442,28 @@ const readCall = (path) =>
     ],
   })}\n\n`;
 
+const completeReadCall = (path) => ({
+  choices: [
+    {
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            type: "function",
+            id: "call_one",
+            function: { name: "get_file_contents", arguments: JSON.stringify({ path }) },
+          },
+        ],
+      },
+    },
+  ],
+});
+
+const completeAnswer = (content) => ({
+  choices: [{ message: { role: "assistant", content } }],
+});
+
 const says = (text) =>
   `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
 
@@ -489,6 +526,28 @@ test("reads a file the model asks for and answers with what it said next", async
 
   const text = events.filter((e) => e.type === "token").map((e) => e.text).join("");
   assert.match(text, /The plan is short\./);
+  assert.deepEqual(events.at(-1), { type: "end" });
+});
+
+test("continues a file read from complete responses when streaming is disabled", async () => {
+  const calls = [];
+  const { events, onEvent } = collect();
+  const fetchImpl = completionFetch(
+    [completeReadCall("plan.md"), completeAnswer("The plan is short.")],
+    { calls },
+  );
+
+  await provider(fetchImpl).run({
+    profile: { ...TOOLS_PROFILE, stream: false },
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({ "plan.md": "# Plan\n\nDo the thing." }),
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].body.stream, false);
+  assert.equal(calls[1].body.messages.at(-1).role, "tool");
+  assert.match(events.filter((event) => event.type === "token").map((event) => event.text).join(""), /The plan is short\./);
   assert.deepEqual(events.at(-1), { type: "end" });
 });
 

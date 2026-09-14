@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 15;
+export const SETTINGS_VERSION = 16;
 
 export const SettingsSchema = z
   .object({
@@ -158,6 +158,23 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 16,
+    // Version 16 lets a model opt out of streamed replies. An existing profile keeps streaming:
+    // changing a transport setting during an upgrade would make every reply feel slower for no
+    // user-visible reason.
+    migrate: (input) => {
+      const chat = (input as { chat?: { profiles?: unknown[] } }).chat ?? {};
+      const profiles = Array.isArray(chat.profiles) ? chat.profiles : [];
+      return {
+        ...input,
+        chat: {
+          ...chat,
+          profiles: profiles.map((profile) => ({ stream: true, ...(profile as object) })),
+        },
+      };
+    },
+  },
   {
     to: 15,
     // Version 15 gave a remembered workspace a provider. Everything remembered before it was an

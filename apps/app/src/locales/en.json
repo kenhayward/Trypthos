@@ -316,6 +316,8 @@
       "systemPromptHint": "Sent ahead of every conversation. It tells the model what Trypthos is and how answers should read.",
       "resetPrompt": "Reset to the default",
       "supportsTools": "This endpoint supports tool calling",
+      "stream": "Stream replies",
+      "streamHint": "Show replies as they arrive. Turn this off for a model or server whose streamed tool calls are incomplete.",
       "thinking": "Thinking",
       "thinkingHint": "Ask the model to reason before it answers. Only some models have a reasoning mode - gpt-oss does - and an endpoint that has never heard of the setting may refuse the request outright, so this is off unless you turn it on.",
       "reasoningEffort": "How much",

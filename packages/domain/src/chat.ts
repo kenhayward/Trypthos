@@ -36,6 +36,13 @@ export const ChatProfileSchema = z
     /// fenced transport works everywhere, so the safe default is the one that always works and this
     /// is opt-in.
     supportsTools: z.boolean().default(false),
+    /// Whether replies arrive as server-sent events rather than one completed response.
+    ///
+    /// On by default: showing a reply as it is written is the normal chat experience. Some local
+    /// OpenAI-compatible servers, however, lose structured tool-call fields while serialising
+    /// streamed deltas. This is per profile because it is a property of the model and harness pair,
+    /// not of every model pointed at the same endpoint.
+    stream: z.boolean().default(true),
     /// Whether to ask the model to reason before answering.
     ///
     /// Off by default, for the same reason `supportsTools` is: `reasoning_effort` is a field a

@@ -9,6 +9,7 @@ const {
   createSseDecoder,
   editFromToolArguments,
   formatEditBlock,
+  parseCompletionPayload,
   parseStreamPayload,
   pathFromToolArguments,
   readRequestIn,
@@ -141,17 +142,13 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       return null;
     }
 
-    if (!response.ok || !response.body) {
+    if (!response.ok || (profile.stream !== false && !response.body)) {
       // The body is NOT read into the message. Some providers echo the rejected key back in it.
       logger.error(`The chat endpoint answered ${response.status}.`);
       onEvent({ type: "error", message: statusMessage(response.status, profile) });
       onEvent({ type: "end" });
       return null;
     }
-
-    const reader = response.body.getReader();
-    const decoder = createSseDecoder();
-    const utf8 = new TextDecoder();
 
     /// The names of the tools called this round, by index, so a read can be told from a proposal.
     const toolNames = new Map();
@@ -290,6 +287,52 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       onEvent({ type: "reset" });
       return { kind: "fenced" };
     }
+
+    if (profile.stream === false) {
+      let events;
+      try {
+        events = parseCompletionPayload(await response.json());
+      } catch {
+        logger.error("The chat endpoint returned an unreadable response.");
+        onEvent({ type: "error", message: "The reply could not be read." });
+        onEvent({ type: "end" });
+        return null;
+      }
+
+      for (const event of events) {
+        if (event.type === "ignored") continue;
+        if (event.type === "tool-call") {
+          if (event.name !== null) toolNames.set(event.index, event.name);
+          toolArguments.set(
+            event.index,
+            (toolArguments.get(event.index) ?? "") + event.argumentsDelta,
+          );
+          continue;
+        }
+        if (event.type === "error") {
+          flushToolCalls();
+          onEvent(event);
+          onEvent({ type: "end" });
+          return null;
+        }
+        if (event.type === "token") replyText += event.text;
+        onEvent(event);
+      }
+
+      flushToolCalls();
+      const read = await answerToolCall();
+      if (read !== null) return read;
+
+      const fenced = await answerFencedRead(replyText);
+      if (fenced !== null) return fenced;
+
+      onEvent({ type: "end" });
+      return null;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = createSseDecoder();
+    const utf8 = new TextDecoder();
 
     try {
       for (;;) {

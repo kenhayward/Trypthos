@@ -85,7 +85,7 @@ export function completionsUrl(endpoint: string): string {
 export interface ChatRequestBody {
   model: string;
   messages: RequestMessage[];
-  stream: true;
+  stream: boolean;
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
@@ -131,7 +131,7 @@ export function buildChatRequest(
     // The slug, never the label. They are separate fields precisely so this cannot go wrong.
     model: profile.model,
     messages: [...turns],
-    stream: true,
+    stream: profile.stream !== false,
     ...(profile.temperature === undefined ? {} : { temperature: profile.temperature }),
     ...(profile.maxTokens === undefined ? {} : { max_tokens: profile.maxTokens }),
     ...(profile.topP === undefined ? {} : { top_p: profile.topP }),
@@ -211,6 +211,89 @@ const ChunkSchema = z.looseObject({
     .optional(),
   error: z.looseObject({ message: z.string().optional() }).optional(),
 });
+
+/// One completed OpenAI-compatible response. The names mirror `ChunkSchema`, but a completed
+/// response carries its answer under `message` rather than `delta` and can hold several complete
+/// tool calls at once.
+const CompletionSchema = z.looseObject({
+  choices: z
+    .array(
+      z.looseObject({
+        message: z
+          .looseObject({
+            content: z.string().nullable().optional(),
+            reasoning: z.string().optional(),
+            reasoning_content: z.string().optional(),
+            tool_calls: z
+              .array(
+                z.looseObject({
+                  function: z
+                    .looseObject({
+                      name: z.string().optional(),
+                      arguments: z.string().optional(),
+                    })
+                    .optional(),
+                }),
+              )
+              .optional(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+  usage: z
+    .looseObject({
+      prompt_tokens: z.number().optional(),
+      completion_tokens: z.number().optional(),
+    })
+    .optional(),
+  error: z.looseObject({ message: z.string().optional() }).optional(),
+});
+
+/// Reads a complete response into the same events the streaming transport emits.
+///
+/// A profile can opt out of streaming when a server's SSE tool-call serializer is unreliable. The
+/// panel must not need a second rendering path for that workaround, so the provider receives the
+/// familiar token, reasoning, usage and completed-tool events either way.
+export function parseCompletionPayload(payload: unknown): StreamEvent[] {
+  const completion = CompletionSchema.safeParse(payload);
+  if (!completion.success) return [{ type: "ignored" }];
+
+  const { choices, usage, error } = completion.data;
+  if (error !== undefined) {
+    return [{ type: "error", message: error.message ?? "The provider reported an error." }];
+  }
+
+  const message = choices?.[0]?.message;
+  const events: StreamEvent[] = [];
+  if (typeof message?.content === "string" && message.content !== "") {
+    events.push({ type: "token", text: message.content });
+  }
+
+  const thinking = message?.reasoning ?? message?.reasoning_content;
+  if (typeof thinking === "string" && thinking !== "") {
+    events.push({ type: "reasoning", text: thinking });
+  }
+
+  message?.tool_calls?.forEach((call, index) => {
+    events.push({
+      type: "tool-call",
+      index,
+      name: call.function?.name ?? null,
+      argumentsDelta: call.function?.arguments ?? "",
+    });
+  });
+
+  if (usage !== undefined) {
+    events.push({
+      type: "usage",
+      promptTokens: usage.prompt_tokens ?? 0,
+      replyTokens: usage.completion_tokens ?? 0,
+    });
+  }
+
+  return events.length === 0 ? [{ type: "ignored" }] : events;
+}
 
 /// Reads one `data:` payload from the stream.
 ///

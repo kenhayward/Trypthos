@@ -1694,6 +1694,12 @@ answer in the same conversation was about.
 
 ### The read loop
 
+Chat profiles stream replies by default. A profile can turn streaming off for a model or server that
+produces incomplete tool calls over SSE; its request uses `stream: false`, then the complete
+OpenAI-compatible response is normalised into the same reply, reasoning, usage and tool-call events
+as a streamed response. The read loop therefore has one execution path after the transport has been
+decoded. Settings schema version 16 adds `stream` and migrates existing profiles to `true`.
+
 `get_file_contents` is **executed**, and that makes it different in kind from `propose_edit`. A
 proposal is structured output - the call IS the answer, nothing runs, the user presses a button. A
 read is carried out by the app and the result sent back, so the model can read a file and keep
