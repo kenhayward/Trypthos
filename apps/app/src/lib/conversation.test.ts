@@ -3,6 +3,7 @@ import { ChatTurnSchema } from "@trypthos/domain";
 import {
   appendToken,
   noteTool,
+  noteToolCut,
   noteReasoning,
   wireTurns,
   askedBy,
@@ -131,6 +132,34 @@ describe("noteTool", () => {
   it("leaves the reply's text alone", () => {
     const withText = [{ role: "assistant" as const, content: "Half an answer" }];
     expect(noteTool(withText, read("a.js")).at(-1)?.content).toBe("Half an answer");
+  });
+});
+
+/// A read that had to be cut to the model's budget, reported straight after the call that read it.
+describe("noteToolCut", () => {
+  const read = (detail: string) => ({ name: "get_file_contents", detail });
+
+  it("marks the most recent call on the reply in progress", () => {
+    const replying = [
+      { role: "user" as const, content: "Summarise these" },
+      { role: "assistant" as const, content: "", tools: [read("a.md"), read("big.md")] },
+    ];
+
+    expect(noteToolCut(replying, { sent: 3_600, total: 5_003 }).at(-1)?.tools).toEqual([
+      read("a.md"),
+      { ...read("big.md"), cut: { sent: 3_600, total: 5_003 } },
+    ]);
+  });
+
+  // Nothing to attach it to. A cut with no call before it is a stray event, not a reason to invent one.
+  it("changes nothing when the reply has made no call", () => {
+    const replying = [{ role: "assistant" as const, content: "" }];
+    expect(noteToolCut(replying, { sent: 1, total: 2 })).toEqual(replying);
+  });
+
+  it("changes nothing when the last turn is not a reply", () => {
+    const user = [{ role: "user" as const, content: "Hello" }];
+    expect(noteToolCut(user, { sent: 1, total: 2 })).toEqual(user);
   });
 });
 

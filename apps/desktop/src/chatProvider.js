@@ -6,7 +6,9 @@ const {
   EDIT_TOOL_NAME,
   READ_TOOL_NAME,
   buildChatRequest,
+  capRead,
   completionsUrl,
+  contextCharacterBudget,
   createSseDecoder,
   editFromToolArguments,
   formatEditBlock,
@@ -299,6 +301,16 @@ function createChatProvider({
       return null;
     }
 
+    /// A file the model read, held to this model's budget - the one attachments get.
+    ///
+    /// Reported to the panel when it had to be cut, straight after the `tool` event for the read, so
+    /// the call that read it can be marked. Whole files report nothing.
+    function fitted(content) {
+      const read = capRead(content, contextCharacterBudget(profile.contextWindow ?? null));
+      if (read.cut !== null) onEvent({ type: "tool-cut", ...read.cut });
+      return read.content;
+    }
+
     /// Does one thing the model asked for, and answers with what to tell it.
     ///
     /// Null means "nothing here carries out that name", which is different from a refusal: a
@@ -316,7 +328,7 @@ function createChatProvider({
         // refusal is told to the model rather than ending the turn: it can pick another file.
         const result = wanted === null ? { ok: false } : await readFile(wanted);
         return result.ok
-          ? result.content
+          ? fitted(result.content)
           : "That file cannot be read. Only the files listed for this folder are available.";
       }
 
@@ -357,7 +369,7 @@ function createChatProvider({
       messages.push({
         role: "user",
         content: result.ok
-          ? `Here is ${wanted}:\n\n${result.content}`
+          ? `Here is ${wanted}:\n\n${fitted(result.content)}`
           : "That file cannot be read. Only the files listed for this folder are available.",
       });
 

@@ -2,11 +2,41 @@ import { describe, expect, it } from "vitest";
 import {
   EDIT_TOOL_NAME,
   READ_TOOL_NAME,
+  capRead,
   editFromToolArguments,
   editTools,
   pathFromToolArguments,
   readTools,
 } from "./editTools";
+
+/// A file the model read, fitted to the model's budget.
+///
+/// Reads were never capped at all: a `READ_CHARACTER_LIMIT` of 20,000 was declared and never used.
+/// They are now held to the same budget attachments are, and a read that had to be cut says so -
+/// to the model in the text, and to the user through the `cut` it reports.
+describe("capRead", () => {
+  it("sends a file that fits exactly as it is, and reports no cut", () => {
+    expect(capRead("# Plan\n\nShort.", 1_000)).toEqual({ content: "# Plan\n\nShort.", cut: null });
+  });
+
+  it("sends a file exactly the size of the budget whole", () => {
+    expect(capRead("x".repeat(500), 500).cut).toBeNull();
+  });
+
+  it("sends the beginning of a longer file, and reports how much of it went", () => {
+    const read = capRead(`${"x".repeat(900)}END`, 500);
+
+    expect(read.cut).toEqual({ sent: 500, total: 903 });
+    expect(read.content.startsWith("x".repeat(500))).toBe(true);
+    expect(read.content).not.toContain("END");
+  });
+
+  // The model has to know it did not see the end, or it answers as though the file stopped there.
+  it("tells the model the file was cut, and how much of it it has", () => {
+    const read = capRead("x".repeat(900), 500);
+    expect(read.content).toMatch(/only the first 500 of its 900 characters/i);
+  });
+});
 
 /// The second transport: the same edit, described to the provider as a function it can call.
 ///

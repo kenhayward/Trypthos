@@ -984,7 +984,7 @@ describe("the tool calls a reply made", () => {
     { name: "get_file_contents", detail: "apps/desktop/src/main.js" },
     { name: "search_contents", detail: "appName" },
   ];
-  const answered = (tools: { name: string; detail: string }[]) => [
+  const answered = (tools: { name: string; detail: string; cut?: { sent: number; total: number } }[]) => [
     { role: "user" as const, content: "What is in there?" },
     { role: "assistant" as const, content: "Here is what I found.", tools },
   ];
@@ -996,6 +996,30 @@ describe("the tool calls a reply made", () => {
     expect(block.tagName).toBe("DETAILS");
     expect(block.hasAttribute("open")).toBe(false);
     expect(within(block).getByText("Tool calls (3)")).toBeDefined();
+  });
+
+  /// A read cut to the model's budget. The model is told in the text it was given; the user is told
+  /// here, on the call, and on the closed block's own line so it is seen without opening it.
+  describe("a read that was cut short", () => {
+    const withCut = [
+      calls[0]!,
+      { ...calls[1]!, cut: { sent: 60_000, total: 142_300 } },
+      calls[2]!,
+    ];
+
+    it("says so on the call, with how much of the file was sent", () => {
+      panel({ turns: answered(withCut) });
+
+      const items = within(screen.getByTestId("turn-tools")).getAllByRole("listitem");
+      expect(items[1]!.textContent).toContain("get_file_contents apps/desktop/src/main.js");
+      expect(items[1]!.textContent).toContain("cut short: 60,000 of 142,300 characters sent");
+      expect(items[0]!.textContent).not.toContain("cut short");
+    });
+
+    it("says so on the folded block's own line, without opening it", () => {
+      panel({ turns: answered(withCut) });
+      expect(within(screen.getByTestId("turn-tools")).getByText("Tool calls (3) - 1 cut short")).toBeDefined();
+    });
   });
 
   it("lists every call, in the order it was made", () => {

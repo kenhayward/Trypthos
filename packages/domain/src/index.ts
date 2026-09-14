@@ -76,8 +76,8 @@ export { EDIT_FENCE_TAG, formatEditBlock, splitReply } from "./editBlocks";
 
 export {
   EDIT_TOOL_NAME,
-  READ_CHARACTER_LIMIT,
   READ_TOOL_NAME,
+  capRead,
   editFromToolArguments,
   editTools,
   pathFromToolArguments,

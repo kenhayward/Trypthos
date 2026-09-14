@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ChatEventSchema,
   CloseWindowRequest,
   ConfirmDiscardRequest,
   OpenTargetSchema,
@@ -75,6 +76,29 @@ describe("IPC_CHANNELS", () => {
       /^secrets:(get|read|reveal|export)/.test(channel),
     );
     expect(readsSecrets).toEqual([]);
+  });
+});
+
+/// The events a reply streams to the panel. Strict, because both sides are ours.
+describe("ChatEventSchema", () => {
+  // A file the model read was cut to fit its budget. Reported after the call it belongs to.
+  it("accepts a report of how much of a read was sent", () => {
+    expect(ChatEventSchema.parse({ type: "tool-cut", sent: 3_600, total: 5_003 })).toEqual({
+      type: "tool-cut",
+      sent: 3_600,
+      total: 5_003,
+    });
+  });
+
+  it("refuses a cut that is not two whole counts", () => {
+    for (const event of [
+      { type: "tool-cut", sent: 3_600 },
+      { type: "tool-cut", sent: "3600", total: 5_003 },
+      { type: "tool-cut", sent: 1.5, total: 5_003 },
+      { type: "tool-cut", sent: 3_600, total: 5_003, path: "a.md" },
+    ]) {
+      expect(ChatEventSchema.safeParse(event).success).toBe(false);
+    }
   });
 });
 

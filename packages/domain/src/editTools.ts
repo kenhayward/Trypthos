@@ -47,11 +47,28 @@ const ANCHORED: ReadonlySet<string> = new Set(["insert-before", "insert-after", 
 /// produce something correct and unreadable, and this text is read by the model: the descriptions
 /// are the only thing telling it what "replace-section" means or when a heading is required, and
 /// vague ones produce plausible calls aimed at the wrong place.
-/// How much of one file the model may be given, in characters.
+/// A file the model asked to read, fitted to the character budget of the model reading it.
 ///
-/// Smaller than the whole context budget on purpose: the model can read several files in a turn, and
-/// one enormous note should not be able to spend the entire window before the second is asked for.
-export const READ_CHARACTER_LIMIT = 20_000;
+/// The budget is the one attachments get - `contextCharacterBudget` - so a file reads the same
+/// whether it was attached or asked for. A 20,000-character limit was once declared for reads and
+/// never applied, so until this every read sent the whole file whatever its size.
+///
+/// A read that had to be cut says so twice: in the text, so the model does not answer as though the
+/// file ended where the cut fell, and as `cut`, so the panel can mark the call for the user.
+export function capRead(
+  content: string,
+  budget: number,
+): { content: string; cut: { sent: number; total: number } | null } {
+  if (content.length <= budget) return { content, cut: null };
+  const sent = Math.max(0, budget);
+  return {
+    content:
+      `${content.slice(0, sent)}\n\n[Only the first ${sent} of its ${content.length} characters were ` +
+      "sent, because the file is longer than this model's context allows. Say so if the answer " +
+      "depends on the rest.]",
+    cut: { sent, total: content.length },
+  };
+}
 
 /// The tool that reads a file, offered only alongside a folder outline.
 ///

@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.72.1",
+    date: "2026-09-14",
+    pr: 149,
+    headline: "Hold files the model reads for itself to the same budget, and say when one is cut",
+    summary:
+      "A file the model reads for itself from the folder you gave it was sent whole however large it was: a limit written for these reads had never actually been applied, and nothing tied them to the model's context window. They now follow the same budget attachments do - nine tenths of the model's context window when one is set, or about 60,000 characters when it is not. A read that has to be cut tells the model it only has the beginning, and is marked in the reply's Tool calls list, on the call itself with how much of the file was sent and on the list's own line so you can see it without opening it. Saved chats keep the mark. The hint beside a model's context window in Settings now also says that the window sizes what chat sends, not only the gauge.",
+    fixed: [
+      "A file the model reads for itself follows the same budget as attachments, instead of being sent whole.",
+      "A read that had to be cut is marked in the reply's Tool calls list, with how much of the file was sent.",
+      "The context window hint in Settings says what the window is used for.",
+    ],
+  },
+  {
     version: "0.72.0",
     date: "2026-09-14",
     pr: 147,

@@ -14,6 +14,8 @@ import type { ChatTurn } from "@trypthos/domain";
 export interface ToolCall {
   name: string;
   detail: string;
+  /// Present when the file this call read was cut to the model's budget: how much of it was sent.
+  cut?: { sent: number; total: number };
 }
 
 /// One entry in the conversation, AS THE PANEL HOLDS IT.
@@ -90,6 +92,23 @@ export function noteTool(turns: readonly Turn[], call: ToolCall): Turn[] {
   if (last === undefined || last.role !== "assistant") return [...turns];
 
   return [...turns.slice(0, -1), { ...last, tools: [...(last.tools ?? []), call] }];
+}
+
+/// Marks the most recent call on the reply in progress as a read that was cut to the model's budget.
+///
+/// The shell reports the cut straight after the call that read the file, and reads are carried out
+/// one at a time, so the latest call is that read. With no call to mark, nothing changes: a cut with
+/// nothing before it is a stray event, not a reason to invent a call.
+export function noteToolCut(turns: readonly Turn[], cut: { sent: number; total: number }): Turn[] {
+  const last = turns.at(-1);
+  if (last === undefined || last.role !== "assistant") return [...turns];
+  const tools = last.tools ?? [];
+  if (tools.length === 0) return [...turns];
+
+  return [
+    ...turns.slice(0, -1),
+    { ...last, tools: [...tools.slice(0, -1), { ...tools.at(-1)!, cut }] },
+  ];
 }
 
 /// Collects a fragment of the model's thinking, against the reply in progress.
