@@ -900,11 +900,14 @@ calls for the file; where it does not, it asks by writing a small fenced block a
 file over and lets it carry on. Either way it can only read the files on the list, from the folder
 you chose. The instructions sent with the folder describe whichever of the two your model has.
 
-When the model reads a file from the folder you gave it, the reply says so: **one line at the bottom
-of that answer** naming every file it read, with the full paths on hover. One line however many it
-read, and it stays with the answer - scroll back to something from last week and you can still see
-what it was looking at. While you are waiting, the bubble still says which file is being read, since
-that is what is happening now rather than what happened.
+When the model uses a tool - reading a file, listing a folder, searching, comparing two files,
+opening or creating one - the reply says so: a **Tool calls** block under that answer, **folded
+away** like the thinking and only there when a tool was used. Open it to see every call in the order
+it was made, each with the tool's name and what it was aimed at: the file it read, the folder it
+listed, the text it searched for. It stays with the answer and is kept when you save the chat -
+scroll back to something from last week and you can still see what the model did to get there.
+While you are waiting, the bubble says which file is being read, or which tool is in use, since that
+is what is happening now rather than what happened.
 
 A model with a **reasoning mode** can be asked to think before it answers. Each model has a Thinking
 switch on its page in Settings, with a level - Low, Medium or High - and Trypthos sends that with

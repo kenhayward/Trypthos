@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ChatTurn } from "./chatCompletion";
+import { READ_TOOL_NAME } from "./editTools";
 import { loadPersisted, type Migration } from "./persisted";
 
 /// A saved conversation.
@@ -19,7 +20,7 @@ import { loadPersisted, type Migration } from "./persisted";
 /// conversation: replacing an unreadable chat with an empty one would look exactly like a chat that
 /// had been lost, so it reports failure instead and the caller can say so.
 
-export const CHAT_SESSION_VERSION = 3;
+export const CHAT_SESSION_VERSION = 4;
 
 /// How much of a reply's thinking a saved chat keeps, in characters.
 ///
@@ -31,9 +32,12 @@ export const SAVED_REASONING_LIMIT = 4_000;
 
 /// One turn as a saved chat holds it.
 ///
+/// One tool call a reply made, as the panel lists it: the tool, and what it was aimed at.
+const SessionToolCallSchema = z.object({ name: z.string(), detail: z.string() }).strict();
+
 /// NOT `ChatTurnSchema`, which is strict and describes what a PROVIDER receives. A saved chat is a
 /// record of what the panel showed, so it keeps the two things the panel records for itself - what
-/// the model thought, and which files it read. Neither is ever sent back.
+/// the model thought, and the tool calls it made. Neither is ever sent back.
 const SessionTurnSchema = z
   .object({
     role: z.enum(["system", "user", "assistant"]),
@@ -42,7 +46,7 @@ const SessionTurnSchema = z
     /// True when `reasoning` was shortened on the way to disk, so the panel can say so rather than
     /// showing a train of thought that appears to stop mid-sentence.
     reasoningTruncated: z.boolean().optional(),
-    reads: z.array(z.string()).optional(),
+    tools: z.array(SessionToolCallSchema).optional(),
     /// True for a turn the APP wrote - the answer to a slash command, and the command that asked
     /// for it. Kept, because the panel showed it; carried, because reopening the chat must not
     /// start sending this app's own command tables to a provider.
@@ -103,6 +107,17 @@ export interface ChatSessionSummary {
 /// No migrations yet. The first shape change writes one here, in the PR that makes it.
 export const CHAT_SESSION_MIGRATIONS: Migration[] = [
   {
+    to: 4,
+    // Version 4 records every tool call a reply made, not only the files it read. Up to version 3
+    // the only calls recorded were reads, as bare paths, so each becomes the read it was. A real
+    // migration rather than an optional field: the strict turn schema no longer knows `reads`, and a
+    // chat that kept it would be refused rather than half-loaded.
+    migrate: (input) => ({
+      ...input,
+      turns: Array.isArray(input.turns) ? input.turns.map(readsToToolCalls) : input.turns,
+    }),
+  },
+  {
     to: 3,
     // Version 3 lets a turn say the app wrote it rather than the model. Optional in the schema, so
     // a version 2 file loads either way - the version exists for the OTHER direction, as version 2
@@ -120,6 +135,22 @@ export const CHAT_SESSION_MIGRATIONS: Migration[] = [
     migrate: (input) => input,
   },
 ];
+
+/// One version 3 turn, with its `reads` rewritten as the calls that did the reading.
+///
+/// Anything that is not the expected shape is passed through untouched for the schema to refuse -
+/// a migration that repaired what it did not understand would be guessing.
+function readsToToolCalls(turn: unknown): unknown {
+  if (typeof turn !== "object" || turn === null || !("reads" in turn)) return turn;
+
+  const { reads, ...rest } = turn as { reads: unknown };
+  if (!Array.isArray(reads)) return turn;
+
+  return {
+    ...rest,
+    tools: reads.map((path) => ({ name: READ_TOOL_NAME, detail: path })),
+  };
+}
 
 export function loadChatSession(raw: unknown): ChatSession | null {
   const result = loadPersisted(raw, {

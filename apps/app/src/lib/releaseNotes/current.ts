@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.69.0",
+    date: "2026-09-14",
+    pr: 141,
+    headline: "See every tool call a chat reply made, folded away",
+    summary:
+      "A reply used to end with a single line naming the files the model read. It could not say what else the model did - a folder listing, a search, a comparison - and a search showed up as a blank name in that line. Each reply that used tools now has a Tool calls block under it, folded away like the model's thinking and only there when a tool was actually used. Open it to see every call in the order it was made: the tool's name and what it was aimed at, such as the file it read, the folder it listed or the text it searched for. Saved chats keep the list, and chats saved by earlier versions open with their file reads shown the same way.",
+    added: [
+      "A folded Tool calls block under each chat reply that used tools, listing every call with what it was aimed at.",
+    ],
+    changed: [
+      "The line naming the files a reply read is replaced by the Tool calls block.",
+      "While a reply waits on a tool other than reading a file, the chat says which tool it is using rather than an empty Reading message.",
+    ],
+  },
+  {
     version: "0.68.2",
     date: "2026-09-14",
     pr: 140,

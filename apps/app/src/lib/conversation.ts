@@ -7,10 +7,19 @@ import type { ChatTurn } from "@trypthos/domain";
 /// arriving after the turn it belonged to, a retry that has to drop the answer it did not like -
 /// and none of them need a rendered panel to check.
 
+/// One tool call a reply made: which tool, and what it was aimed at.
+///
+/// `detail` is worked out in the main process from the call's arguments and may be empty - a
+/// listing of the attached folder names no directory. The raw arguments never reach the renderer.
+export interface ToolCall {
+  name: string;
+  detail: string;
+}
+
 /// One entry in the conversation, AS THE PANEL HOLDS IT.
 ///
 /// A superset of the wire turn. The panel records things a provider must never receive - today, the
-/// files read on the model's behalf - so the two stopped being the same object the moment one of
+/// tool calls made on the model's behalf - so the two stopped being the same object the moment one of
 /// them grew a field the other must not see.
 ///
 /// `wireTurns` is the conversion, and it is not optional politeness: `ChatTurnSchema` is strict, so
@@ -35,11 +44,11 @@ export interface Turn extends ChatTurn {
   /// True when the thinking above was shortened on the way to disk. Set only by loading a saved
   /// chat - a live reply is never shortened.
   reasoningTruncated?: boolean;
-  /// Files read on the model's behalf while this reply was produced, in the order asked for.
+  /// Tool calls carried out on the model's behalf while this reply was produced, in the order made.
   ///
-  /// On the TURN rather than beside it, so scrolling back to an answer still shows what it read to
+  /// On the TURN rather than beside it, so scrolling back to an answer still shows what it did to
   /// get there - a fact about that reply, not about whichever reply is on screen now.
-  reads?: string[];
+  tools?: ToolCall[];
 }
 
 /// The conversation as a provider receives it.
@@ -70,18 +79,17 @@ export function appendToken(turns: readonly Turn[], text: string): Turn[] {
   return [...turns.slice(0, -1), { ...last, content: last.content + text }];
 }
 
-/// Records a file read on the model's behalf, against the reply in progress.
+/// Records a tool call made on the model's behalf, against the reply in progress.
 ///
-/// Named once however often it was asked for: the line this feeds says what the model looked at,
-/// and a file listed twice reads as a bug in the panel rather than a fact about the turn.
-export function noteRead(turns: readonly Turn[], path: string): Turn[] {
+/// Every call, repeats included: the list this feeds is a record of what the model did, and one
+/// that quietly merged two identical calls would be hiding part of it.
+export function noteTool(turns: readonly Turn[], call: ToolCall): Turn[] {
   const last = turns.at(-1);
   // The same rule the token appender follows: a late event from a stream nobody is listening to
   // must not attach itself to somebody's own message.
   if (last === undefined || last.role !== "assistant") return [...turns];
-  if (last.reads?.includes(path) === true) return [...turns];
 
-  return [...turns.slice(0, -1), { ...last, reads: [...(last.reads ?? []), path] }];
+  return [...turns.slice(0, -1), { ...last, tools: [...(last.tools ?? []), call] }];
 }
 
 /// Collects a fragment of the model's thinking, against the reply in progress.

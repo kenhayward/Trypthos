@@ -387,8 +387,9 @@ export const ChatEventSchema = z.discriminatedUnion("type", [
   /// read transport, for endpoints with no tool calling. The panel empties the reply and the next
   /// round writes the real one, so the user is not left reading the model's own bookkeeping.
   z.object({ type: z.literal("reset") }).strict(),
-  /// Something the app is doing on the model's behalf - reading a file it asked for. Shown in the
-  /// panel so a turn that pauses for several seconds says what it is doing rather than look stuck.
+  /// A tool call the app carried out on the model's behalf, and what it was aimed at (see
+  /// `toolCallDetail`). Shown live so a turn that pauses for several seconds says what it is doing
+  /// rather than look stuck, and recorded on the reply for its list of tool calls.
   z.object({ type: z.literal("tool"), name: z.string(), detail: z.string() }).strict(),
   z
     .object({

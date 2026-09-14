@@ -570,6 +570,46 @@ test("says which file it is reading", async () => {
   assert.deepEqual(events[0], { type: "tool", name: "get_file_contents", detail: "plan.md" });
 });
 
+// The panel lists every call a reply made. A call to anything but a read used to arrive with an
+// empty detail, so the list could say a search happened but not what it searched for.
+test("says what a folder tool was aimed at", async () => {
+  const { events, onEvent } = collect();
+  const searchCall = `data: ${JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              function: {
+                name: "search_contents",
+                arguments: JSON.stringify({ pattern: "TODO", path: "notes" }),
+              },
+            },
+          ],
+        },
+      },
+    ],
+  })}\n\n`;
+  const fetchImpl = scriptedFetch([
+    [searchCall, "data: [DONE]\n\n"],
+    ["data: [DONE]\n\n"],
+  ]);
+
+  await provider(fetchImpl).run({
+    profile: TOOLS_PROFILE,
+    turns: TURNS,
+    onEvent,
+    readFile: allowlist({}),
+    callTool: async () => ({ content: "notes/a.md:1: TODO" }),
+  });
+
+  assert.deepEqual(
+    events.filter((e) => e.type === "tool"),
+    [{ type: "tool", name: "search_contents", detail: "TODO in notes" }],
+  );
+});
+
 /// The allowlist. A path the outline never named must not reach the filesystem.
 test("refuses a file that was never offered, and tells the model why", async () => {
   const calls = [];
