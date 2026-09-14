@@ -36,8 +36,11 @@ export {
   CONTEXT_CHARACTER_LIMIT,
   DEFAULT_OUTLINE_FILE_LIMIT,
   EMPTY_CONTEXT,
+  MAX_CONTEXT_CHARACTER_LIMIT,
   OUTLINE_PATH_LIMIT,
   ChatContextSchema,
+  attachmentsCutShort,
+  contextCharacters,
   contextTurns,
   resolveChatContext,
 } from "./chatContext";
@@ -104,6 +107,8 @@ export type { EditorMode } from "./editorMode";
 
 export {
   CHARACTERS_PER_TOKEN,
+  DOCUMENT_CONTEXT_SHARE,
+  contextCharacterBudget,
   contextTokens,
   contextUsage,
   estimateTokens,

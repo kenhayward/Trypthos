@@ -173,6 +173,10 @@
       "filter": "Find a file",
       "noFiles": "No other files to attach.",
       "dropHere": "Drop to add to the chat",
+      "cutShort": "- cut short",
+      "notSent": "- not sent",
+      "cutShortHint": "Only the beginning of this file fits in the model's context, so the rest is not sent. Set the model's context window in Settings, or remove another attachment, to send more.",
+      "notSentHint": "None of this file fits in the model's context, so it is not sent. Set the model's context window in Settings, or remove another attachment, to send it.",
       "attachFailed": {
         "tooLarge": "That file is too large to add to the chat.",
         "notText": "That file is not a text file, so it cannot be added to the chat.",

@@ -25,13 +25,25 @@ import { READ_FENCE_TAG } from "./readBlocks";
 /// Pure and in the domain because the consequences are invisible in a screenshot: sending a whole
 /// document where a paragraph was meant produces a plausible answer to the wrong question.
 
-/// How much document and attachment text may be sent, in characters, across everything.
+/// How much document and attachment text may be sent, in characters, across everything - for a
+/// model whose context window nobody has set.
 ///
 /// Characters rather than tokens because nothing here can count tokens - that needs the provider's
 /// tokeniser, and profiles point at arbitrary endpoints. Roughly four characters to a token puts
-/// this near 15,000 tokens: comfortable inside a modern context window while leaving room for the
-/// conversation.
+/// this near 15,000 tokens.
+///
+/// **Only the fallback.** A model with a window set gets a budget sized from it - see
+/// `contextCharacterBudget`. This used to be the budget for every model, so a model with room for a
+/// quarter of a million tokens was sent fifteen thousand, and attachments past that were cut short or
+/// sent empty (#145).
 export const CONTEXT_CHARACTER_LIMIT = 60_000;
+
+/// The most document and attachment text any request may carry, however large a window claims to be.
+///
+/// A window is a number somebody types, and a few extra zeros must not become a request the shell is
+/// obliged to accept. About a million tokens at four characters each, which is past every context
+/// window in common use.
+export const MAX_CONTEXT_CHARACTER_LIMIT = 4_000_000;
 
 /// How many files the outline names by default, and the most it may ever name.
 ///
@@ -86,7 +98,10 @@ export interface ChatContext {
   folder: FolderOutline | null;
 }
 
-const sized = z.string().max(CONTEXT_CHARACTER_LIMIT);
+/// Bounded by the ceiling rather than the fallback: a model with a large window is allowed far more
+/// than sixty thousand characters. What one request may actually carry depends on the model it names,
+/// which only the shell knows - so the shell checks the total against that model's budget as well.
+const sized = z.string().max(MAX_CONTEXT_CHARACTER_LIMIT);
 
 const DocumentContextSchema = z.discriminatedUnion("kind", [
   z
@@ -142,6 +157,33 @@ export interface ContextSource {
   attachments?: readonly { path: string; content: string }[];
   /// The folder outline, when the user asked for it.
   folder?: FolderOutline | null;
+  /// How many characters of document and attachment text may be sent, for the model the question is
+  /// going to - see `contextCharacterBudget`. The fixed fallback when absent.
+  budget?: number;
+}
+
+/// The attachments that do not fit whole, by path: `partial` when only the beginning is sent,
+/// `none` when nothing is.
+///
+/// For the chat panel to mark on their chips. The model was always told; the user was not, so an
+/// attachment sent empty looked exactly like one sent whole (#145). A file that is simply empty is
+/// not in here - `truncated` is false for it, because there was nothing to cut.
+export function attachmentsCutShort(context: ChatContext): Record<string, "partial" | "none"> {
+  const cut: Record<string, "partial" | "none"> = {};
+  for (const attachment of context.attachments) {
+    if (!attachment.truncated) continue;
+    cut[attachment.path] = attachment.text === "" ? "none" : "partial";
+  }
+  return cut;
+}
+
+/// How much document and attachment text a resolved context carries.
+///
+/// What the shell measures against the budget of the model a request names: the renderer resolves
+/// within that budget before sending, and a context that does not is a renderer doing as it pleases.
+export function contextCharacters(context: ChatContext): number {
+  const document = context.document.kind === "none" ? 0 : context.document.text.length;
+  return context.attachments.reduce((total, attachment) => total + attachment.text.length, document);
 }
 
 function capped(text: string, budget: number): { text: string; truncated: boolean } {
@@ -160,6 +202,7 @@ export function resolveChatContext(source: ContextSource): ChatContext {
   // suppress the file the person is actually looking at.
   const selected = source.selection.trim() !== "";
   const file = source.file;
+  const budget = Math.min(source.budget ?? CONTEXT_CHARACTER_LIMIT, MAX_CONTEXT_CHARACTER_LIMIT);
 
   let document: DocumentContext;
   let spent = 0;
@@ -167,7 +210,7 @@ export function resolveChatContext(source: ContextSource): ChatContext {
   if (selected) {
     // Not trimmed, only tested: leading whitespace is what makes a line part of a code block or a
     // nested list item, and removing it changes what the passage means.
-    const { text, truncated } = capped(source.selection, CONTEXT_CHARACTER_LIMIT);
+    const { text, truncated } = capped(source.selection, budget);
     document = {
       kind: "selection",
       path: file?.path ?? null,
@@ -177,7 +220,7 @@ export function resolveChatContext(source: ContextSource): ChatContext {
     };
     spent = text.length;
   } else if (file !== null && file.content.trim() !== "") {
-    const { text, truncated } = capped(file.content, CONTEXT_CHARACTER_LIMIT);
+    const { text, truncated } = capped(file.content, budget);
     document = { kind: "file", path: file.path, text, truncated, fileType: file.fileType };
     spent = text.length;
   } else {
@@ -189,7 +232,7 @@ export function resolveChatContext(source: ContextSource): ChatContext {
   // would answer about the wrong text entirely.
   const attachments: AttachedFile[] = [];
   for (const attachment of source.attachments ?? []) {
-    const remaining = CONTEXT_CHARACTER_LIMIT - spent;
+    const remaining = budget - spent;
     if (remaining <= 0) {
       // Named but empty, so the model knows the file exists and that it did not see it.
       attachments.push({ path: attachment.path, text: "", truncated: true });

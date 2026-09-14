@@ -14,6 +14,8 @@ const {
   DeleteSecretRequest,
   OpenExternalRequest,
   SendChatRequest,
+  contextCharacterBudget,
+  contextCharacters,
   SetIntegrationRequest,
   SetSecretRequest,
   CloseWorkspaceRequest,
@@ -348,6 +350,16 @@ function registerIpcHandlers({
     const settings = await readSettings(userDataDir);
     const profile = settings.chat.profiles.find(({ id }) => id === parsed.data.profileId);
     if (profile === undefined) return { ok: false, reason: "no-such-profile" };
+
+    // The document and attachments must fit the budget of THIS model - sized from its context window,
+    // or the fixed fallback when none is set. The schema can only bound the text by the ceiling every
+    // model shares; which model a request is for is known here, and nowhere earlier. The renderer
+    // resolves within the same budget before sending, so a context past it is a renderer doing as it
+    // pleases rather than a user with a large file.
+    if (contextCharacters(parsed.data.context) > contextCharacterBudget(profile.contextWindow)) {
+      console.error("Rejected a chat request carrying more context than its model's budget.");
+      return { ok: false, reason: "bad-request" };
+    }
 
     const streamId = randomUUID();
     const controller = new AbortController();

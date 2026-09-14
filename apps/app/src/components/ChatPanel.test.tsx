@@ -773,11 +773,31 @@ describe("ChatPanel: scope", () => {
   // The chip is narrow and a path is cut from the right, so the whole path left the NAME - the part
   // that says which file it is - behind the ellipsis. The name is shown; the path is on hover, where
   // two files called notes.md in different folders can still be told apart.
+  // Only the model used to be told a file did not fit. An attachment sent empty looked exactly like
+  // one sent whole, which is how a model answering from three thousand characters of a file went
+  // unnoticed (#145).
+  it("marks an attachment that is cut short, or not sent at all", () => {
+    withScope({
+      attachments: ["Notes/whole.md", "Notes/part.md", "Notes/none.md"],
+      cutShort: { "Notes/part.md": "partial", "Notes/none.md": "none" },
+    });
+
+    const chip = (name: string) => screen.getByText(name).closest("[title]")!;
+    expect(chip("whole.md").textContent).not.toMatch(/cut short|not sent/);
+    expect(chip("part.md").textContent).toContain("cut short");
+    expect(chip("part.md").getAttribute("title")).toContain("Only the beginning of this file fits");
+    expect(chip("none.md").textContent).toContain("not sent");
+    expect(chip("none.md").getAttribute("title")).toContain("None of this file fits");
+  });
+
   it("names an attachment by its file, with the whole path on hover", () => {
     withScope({ attachments: ["Notes/research/risks.md"] });
 
     expect(screen.getByText("risks.md").closest("[title]")?.getAttribute("title")).toBe(
       "Notes/research/risks.md",
+    );
+    expect(screen.getByText("risks.md").closest("[title]")?.textContent).not.toMatch(
+      /cut short|not sent/,
     );
   });
 

@@ -109,6 +109,34 @@ describe("attachments", () => {
   });
 });
 
+/// The budget is the active model's, when it says how big its window is (#145).
+describe("the budget", () => {
+  const large: ScopeSource = {
+    selection: "",
+    file: { path: "ws/open.md", content: "d".repeat(57_000), fileType: "markdown" },
+  };
+  const files = { "ws/first.md": "a".repeat(36_000), "ws/second.md": "b".repeat(12_000) };
+
+  async function attachBoth(contextWindow: number | null) {
+    const bridge = fakeBridge(files);
+    const { result } = renderHook(() => useChatScope(bridge, () => large, "", contextWindow));
+    await act(async () => {
+      await result.current.attach("ws/first.md");
+      await result.current.attach("ws/second.md");
+    });
+    return result.current.context().attachments.map((attachment) => attachment.text.length);
+  }
+
+  // The report, exactly: a large window, a large open document and two attachments, all sent whole.
+  it("sends every attachment whole when the model's window has room", async () => {
+    expect(await attachBoth(262_000)).toEqual([36_000, 12_000]);
+  });
+
+  it("keeps the fixed budget for a model with no window set", async () => {
+    expect(await attachBoth(null)).toEqual([3_000, 0]);
+  });
+});
+
 describe("the folder", () => {
   it("is not included until it is asked for", () => {
     const bridge = fakeBridge();

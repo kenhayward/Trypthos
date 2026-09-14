@@ -1,16 +1,50 @@
 import { describe, expect, it } from "vitest";
 import {
   CHARACTERS_PER_TOKEN,
+  contextCharacterBudget,
   contextTokens,
   contextUsage,
   estimateTokens,
 } from "./contextUsage";
-import { EMPTY_CONTEXT, type ChatContext } from "./chatContext";
+import {
+  CONTEXT_CHARACTER_LIMIT,
+  EMPTY_CONTEXT,
+  MAX_CONTEXT_CHARACTER_LIMIT,
+  type ChatContext,
+} from "./chatContext";
 import type { ChatTurn } from "./chatCompletion";
 
 const document = (text: string): ChatContext => ({
   ...EMPTY_CONTEXT,
   document: { kind: "file", path: "notes.md", text, truncated: false, fileType: "markdown" },
+});
+
+/// How much document and attachment text a question may carry, for the model it is going to.
+///
+/// It used to be one fixed number for every model - sixty thousand characters - so a model with a
+/// window of a quarter of a million tokens was sent about fifteen thousand of them, and the files
+/// past that were cut short or sent empty (#145).
+describe("contextCharacterBudget", () => {
+  // A model nobody has sized keeps the budget it always had: inventing a window would be guessing.
+  it("keeps the fixed budget for a model with no context window set", () => {
+    expect(contextCharacterBudget(null)).toBe(CONTEXT_CHARACTER_LIMIT);
+  });
+
+  // The system prompt, the tool definitions and the conversation are small next to the documents,
+  // so the documents get nine tenths of the window, at the same rate the context dial estimates by.
+  it("gives the documents nine tenths of a model's window", () => {
+    expect(contextCharacterBudget(262_000)).toBe(Math.floor(262_000 * 0.9 * CHARACTERS_PER_TOKEN));
+  });
+
+  it("lets a small model have less than the old fixed budget", () => {
+    expect(contextCharacterBudget(8_000)).toBe(28_800);
+  });
+
+  // The window is a number a user types. A typo of a few extra zeros must not become a request the
+  // shell is obliged to accept, so there is a ceiling however large the window claims to be.
+  it("never exceeds the ceiling", () => {
+    expect(contextCharacterBudget(50_000_000)).toBe(MAX_CONTEXT_CHARACTER_LIMIT);
+  });
 });
 
 describe("estimateTokens", () => {

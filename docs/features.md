@@ -971,6 +971,15 @@ to answer with what it has, rather than being cut off mid-thought.
 served first: an attachment that would push it out is shortened instead, and one there was no room
 for at all is still named, so the model knows it exists and did not see it.
 
+**The budget follows the model.** Set a model's **context window** in Settings and your document and
+attachments may use up to **nine tenths of it** - with a window of 262,000 tokens that is close to a
+million characters, so large files are sent whole. The rest of a request (the instructions, the
+tools and the conversation) is small by comparison. A model with no context window set keeps a
+fixed budget of about 60,000 characters, since Trypthos has no way to ask an endpoint how much it
+can take. An attachment that does not fit is **marked on its chip** - "cut short" when only its
+beginning is sent, "not sent" when none of it is - with the reason on hover, so a file the model did
+not really see never looks like one it did.
+
 Starting a new conversation clears its attachments rather than carrying them into the next one.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than

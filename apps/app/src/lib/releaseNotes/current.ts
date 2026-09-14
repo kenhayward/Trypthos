@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.71.1",
+    date: "2026-09-14",
+    pr: 146,
+    headline: "Send attachments whole to models with room for them",
+    summary:
+      "Attached files were cut short or sent empty even to models with a very large context window. The open document, your selection and every attachment shared one fixed budget of about 60,000 characters whatever the model could take, so with a large document open a 36,000-character attachment arrived with only its first few thousand characters and the next one arrived empty. The budget now follows the model: when a model's context window is set in Settings, your document and attachments may use up to nine tenths of it, so a model with a 262,000-token window is sent large files whole. A model with no context window set keeps the old budget. An attachment that still does not fit is now marked on its chip - cut short, or not sent - with the reason on hover, instead of only the model being told.",
+    fixed: [
+      "Documents and attachments sent to chat are sized to the model's context window, when one is set, instead of a fixed 60,000 characters.",
+      "An attachment that does not fit is marked cut short or not sent on its chip.",
+    ],
+  },
+  {
     version: "0.71.0",
     date: "2026-09-14",
     pr: 144,

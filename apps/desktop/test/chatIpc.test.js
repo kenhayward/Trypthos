@@ -604,7 +604,55 @@ test("sends an attached file, named", async () => {
   );
 });
 
-// The renderer caps before sending, so anything larger is a bug or a renderer doing as it pleases.
+/// The budget belongs to the model the request names, and the shell is the side that knows it (#145).
+///
+/// A model with a large context window is sent far more than the fixed sixty thousand characters -
+/// that fixed number cutting attachments short for a quarter-of-a-million-token model was the bug.
+test("accepts a large attachment for a model whose window has room for it", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      const result = await ipcMain.invoke(
+        "chat:send",
+        send({
+          context: withDocument({
+            attachments: [{ path: "big.md", text: "x".repeat(100_000), truncated: false }],
+          }),
+        }),
+      );
+
+      assert.equal(result.ok, true);
+      assert.equal(runs.length, 1);
+    },
+    { profiles: [{ ...PROFILE, contextWindow: 262_000 }] },
+  );
+});
+
+// Measured against THAT model's budget, however the text is split: the renderer resolves within it
+// before sending, so anything past it is a bug or a renderer doing as it pleases.
+test("refuses more text than the named model's budget allows", async () => {
+  await withHandlers(
+    async ({ ipcMain, runs }) => {
+      const result = await ipcMain.invoke(
+        "chat:send",
+        send({
+          context: withDocument({
+            attachments: [
+              { path: "a.md", text: "x".repeat(20_000), truncated: false },
+              { path: "b.md", text: "x".repeat(20_000), truncated: false },
+            ],
+          }),
+        }),
+      );
+
+      assert.deepEqual(result, { ok: false, reason: "bad-request" });
+      assert.equal(runs.length, 0);
+    },
+    // 8,000 tokens: nine tenths at four characters each is 28,800 characters.
+    { profiles: [{ ...PROFILE, contextWindow: 8_000 }] },
+  );
+});
+
+// A model with no window set keeps the fixed budget, so anything larger is still refused.
 test("refuses an attachment larger than the cap", async () => {
   await withHandlers(async ({ ipcMain, runs }) => {
     const result = await ipcMain.invoke(
