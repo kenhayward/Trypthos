@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  READ_TOOL_NAME,
   splitReply,
   type ChatProfile,
   type ChatSessionSummary,
@@ -11,7 +12,7 @@ import { useCodeHighlighting } from "../hooks/useCodeHighlighting";
 import { linkifyPaths } from "../lib/replyLinks";
 import { renderMarkdown } from "../lib/markdown";
 import { contextUsage } from "@trypthos/domain";
-import type { Turn } from "../lib/conversation";
+import type { ToolCall, Turn } from "../lib/conversation";
 import ChatEditCard from "./ChatEditCard";
 import ChatHistoryMenu from "./ChatHistoryMenu";
 import ChatModelPicker from "./ChatModelPicker";
@@ -32,8 +33,8 @@ interface Props {
   linkWorkspaceId?: string | null;
   streaming: boolean;
   error: string | null;
-  /// A file being read on the model's behalf, if one is.
-  activity: string | null;
+  /// The tool call being carried out on the model's behalf, if one is.
+  activity: ToolCall | null;
   /// What the next request will already carry, and the window it has to fit in.
   ///
   /// The count arrives measured rather than measured here: it needs the system prompt and the
@@ -329,7 +330,9 @@ export default function ChatPanel({
                       <span className="text-ink-4">
                         {activity === null
                           ? t("chat.thinking")
-                          : t("chat.readingFile", { path: activity })}
+                          : activity.name === READ_TOOL_NAME && activity.detail !== ""
+                            ? t("chat.readingFile", { path: activity.detail })
+                            : t("chat.usingTool", { tool: activity.name })}
                       </span>
                     ) : turn.content === "" && !streaming ? (
                       // A turn that finished having produced nothing. Reasoning models do this:
@@ -398,20 +401,25 @@ export default function ChatPanel({
                     </details>
                   )}
 
-                  {/* One line for every file this reply read, and only once it has something to
-                      show beside. While the turn is still waiting the bubble already says
+                  {/* Every tool call this reply made, folded away beside the thinking and built the
+                      same way, so the two read as a pair. Only once the reply has something to
+                      show beside: while the turn is still waiting the bubble already says
                       "Reading a.js" - the live signal - and saying it again in the past tense is
                       two controls for one fact. */}
-                  {turn.role === "assistant" && !waiting && (turn.reads?.length ?? 0) > 0 && (
-                    <p
-                      data-testid="turn-reads"
-                      title={turn.reads?.join("\n")}
-                      className="mt-1.5 truncate border-t border-rule pt-1 text-2xs text-ink-4"
-                    >
-                      {t("chat.filesRead", {
-                        files: (turn.reads ?? []).map(fileName).join(", "),
-                      })}
-                    </p>
+                  {turn.role === "assistant" && !waiting && (turn.tools?.length ?? 0) > 0 && (
+                    <details data-testid="turn-tools" className="mt-1.5 text-xs text-ink-4">
+                      <summary className="cursor-pointer">
+                        {t("chat.toolCalls", { calls: turn.tools?.length ?? 0 })}
+                      </summary>
+                      <ol className="mt-1 max-h-48 space-y-0.5 overflow-auto">
+                        {(turn.tools ?? []).map((call, at) => (
+                          <li key={at} className="break-all">
+                            <code className="rounded bg-hover px-1 text-ink-3">{call.name}</code>
+                            {call.detail !== "" && ` ${call.detail}`}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
                   )}
                 </div>
               </div>
@@ -514,13 +522,4 @@ export default function ChatPanel({
       </div>
     </aside>
   );
-}
-
-/// The last segment of a workspace-relative path.
-///
-/// The panel is narrow, so the name is what is shown and the whole path is on hover - two files
-/// called index.js in different folders are otherwise indistinguishable.
-function fileName(path: string): string {
-  const cut = path.lastIndexOf("/");
-  return cut === -1 ? path : path.slice(cut + 1);
 }

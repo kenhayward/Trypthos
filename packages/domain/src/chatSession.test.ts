@@ -148,18 +148,49 @@ describe("saved reasoning", () => {
     profileId: null,
   };
 
-  it("keeps the thinking and the files a reply read", () => {
+  it("keeps the thinking and the tool calls a reply made", () => {
+    const tools = [
+      { name: "list_directory", detail: "notes" },
+      { name: "get_file_contents", detail: "notes/a.md" },
+    ];
     const session = {
       ...base,
-      turns: [
-        { role: "assistant", content: "Hi", reasoning: "I thought about it", reads: ["a.md"] },
-      ],
+      turns: [{ role: "assistant", content: "Hi", reasoning: "I thought about it", tools }],
     };
     const loaded = loadChatSession(session);
 
     expect(loaded).not.toBeNull();
     expect(loaded?.turns[0]?.reasoning).toBe("I thought about it");
-    expect(loaded?.turns[0]?.reads).toEqual(["a.md"]);
+    expect(loaded?.turns[0]?.tools).toEqual(tools);
+  });
+
+  // Version 3 recorded only the files a reply read, as bare paths. Each was a read, so each becomes
+  // the tool call it was - the history a user scrolls back to still says what the model looked at.
+  it("turns the files a version 3 chat read into the calls that read them", () => {
+    const old = {
+      ...base,
+      schemaVersion: 3,
+      turns: [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "Hi", reads: ["a.md", "b.md"] },
+      ],
+    };
+    const loaded = loadChatSession(old);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.turns[1]?.tools).toEqual([
+      { name: "get_file_contents", detail: "a.md" },
+      { name: "get_file_contents", detail: "b.md" },
+    ]);
+    expect("reads" in (loaded?.turns[1] ?? {})).toBe(false);
+    expect(loaded?.turns[0]).toEqual({ role: "user", content: "Hello" });
+  });
+
+  // The strict turn schema is what stops a half-migrated file loading as though it were whole.
+  it("refuses a current chat that still carries the old field", () => {
+    expect(
+      loadChatSession({ ...base, turns: [{ role: "assistant", content: "Hi", reads: ["a.md"] }] }),
+    ).toBeNull();
   });
 
   // A version 1 file has neither, which is exactly what it had.

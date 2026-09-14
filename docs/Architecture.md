@@ -1310,8 +1310,8 @@ between turns, and it is frequently longer than the answer.
 ### The panel's turn is not the wire turn
 
 `lib/conversation.ts`'s `Turn` **extends** `ChatTurn` rather than aliasing it. The panel records
-things a provider must never receive - today `reads`, the files fetched on the model's behalf - so
-the two stopped being one object the moment one grew a field the other must not see.
+things a provider must never receive - today `tools`, the calls carried out on the model's behalf -
+so the two stopped being one object the moment one grew a field the other must not see.
 
 `wireTurns` is the conversion, applied at the two places a conversation leaves the panel: `sendChat`
 and saving a chat. `ChatTurnSchema` is strict, so an unconverted turn is a loud parse failure at the
@@ -1319,10 +1319,24 @@ IPC boundary rather than a silent leak - but that only helps if something conver
 `useChat.test` asserts every turn a provider receives has exactly `role` and `content`. Removing the
 conversion broke no test before that was added.
 
-`reads` sits on the TURN rather than beside it, so scrolling back to an answer still shows what it
-read to get there. A file is named once however often it was asked for. The panel draws one line per
-reply, and only once the reply is past waiting: the bubble already says "Reading a.js" while you
-wait, and saying it again in the past tense is two controls for one fact.
+`tools` sits on the TURN rather than beside it, so scrolling back to an answer still shows what it
+did to get there. Each entry is `{ name, detail }`, one per `tool` chat event, repeats included -
+the list is a record of the model's work, not a set of what it looked at. `detail` is computed in
+the MAIN process by `toolCallDetail` (domain) from the call's arguments, using the same readers that
+decide whether the call can be carried out: the path read, opened or created, the directory listed,
+the search pattern (and where), the two files diffed. The raw arguments never cross IPC, and
+`create_file`'s would carry a whole file.
+
+The panel draws a closed `<details>` per reply ("Tool calls (n)"), beside the thinking and built the
+same way, and only once the reply is past waiting: the bubble already says "Reading a.js" (or
+"Using search_contents" for any other tool) while you wait, and saying it again in the past tense is
+two controls for one fact. `ChatPanel.browser.test` asserts the calls are out of sight until the
+block is opened - a question jsdom cannot answer, and one where a measured height lies, because
+Chromium hides closed `details` content with `content-visibility: hidden`, which still lays it out.
+
+Saved chats keep the list. **`CHAT_SESSION_VERSION` 4** replaced the turn's `reads: string[]` with
+`tools`; the migration rewrites each saved path as the `get_file_contents` call it was, and the
+strict turn schema refuses a current-version file that still carries `reads`.
 
 This is also the shape `docs/specs/reasoning-display.md` recommends for reasoning - a second use of
 it, arrived at independently.

@@ -4,10 +4,11 @@ import {
   appendToken,
   beginReply,
   historyWithoutReply,
-  noteRead,
   noteReasoning,
+  noteTool,
   setReply,
   wireTurns,
+  type ToolCall,
   type Turn,
 } from "../lib/conversation";
 
@@ -40,11 +41,11 @@ export function useChat(
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /// The file being read on the model's behalf, if one is.
+  /// The tool call most recently made on the model's behalf in this reply, if one was.
   ///
   /// A turn that pauses for several seconds while a file is read should say what it is doing rather
   /// than look stuck, and this is the only signal that anything is happening at all.
-  const [activity, setActivity] = useState<string | null>(null);
+  const [activity, setActivity] = useState<ToolCall | null>(null);
 
   /// The stream whose events count. Everything from any other stream is dropped.
   ///
@@ -90,10 +91,11 @@ export function useChat(
       }
       if (event.type === "tool") {
         // Both, and they are not the same fact: `activity` is what is happening NOW and disappears
-        // when the answer starts arriving; the turn's `reads` is what happened, and stays with the
+        // when the answer starts arriving; the turn's `tools` is what happened, and stays with the
         // reply somebody scrolls back to.
-        setActivity(event.detail);
-        setTurns((current) => noteRead(current, event.detail));
+        const call = { name: event.name, detail: event.detail };
+        setActivity(call);
+        setTurns((current) => noteTool(current, call));
         return;
       }
       if (event.type === "error") {

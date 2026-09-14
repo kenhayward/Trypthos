@@ -160,6 +160,7 @@ export {
   searchExpression,
   withinFolder,
 } from "./folderTools";
+export { toolCallDetail } from "./toolCallDetail";
 export { diffLines } from "./lineDiff";
 export type { DiffResult } from "./lineDiff";
 

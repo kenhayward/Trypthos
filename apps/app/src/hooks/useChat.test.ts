@@ -383,8 +383,10 @@ describe("the conversation a provider receives", () => {
     act(() => push({ type: "token", text: "Found it." }));
     act(() => push({ type: "end" }));
 
-    // The read is on the turn the panel shows.
-    expect(result.current.turns.at(-1)?.reads).toEqual(["src/main.js"]);
+    // The call is on the turn the panel shows.
+    expect(result.current.turns.at(-1)?.tools).toEqual([
+      { name: "get_file_contents", detail: "src/main.js" },
+    ]);
 
     await act(async () => {
       await result.current.send("And the other one?");

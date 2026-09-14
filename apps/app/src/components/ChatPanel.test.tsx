@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ChatProfileSchema, type ChatSessionSummary } from "@trypthos/domain";
@@ -816,11 +816,26 @@ describe("ChatPanel: reading a file", () => {
     { role: "assistant" as const, content: "" },
   ];
 
+  const reading = { name: "get_file_contents", detail: "plan.md" };
+
   it("says which file it is reading, in place of thinking", () => {
-    panel({ turns: waiting, streaming: true, activity: "plan.md" });
+    panel({ turns: waiting, streaming: true, activity: reading });
 
     expect(screen.getByText("Reading plan.md...")).toBeDefined();
     expect(screen.queryByText("Thinking...")).toBeNull();
+  });
+
+  // Any other tool is named rather than described as a read: "Reading notes" for a directory
+  // listing would say something that did not happen.
+  it("names any other tool it is using", () => {
+    panel({
+      turns: waiting,
+      streaming: true,
+      activity: { name: "search_contents", detail: "TODO" },
+    });
+
+    expect(screen.getByText("Using search_contents...")).toBeDefined();
+    expect(screen.queryByText(/Reading/)).toBeNull();
   });
 
   it("goes back to thinking when nothing is being read", () => {
@@ -836,7 +851,7 @@ describe("ChatPanel: reading a file", () => {
         { role: "assistant", content: "They say" },
       ],
       streaming: true,
-      activity: "plan.md",
+      activity: reading,
     });
 
     expect(screen.queryByText("Reading plan.md...")).toBeNull();
@@ -844,58 +859,88 @@ describe("ChatPanel: reading a file", () => {
   });
 });
 
-/// What the model read to answer.
+/// The tool calls a reply made.
 ///
-/// One line at the bottom of the reply it belongs to, listing every file: a line per call would
-/// push the answer off screen for a turn that read several, and the interesting fact is the SET
-/// rather than the sequence.
-describe("the files a reply read", () => {
-  const answered = (reads: string[]) => [
+/// A block of their own, folded away like the thinking beside it: a line naming every call pushed
+/// the answer around for a turn that made several, and squeezed the calls into a list of file names
+/// that could not say what was searched or listed. Closed, the block is one short line; open, it is
+/// every call in the order it was made.
+describe("the tool calls a reply made", () => {
+  const calls = [
+    { name: "list_directory", detail: "apps/desktop/src" },
+    { name: "get_file_contents", detail: "apps/desktop/src/main.js" },
+    { name: "search_contents", detail: "appName" },
+  ];
+  const answered = (tools: { name: string; detail: string }[]) => [
     { role: "user" as const, content: "What is in there?" },
-    { role: "assistant" as const, content: "Here is what I found.", reads },
+    { role: "assistant" as const, content: "Here is what I found.", tools },
   ];
 
-  it("names them, on one line", () => {
-    panel({ turns: answered(["apps/desktop/src/main.js", "apps/desktop/src/appName.js"]) });
+  it("is folded away, and says how many calls it holds", () => {
+    panel({ turns: answered(calls) });
 
-    const line = screen.getByTestId("turn-reads");
-    expect(line.textContent).toContain("main.js");
-    expect(line.textContent).toContain("appName.js");
+    const block = screen.getByTestId("turn-tools");
+    expect(block.tagName).toBe("DETAILS");
+    expect(block.hasAttribute("open")).toBe(false);
+    expect(within(block).getByText("Tool calls (3)")).toBeDefined();
   });
 
-  // The panel is narrow, so the name is what is shown and the path is what is available on hover -
-  // two files called index.js in different folders are otherwise indistinguishable.
-  it("keeps the whole path reachable", () => {
-    panel({ turns: answered(["apps/desktop/src/main.js"]) });
-    expect(screen.getByTestId("turn-reads").getAttribute("title")).toContain(
-      "apps/desktop/src/main.js",
-    );
+  it("lists every call, in the order it was made", () => {
+    panel({ turns: answered(calls) });
+
+    const items = within(screen.getByTestId("turn-tools")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "list_directory apps/desktop/src",
+      "get_file_contents apps/desktop/src/main.js",
+      "search_contents appName",
+    ]);
   });
 
-  it("shows nothing for a reply that read nothing", () => {
+  // A listing of the attached folder names no directory. The call still happened.
+  it("names a call that had nothing to say about where it looked", () => {
+    panel({ turns: answered([{ name: "list_directory", detail: "" }]) });
+
+    const items = within(screen.getByTestId("turn-tools")).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual(["list_directory"]);
+  });
+
+  it("opens to show the calls", async () => {
+    panel({ turns: answered(calls) });
+
+    await userEvent.click(screen.getByText("Tool calls (3)"));
+    expect(screen.getByTestId("turn-tools").hasAttribute("open")).toBe(true);
+  });
+
+  it("shows nothing for a reply that made no calls", () => {
     panel({ turns: answered([]) });
-    expect(screen.queryByTestId("turn-reads")).toBeNull();
+    expect(screen.queryByTestId("turn-tools")).toBeNull();
+  });
+
+  it("shows nothing for a reply with no record of calls at all", () => {
+    panel({ turns: [{ role: "assistant", content: "Hi" }] });
+    expect(screen.queryByTestId("turn-tools")).toBeNull();
   });
 
   // It stays with the reply. Scrolling back to an answer should still say what it was based on.
   it("stays after the reply has finished", () => {
-    panel({ turns: answered(["a.js"]), streaming: false });
-    expect(screen.getByTestId("turn-reads")).toBeDefined();
+    panel({ turns: answered(calls), streaming: false });
+    expect(screen.getByTestId("turn-tools")).toBeDefined();
   });
 
   // While the reply is still waiting, the bubble already says "Reading a.js" - the live signal.
   // Saying it twice in two different tenses is two controls for one fact.
   it("does not double up with the live reading message", () => {
+    const read = { name: "get_file_contents", detail: "a.js" };
     panel({
       turns: [
         { role: "user", content: "What is in there?" },
-        { role: "assistant", content: "", reads: ["a.js"] },
+        { role: "assistant", content: "", tools: [read] },
       ],
       streaming: true,
-      activity: "a.js",
+      activity: read,
     });
 
-    expect(screen.queryByTestId("turn-reads")).toBeNull();
+    expect(screen.queryByTestId("turn-tools")).toBeNull();
   });
 });
 

@@ -13,6 +13,7 @@ const {
   parseStreamPayload,
   pathFromToolArguments,
   readRequestIn,
+  toolCallDetail,
 } = require("@trypthos/domain");
 
 /// How many times the model may ask to read a file in one turn.
@@ -248,7 +249,10 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       const done = await callTool(name, json);
       if (done === null) return null;
 
-      onEvent({ type: "tool", name, detail: "" });
+      // What it was aimed at, so the panel's list of calls says what was searched or listed. Worked
+      // out here from the arguments: the renderer never sees them, and `create_file`'s carry a
+      // whole file.
+      onEvent({ type: "tool", name, detail: toolCallDetail(name, json) });
       return done.content;
     }
 
