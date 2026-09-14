@@ -46,6 +46,8 @@ interface Props {
   onNewFile: (directory: string) => void;
   /// Prompts for and creates one directory in the local folder whose context menu was opened.
   onNewFolder: (directory: string) => void;
+  /// Opens one local file in a separate document-only Electron window.
+  onOpenInNewWindow: (path: string) => void;
   onOpenFile: (node: RemoteNode) => void;
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
   /// the footer names them.
@@ -92,6 +94,7 @@ export default function WorkspacePanel({
   onRefreshWorkspace,
   onNewFile,
   onNewFolder,
+  onOpenInNewWindow,
   onOpenFile,
   fileTypes,
   selectedFolder,
@@ -108,14 +111,15 @@ export default function WorkspacePanel({
   const [menu, setMenu] = useState<{
     workspaceId: string;
     directory: string;
+    file: string | null;
     x: number;
     y: number;
   } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const openMenu = useCallback(
-    (event: React.MouseEvent, workspaceId: string, directory: string) => {
+    (event: React.MouseEvent, workspaceId: string, directory: string, file: string | null = null) => {
       event.preventDefault();
-      setMenu({ workspaceId, directory, x: event.clientX, y: event.clientY });
+      setMenu({ workspaceId, directory, file, x: event.clientX, y: event.clientY });
     },
     [],
   );
@@ -130,6 +134,7 @@ export default function WorkspacePanel({
       ? selectedFolder
       : null;
   const newFolderDirectory = menuWorkspace?.ref.kind === "local" ? menu?.directory ?? null : null;
+  const newWindowFile = menuWorkspace?.ref.kind === "local" ? menu?.file ?? null : null;
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.
   ///
   /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
@@ -324,6 +329,10 @@ export default function WorkspacePanel({
                       open={openPaths.includes(row.node.id)}
                       dirty={dirtyPaths.includes(row.node.id)}
                       onOpen={() => onOpenFile(row.node)}
+                      onContextMenu={(event) => {
+                        event.stopPropagation();
+                        openMenu(event, workspace.id, workspace.id, row.node.id);
+                      }}
                     />
                   ),
                 )}
@@ -351,6 +360,16 @@ export default function WorkspacePanel({
                   }}
                 >
                   {t("workspace.newFolder")}
+                </ContextMenuItem>
+              )}
+              {newWindowFile !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onOpenInNewWindow(newWindowFile);
+                  }}
+                >
+                  {t("workspace.openInNewWindow")}
                 </ContextMenuItem>
               )}
               {/* The same entry for a folder and a repository. What refreshing a repository changes
@@ -579,12 +598,14 @@ function FileRow({
   open,
   dirty,
   onOpen,
+  onContextMenu,
 }: {
   row: TreeRow;
   selected: boolean;
   open: boolean;
   dirty: boolean;
   onOpen: () => void;
+  onContextMenu: (event: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
 
@@ -612,6 +633,7 @@ function FileRow({
     <button
       type="button"
       onClick={onOpen}
+      onContextMenu={onContextMenu}
       aria-current={selected ? "true" : undefined}
       // Three states, not two: the file you are in, the files you have open behind it, and the rest.
       // Without the middle one a click on an open file looks like it did nothing, when what it did

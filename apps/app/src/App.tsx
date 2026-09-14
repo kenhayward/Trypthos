@@ -636,6 +636,7 @@ export default function App() {
           onRefreshWorkspace={askToRefresh}
           onNewFile={(directory) => setNamingFile(directory)}
           onNewFolder={(directory) => setNamingFolder(directory)}
+          onOpenInNewWindow={(path) => void actions.openInNewWindow(path)}
           onOpenFile={(node) => void actions.openFile(node)}
           fileTypes={settings.fileTypes.enabled}
           selectedFolder={state.selectedFolder}

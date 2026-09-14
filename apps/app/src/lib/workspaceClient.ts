@@ -145,6 +145,8 @@ export interface WorkspaceClient {
     expectedRevision: Revision | null,
     message?: string | null,
   ): Promise<WriteResult>;
+  /// Opens this local file in a separate, document-only Electron window.
+  openInNewWindow(path: string): Promise<{ ok: true } | Failure>;
   /// The branches a repository has, and which of them it is reading and writing.
   ///
   /// On the workspace client rather than the GitHub bridge because it is an operation on an OPEN
@@ -368,6 +370,7 @@ export const browserClient: WorkspaceClient = {
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),
+  openInNewWindow: async () => unavailable(),
   repoBranches: async () => unavailable(),
   setRepoBranch: async () => unavailable(),
   saveFileAs: async () => unavailable(),

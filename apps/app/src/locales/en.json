@@ -25,7 +25,8 @@
     "truncatedRepo": "Too large to list in full - some folders are missing.",
     "refresh": "Refresh",
     "newFile": "New File ...",
-    "newFolder": "New Folder ..."
+      "newFolder": "New Folder ...",
+      "openInNewWindow": "Open in New Window ..."
   },
   "refreshRepo": {
     "title": "Refresh {{name}} from GitHub",

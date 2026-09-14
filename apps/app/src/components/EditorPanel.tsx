@@ -97,6 +97,9 @@ interface Props {
   /// level up it would be positioned against the whole three-panel row and would sit over the chat
   /// panel whenever one was open.
   overlay?: React.ReactNode;
+  /// A focused document window has no surrounding workspace chrome. It keeps the one editor surface
+  /// and its file handling, while omitting the tab strip, mode header, authoring toolbar and status.
+  singleDocument?: boolean;
 }
 
 /// Centre panel: the open files, the editor, and its status bar.
@@ -138,6 +141,7 @@ export default function EditorPanel({
   matches = NO_MATCHES,
   activeMatch = -1,
   overlay = null,
+  singleDocument = false,
 }: Props) {
   const { t } = useTranslation();
   /// The view each document is being read in, keyed by path.
@@ -262,33 +266,36 @@ export default function EditorPanel({
       {/* One row: identity on the left, state on the right. The strip takes whatever width the
           header does not need, and scrolls within it - so the list of open files is pinned between
           the two rather than inside the strip, where it would scroll away with the tabs. */}
-      <div className="flex items-stretch border-b border-rule">
-        <EditorTabs
-          workspaceName={workspaceName}
-          paths={paths}
-          activePath={activePath}
-          dirtyPaths={dirtyPaths}
-          onActivate={(path) => onActivateFile?.(path)}
-          onClose={(path) => onCloseFile?.(path)}
-          onCloseMany={(paths) => onCloseFiles?.(paths)}
-        />
-        <OpenFilesMenu
-          workspaceName={workspaceName}
-          paths={paths}
-          activePath={activePath}
-          dirtyPaths={dirtyPaths}
-          onActivate={(path) => onActivateFile?.(path)}
-        />
-        {/* Nothing to switch between for an image, and a header offering three views of a
-            photograph would be three buttons that do nothing. */}
-        {media === null && page === null && (
-          <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
-        )}
-      </div>
+      {!singleDocument && (
+        <div className="flex items-stretch border-b border-rule">
+          <EditorTabs
+            workspaceName={workspaceName}
+            paths={paths}
+            activePath={activePath}
+            dirtyPaths={dirtyPaths}
+            onActivate={(path) => onActivateFile?.(path)}
+            onClose={(path) => onCloseFile?.(path)}
+            onCloseMany={(paths) => onCloseFiles?.(paths)}
+          />
+          <OpenFilesMenu
+            workspaceName={workspaceName}
+            paths={paths}
+            activePath={activePath}
+            dirtyPaths={dirtyPaths}
+            onActivate={(path) => onActivateFile?.(path)}
+          />
+          {/* Nothing to switch between for an image, and a header offering three views of a
+              photograph would be three buttons that do nothing. */}
+          {media === null && page === null && (
+            <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
+          )}
+        </div>
+      )}
 
       {/* Source only. Live hides the markers a press writes, so the same button in that view would
           insert punctuation that disappears as it lands, and Preview has nothing to write into. */}
-      {page === null &&
+      {!singleDocument &&
+        page === null &&
         media === null &&
         mode === "source" &&
         !readOnly &&
@@ -344,7 +351,7 @@ export default function EditorPanel({
 
       {/* A word count and a caret position are questions about text. For a picture the status bar
           would be four fields, three of which are lies about a file with no lines in it. */}
-      {media === null && page === null && (
+      {!singleDocument && media === null && page === null && (
         <EditorStatusBar
           mode={mode}
           fileTypeKey={fileType.labelKey}

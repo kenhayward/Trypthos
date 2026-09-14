@@ -117,6 +117,45 @@ test("creates a directory in the workspace the qualified path names", async () =
   });
 });
 
+test("opens a local file in a separate window with its workspace root", async () => {
+  const opened = [];
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-window-"));
+  const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-window-data-"));
+  try {
+    await fs.writeFile(path.join(root, "a.md"), "one", "utf8");
+    const ipcMain = fakeIpcMain();
+    registerIpcHandlers({
+      ipcMain,
+      dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: [root] }) },
+      getWindow: () => null,
+      openInNewWindow: (target) => {
+        opened.push(target);
+        return { ok: true };
+      },
+      userDataDir: userData,
+      secrets: {
+        endpointsWithKeys: async () => [],
+        setKey: async () => {},
+        deleteKey: async () => {},
+        retainOnly: async () => {},
+      },
+      explorerIntegration: {
+        supported: () => false,
+        isRegistered: async () => false,
+        register: async () => ({ ok: true }),
+        unregister: async () => ({ ok: true }),
+      },
+    });
+    const workspace = (await ipcMain.invoke("workspace:open")).workspace;
+
+    assert.deepEqual(await ipcMain.invoke("file:openInNewWindow", { path: `${workspace.id}/a.md` }), { ok: true });
+    assert.deepEqual(opened, [{ root: workspace.ref.root, file: "a.md" }]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(userData, { recursive: true, force: true });
+  }
+});
+
 /// The boundary, restated for the thing that is new. Each workspace has its own guard, and a path
 /// naming one cannot climb into the other even though both are open.
 test("a path cannot climb from one workspace into another", async () => {

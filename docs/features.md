@@ -35,6 +35,17 @@ are left alone, and the rows stay on screen while it happens rather than emptyin
 Refresh is the first entry on that menu. On a GitHub repository it also moves the repository to the
 newest commit on its branch, and asks first - see below.
 
+**Make a file or folder where you are.** Right-click a local workspace or any local folder and choose
+**New File** or **New Folder**. Name the thing you want; a new file also takes its type from the same
+list of enabled file types as the rest of the browser, and opens immediately in a tab. Nothing is
+offered for a GitHub repository: making a local directory there would be a clone disguised as a menu
+item, and saving into a repository is a commit rather than a filesystem operation.
+
+**Give one file the whole window.** Right-click an openable local file and choose **Open in New
+Window**. It opens in a separate native window with only that document, no folder browser, chat panel
+or tabs. It remains editable and has the normal save shortcut and unsaved-change question, so focusing
+a file does not make a copy or create a second save path.
+
 **Open Folder adds a folder rather than replacing the one you had.** Each open folder gets its own
 row at the top of its tree. **That row collapses like any folder inside one**: click it and the whole
 folder folds away, which is what keeps the panel usable with two or three open - put the ones you are

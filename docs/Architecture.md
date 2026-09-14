@@ -745,6 +745,13 @@ which folder is still loading are testable without a tree or a filesystem.
   accessibility tree, still announced as something to activate, and still a place a keyboard lands.
   `visibleFileCount` counts only openable rows, so the footer's count agrees with the types it
   names in the same sentence.
+- **Creation and focused windows are local-only.** The workspace and folder menus can create an
+  empty file or directory through the guarded filesystem provider; a file opens in a tab only after
+  that write succeeds. `file:openInNewWindow` resolves the renderer's qualified file path against
+  the open local workspace before `main.js` creates a native document window. The renderer receives
+  the resolved root and relative file only as its initial route, then uses the ordinary workspace
+  hook and editor surface. `EditorPanel` omits tabs, header, toolbar and status in that route, while
+  `windowHandlers.js` routes dirty state and close confirmation to the guard belonging to its sender.
 - **Counting is lazy, and that is measured rather than assumed.** A recursive markdown count took 5ms
   on this repo, 80ms on Diariz, and **40 seconds across 113,000 folders on a home directory** - which
   is a perfectly plausible workspace. The footer therefore counts what is on screen.
@@ -1876,7 +1883,7 @@ The list is asserted exactly in a test, so adding one is deliberate rather than 
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
 `workspace:filter`, `workspace:close`, `workspace:refresh`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
-`file:readImage`, `file:write`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
+`file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
 conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and

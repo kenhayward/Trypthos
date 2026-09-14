@@ -154,6 +154,8 @@ export interface WorkspaceActions {
   createEmptyFile(directory: string, name: string): Promise<void>;
   /// Creates one local directory and adds it to its already-loaded parent in the workspace tree.
   createDirectory(directory: string, name: string): Promise<void>;
+  /// Opens a local file in its own Electron window, keeping this workspace and its tabs untouched.
+  openInNewWindow(path: string): Promise<void>;
   /// Opens what the app was handed from outside - a folder from File Explorer, or a markdown file
   /// within one. A file names both, because every path here is relative to one open folder.
   openTarget(target: { root: string; file: string | null }): Promise<void>;
@@ -713,6 +715,21 @@ export function useWorkspace(
     [client, fail],
   );
 
+  const openInNewWindow = useCallback(
+    async (path: string) => {
+      const workspaceId = splitQualified(path)?.workspaceId;
+      const workspace = stateRef.current.workspaces.find((candidate) => candidate.id === workspaceId);
+      if (workspace?.ref.kind !== "local") {
+        fail({ reason: "unsupported" });
+        return;
+      }
+
+      const result = await client.openInNewWindow(path);
+      if (!result.ok) fail(result);
+    },
+    [client, fail],
+  );
+
   /// May this one document be thrown away?
   ///
   /// One implementation for every path that would discard it - closing its tab, opening another
@@ -1087,6 +1104,7 @@ export function useWorkspace(
       }),
     createEmptyFile,
     createDirectory,
+    openInNewWindow,
     openRepoPage: (workspaceId: string) =>
       setInternal((prev) => ({
         ...prev,

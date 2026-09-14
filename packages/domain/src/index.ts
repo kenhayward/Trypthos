@@ -279,6 +279,7 @@ export {
   WriteSettingsRequest,
   WindowStateSchema,
   WriteRequest,
+  OpenInNewWindowRequest,
   OpenWorkspaceRefRequest,
   ConnectGitHubRequest,
   BranchesRequest,

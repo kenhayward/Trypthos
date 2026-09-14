@@ -39,6 +39,7 @@ const {
   ReadRequest,
   SaveAsRequest,
   WriteRequest,
+  OpenInNewWindowRequest,
   WriteSettingsRequest,
 } = require("@trypthos/domain");
 const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
@@ -202,6 +203,7 @@ function registerIpcHandlers({
   /// Puts a file on the user's screen. Passed in rather than reached for, because the channel and
   /// the window belong to `main.js` - and because a test can then watch what would have opened.
   openInWindow = () => {},
+  openInNewWindow = () => ({ ok: false, reason: "unsupported" }),
   userDataDir,
   secrets,
   /// Cloud provider credentials. A separate store from `secrets` on purpose - see `accountStore.js`.
@@ -934,6 +936,17 @@ function registerIpcHandlers({
         message: request.message ?? undefined,
       }),
     ),
+  );
+
+  /// A separate Electron window can only start from a filesystem workspace: a GitHub repository
+  /// has no local root to hand to another renderer, and this action must not turn a read operation
+  /// into an implicit clone or commit.
+  ipcMain.handle(
+    "file:openInNewWindow",
+    guarded(locateQualified, OpenInNewWindowRequest, (request, workspace) => {
+      if (workspace.root === null) return { ok: false, reason: "unsupported" };
+      return openInNewWindow({ root: workspace.root, file: request.path });
+    }),
   );
 }
 
