@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EMPTY_CONTEXT,
+  contextCharacterBudget,
   qualifyPath,
   resolveChatContext,
   splitQualified,
@@ -46,6 +47,9 @@ export function useChatScope(
   bridge: ScopeBridge | null,
   source: () => ScopeSource,
   folderPath: string,
+  /// The active model's context window, which sizes how much document and attachment text is sent -
+  /// see `contextCharacterBudget`. Null for a model nobody has sized, which keeps the fixed budget.
+  contextWindow: number | null = null,
 ) {
   /// Files the user attached, with their contents at the moment they were attached.
   const [attachments, setAttachments] = useState<{ path: string; content: string }[]>([]);
@@ -157,8 +161,11 @@ export function useChatScope(
       file,
       attachments,
       folder: includeFolder ? outline : null,
+      // The model's own budget. A fixed sixty thousand characters for every model cut attachments
+      // short, or sent them empty, to a model with room for a quarter of a million tokens (#145).
+      budget: contextCharacterBudget(contextWindow),
     });
-  }, [attachments, bridge, includeFolder, outline, source]);
+  }, [attachments, bridge, contextWindow, includeFolder, outline, source]);
 
   const paths = useMemo(() => attachments.map((attachment) => attachment.path), [attachments]);
 

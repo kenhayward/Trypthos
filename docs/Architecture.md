@@ -1468,6 +1468,19 @@ OpenAI-compatible endpoint; the endpoint reports its own count in the reply, whi
 question the dial exists to inform. Four characters to a token is the same rule of thumb
 `CONTEXT_CHARACTER_LIMIT` is set from - close on English prose, worse on code.
 
+**The document budget is sized from the same window (#145).** `contextCharacterBudget(contextWindow)`
+gives document and attachment text `DOCUMENT_CONTEXT_SHARE` (0.9) of the window at
+`CHARACTERS_PER_TOKEN`, capped at `MAX_CONTEXT_CHARACTER_LIMIT` (4,000,000 characters) because the
+window is typed by a user; a profile with no window keeps `CONTEXT_CHARACTER_LIMIT` (60,000). It used
+to be that fixed 60,000 for every model, so a 262,000-token model was sent about 15,000 tokens of
+documents and later attachments went empty. The budget is enforced in three places that must agree:
+`resolveChatContext({ budget })` cuts within it in the renderer (`useChatScope` passes the active
+model's window); `ChatContextSchema` bounds each text only by the ceiling, since the schema cannot know
+the model; and `chat:send` refuses (`bad-request`) a context whose `contextCharacters` exceed
+`contextCharacterBudget(profile.contextWindow)` for the profile it resolves from settings, because the
+renderer is untrusted. `attachmentsCutShort(context)` - from the same resolved context the dial
+counts - drives the "cut short" / "not sent" marks on `ChatScope`'s chips.
+
 It counts `contextTurns(context)` rather than the raw document, deliberately: the fences and the
 explanations wrapped around a file are real tokens the user pays for, and a dial counting different
 text from the request would be worse than no dial.

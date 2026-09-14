@@ -28,7 +28,13 @@ interface Props {
   usage: ContextUsage;
   /// Why the last file could not be attached, as a failure reason, or null.
   attachFailure?: string | null;
+  /// Attachments that do not fit the model's budget whole, by path: `partial` when only the beginning
+  /// is sent, `none` when nothing is. Absent for one sent whole, which is nearly every one.
+  cutShort?: Readonly<Record<string, "partial" | "none">>;
 }
+
+/// Hoisted rather than a fresh `{}` default on every render.
+const NOTHING_CUT: Readonly<Record<string, "partial" | "none">> = {};
 
 /// What chat can see, beyond the open document.
 ///
@@ -47,6 +53,7 @@ export default function ChatScope({
   onAttach,
   usage,
   attachFailure = null,
+  cutShort = NOTHING_CUT,
 }: Props) {
   const { t } = useTranslation();
   const [picking, setPicking] = useState(false);
@@ -107,15 +114,32 @@ export default function ChatScope({
           : t("chat.scope.folder")}
       </button>
 
-      {attachments.map((path) => (
+      {attachments.map((path) => {
+        // Only the model used to be told a file did not fit, so an attachment sent empty looked
+        // exactly like one sent whole (#145). Said on the chip, with why on hover.
+        const fit = cutShort[path];
+        return (
         <span
           key={path}
           // The whole path on hover. The chip has room for a name, and a path cut from the right
           // leaves the name - the part that says which file this is - behind the ellipsis.
-          title={path}
-          className="flex max-w-48 items-center gap-1 rounded bg-sunken px-2 py-0.5 text-xs text-ink"
+          title={
+            fit === undefined
+              ? path
+              : `${path}\n\n${fit === "partial" ? t("chat.scope.cutShortHint") : t("chat.scope.notSentHint")}`
+          }
+          className={
+            fit === undefined
+              ? "flex max-w-48 items-center gap-1 rounded bg-sunken px-2 py-0.5 text-xs text-ink"
+              : "flex max-w-56 items-center gap-1 rounded bg-sunken px-2 py-0.5 text-xs text-danger"
+          }
         >
           <span className="truncate">{folderName(path)}</span>
+          {fit !== undefined && (
+            <span className="shrink-0">
+              {fit === "partial" ? t("chat.scope.cutShort") : t("chat.scope.notSent")}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => onDetach(path)}
@@ -135,7 +159,8 @@ export default function ChatScope({
             </svg>
           </button>
         </span>
-      ))}
+        );
+      })}
 
       {/* `flex`, not a bare block: a block wrapping an inline-block button is a LINE BOX, and the
           line box carries the font's descender space below the button. That made this wrapper a

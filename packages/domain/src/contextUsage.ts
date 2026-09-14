@@ -1,5 +1,10 @@
 import type { ChatTurn } from "./chatCompletion";
-import { contextTurns, type ChatContext } from "./chatContext";
+import {
+  CONTEXT_CHARACTER_LIMIT,
+  MAX_CONTEXT_CHARACTER_LIMIT,
+  contextTurns,
+  type ChatContext,
+} from "./chatContext";
 
 /// How full the model's context is, roughly.
 ///
@@ -14,6 +19,26 @@ export const CHARACTERS_PER_TOKEN = 4;
 
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARACTERS_PER_TOKEN);
+}
+
+/// The share of a model's context window the documents and attachments may fill.
+///
+/// Nine tenths. What else a request carries - the system prompt, the tool definitions, the
+/// conversation - is small next to a set of documents, and the reply is the model's own business.
+export const DOCUMENT_CONTEXT_SHARE = 0.9;
+
+/// How many characters of document and attachment text a question to this model may carry.
+///
+/// Sized from the window when one is set, at the same four characters to a token the dial estimates
+/// by, so the budget and the ring agree about what fits. The fixed fallback when no window is set:
+/// there is no way to ask an endpoint, and a guess would be worse. Never past the ceiling, since the
+/// window is a number somebody types.
+export function contextCharacterBudget(contextWindow: number | null): number {
+  if (contextWindow === null || contextWindow <= 0) return CONTEXT_CHARACTER_LIMIT;
+  return Math.min(
+    Math.floor(contextWindow * DOCUMENT_CONTEXT_SHARE * CHARACTERS_PER_TOKEN),
+    MAX_CONTEXT_CHARACTER_LIMIT,
+  );
 }
 
 export interface ContextTokensInput {

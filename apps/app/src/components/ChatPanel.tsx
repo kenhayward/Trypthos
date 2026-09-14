@@ -77,6 +77,8 @@ interface Props {
     onDetach: (path: string) => void;
     /// Why the last file could not be attached, as a failure reason, or null.
     attachFailure?: string | null;
+    /// Attachments that do not fit the model's budget whole - see `ChatScope`.
+    cutShort?: Readonly<Record<string, "partial" | "none">>;
   };
   onOpenChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
@@ -497,6 +499,7 @@ export default function ChatPanel({
           onAttach={scope.onAttach}
           onDetach={scope.onDetach}
           attachFailure={scope.attachFailure ?? null}
+          cutShort={scope.cutShort}
         />
       )}
 

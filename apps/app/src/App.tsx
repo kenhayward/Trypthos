@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
   chatPanelVisible,
+  attachmentsCutShort,
   contextTokens,
   defaultChatProfile,
   cappedForSaving,
@@ -328,7 +329,13 @@ export default function App() {
     // folder walk, which is the expensive thing here.
     [client],
   );
-  const scope = useChatScope(scopeBridge, scopeSource, state.selectedFolder);
+  // The active model's window sizes how much document and attachment text is sent (#145).
+  const scope = useChatScope(
+    scopeBridge,
+    scopeSource,
+    state.selectedFolder,
+    activeModel?.contextWindow ?? null,
+  );
 
   /// Where a proposed edit would land in the document AS IT IS NOW.
   ///
@@ -372,20 +379,23 @@ export default function App() {
   /// THEN, and the dial has to answer before that. It re-resolves when the document changes, which
   /// is what makes the ring move as you write - and only while the panel is on screen, since a
   /// hidden dial is a document walk nobody reads.
-  const carried = useMemo(
-    () =>
-      showChat
-        ? contextTokens({
-            systemPrompt: effectiveSystemPrompt(settings.chat.systemPrompt),
-            context: scope.context(),
-            turns: chat.turns,
-          })
-        : 0,
+  const { carried, cutShort } = useMemo(() => {
+    if (!showChat) return { carried: 0, cutShort: {} };
+    const context = scope.context();
+    return {
+      carried: contextTokens({
+        systemPrompt: effectiveSystemPrompt(settings.chat.systemPrompt),
+        context,
+        turns: chat.turns,
+      }),
+      // From the same resolved context the dial counts, so the chips and the ring cannot disagree
+      // about what fits.
+      cutShort: attachmentsCutShort(context),
+    };
     // `scope` rather than `scope.context`: the rule cannot see that the callback is the only part
     // read, and naming the object satisfies it honestly rather than suppressing it. The callback is
     // memoised on its own inputs, so this recomputes exactly when the context it would build does.
-    [showChat, settings.chat.systemPrompt, scope, chat.turns],
-  );
+  }, [showChat, settings.chat.systemPrompt, scope, chat.turns]);
   const history = useChatHistory(useMemo(() => chatHistoryBridge(), []));
 
   /// The file a reopened conversation was about, when it is no longer in the open folder.
@@ -797,6 +807,7 @@ export default function App() {
                   onAttach: (path) => void scope.attach(path),
                   onDetach: scope.detach,
                   attachFailure: scope.attachFailure,
+                  cutShort,
                 }}
                 onSaveChat={() =>
                   // The panel's turns, not the wire ones: a saved chat is a record of what was

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTEXT_CHARACTER_LIMIT,
+  ChatContextSchema,
+  MAX_CONTEXT_CHARACTER_LIMIT,
+  attachmentsCutShort,
+  contextCharacters,
   contextTurns,
   resolveChatContext,
   type ContextSource,
@@ -221,6 +225,124 @@ describe("attachments", () => {
 
   it("sends nothing extra when nothing is attached", () => {
     expect(turns({ selection: "", file })).toHaveLength(1);
+  });
+});
+
+/// The budget comes from the model, when the model says how big its window is (#145).
+///
+/// The case from the report: a large open document, then a 36,000-character attachment and a second
+/// one. Under the old fixed budget the first was cut about 3,000 characters in and the second was sent
+/// empty, to a model with room for a quarter of a million tokens.
+describe("a budget sized for the model", () => {
+  const reported: ContextSource = {
+    selection: "",
+    file: { path: "ws/open.md", content: "d".repeat(57_000), fileType: "markdown" },
+    attachments: [
+      { path: "ws/first.md", content: "a".repeat(36_000) },
+      { path: "ws/second.md", content: "b".repeat(12_000) },
+    ],
+  };
+
+  it("sends everything that fits the budget it is given", () => {
+    const context = resolveChatContext({ ...reported, budget: 943_200 });
+
+    expect(context.attachments).toEqual([
+      { path: "ws/first.md", text: "a".repeat(36_000), truncated: false },
+      { path: "ws/second.md", text: "b".repeat(12_000), truncated: false },
+    ]);
+  });
+
+  it("sizes the document's own cap by the budget too", () => {
+    const context = resolveChatContext({
+      selection: "",
+      file: { path: "ws/long.md", content: "d".repeat(200_000), fileType: "markdown" },
+      budget: 943_200,
+    });
+
+    expect(context.document).toMatchObject({ truncated: false });
+  });
+
+  // No budget given is the old fixed one, so nothing that does not know the model changes.
+  it("keeps the fixed budget when none is given", () => {
+    const context = resolveChatContext(reported);
+    expect(context.attachments.map((attachment) => attachment.text.length)).toEqual([3_000, 0]);
+  });
+});
+
+/// What the shell will accept, which has to allow what a large window lets the renderer send.
+describe("ChatContextSchema", () => {
+  const withAttachment = (length: number) => ({
+    document: { kind: "none" },
+    attachments: [{ path: "ws/big.md", text: "x".repeat(length), truncated: false }],
+    folder: null,
+  });
+
+  it("accepts text past the old fixed budget", () => {
+    expect(ChatContextSchema.safeParse(withAttachment(CONTEXT_CHARACTER_LIMIT + 1)).success).toBe(true);
+  });
+
+  it("refuses text past the ceiling", () => {
+    expect(ChatContextSchema.safeParse(withAttachment(MAX_CONTEXT_CHARACTER_LIMIT + 1)).success).toBe(
+      false,
+    );
+  });
+});
+
+/// Which attachments do not fit whole - what the chat panel marks on their chips.
+describe("attachmentsCutShort", () => {
+  it("names the attachments that were cut, and the ones sent empty", () => {
+    const context = resolveChatContext({
+      selection: "",
+      file: { path: "ws/open.md", content: "d".repeat(57_000), fileType: "markdown" },
+      attachments: [
+        { path: "ws/first.md", content: "a".repeat(36_000) },
+        { path: "ws/second.md", content: "b".repeat(12_000) },
+      ],
+    });
+
+    expect(attachmentsCutShort(context)).toEqual({ "ws/first.md": "partial", "ws/second.md": "none" });
+  });
+
+  it("names nothing when everything fits", () => {
+    const context = resolveChatContext({
+      selection: "",
+      file: null,
+      attachments: [{ path: "ws/small.md", content: "tiny" }],
+    });
+
+    expect(attachmentsCutShort(context)).toEqual({});
+  });
+
+  // An empty file is not a file that did not fit: there was simply nothing in it to send.
+  it("does not call an empty file cut short", () => {
+    const context = resolveChatContext({
+      selection: "",
+      file: null,
+      attachments: [{ path: "ws/empty.md", content: "" }],
+    });
+
+    expect(attachmentsCutShort(context)).toEqual({});
+  });
+});
+
+/// How much document and attachment text a resolved context carries - what the shell checks against
+/// the budget of the model the request names.
+describe("contextCharacters", () => {
+  it("adds the document and every attachment", () => {
+    const context = resolveChatContext({
+      selection: "",
+      file: { path: "ws/open.md", content: "d".repeat(100), fileType: "markdown" },
+      attachments: [
+        { path: "ws/a.md", content: "a".repeat(20) },
+        { path: "ws/b.md", content: "b".repeat(3) },
+      ],
+    });
+
+    expect(contextCharacters(context)).toBe(123);
+  });
+
+  it("counts nothing for nothing", () => {
+    expect(contextCharacters(resolveChatContext({ selection: "", file: null }))).toBe(0);
   });
 });
 
