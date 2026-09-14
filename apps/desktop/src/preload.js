@@ -32,7 +32,13 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// no history to write it into, which is all of them but GitHub.
   writeFile: (path, content, expectedRevision, message = null) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision, message }),
-  openInNewWindow: (path) => ipcRenderer.invoke("file:openInNewWindow", { path }),
+  /// `draft` is a tab's unsaved text and the revision it was based on, when a tab with unsaved work
+  /// is moved into the window. The answer arrives only once the new window has claimed it.
+  openInNewWindow: (path, draft = null) =>
+    ipcRenderer.invoke("file:openInNewWindow", draft === null ? { path } : { path, draft }),
+  /// A document window claiming the text it was opened with, once. Asks by nothing but being the
+  /// window that asks - see `document:takeDraft`.
+  takeDocumentDraft: () => ipcRenderer.invoke("document:takeDraft"),
 
   /// Save As. Note what is NOT sent: a destination. The dialog runs in the main process and the path
   /// it answers with is checked against the open workspace there - `path` here is only where the

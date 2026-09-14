@@ -23,6 +23,9 @@ function registerWindowHandlers({
   /// controls bridge, so each event must resolve back to the window that sent it.
   getWindowForEvent = () => getWindow(),
   guardForWindow = () => guard,
+  /// The unsaved text a document window was opened with, by the id of the renderer asking - see
+  /// `documentHandoff`. Nothing by default: a shell with no handoff has no drafts to give.
+  takeDraft = () => null,
 }) {
   const fromEvent = (event) => getWindowForEvent(event) ?? getWindow();
   const fromWindow = (window) => guardForWindow(window) ?? guard;
@@ -75,6 +78,13 @@ function registerWindowHandlers({
 
     return { ok: true, choice: await fromWindow(fromEvent(event)).ask(parsed.data.name) };
   });
+
+  // No payload to validate, deliberately: which draft is answered from WHO is asking, so there is
+  // nothing a page could put in a request to reach another window's text.
+  ipcMain.handle("document:takeDraft", (event) => ({
+    ok: true,
+    draft: takeDraft(event?.sender?.id) ?? null,
+  }));
 }
 
 module.exports = { registerWindowHandlers };

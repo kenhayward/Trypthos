@@ -1,7 +1,14 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
-import { failureKey, failureParams, parentOf, useWorkspace, withoutSubtree } from "./useWorkspace";
+import {
+  canOpenInNewWindow,
+  failureKey,
+  failureParams,
+  parentOf,
+  useWorkspace,
+  withoutSubtree,
+} from "./useWorkspace";
 import type { CommitChoice, ConfirmDiscard, WorkspaceActions } from "./useWorkspace";
 import type { ReadResult, WorkspaceClient, WriteResult } from "../lib/workspaceClient";
 
@@ -50,6 +57,9 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     }),
     createDirectory: async () => ({ ok: true }),
     openInNewWindow: async () => ({ ok: true }),
+    // A document window's claim on the text it was opened with. This hook never claims; the window
+    // around it does - see `SingleDocumentWindow`.
+    takeDocumentDraft: async () => ({ ok: true, draft: null }),
     readFile: async (path): Promise<ReadResult> => {
       reads.push(path);
       return { ok: true, content: "# On disk\n", revision: { id: "r1" } };
@@ -157,6 +167,12 @@ describe("failureKey", () => {
     expect(failureKey("encryption-unavailable")).toBe("errors.encryptionUnavailable");
   });
 
+  // A tab that could not move into its own window is still open. The message has to say that,
+  // because the one thing a user wonders after a failed move is where their text went.
+  it("says a tab stayed where it was when its window did not open", () => {
+    expect(failureKey("window-failed")).toBe("errors.windowFailed");
+  });
+
   // An errno must never reach the interface, whether as wording or as a key that renders raw.
   it("maps anything unrecognised to the generic key", () => {
     expect(failureKey("EACCES")).toBe("errors.unknown");
@@ -202,6 +218,190 @@ describe("useWorkspace", () => {
     });
 
     expect(opened).toEqual(["ws/a.md"]);
+  });
+
+  /// A tab moved into its own window.
+  ///
+  /// The tab's text goes with it, including what has not been saved, and the tab closes only once
+  /// the new window has it. Every way that can fail leaves the tab open: the worst outcome is the
+  /// same text in two places, never in none.
+  describe("moving a tab into its own window", () => {
+    type Draft = { content: string; revision: { id: string } } | undefined;
+
+    async function withOpenTab(openInNewWindow: WorkspaceClient["openInNewWindow"]) {
+      const asked: string[] = [];
+      const confirm: ConfirmDiscard = async (name) => {
+        asked.push(name ?? "");
+        return "cancel";
+      };
+      const { client } = fakeClient({ openInNewWindow });
+      const { result } = renderHook(() => useWorkspace(client, "", confirm));
+
+      await act(async () => {
+        await result.current.actions.open();
+      });
+      await act(async () => {
+        await result.current.actions.openPath("ws/a.md");
+      });
+      return { result, asked };
+    }
+
+    const openPaths = (state: { documents: readonly { path: string }[] }) =>
+      state.documents.map((document) => document.path);
+
+    it("takes the unsaved text and its revision, and closes the tab without asking", async () => {
+      const sent: { path: string; draft: Draft }[] = [];
+      const { result, asked } = await withOpenTab(async (path, draft) => {
+        sent.push({ path, draft });
+        return { ok: true };
+      });
+
+      act(() => {
+        result.current.actions.edit("# Half written\n");
+      });
+      await act(async () => {
+        await result.current.actions.moveToNewWindow("ws/a.md");
+      });
+
+      expect(sent).toEqual([
+        { path: "ws/a.md", draft: { content: "# Half written\n", revision: { id: "r1" } } },
+      ]);
+      expect(openPaths(result.current.state)).toEqual([]);
+      // The work was not discarded - it moved - so there is nothing to ask about.
+      expect(asked).toEqual([]);
+    });
+
+    // Nothing unsaved means nothing to carry: the new window reads the file like any other.
+    it("sends no text for a tab with nothing unsaved", async () => {
+      const sent: Draft[] = [];
+      const { result } = await withOpenTab(async (_path, draft) => {
+        sent.push(draft);
+        return { ok: true };
+      });
+
+      await act(async () => {
+        await result.current.actions.moveToNewWindow("ws/a.md");
+      });
+
+      expect(sent).toEqual([undefined]);
+      expect(openPaths(result.current.state)).toEqual([]);
+    });
+
+    it("keeps the tab, and says so, when the new window did not take it", async () => {
+      const { result } = await withOpenTab(async () => ({ ok: false, reason: "window-failed" }));
+
+      act(() => {
+        result.current.actions.edit("# Half written\n");
+      });
+      await act(async () => {
+        await result.current.actions.moveToNewWindow("ws/a.md");
+      });
+
+      expect(openPaths(result.current.state)).toEqual(["ws/a.md"]);
+      expect(result.current.state.content).toBe("# Half written\n");
+      expect(result.current.state.dirty).toBe(true);
+      expect(result.current.state.errorKey).toBe("errors.windowFailed");
+    });
+
+    // The new window takes a moment to open, and the tab is still on screen meanwhile. Anything typed
+    // in that moment is not in the window, so closing the tab would throw it away.
+    it("keeps the tab when it was typed into while the window opened", async () => {
+      let typeWhileWaiting = () => {};
+      const { result } = await withOpenTab(async () => {
+        typeWhileWaiting();
+        return { ok: true };
+      });
+
+      act(() => {
+        result.current.actions.edit("# Half written\n");
+      });
+      typeWhileWaiting = () => result.current.actions.edit("# Half written, and more\n");
+      await act(async () => {
+        await result.current.actions.moveToNewWindow("ws/a.md");
+      });
+
+      expect(openPaths(result.current.state)).toEqual(["ws/a.md"]);
+      expect(result.current.state.content).toBe("# Half written, and more\n");
+    });
+
+    // A document that has never been saved has no file for a window to open.
+    it("does not move a document that has never been saved", async () => {
+      const sent: string[] = [];
+      const { result } = await withOpenTab(async (path) => {
+        sent.push(path);
+        return { ok: true };
+      });
+
+      act(() => {
+        result.current.actions.newDocument("Untitled.md");
+      });
+      const draftPath = result.current.state.activePath!;
+      await act(async () => {
+        await result.current.actions.moveToNewWindow(draftPath);
+      });
+
+      expect(sent).toEqual([]);
+      expect(openPaths(result.current.state)).toContain(draftPath);
+    });
+  });
+
+  describe("canOpenInNewWindow", () => {
+    const local = { id: "ws", name: "ws", ref: { kind: "local" as const, root: "/ws" }, truncated: false };
+    const repo = {
+      id: "notes",
+      name: "notes",
+      ref: { kind: "github" as const, owner: "ada", repo: "notes", branch: null },
+      truncated: false,
+    };
+    const document = (path: string, draft = false) => ({ path, draft });
+
+    it("offers a file from a local folder", () => {
+      expect(canOpenInNewWindow([local], [document("ws/a.md")], "ws/a.md")).toBe(true);
+    });
+
+    // The same rule the file tree follows: a repository has no folder for another window to open.
+    it("does not offer a file from a repository", () => {
+      expect(canOpenInNewWindow([repo] as never, [document("notes/a.md")], "notes/a.md")).toBe(false);
+    });
+
+    it("does not offer a document that has never been saved", () => {
+      expect(canOpenInNewWindow([local], [document("ws/Untitled.md", true)], "ws/Untitled.md")).toBe(
+        false,
+      );
+    });
+
+    it("does not offer a document that is not open", () => {
+      expect(canOpenInNewWindow([local], [], "ws/a.md")).toBe(false);
+    });
+  });
+
+  /// The other end: a document window opened with a tab's unsaved text.
+  describe("opening a window's document from a handed-over draft", () => {
+    it("shows the text, unsaved, and saves it against the revision the tab had read", async () => {
+      const { client, reads, writes } = fakeClient();
+      const { result } = renderHook(() => useWorkspace(client));
+
+      await act(async () => {
+        await result.current.actions.openTarget({
+          root: "/ws",
+          file: "a.md",
+          draft: { content: "# Half written\n", revision: { id: "r0" } },
+        });
+      });
+
+      // Not read from disk: what is there now is not what the tab was editing.
+      expect(reads).toEqual([]);
+      expect(result.current.state.activePath).toBe("ws/a.md");
+      expect(result.current.state.content).toBe("# Half written\n");
+      expect(result.current.state.dirty).toBe(true);
+
+      await act(async () => {
+        await result.current.actions.save();
+      });
+      expect(writes).toEqual([
+        { path: "ws/a.md", content: "# Half written\n", revision: "r0", message: null },
+      ]);
+    });
   });
 
   it("starts with nothing open", () => {

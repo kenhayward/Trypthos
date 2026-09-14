@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.70.0",
+    date: "2026-09-14",
+    pr: 142,
+    headline: "Move a tab into its own window, unsaved changes and all",
+    summary:
+      "Right-clicking a file in the folder browser could already open it in a focused window of its own, but only as it was on disk. The tab menu now offers Open in New Window too. It opens that same focused window with the tab's text exactly as it stands, including changes you have not saved, and then closes the tab without asking about unsaved work, because nothing was thrown away. The tab only closes once the new window has the text: if the window does not open, the tab stays put with your changes and Trypthos tells you, and anything you type while the window is opening keeps the tab open as well. Saving from the new window is still checked against the file as the tab last read it, so a file that changed on disk in the meantime is refused rather than overwritten. The entry is offered for files in local folders, not for GitHub repositories or documents that have never been saved.",
+    added: [
+      "Open in New Window on the tab right-click menu, which moves the tab and its unsaved changes into a focused window.",
+    ],
+  },
+  {
     version: "0.69.0",
     date: "2026-09-14",
     pr: 141,

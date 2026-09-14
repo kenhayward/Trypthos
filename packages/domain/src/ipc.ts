@@ -49,6 +49,7 @@ export const IPC_CHANNELS = [
   "workspace:refresh",
   "document:dirty",
   "document:confirmDiscard",
+  "document:takeDraft",
   "shell:openExternal",
   "shell:integration",
   "shell:setIntegration",
@@ -295,9 +296,32 @@ export const WriteRequest = z
   })
   .strict();
 
+/// A tab's unsaved text, and the revision that text was based on.
+///
+/// The revision travels with it so the window it moves to saves against what the tab READ, not
+/// against whatever is on disk by the time the window opens - otherwise a file changed underneath
+/// the tab would be silently overwritten by the first save from its new window.
+export const DocumentDraftSchema = z
+  .object({ content: z.string(), revision: RevisionSchema })
+  .strict();
+
+export type DocumentDraft = z.infer<typeof DocumentDraftSchema>;
+
 /// Opens a file the renderer already has in a focused editor window. The path remains qualified:
 /// the main process removes the workspace id and holds the filesystem root itself.
-export const OpenInNewWindowRequest = z.object({ path: relativePath.min(1) }).strict();
+///
+/// `draft` is present when a tab with unsaved work is moved into the window. It is held by the main
+/// process for the new window to claim - never put in the window's address, where a document's text
+/// has no business being.
+export const OpenInNewWindowRequest = z
+  .object({ path: relativePath.min(1), draft: DocumentDraftSchema.optional() })
+  .strict();
+
+/// What a document window receives when it claims the draft it was opened with. Null when it was
+/// opened without one - from the file tree, or from a tab with nothing unsaved.
+export const TakeDraftResponse = z
+  .object({ ok: z.literal(true), draft: DocumentDraftSchema.nullable() })
+  .strict();
 
 /// Save As: a dialog, and then a write to wherever it landed.
 ///

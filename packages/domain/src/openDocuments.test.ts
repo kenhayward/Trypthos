@@ -47,6 +47,19 @@ describe("openDocument", () => {
     expect(activeDocument(withFiles("a.md"))?.dirty).toBe(false);
   });
 
+  // A tab moved into its own window arrives with text that was never saved. It must say so, or the
+  // new window would close on it without asking and the edits would be gone.
+  it("opens unsaved when handed text that was never saved", () => {
+    const set = openDocument(
+      { documents: [], activePath: null },
+      { path: "a.md", content: "# edited\n", revision: rev("r1"), dirty: true },
+    );
+
+    expect(activeDocument(set)?.dirty).toBe(true);
+    expect(activeDocument(set)?.content).toBe("# edited\n");
+    expect(activeDocument(set)?.revision).toEqual(rev("r1"));
+  });
+
   it("activates a document that is already open rather than opening it twice", () => {
     const two = withFiles("a.md", "b.md");
     const again = openDocument(two, { path: "a.md", content: "# fresh\n", revision: rev("r9") });

@@ -248,4 +248,48 @@ describe("EditorTabs: the tab menu", () => {
 
     expect(screen.queryByRole("menu")).toBeNull();
   });
+
+  /// Moving a tab into its own window. The same entry, in the same words, as the file tree's - it
+  /// opens the same kind of window - with the tab's unsaved text going along with it.
+  describe("open in new window", () => {
+    const movable = { canOpenInNewWindow: () => true, onOpenInNewWindow: vi.fn() };
+
+    it("is offered after the ways to close", async () => {
+      await openMenuOn("b.md", movable);
+
+      expect(screen.getAllByRole("menuitem").map((entry) => entry.textContent)).toEqual([
+        "Close",
+        "Close Tabs to the Right",
+        "Close All",
+        "Close Others",
+        "Close Saved",
+        "Open in New Window ...",
+      ]);
+    });
+
+    it("moves the tab that was right-clicked, and closes the menu", async () => {
+      const onOpenInNewWindow = vi.fn();
+      const { user } = await openMenuOn("b.md", { ...movable, onOpenInNewWindow });
+      await user.click(item("Open in New Window ..."));
+
+      expect(onOpenInNewWindow).toHaveBeenCalledWith("b.md");
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    // Not greyed but absent, as in the file tree: a repository file or a never-saved document has no
+    // folder for another window to open, and an entry that can never work is not an option.
+    it("is not offered for a tab that cannot move", async () => {
+      await openMenuOn("b.md", {
+        canOpenInNewWindow: (path) => path !== "b.md",
+        onOpenInNewWindow: vi.fn(),
+      });
+
+      expect(screen.queryByRole("menuitem", { name: "Open in New Window ..." })).toBeNull();
+    });
+
+    it("is not offered where nothing can open a window", async () => {
+      await openMenuOn("b.md");
+      expect(screen.queryByRole("menuitem", { name: "Open in New Window ..." })).toBeNull();
+    });
+  });
 });

@@ -512,6 +512,16 @@ closed before the cancel stays closed, because you agreed to each of those. An e
 nothing is greyed rather than offered - Close Tabs to the Right on the last tab, Close Others when
 there is only one.
 
+**Move a tab into its own window.** The same right-click menu offers **Open in New Window** for a tab
+whose file is in a local folder. It opens the same focused window the file tree does, but with the
+tab's text as it stands - **unsaved changes included** - and then closes the tab, without asking
+about unsaved work, because nothing was thrown away. The tab closes only once the new window has the
+text: if the window does not open, the tab stays where it was with your changes and Trypthos says so,
+and anything you type in the tab while the window is opening keeps the tab open too. A save from the
+new window is still checked against the file as the tab last read it, so a file changed on disk in
+the meantime is refused rather than overwritten. It is not offered for a file in a GitHub repository
+or for a document that has never been saved.
+
 Coming back to a tab puts you back where you were - the same caret position, and the same place in
 the document, rather than the top of it. Each file also keeps the view you were reading it in, so a
 file you switched to Source stays in Source while you work in Live elsewhere. The folder browser

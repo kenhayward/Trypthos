@@ -125,6 +125,39 @@ test("refuses a name that is not a string", async () => {
   assert.deepEqual(calls, []);
 });
 
+/// A document window claiming the unsaved text a tab moved into it with.
+///
+/// By the id of the renderer that ASKS, never by anything in a payload: a page cannot name which
+/// window's draft it would like.
+test("hands a window the draft held for the renderer that asked", async () => {
+  const handlers = new Map();
+  const draft = { content: "text", revision: { id: "rev-1" } };
+  const asked = [];
+
+  registerWindowHandlers({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    getWindow: () => null,
+    guard: {},
+    takeDraft: (windowId) => {
+      asked.push(windowId);
+      return windowId === 7 ? draft : null;
+    },
+  });
+
+  const take = handlers.get("document:takeDraft");
+  assert.deepEqual(await take({ sender: { id: 7 } }), { ok: true, draft });
+  assert.deepEqual(await take({ sender: { id: 8 } }), { ok: true, draft: null });
+  assert.deepEqual(asked, [7, 8]);
+});
+
+test("answers no draft when nothing can hold one", async () => {
+  const { handlers } = harness();
+  assert.deepEqual(await handlers.get("document:takeDraft")({ sender: { id: 7 } }), {
+    ok: true,
+    draft: null,
+  });
+});
+
 // The window can be gone between a click and its handler - during shutdown, or after a crash.
 test("says so rather than throwing when there is no window left", async () => {
   const { invoke } = harness({ noWindow: true });

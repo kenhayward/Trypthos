@@ -59,6 +59,9 @@ export interface DocumentSource {
   readonly draft?: boolean;
   /// Opens a document that is looked at rather than read. Defaults to null - not an image.
   readonly media?: string | null;
+  /// Opens with unsaved work - text handed over from a tab moved into its own window, measured
+  /// against the revision that tab had read. Defaults to false, as above.
+  readonly dirty?: boolean;
 }
 
 /// The path of the built-in markdown guide.
@@ -113,7 +116,7 @@ export function openDocument(set: DocumentSet, source: DocumentSource): Document
     name: documentName(source.path),
     revision: source.revision,
     content: source.content,
-    dirty: false,
+    dirty: source.dirty ?? false,
     readOnly: source.readOnly ?? false,
     draft: source.draft ?? false,
     media: source.media ?? null,

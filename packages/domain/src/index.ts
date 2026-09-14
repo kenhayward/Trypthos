@@ -281,7 +281,9 @@ export {
   WriteSettingsRequest,
   WindowStateSchema,
   WriteRequest,
+  DocumentDraftSchema,
   OpenInNewWindowRequest,
+  TakeDraftResponse,
   OpenWorkspaceRefRequest,
   ConnectGitHubRequest,
   BranchesRequest,
@@ -290,7 +292,14 @@ export {
   RefreshWorkspaceRequest,
   SetBranchRequest,
 } from "./ipc";
-export type { ChatEvent, DiscardChoice, IpcChannel, OpenTarget, WindowState } from "./ipc";
+export type {
+  ChatEvent,
+  DiscardChoice,
+  DocumentDraft,
+  IpcChannel,
+  OpenTarget,
+  WindowState,
+} from "./ipc";
 
 export type {
   ListPage,

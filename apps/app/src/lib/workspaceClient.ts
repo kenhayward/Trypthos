@@ -1,4 +1,5 @@
 import type {
+  DocumentDraft,
   FileHit,
   FilterRequest,
   FindRequest,
@@ -146,7 +147,12 @@ export interface WorkspaceClient {
     message?: string | null,
   ): Promise<WriteResult>;
   /// Opens this local file in a separate, document-only Electron window.
-  openInNewWindow(path: string): Promise<{ ok: true } | Failure>;
+  ///
+  /// `draft` is a tab's unsaved text and the revision it was based on, when a tab is moved rather
+  /// than a file opened. With one, the answer arrives only once the new window has claimed it.
+  openInNewWindow(path: string, draft?: DocumentDraft): Promise<{ ok: true } | Failure>;
+  /// In a document window: the unsaved text it was opened with, once. Null when there was none.
+  takeDocumentDraft(): Promise<{ ok: true; draft: DocumentDraft | null } | Failure>;
   /// The branches a repository has, and which of them it is reading and writing.
   ///
   /// On the workspace client rather than the GitHub bridge because it is an operation on an OPEN
@@ -371,6 +377,7 @@ export const browserClient: WorkspaceClient = {
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),
   openInNewWindow: async () => unavailable(),
+  takeDocumentDraft: async () => unavailable(),
   repoBranches: async () => unavailable(),
   setRepoBranch: async () => unavailable(),
   saveFileAs: async () => unavailable(),

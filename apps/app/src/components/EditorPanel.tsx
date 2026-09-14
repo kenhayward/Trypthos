@@ -58,6 +58,10 @@ interface Props {
   onCloseFile?: (path: string) => void;
   /// Closes several documents, in the order given - what the tab menu asks for.
   onCloseFiles?: (paths: readonly string[]) => void;
+  /// Whether a tab can be moved into a window of its own, for the tab menu.
+  canOpenInNewWindow?: (path: string) => boolean;
+  /// Moves a tab into its own window - the tab menu's Open in New Window.
+  onOpenInNewWindow?: (path: string) => void;
   /// Reports the editor selection, so the chat panel can ask about a passage rather than the whole
   /// file. Empty when nothing is selected.
   ///
@@ -133,6 +137,8 @@ export default function EditorPanel({
   onActivateFile,
   onCloseFile,
   onCloseFiles,
+  canOpenInNewWindow,
+  onOpenInNewWindow,
   onSelectionChange,
   onFollowLink,
   defaultMode = DEFAULT_EDITOR_MODE,
@@ -276,6 +282,8 @@ export default function EditorPanel({
             onActivate={(path) => onActivateFile?.(path)}
             onClose={(path) => onCloseFile?.(path)}
             onCloseMany={(paths) => onCloseFiles?.(paths)}
+            canOpenInNewWindow={canOpenInNewWindow}
+            onOpenInNewWindow={onOpenInNewWindow}
           />
           <OpenFilesMenu
             workspaceName={workspaceName}

@@ -18,6 +18,10 @@ interface Props {
   onClose: (path: string) => void;
   /// Closes several tabs, in the order given, asking about each unsaved one in turn.
   onCloseMany: (paths: readonly string[]) => void;
+  /// Whether a tab can be moved into a window of its own. Absent where nothing can open a window.
+  canOpenInNewWindow?: (path: string) => boolean;
+  /// Moves a tab into its own window, unsaved text and all. Absent where nothing can open a window.
+  onOpenInNewWindow?: (path: string) => void;
 }
 
 /// What each entry of the tab menu is called. Keys, not wording - the component translates.
@@ -46,6 +50,8 @@ export default function EditorTabs({
   onActivate,
   onClose,
   onCloseMany,
+  canOpenInNewWindow,
+  onOpenInNewWindow,
 }: Props) {
   const { t } = useTranslation();
   /// The tab the right-click menu is about, and where to draw it. Null when it is closed.
@@ -220,6 +226,19 @@ export default function EditorTabs({
               </ContextMenuItem>
             );
           })}
+          {/* Absent rather than greyed where the tab cannot move, as the file tree's entry is: a
+              file with no local folder behind it, or a document never saved, has nothing for a
+              second window to open. The same words as the tree's, because it is the same window. */}
+          {onOpenInNewWindow !== undefined && canOpenInNewWindow?.(menu.path) === true && (
+            <ContextMenuItem
+              onClick={() => {
+                setMenu(null);
+                onOpenInNewWindow(menu.path);
+              }}
+            >
+              {t("workspace.openInNewWindow")}
+            </ContextMenuItem>
+          )}
         </ContextMenu>
       )}
     </div>
