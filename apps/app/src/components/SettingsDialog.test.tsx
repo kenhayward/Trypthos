@@ -38,6 +38,7 @@ const PROFILE = {
   supportsImages: false,
   supportsTools: false,
   stream: true,
+  timeoutMinutes: 10,
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: true,
@@ -798,5 +799,45 @@ describe("streaming on a model", () => {
 
     const saved = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
     expect(saved.chat?.profiles[0]?.stream).toBe(false);
+  });
+});
+
+describe("the reply timeout on a model", () => {
+  async function newModel() {
+    await userEvent.click(screen.getByRole("button", { name: "Add a model" }));
+    await userEvent.type(screen.getByLabelText("Name"), "Local model");
+    await userEvent.type(screen.getByLabelText("Endpoint"), "http://localhost:11434/v1");
+    await userEvent.type(screen.getByLabelText("Model"), "qwen3.8-27b");
+  }
+
+  it("starts at ten minutes and saves the timeout chosen", async () => {
+    const onChange = vi.fn();
+    dialog({ openOn: "chatModels", onChange });
+    await newModel();
+
+    const timeout = screen.getByLabelText("Reply timeout (minutes)") as HTMLInputElement;
+    expect(timeout.value).toBe("10");
+
+    await userEvent.clear(timeout);
+    await userEvent.type(timeout, "45");
+    await userEvent.click(screen.getByRole("button", { name: "Save model" }));
+
+    const saved = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+    expect(saved.chat?.profiles[0]?.timeoutMinutes).toBe(45);
+  });
+
+  // An hour at most. Past that a request is not slow, it is stuck.
+  it("refuses more than sixty minutes, and says which field", async () => {
+    const onChange = vi.fn();
+    dialog({ openOn: "chatModels", onChange });
+    await newModel();
+
+    const timeout = screen.getByLabelText("Reply timeout (minutes)");
+    await userEvent.clear(timeout);
+    await userEvent.type(timeout, "90");
+    await userEvent.click(screen.getByRole("button", { name: "Save model" }));
+
+    expect(timeout.getAttribute("aria-invalid")).toBe("true");
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

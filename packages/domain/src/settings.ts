@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChatProfileListSchema } from "./chat";
+import { ChatProfileListSchema, DEFAULT_TIMEOUT_MINUTES } from "./chat";
 import { DEFAULT_EDITOR_MODE, EditorModeSchema } from "./editorMode";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
 import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 16;
+export const SETTINGS_VERSION = 17;
 
 export const SettingsSchema = z
   .object({
@@ -158,6 +158,26 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 17,
+    // Version 17 gives each model a reply timeout. An existing profile gets the default ten minutes -
+    // twice what the old fixed network limit allowed, so no model that answered before stops
+    // answering because of the upgrade.
+    migrate: (input) => {
+      const chat = (input as { chat?: { profiles?: unknown[] } }).chat ?? {};
+      const profiles = Array.isArray(chat.profiles) ? chat.profiles : [];
+      return {
+        ...input,
+        chat: {
+          ...chat,
+          profiles: profiles.map((profile) => ({
+            timeoutMinutes: DEFAULT_TIMEOUT_MINUTES,
+            ...(profile as object),
+          })),
+        },
+      };
+    },
+  },
   {
     to: 16,
     // Version 16 lets a model opt out of streamed replies. An existing profile keeps streaming:

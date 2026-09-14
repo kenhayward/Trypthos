@@ -1771,6 +1771,21 @@ OpenAI-compatible response is normalised into the same reply, reasoning, usage a
 as a streamed response. The read loop therefore has one execution path after the transport has been
 decoded. Settings schema version 16 adds `stream` and migrates existing profiles to `true`.
 
+**Requests go through Electron's `net.fetch`, watched for silence.** `main.js` hands the provider
+`net.fetch` rather than Node's global `fetch`. Node's `fetch` (undici) abandons a request after 300 s
+without response headers, or 300 s between body chunks, and nothing in this app could raise that - so
+a reasoning model thinking for more than five minutes before its first token could never be answered.
+Chromium's stack sets no such limit (and knows the machine's proxy and certificate store, which is why
+GitHub already used it). The limit is now each profile's `timeoutMinutes` (1-60, default 10; settings
+version 17 migrates existing profiles to 10). `createSilenceWatch` in `chatProvider.js` owns an
+`AbortController` per request round: it aborts when the caller's signal does (Stop) or when `touch` has
+not been called for the timeout. `touch` runs when the request starts, when response headers arrive
+and on every body chunk, so the timeout measures silence rather than total duration; the watch stops
+once the reply is complete, so carrying out a tool the model asked for is never timed. A timeout is
+reported as its own message (which model, how long, and that the timeout is in Settings) and keeps
+the tokens already emitted; Stop still ends quietly. The provider takes injected `timers`, so the tests
+drive a ten-minute wait as a step.
+
 `get_file_contents` is **executed**, and that makes it different in kind from `propose_edit`. A
 proposal is structured output - the call IS the answer, nothing runs, the user presses a button. A
 read is carried out by the app and the result sent back, so the model can read a file and keep

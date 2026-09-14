@@ -353,6 +353,7 @@ describe("chatPanelVisible", () => {
     supportsImages: false,
     supportsTools: false,
     stream: true,
+    timeoutMinutes: 10,
     thinking: false,
     reasoningEffort: "medium" as const,
     isDefault: true,
@@ -659,6 +660,64 @@ describe("streaming on a profile", () => {
     };
 
     expect(loadSettings(before).chat.profiles[0]?.stream).toBe(true);
+  });
+});
+
+/// The reply timeout, added at version 17.
+///
+/// The schema defaults it, so an old file would load either way. The version exists for the OTHER
+/// direction, as with streaming: `ChatProfileSchema` is strict, so a file written here and read by the
+/// previous build would fail to parse and take every configured model with it.
+describe("the reply timeout on a profile", () => {
+  it("gives a model configured before the setting existed the ten-minute default", () => {
+    const before = {
+      ...DEFAULT_SETTINGS,
+      schemaVersion: 16,
+      chat: {
+        ...DEFAULT_SETTINGS.chat,
+        profiles: [
+          {
+            id: "one",
+            label: "Local model",
+            endpoint: "http://localhost:11434/v1",
+            model: "qwen3.8-27b",
+            contextWindow: null,
+            supportsImages: false,
+            supportsTools: true,
+            stream: true,
+            thinking: false,
+            reasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      },
+    };
+
+    const loaded = loadSettings(before);
+    expect(loaded.schemaVersion).toBe(17);
+    expect(loaded.chat.profiles[0]?.timeoutMinutes).toBe(10);
+    expect(loaded.chat.profiles[0]?.model).toBe("qwen3.8-27b");
+  });
+
+  it("keeps a timeout somebody chose", () => {
+    const chosen = {
+      ...DEFAULT_SETTINGS,
+      chat: {
+        ...DEFAULT_SETTINGS.chat,
+        profiles: [
+          {
+            id: "one",
+            label: "Slow model",
+            endpoint: "http://localhost:11434/v1",
+            model: "big",
+            timeoutMinutes: 45,
+            isDefault: true,
+          },
+        ],
+      },
+    };
+
+    expect(loadSettings(chosen).chat.profiles[0]?.timeoutMinutes).toBe(45);
   });
 });
 

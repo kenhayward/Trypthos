@@ -2,6 +2,7 @@
 
 const { randomUUID } = require("node:crypto");
 const {
+  DEFAULT_TIMEOUT_MINUTES,
   EDIT_TOOL_NAME,
   READ_TOOL_NAME,
   buildChatRequest,
@@ -56,7 +57,61 @@ function statusMessage(status, profile) {
   return `The request was refused (${status}).`;
 }
 
-function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = console }) {
+/// What to tell the user when a model went quiet for longer than its timeout allows.
+function timeoutMessage(profile, minutes) {
+  const span = minutes === 1 ? "1 minute" : `${minutes} minutes`;
+  return `${profile.label} sent nothing for ${span}, so Trypthos stopped waiting. If this model needs longer, raise its timeout in Settings.`;
+}
+
+/// A clock that gives up on a reply after a stretch of SILENCE, not after a total duration.
+///
+/// Its own abort signal is what the request is made with. It aborts when the caller's signal does -
+/// the user pressing Stop - or when `touch` has not been called for `ms`. Every piece of a reply calls
+/// `touch`, so a long answer that keeps arriving is never cut off, while a model that has gone away
+/// is given up on rather than left holding the stop button up.
+///
+/// **Why this exists at all.** Node's own `fetch` gave up after five minutes without a response,
+/// whatever anybody wanted, so a large reasoning model thinking before its first token could never be
+/// waited for. Requests now go through a stack with no limit of its own, and this is the limit - one
+/// the user sets per model.
+function createSilenceWatch({ ms, signal, timers }) {
+  const controller = new AbortController();
+  let timer = null;
+  let stopped = false;
+  let timedOut = false;
+
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+
+  const touch = () => {
+    if (stopped) return;
+    if (timer !== null) timers.clearTimeout(timer);
+    timer = timers.setTimeout(() => {
+      timer = null;
+      timedOut = true;
+      controller.abort();
+    }, ms);
+  };
+
+  const stop = () => {
+    stopped = true;
+    if (timer !== null) timers.clearTimeout(timer);
+    timer = null;
+    signal?.removeEventListener("abort", onAbort);
+  };
+
+  touch();
+  return { signal: controller.signal, touch, stop, timedOut: () => timedOut };
+}
+
+function createChatProvider({
+  fetchImpl = globalThis.fetch,
+  secrets,
+  logger = console,
+  /// Injected so a ten-minute wait can be a step in a test rather than ten minutes.
+  timers = globalThis,
+}) {
   /// Runs one turn, emitting events until the reply ends.
   ///
   /// Never rejects. A failure is an `error` event followed by nothing - the panel has one place to
@@ -98,11 +153,33 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
     }
   }
 
-  /// One request, and what to do with what came back.
+  /// One request, and what to do with what came back - watched for silence.
   ///
   /// Returns null when the turn is over, or the tool call that has already been answered and needs
-  /// another round.
-  async function runOnce({ profile, messages, onEvent, signal, readFile, callTool }) {
+  /// another round. The watch is stopped however this ends: a timer left running would fire an error
+  /// into a conversation that finished long ago.
+  async function runOnce(round) {
+    const minutes = round.profile.timeoutMinutes ?? DEFAULT_TIMEOUT_MINUTES;
+    const watch = createSilenceWatch({ ms: minutes * 60_000, signal: round.signal, timers });
+    try {
+      return await runWatched({ ...round, watch, minutes });
+    } finally {
+      watch.stop();
+    }
+  }
+
+  async function runWatched({ profile, messages, onEvent, signal, readFile, callTool, watch, minutes }) {
+    /// How a request that ended early is reported: quietly when the user stopped it, as a timeout
+    /// when the model went silent, and otherwise as whatever went wrong.
+    const failure = (fallback) => {
+      if (signal?.aborted) return null;
+      if (watch.timedOut()) {
+        logger.error("The chat endpoint sent nothing for longer than its timeout.");
+        return timeoutMessage(profile, minutes);
+      }
+      return fallback;
+    };
+
     // Read here, used here, and never returned. The renderer asked for a profile by id; it has no
     // idea whether a key exists beyond the boolean the settings UI shows.
     const key = await secrets.getKey(profile.endpoint);
@@ -125,23 +202,21 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
             canActOnFolder: callTool !== null,
           }),
         ),
-        signal,
+        signal: watch.signal,
       });
     } catch {
-      if (signal?.aborted) {
-        onEvent({ type: "end" });
-        return null;
-      }
       // Deliberately not including the thrown message: a request error can carry the headers that
       // were sent, and those contain the key.
-      logger.error("The chat endpoint could not be reached.");
-      onEvent({
-        type: "error",
-        message: `${profile.label} could not be reached. Check the endpoint in Settings.`,
-      });
+      const message = failure(`${profile.label} could not be reached. Check the endpoint in Settings.`);
+      if (message !== null) {
+        if (!watch.timedOut()) logger.error("The chat endpoint could not be reached.");
+        onEvent({ type: "error", message });
+      }
       onEvent({ type: "end" });
       return null;
     }
+    // The answer has begun: the clock restarts rather than counting the wait for it as silence.
+    watch.touch();
 
     if (!response.ok || (profile.stream !== false && !response.body)) {
       // The body is NOT read into the message. Some providers echo the rejected key back in it.
@@ -297,11 +372,17 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       try {
         events = parseCompletionPayload(await response.json());
       } catch {
-        logger.error("The chat endpoint returned an unreadable response.");
-        onEvent({ type: "error", message: "The reply could not be read." });
+        const message = failure("The reply could not be read.");
+        if (message !== null) {
+          if (!watch.timedOut()) logger.error("The chat endpoint returned an unreadable response.");
+          onEvent({ type: "error", message });
+        }
         onEvent({ type: "end" });
         return null;
       }
+      // The whole reply is in. Carrying out a tool it asked for is the app's work, not the model's
+      // silence, so it is not timed.
+      watch.stop();
 
       for (const event of events) {
         if (event.type === "ignored") continue;
@@ -342,6 +423,8 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        // A piece of the reply arrived: the model is still working, so the silence starts again.
+        watch.touch();
 
         // `stream: true` matters: a multi-byte character split across two network reads would
         // otherwise decode as two replacement characters, which is how accented text arrives
@@ -360,6 +443,8 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
             continue;
           }
           if (event.type === "done") {
+            // The reply is complete; any tool it asked for is the app's work, not timed silence.
+            watch.stop();
             flushToolCalls();
             const read = await answerToolCall();
             if (read !== null) return read;
@@ -386,14 +471,16 @@ function createChatProvider({ fetchImpl = globalThis.fetch, secrets, logger = co
         }
       }
     } catch {
-      if (!signal?.aborted) {
-        logger.error("The chat stream failed part-way through.");
-        onEvent({ type: "error", message: "The reply stopped part-way through." });
+      const message = failure("The reply stopped part-way through.");
+      if (message !== null) {
+        if (!watch.timedOut()) logger.error("The chat stream failed part-way through.");
+        onEvent({ type: "error", message });
       }
     } finally {
       // Best effort. The reader is already finished on the normal path.
       await reader.cancel?.().catch(() => {});
     }
+    watch.stop();
 
     // Reached when the stream closed without a [DONE] sentinel - a dropped connection, or simply a
     // provider that does not send one. The panel has to be told the turn ended, or the stop button

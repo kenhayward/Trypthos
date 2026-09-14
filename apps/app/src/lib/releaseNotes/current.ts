@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.72.0",
+    date: "2026-09-14",
+    pr: 147,
+    headline: "Set how long to wait for each chat model",
+    summary:
+      "A chat request used to give up if the model sent nothing for five minutes, a limit built into the networking Trypthos used and not something you could change - so a large model that thinks for a long time before it starts to answer could time out with its answer still coming. Each model in Settings now has a Reply timeout, in minutes: how long to wait while it sends nothing. It is 10 minutes by default and can be anything from 1 to 60, and existing models start at 10. The wait starts again whenever part of a reply arrives, so a long answer that keeps coming is never cut off. When a model does go quiet for longer, the chat says which model and for how long, keeps whatever part of the reply had already arrived, and points you at the setting. Chat requests now also go through the same networking GitHub already used, which follows your system's proxy and certificate settings.",
+    added: [
+      "A Reply timeout on every chat model: how long to wait while it sends nothing, from 1 to 60 minutes, 10 by default.",
+    ],
+    changed: [
+      "Chat requests no longer give up after five minutes of silence, and follow the system's proxy and certificate settings.",
+    ],
+  },
+  {
     version: "0.71.1",
     date: "2026-09-14",
     pr: 146,
