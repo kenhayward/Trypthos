@@ -221,6 +221,12 @@ describe("the reasoning channel", () => {
 /// Opt-in per profile, because there is no reliable way to ask an OpenAI-compatible endpoint whether
 /// it supports tools: several accept a `tools` array, ignore it, and answer in prose.
 describe("tool calling", () => {
+  it("can disable streaming for an endpoint whose streamed tool calls are malformed", () => {
+    const nonStreaming = ChatProfileSchema.parse({ ...profile, stream: false });
+
+    expect(buildChatRequest(nonStreaming, turns).stream).toBe(false);
+  });
+
   it("sends no tools unless the profile says the endpoint supports them", () => {
     const body = buildChatRequest(profile, turns);
     expect("tools" in body).toBe(false);

@@ -352,6 +352,7 @@ describe("chatPanelVisible", () => {
     contextWindow: null,
     supportsImages: false,
     supportsTools: false,
+    stream: true,
     thinking: false,
     reasoningEffort: "medium" as const,
     isDefault: true,
@@ -630,6 +631,34 @@ describe("thinking on a profile", () => {
     };
     expect(loadSettings(chosen).chat.profiles[0]?.reasoningEffort).toBe("high");
     expect(loadSettings(chosen).chat.profiles[0]?.thinking).toBe(true);
+  });
+});
+
+describe("streaming on a profile", () => {
+  it("keeps streaming enabled for a model configured before the setting existed", () => {
+    const before = {
+      ...DEFAULT_SETTINGS,
+      schemaVersion: 15,
+      chat: {
+        ...DEFAULT_SETTINGS.chat,
+        profiles: [
+          {
+            id: "one",
+            label: "Local model",
+            endpoint: "http://localhost:11434/v1",
+            model: "qwen3.8-27b",
+            contextWindow: null,
+            supportsImages: false,
+            supportsTools: true,
+            thinking: false,
+            reasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      },
+    };
+
+    expect(loadSettings(before).chat.profiles[0]?.stream).toBe(true);
   });
 });
 

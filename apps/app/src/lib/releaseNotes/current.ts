@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.68.0",
+    date: "2026-09-14",
+    pr: 138,
+    headline: "Use complete chat responses when a model streams incomplete tool calls",
+    summary:
+      "Chat normally streams a reply as it arrives. Some model and server combinations lose part of a tool call while doing that: the model asks to read a file, but the streamed response omits the tool name, so Trypthos cannot run it and the conversation ends there. Every chat model now has a Stream replies switch, on by default. Turn it off for that model when its server has this problem and Trypthos asks for one complete response instead. It then handles the reply, its reasoning and its tool calls in exactly the same way, including reading a file and continuing the conversation, only showing the reply after the server has finished it.",
+    added: [
+      "A Stream replies switch on every chat model, for endpoints whose streamed tool calls are incomplete.",
+    ],
+  },
+  {
     version: "0.67.0",
     date: "2026-09-14",
     pr: 136,

@@ -37,6 +37,7 @@ const PROFILE = {
   contextWindow: null,
   supportsImages: false,
   supportsTools: false,
+  stream: true,
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: true,
@@ -777,5 +778,25 @@ describe("thinking on a model", () => {
     await userEvent.click(screen.getByRole("radio", { name: "High" }));
 
     expect((screen.getByRole("radio", { name: "High" }) as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe("streaming on a model", () => {
+  it("starts on and saves an explicit off choice", async () => {
+    const onChange = vi.fn();
+    dialog({ openOn: "chatModels", onChange });
+    await userEvent.click(screen.getByRole("button", { name: "Add a model" }));
+
+    const stream = screen.getByRole("checkbox", { name: "Stream replies" }) as HTMLInputElement;
+    expect(stream.checked).toBe(true);
+
+    await userEvent.click(stream);
+    await userEvent.type(screen.getByLabelText("Name"), "Local model");
+    await userEvent.type(screen.getByLabelText("Endpoint"), "http://localhost:11434/v1");
+    await userEvent.type(screen.getByLabelText("Model"), "qwen3.8-27b");
+    await userEvent.click(screen.getByRole("button", { name: "Save model" }));
+
+    const saved = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+    expect(saved.chat?.profiles[0]?.stream).toBe(false);
   });
 });

@@ -641,7 +641,9 @@ switch it is your answer, and Trypthos stops deciding for you.
 You configure the endpoint, model and parameters yourself, as a list of named models you choose
 between per message. Settings has a Chat models page for this: each entry carries a name you
 read, the address of an OpenAI-compatible endpoint, the model slug that endpoint expects, and
-optional temperature and token limits. One is marked as the model new chats start on.
+optional temperature and token limits. One is marked as the model new chats start on. Each also has
+a **Stream replies** switch, on by default. Turning it off asks the endpoint for one complete
+response, for a model or server that loses part of a tool call while streaming.
 
 Requests go directly from Trypthos to the endpoint you named; no Trypthos server is involved,
 because there is not one.
@@ -654,12 +656,14 @@ can read one back. If your computer cannot encrypt the key, Trypthos says so and
 rather than falling back to writing it in plain text. Removing a model, or pointing it at a different
 endpoint, deletes the key nothing uses any more.
 
-The panel itself works: type a question, press Enter, and the reply streams in as the model writes
-it. The model that answers is chosen from the picker at the top of the panel, which starts on the one
-marked as the default. While a reply is arriving the send button becomes a stop button in the same
-place, so an endpoint that accepts a request and then goes quiet is never a panel with no way out.
-Replies render as markdown, and are sanitised before they are shown - a model's output is text
-Trypthos did not write, and is treated with the same suspicion as a file from your workspace.
+The panel itself works: type a question, press Enter, and the reply normally streams in as the model
+writes it. With Stream replies off it appears after the endpoint has completed it, but its reasoning
+and tool calls work the same way. The model that answers is chosen from the picker at the top of the
+panel, which starts on the one marked as the default. While a reply is arriving the send button
+becomes a stop button in the same place, so an endpoint that accepts a request and then goes quiet
+is never a panel with no way out. Replies render as markdown, and are sanitised before they are
+shown - a model's output is text Trypthos did not write, and is treated with the same suspicion as a
+file from your workspace.
 
 ### How full the context is
 

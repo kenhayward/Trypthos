@@ -178,6 +178,16 @@ export default function ChatProfileForm({
       <label className="mt-1 flex items-center gap-2 text-ui text-ink">
         <input
           type="checkbox"
+          checked={draft.stream}
+          onChange={(event) => set("stream", event.target.checked)}
+        />
+        {t("settings.chat.stream")}
+      </label>
+      <p className="mt-1 text-xs text-ink-4">{t("settings.chat.streamHint")}</p>
+
+      <label className="mt-1 flex items-center gap-2 text-ui text-ink">
+        <input
+          type="checkbox"
           checked={draft.thinking}
           onChange={(event) => set("thinking", event.target.checked)}
         />

@@ -15,6 +15,7 @@ const PROFILE = {
   contextWindow: null,
   supportsImages: false,
   supportsTools: false,
+  stream: true,
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: true,

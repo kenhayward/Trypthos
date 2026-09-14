@@ -28,6 +28,7 @@ export {
   buildChatRequest,
   completionsUrl,
   composeMessages,
+  parseCompletionPayload,
   parseStreamPayload,
 } from "./chatCompletion";
 
