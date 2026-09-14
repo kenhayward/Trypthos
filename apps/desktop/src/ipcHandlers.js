@@ -31,6 +31,8 @@ const {
   splitQualified,
   workspaceIdFor,
   imageMediaType,
+  isOpenable,
+  withinFolder,
   ListRequest,
   CreateDirectoryRequest,
   OutlineRequest,
@@ -355,11 +357,10 @@ function registerIpcHandlers({
     // now so it can match the events that follow.
     /// Serves a file the model asked for, or refuses.
     ///
-    /// **The allowlist, and the only reason this is safe.** The outline is recomputed here rather
-    /// than taken from the request: the renderer's copy came from this same function, and trusting
-    /// it back would let a renderer widen what the model may read simply by sending a longer list.
-    /// The workspace provider then resolves the path against the open root, so even an allowed name
-    /// goes through the boundary check every other read does.
+    /// **Two boundaries, and both are decided here.** The model may read only an enabled file inside
+    /// the folder the user attached, never a path outside that folder or its workspace. The renderer
+    /// does not choose either: the main process resolves the attached folder and the workspace
+    /// provider applies its lexical and realpath checks to every requested file.
     ///
     /// Offered only when the user asked for the folder. With no outline there is nothing to read
     /// from, and offering the tool would invite calls that could only be refused.
@@ -373,18 +374,13 @@ function registerIpcHandlers({
             if (!attached) return { ok: false, reason: "no-workspace" };
             const { workspace } = attached;
 
-            // Rebuilt HERE rather than trusted from the request: the outline is the allowlist, so
-            // what may be read is decided by the main process walking the folder again. The folder
-            // itself is the user's choice and comes with the context; the guard is what keeps that
-            // choice inside the workspace.
-            const outline = await outlineWorkspace(workspace.provider, {
-              // The folder INSIDE its workspace. What the model sees, and what it names back, is
-              // relative to the workspace its folder is in - one folder is one world to it.
-              path: attached.path,
-              fileTypes: settings.fileTypes.enabled,
-              limit: settings.chat.folderFileLimit,
-            });
-            if (!outline.paths.includes(wanted)) return { ok: false, reason: "not-allowed" };
+            // `list_directory` can discover a file below the first one-level outline. That listing
+            // is not itself permission, though: this folder check and the provider guard are. The
+            // model also cannot read a type the user has turned off in Settings.
+            if (!withinFolder(attached.path, wanted)) return { ok: false, reason: "not-allowed" };
+            if (!isOpenable(wanted, settings.fileTypes.enabled)) {
+              return { ok: false, reason: "not-allowed" };
+            }
 
             const result = await workspace.provider.read(wanted);
             return result.ok ? { ok: true, content: result.content } : { ok: false, reason: "unreadable" };

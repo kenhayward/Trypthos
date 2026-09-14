@@ -218,7 +218,7 @@ function fenced(heading: string, body: string, note: string): ChatTurn {
   };
 }
 
-/// How the model may ask for one of the files the outline named.
+/// How the model may ask for a file in the folder it attached.
 ///
 /// `tool` where the endpoint supports tool calling and `get_file_contents` was sent; `fenced`
 /// otherwise, where the model writes a block and the app carries it out.
@@ -235,7 +235,7 @@ export type ReadTransport = "tool" | "fenced";
 /// copies is a path that will be accepted rather than one that will be refused.
 function howToRead(reads: ReadTransport, example: string): string {
   if (reads === "tool") {
-    return `To read one, call ${READ_TOOL_NAME} with its path exactly as written here.`;
+    return `To read one, call ${READ_TOOL_NAME} with its path exactly as written here, or with a path returned by list_directory inside the attached folder.`;
   }
 
   return [
@@ -270,9 +270,9 @@ export function contextTurns(
     turns.push(
       fenced(
         `Here are the files in ${context.folder.path === "" ? "the folder the user is working in" : context.folder.path}. This ` +
-          "is a list of paths only - you have not been shown their contents. " +
+          "is a one-level list of paths only - you have not been shown their contents. " +
           howToRead(reads, context.folder.paths[0] ?? "path/to/file") +
-          " Only these paths can be read.",
+          " You may read an enabled file inside the attached folder or below it.",
         context.folder.paths.join("\n"),
         note,
       ),

@@ -18,15 +18,16 @@ import type { ProposedEdit } from "./documentEdit";
 
 export const EDIT_TOOL_NAME = "propose_edit";
 
-/// Reading one of the files the outline offered.
+/// Reading an enabled file inside the folder the user attached.
 ///
 /// **This one is executed, and that makes it different in kind.** `propose_edit` is structured
 /// output: the call IS the proposal, nothing runs, and the user presses a button. This call is
 /// carried out by the app and the result sent back, so the model can read a file and then keep
 /// going - a real loop, with the bounds that implies.
 ///
-/// The bound that matters is the allowlist: only a path the outline named may be read, and the
-/// outline is one level of the open folder. A model asking for anything else is refused and told so.
+/// The bounds that matter are the attached folder, the workspace guard, and the enabled file types.
+/// A directory listing can discover a nested file and the model may read it, but a sibling folder,
+/// a path that escapes the workspace, or a file type the user turned off is refused.
 export const READ_TOOL_NAME = "get_file_contents";
 
 const OPS = [
@@ -55,7 +56,7 @@ export const READ_CHARACTER_LIMIT = 20_000;
 /// The tool that reads a file, offered only alongside a folder outline.
 ///
 /// Separate from `editTools` because it is offered under a different condition: proposing an edit
-/// needs nothing but a document, while reading a file needs a list of files to read from.
+/// needs nothing but a document, while reading a file needs an attached folder to read from.
 export function readTools() {
   return [
     {
@@ -63,16 +64,18 @@ export function readTools() {
       function: {
         name: READ_TOOL_NAME,
         description:
-          "Read one of the markdown files listed for this folder. Use it when you need what is " +
-          "inside a file rather than only its name. You may call it more than once, one file at a " +
-          "time. Only the paths in that list can be read; anything else is refused.",
+          "Read an enabled file in the folder attached to this conversation, or in a directory " +
+          "below it. Use it when you need what is inside a file rather than only its name. You may " +
+          "call it more than once, one file at a time. A path outside the attached folder or a file " +
+          "type the user has turned off is refused.",
         parameters: {
           type: "object" as const,
           properties: {
             path: {
               type: "string" as const,
               description:
-                "The file to read, exactly as it appears in the list of files for this folder.",
+                "The path of an enabled file inside the attached folder, as a directory listing " +
+                "or the initial folder list writes it.",
             },
           },
           required: ["path"],

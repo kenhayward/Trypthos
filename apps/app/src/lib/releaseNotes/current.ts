@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.68.1",
+    date: "2026-09-14",
+    pr: 139,
+    headline: "Let a model read the nested file it found",
+    summary:
+      "A model can list what is in the folder you attached, including folders below it, and then ask to read a file it found. Until now that second step failed unless the file happened to be on the first short list at the top of the folder, which made the listing useful only for names. It can now read any enabled file inside the folder you attached, including one it finds below it. The boundary has not widened: a file outside that folder is still refused, even when it is elsewhere in the same workspace.",
+    fixed: [
+      "A model can read an enabled file it discovers below the folder you attached, rather than being refused because it was not on the first list.",
+    ],
+  },
+  {
     version: "0.68.0",
     date: "2026-09-14",
     pr: 138,
