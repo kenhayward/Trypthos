@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// no history to write it into, which is all of them but GitHub.
   writeFile: (path, content, expectedRevision, message = null) =>
     ipcRenderer.invoke("file:write", { path, content, expectedRevision, message }),
+  openInNewWindow: (path) => ipcRenderer.invoke("file:openInNewWindow", { path }),
 
   /// Save As. Note what is NOT sent: a destination. The dialog runs in the main process and the path
   /// it answers with is checked against the open workspace there - `path` here is only where the

@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.67.0",
+    date: "2026-09-14",
+    pr: 136,
+    headline: "Create files and folders where you are working, or focus a file in its own window",
+    summary:
+      "The workspace menu now lets you make an empty file or a folder exactly where you are looking, instead of making it elsewhere and finding it afterwards. Right-click a local folder, choose New File or New Folder, give it a name, and it appears in that folder; a new file opens straight away in a tab ready to write. Files also have Open in New Window. It opens the selected local file in a separate native window with only the document on screen: no folder browser, chat panel or tab strip. It remains the same editor, so saving and the warning before unsaved changes are handled just as they are in the main window.",
+    added: [
+      "New File and New Folder in the local workspace and folder menus.",
+      "Open in New Window on local file menus, for a focused document-only window.",
+    ],
+  },
+  {
     version: "0.66.0",
     date: "2026-09-11",
     pr: 135,

@@ -8,6 +8,7 @@ import {
   DocumentDirtyRequest,
   IPC_CHANNELS,
   OpenExternalRequest,
+  OpenInNewWindowRequest,
   ListRequest,
   CreateDirectoryRequest,
   ReadRequest,
@@ -25,6 +26,7 @@ describe("IPC_CHANNELS", () => {
       "workspace:createDirectory",
       "file:read",
       "file:write",
+      "file:openInNewWindow",
       "file:saveAs",
       "file:readImage",
       "window:minimize",
@@ -138,6 +140,16 @@ describe("CreateDirectoryRequest", () => {
 
   it("requires a directory below the workspace root", () => {
     expect(() => CreateDirectoryRequest.parse({ path: "" })).toThrow();
+  });
+});
+
+describe("OpenInNewWindowRequest", () => {
+  it("accepts the qualified path of the file to show", () => {
+    expect(OpenInNewWindowRequest.parse({ path: "Notes/plan.md" })).toEqual({ path: "Notes/plan.md" });
+  });
+
+  it("refuses an empty file path", () => {
+    expect(() => OpenInNewWindowRequest.parse({ path: "" })).toThrow();
   });
 });
 

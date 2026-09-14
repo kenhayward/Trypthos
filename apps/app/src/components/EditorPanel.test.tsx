@@ -34,6 +34,25 @@ function Harness({
 const modeButton = (name: string) => screen.getByRole("button", { name });
 
 describe("EditorPanel", () => {
+  it("shows only the document surface when used in a focused document window", () => {
+    render(
+      <EditorPanel
+        singleDocument
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        defaultMode="source"
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Document source")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Source" })).toBeNull();
+    expect(screen.queryByText("Diariz")).toBeNull();
+  });
+
   it("opens in Live mode with the document in an editable surface", () => {
     render(<Harness />);
 

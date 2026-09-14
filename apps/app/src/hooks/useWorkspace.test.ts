@@ -49,6 +49,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
           ],
     }),
     createDirectory: async () => ({ ok: true }),
+    openInNewWindow: async () => ({ ok: true }),
     readFile: async (path): Promise<ReadResult> => {
       reads.push(path);
       return { ok: true, content: "# On disk\n", revision: { id: "r1" } };
@@ -183,6 +184,26 @@ describe("failureParams", () => {
 });
 
 describe("useWorkspace", () => {
+  it("asks the shell to open a local file in a focused window", async () => {
+    const opened: string[] = [];
+    const { client } = fakeClient({
+      openInNewWindow: async (path) => {
+        opened.push(path);
+        return { ok: true };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.openInNewWindow("ws/a.md");
+    });
+
+    expect(opened).toEqual(["ws/a.md"]);
+  });
+
   it("starts with nothing open", () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));

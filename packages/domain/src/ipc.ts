@@ -23,6 +23,7 @@ export const IPC_CHANNELS = [
   "workspace:createDirectory",
   "file:read",
   "file:write",
+  "file:openInNewWindow",
   "file:saveAs",
   "file:readImage",
   "window:minimize",
@@ -294,6 +295,10 @@ export const WriteRequest = z
   })
   .strict();
 
+/// Opens a file the renderer already has in a focused editor window. The path remains qualified:
+/// the main process removes the workspace id and holds the filesystem root itself.
+export const OpenInNewWindowRequest = z.object({ path: relativePath.min(1) }).strict();
+
 /// Save As: a dialog, and then a write to wherever it landed.
 ///
 /// **The renderer cannot name a destination, and that is the whole shape of this.** It sends the
@@ -432,6 +437,7 @@ export type CloseWorkspaceRequest = z.infer<typeof CloseWorkspaceRequest>;
 export type ReadImageRequest = z.infer<typeof ReadImageRequest>;
 export type SaveAsRequest = z.infer<typeof SaveAsRequest>;
 export type WriteRequest = z.infer<typeof WriteRequest>;
+export type OpenInNewWindowRequest = z.infer<typeof OpenInNewWindowRequest>;
 
 // No `Revision` type is exported here on purpose: provider.ts already defines it, and a second
 // declaration of the same concept is the start of the two drifting apart. RevisionSchema is the

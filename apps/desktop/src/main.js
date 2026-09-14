@@ -44,6 +44,9 @@ const { pathFromArgv, resolveTarget } = require("./launchTarget");
 const { readCloseToTray, onSettingsWritten, readSettings } = require("./settingsStore");
 
 let mainWindow = null;
+/// Each document-only window needs its own dirty bit and close permission. Holding them by window
+/// means the shared IPC handlers can route an event back to the renderer that sent it.
+const documentGuards = new Map();
 
 /// Unsaved work, and whether the window may close on it. Built once and shared: the close listener
 /// reads it, and the document channels write to it. See `closeGuard.js` for the split.
@@ -72,7 +75,7 @@ let retryTimer = null;
 /// user's open tabs and any unsaved work.
 let hasLoaded = false;
 
-function loadRenderer(window) {
+function loadRenderer(window, documentTarget = null) {
   const target = rendererTarget(
     process.env,
     builtIndexPath({
@@ -83,9 +86,69 @@ function loadRenderer(window) {
   );
 
   if (target.kind === "url") {
-    return window.loadURL(target.value);
+    if (documentTarget === null) return window.loadURL(target.value);
+    const url = new URL(target.value);
+    url.searchParams.set("view", "document");
+    url.searchParams.set("root", documentTarget.root);
+    url.searchParams.set("file", documentTarget.file);
+    return window.loadURL(url.toString());
   }
-  return window.loadFile(target.value);
+  if (documentTarget === null) return window.loadFile(target.value);
+  return window.loadFile(target.value, {
+    query: { view: "document", root: documentTarget.root, file: documentTarget.file },
+  });
+}
+
+/// A link belongs in the system browser. Shared by the main window and a focused document window:
+/// a second renderer has the same isolation boundary as the first one.
+function protectNavigation(window) {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    const decision = navigationDecision(window.webContents.getURL(), url);
+    if (decision === "allow") return;
+
+    event.preventDefault();
+    if (decision === "external") void shell.openExternal(url);
+  });
+}
+
+/// Creates a native-framed window containing only one document surface. It intentionally does not
+/// use `chromeOptionsFor`: the custom title bar would be app chrome in a window whose purpose is to
+/// show only the requested file.
+function createDocumentWindow(target) {
+  const documentWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    minWidth: 480,
+    minHeight: 320,
+    title: path.basename(target.file),
+    show: false,
+    backgroundColor: "#111827",
+    webPreferences: webPreferencesFor(path.join(__dirname, "preload.js")),
+  });
+  const guard = createCloseGuard({
+    dialog,
+    send: (channel, payload) => {
+      if (!documentWindow.isDestroyed()) documentWindow.webContents.send(channel, payload);
+    },
+  });
+  documentGuards.set(documentWindow, guard);
+
+  documentWindow.on("close", (event) => {
+    const decision = closeDecision({ forced: guard.forced(), hiding: false, dirty: guard.isDirty() });
+    if (decision === "close") return;
+    event.preventDefault();
+    guard.requestClose();
+  });
+  documentWindow.on("closed", () => documentGuards.delete(documentWindow));
+  documentWindow.once("ready-to-show", () => documentWindow.show());
+  protectNavigation(documentWindow);
+  void loadRenderer(documentWindow, target);
+  return { ok: true };
 }
 
 /// The menu handlers, shared between the popup channel and the context-menu listener.
@@ -246,24 +309,7 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // A link to the wider internet opens in the user's browser, never inside the app window - an
-  // in-app navigation would hand a remote page the app's own origin.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isExternalUrl(url)) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-
-  // The same rule for a navigation the page starts itself. The renderer intercepts links in rendered
-  // markdown and is where the behaviour a user sees is decided; this is the line underneath it, and
-  // it is what makes "the window never navigates" a property of the shell rather than a habit of the
-  // renderer. See `navigationGuard.js` for why a frameless window makes this worse than a lost tab.
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    const decision = navigationDecision(mainWindow.webContents.getURL(), url);
-    if (decision === "allow") return;
-
-    event.preventDefault();
-    if (decision === "external") void shell.openExternal(url);
-  });
+  protectNavigation(mainWindow);
 }
 
 /// Must match `appId` in electron-builder.config.cjs.
@@ -312,6 +358,7 @@ if (!gotLock) {
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send(OPEN_TARGET_CHANNEL, target);
       },
+      openInNewWindow: createDocumentWindow,
       userDataDir: app.getPath("userData"),
       secrets,
       // The provider call lives here and only here. The renderer never opens a socket to a provider
@@ -341,7 +388,14 @@ if (!gotLock) {
         exePath: process.execPath,
       }),
     });
-    registerWindowHandlers({ ipcMain, getWindow: () => mainWindow, guard: closeGuard });
+    registerWindowHandlers({
+      ipcMain,
+      getWindow: () => mainWindow,
+      guard: closeGuard,
+      getWindowForEvent: (event) =>
+        event?.sender ? BrowserWindow.fromWebContents(event.sender) ?? mainWindow : mainWindow,
+      guardForWindow: (window) => documentGuards.get(window) ?? closeGuard,
+    });
 
     /// The recent files list, as the menus need it.
     ///

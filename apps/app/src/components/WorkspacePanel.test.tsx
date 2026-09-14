@@ -50,6 +50,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onRefreshWorkspace: vi.fn(),
     onNewFile: vi.fn(),
     onNewFolder: vi.fn(),
+    onOpenInNewWindow: vi.fn(),
     onOpenFile: vi.fn(),
     fileTypes: ["markdown"] as readonly string[],
     selectedFolder: "",
@@ -548,6 +549,16 @@ describe("the workspace menu", () => {
     await user.click(screen.getByRole("menuitem", { name: "New Folder ..." }));
 
     expect(onNewFolder).toHaveBeenCalledWith("Diariz/docs");
+  });
+
+  it("opens a local file in a new window from its context menu", async () => {
+    const onOpenInNewWindow = vi.fn();
+    panel({ onOpenInNewWindow });
+    const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+    await user.click(screen.getByRole("menuitem", { name: "Open in New Window ..." }));
+
+    expect(onOpenInNewWindow).toHaveBeenCalledWith("Diariz/docs/plan.md");
   });
 
   it("refreshes that workspace when Refresh is chosen, and closes", async () => {

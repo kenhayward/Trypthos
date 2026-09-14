@@ -78,6 +78,24 @@ test("passes the dirty flag to the guard", async () => {
   assert.deepEqual(calls, ["dirty:true"]);
 });
 
+test("routes document state to the guard belonging to the window that sent it", async () => {
+  const handlers = new Map();
+  const documentWindow = { isDestroyed: () => false };
+  const documentGuardCalls = [];
+  const documentGuard = { setDirty: (value) => documentGuardCalls.push(value) };
+
+  registerWindowHandlers({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    getWindow: () => null,
+    guard: { setDirty: () => assert.fail("used the main window guard") },
+    getWindowForEvent: () => documentWindow,
+    guardForWindow: (window) => (window === documentWindow ? documentGuard : null),
+  });
+
+  assert.deepEqual(await handlers.get("document:dirty")({}, { dirty: true }), { ok: true });
+  assert.deepEqual(documentGuardCalls, [true]);
+});
+
 test("refuses a dirty flag that is not a boolean", async () => {
   const { invoke, calls } = harness();
 
