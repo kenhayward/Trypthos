@@ -385,7 +385,13 @@ if (!gotLock) {
       secrets,
       // The provider call lives here and only here. The renderer never opens a socket to a provider
       // and never holds the key.
-      chat: createChatProvider({ secrets }),
+      //
+      // **Electron's `net.fetch`, not Node's**, for two reasons. Node's gives up on any response
+      // after five minutes of silence, which no setting here could raise - so a large reasoning model
+      // thinking before its first token could never be waited for. Chromium's stack sets no such
+      // limit, and each model's own reply timeout (see `createSilenceWatch`) is the limit instead. It
+      // also knows the machine's proxy and certificate store, which is why GitHub already uses it.
+      chat: createChatProvider({ secrets, fetchImpl: (url, options) => net.fetch(url, options) }),
       accounts,
       // Every GitHub call happens here, where the token is. The renderer never opens a socket to
       // GitHub and never holds the token - the same rule as the chat provider, for the same reason.

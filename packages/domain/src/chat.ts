@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+/// How long a model may go without sending anything before the app stops waiting, in minutes.
+///
+/// Ten by default: long enough for a large reasoning model to think before its first token, short
+/// enough that an endpoint which has silently gone away does not hold the stop button up for an
+/// afternoon. An hour at most - past that a request is not slow, it is stuck.
+export const DEFAULT_TIMEOUT_MINUTES = 10;
+export const MAX_TIMEOUT_MINUTES = 60;
+
 /// A chat profile: one endpoint, one model, and the parameters to call it with.
 ///
 /// Note what is NOT here: the API key. Keys live in the OS credential store, keyed by endpoint, and
@@ -43,6 +51,13 @@ export const ChatProfileSchema = z
     /// streamed deltas. This is per profile because it is a property of the model and harness pair,
     /// not of every model pointed at the same endpoint.
     stream: z.boolean().default(true),
+    /// How many minutes this model may send NOTHING before the app gives up on the reply.
+    ///
+    /// Silence, not duration: the clock restarts with every piece of a reply, so a long answer that
+    /// keeps arriving is never cut off. With streaming off the whole reply arrives at once, so this
+    /// bounds the wait for all of it. Per profile, because a small local model and a large reasoning
+    /// model on the same endpoint need very different patience.
+    timeoutMinutes: z.number().int().min(1).max(MAX_TIMEOUT_MINUTES).default(DEFAULT_TIMEOUT_MINUTES),
     /// Whether to ask the model to reason before answering.
     ///
     /// Off by default, for the same reason `supportsTools` is: `reasoning_effort` is a field a

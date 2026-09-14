@@ -655,6 +655,14 @@ optional temperature and token limits. One is marked as the model new chats star
 a **Stream replies** switch, on by default. Turning it off asks the endpoint for one complete
 response, for a model or server that loses part of a tool call while streaming.
 
+Each model also has a **Reply timeout**, in minutes: how long Trypthos waits while the model sends
+**nothing** before it gives up on the reply. It is **10 minutes** unless you change it, and can be
+anything from 1 to 60. The wait starts again every time part of a reply arrives, so a long answer
+that keeps coming is never cut off - the timeout only catches a model, or a server, that has gone
+quiet. Raise it for a large model that thinks for a long time before it starts to answer; with
+Stream replies off, the whole reply has to arrive within it. When it runs out, the chat says which
+model went quiet and for how long, and keeps whatever part of the reply had already arrived.
+
 Requests go directly from Trypthos to the endpoint you named; no Trypthos server is involved,
 because there is not one.
 

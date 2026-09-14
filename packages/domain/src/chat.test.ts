@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_TIMEOUT_MINUTES,
+  MAX_TIMEOUT_MINUTES,
   ChatProfileListSchema,
   ChatProfileSchema,
   defaultChatProfile,
@@ -45,6 +47,31 @@ describe("ChatProfileSchema", () => {
 
   it("rejects a blank model slug", () => {
     expect(() => ChatProfileSchema.parse({ ...valid, model: "" })).toThrow();
+  });
+});
+
+/// How long to wait for a model that has gone quiet.
+///
+/// A property of the model, not the app: a small local model answers in seconds, a large reasoning
+/// model on the same machine can think for many minutes before its first token.
+describe("the reply timeout on a profile", () => {
+  it("waits ten minutes unless told otherwise", () => {
+    expect(ChatProfileSchema.parse(valid).timeoutMinutes).toBe(DEFAULT_TIMEOUT_MINUTES);
+    expect(DEFAULT_TIMEOUT_MINUTES).toBe(10);
+  });
+
+  it("accepts anything from one minute to an hour", () => {
+    expect(ChatProfileSchema.parse({ ...valid, timeoutMinutes: 1 }).timeoutMinutes).toBe(1);
+    expect(ChatProfileSchema.parse({ ...valid, timeoutMinutes: 60 }).timeoutMinutes).toBe(60);
+    expect(MAX_TIMEOUT_MINUTES).toBe(60);
+  });
+
+  // Past an hour a request is not waiting for a slow model, it is a stuck one - and a stop button
+  // that stays up all afternoon is a panel that looks broken.
+  it("refuses more than an hour, no time at all, or part of a minute", () => {
+    for (const timeoutMinutes of [61, 0, -5, 2.5]) {
+      expect(ChatProfileSchema.safeParse({ ...valid, timeoutMinutes }).success).toBe(false);
+    }
   });
 });
 

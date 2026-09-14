@@ -19,10 +19,46 @@ const draft: ProfileDraft = {
   supportsImages: false,
   supportsTools: false,
   stream: true,
+  timeoutMinutes: "10",
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: false,
 };
+
+/// How long to wait for a model that has gone quiet, in whole minutes from one to sixty.
+describe("the reply timeout", () => {
+  // Shown rather than left blank, so the form says what a new model will do.
+  it("starts a new model at ten minutes", () => {
+    expect(blankDraft().timeoutMinutes).toBe("10");
+  });
+
+  it("carries a chosen timeout through", () => {
+    const result = toProfile({ ...draft, timeoutMinutes: "45" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.timeoutMinutes).toBe(45);
+  });
+
+  // An emptied box is not "no timeout" - there is always one - so it goes back to the default.
+  it("uses the default when the box is emptied", () => {
+    const result = toProfile({ ...draft, timeoutMinutes: "  " });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.timeoutMinutes).toBe(10);
+  });
+
+  it("reports anything outside one to sixty whole minutes as that field's problem", () => {
+    for (const value of ["61", "0", "2.5", "lots"]) {
+      const result = toProfile({ ...draft, timeoutMinutes: value });
+      expect(result.ok, value).toBe(false);
+      if (!result.ok) expect(result.issues).toContain("timeoutMinutes");
+    }
+  });
+
+  it("shows a stored timeout in the form", () => {
+    const result = toProfile({ ...draft, timeoutMinutes: "25" });
+    if (!result.ok) throw new Error("expected a valid profile");
+    expect(draftFrom(result.profile).timeoutMinutes).toBe("25");
+  });
+});
 
 describe("the context window", () => {
   // An empty box is "I do not know", which is a real answer: the dial then shows what is being sent
@@ -65,6 +101,7 @@ describe("the context window", () => {
       supportsImages: false,
       supportsTools: false,
       stream: true,
+      timeoutMinutes: 10,
       thinking: false,
       reasoningEffort: "medium" as const,
       isDefault: false,

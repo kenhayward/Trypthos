@@ -1,6 +1,7 @@
 "use strict";
 
 const test = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const { createChatProvider } = require("../src/chatProvider");
 
@@ -249,6 +250,232 @@ test("cancelling stops the stream and ends the turn once", async () => {
   });
 
   assert.deepEqual(events, [{ type: "end" }]);
+});
+
+/// How long a model may go quiet before the turn is given up on.
+///
+/// Silence, not duration: the clock restarts with every piece of the reply, so a long answer that
+/// keeps arriving is never cut off, and a model that has simply gone away does not hold the stop
+/// button up for ever. Driven by a timer the test controls, so a ten-minute wait is a step.
+describe("the reply timeout", () => {
+  /// Timers the test fires by hand. Records how long each was set for.
+  function manualTimers() {
+    const pending = new Map();
+    const durations = [];
+    let next = 1;
+    return {
+      durations,
+      setTimeout: (fn, ms) => {
+        const id = next++;
+        pending.set(id, fn);
+        durations.push(ms);
+        return id;
+      },
+      clearTimeout: (id) => pending.delete(id),
+      fire: () => {
+        for (const [id, fn] of [...pending]) {
+          pending.delete(id);
+          fn();
+        }
+      },
+      pending: () => pending.size,
+    };
+  }
+
+  /// Lets every promise that can settle, settle.
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  /// A promise that never settles on its own, and rejects the way fetch does when its signal aborts.
+  const untilAborted = (signal) =>
+    new Promise((_, reject) => {
+      const fail = () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      };
+      if (signal.aborted) fail();
+      else signal.addEventListener("abort", fail, { once: true });
+    });
+
+  function timedProvider(fetchImpl, timers) {
+    return createChatProvider({
+      fetchImpl,
+      secrets: { getKey: async () => null },
+      logger: silent,
+      timers,
+    });
+  }
+
+  it("gives up on an endpoint that never answers, and says why", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+    const running = timedProvider((_url, init) => untilAborted(init.signal), timers).run({
+      profile: PROFILE,
+      turns: TURNS,
+      onEvent,
+    });
+
+    await settle();
+    timers.fire();
+    await running;
+
+    const failure = events.find((event) => event.type === "error");
+    assert.match(failure.message, /Local model sent nothing for 10 minutes/);
+    assert.match(failure.message, /Settings/);
+    assert.deepEqual(events.at(-1), { type: "end" });
+  });
+
+  it("waits ten minutes for a model that has not been given a timeout", async () => {
+    const timers = manualTimers();
+    const running = timedProvider((_url, init) => untilAborted(init.signal), timers).run({
+      profile: PROFILE,
+      turns: TURNS,
+      onEvent: () => {},
+    });
+
+    await settle();
+    assert.deepEqual(timers.durations, [10 * 60_000]);
+    timers.fire();
+    await running;
+  });
+
+  it("waits as long as the model's own timeout says", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+    const running = timedProvider((_url, init) => untilAborted(init.signal), timers).run({
+      profile: { ...PROFILE, timeoutMinutes: 60 },
+      turns: TURNS,
+      onEvent,
+    });
+
+    await settle();
+    assert.deepEqual(timers.durations, [60 * 60_000]);
+    timers.fire();
+    await running;
+
+    assert.match(events.find((event) => event.type === "error").message, /60 minutes/);
+  });
+
+  it("says one minute, not one minutes", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+    const running = timedProvider((_url, init) => untilAborted(init.signal), timers).run({
+      profile: { ...PROFILE, timeoutMinutes: 1 },
+      turns: TURNS,
+      onEvent,
+    });
+
+    await settle();
+    timers.fire();
+    await running;
+
+    assert.match(events.find((event) => event.type === "error").message, /for 1 minute,/);
+  });
+
+  // Silence, not duration. A reply still arriving is a model still working.
+  it("starts the clock again with every piece of the reply", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+
+    await timedProvider(
+      streamingFetch([
+        'data: {"choices":[{"delta":{"content":"One"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" two"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" three"}}]}\n\n',
+        "data: [DONE]\n\n",
+      ]),
+      timers,
+    ).run({ profile: PROFILE, turns: TURNS, onEvent });
+
+    // Armed for the request, again when the answer began, and again for each of the four pieces.
+    assert.ok(timers.durations.length >= 5, `armed ${timers.durations.length} times`);
+    assert.equal(events.some((event) => event.type === "error"), false);
+    // And nothing left running once the turn is over - a stray ten-minute timer would fire an error
+    // into a conversation that finished long ago.
+    assert.equal(timers.pending(), 0);
+  });
+
+  // What already arrived is the model's actual words, and a partial answer is often worth reading.
+  it("keeps what arrived when a reply goes quiet part-way", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+    const fetchImpl = async (_url, init) => {
+      let sent = false;
+      return {
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (!sent) {
+                sent = true;
+                return {
+                  done: false,
+                  value: Buffer.from('data: {"choices":[{"delta":{"content":"Half"}}]}\n\n'),
+                };
+              }
+              return untilAborted(init.signal);
+            },
+            cancel: async () => {},
+          }),
+        },
+      };
+    };
+
+    const running = timedProvider(fetchImpl, timers).run({ profile: PROFILE, turns: TURNS, onEvent });
+    await settle();
+    await settle();
+    timers.fire();
+    await running;
+
+    assert.deepEqual(events[0], { type: "token", text: "Half" });
+    assert.match(events.find((event) => event.type === "error").message, /sent nothing for 10 minutes/);
+    assert.deepEqual(events.at(-1), { type: "end" });
+  });
+
+  // With streaming off the whole reply is one wait, so the timeout bounds all of it.
+  it("gives up on a complete reply that never comes", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+    const fetchImpl = async (_url, init) => ({
+      ok: true,
+      status: 200,
+      body: null,
+      json: () => untilAborted(init.signal),
+    });
+
+    const running = timedProvider(fetchImpl, timers).run({
+      profile: { ...PROFILE, stream: false },
+      turns: TURNS,
+      onEvent,
+    });
+    await settle();
+    timers.fire();
+    await running;
+
+    assert.match(events.find((event) => event.type === "error").message, /sent nothing for 10 minutes/);
+    assert.deepEqual(events.at(-1), { type: "end" });
+  });
+
+  // Stop is the user's choice, not a failure: it ends quietly, and does not claim a timeout.
+  it("still ends quietly when the user stops the reply", async () => {
+    const timers = manualTimers();
+    const { events, onEvent } = collect();
+    const controller = new AbortController();
+    const running = timedProvider((_url, init) => untilAborted(init.signal), timers).run({
+      profile: PROFILE,
+      turns: TURNS,
+      onEvent,
+      signal: controller.signal,
+    });
+
+    await settle();
+    controller.abort();
+    await running;
+
+    assert.deepEqual(events, [{ type: "end" }]);
+    assert.equal(timers.pending(), 0);
+  });
 });
 
 test("passes usage through when the provider reports it", async () => {
