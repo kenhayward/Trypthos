@@ -988,6 +988,13 @@ can take. An attachment that does not fit is **marked on its chip** - "cut short
 beginning is sent, "not sent" when none of it is - with the reason on hover, so a file the model did
 not really see never looks like one it did.
 
+**A file the model reads for itself follows the same budget.** When the model reads a file from the
+folder you gave it, that file may be as long as the same budget allows - nine tenths of the window,
+or about 60,000 characters with no window set. A longer file is cut to fit: the model is told it only
+has the beginning, and the call is marked in the reply's **Tool calls** block - "cut short: 3,600 of
+5,011 characters sent" on the call itself, and "1 cut short" on the block's own line, so you can see
+it without opening the block. Saved chats keep the mark.
+
 Starting a new conversation clears its attachments rather than carrying them into the next one.
 
 Chats are saved on your machine. A chat references the file and workspace it was about rather than

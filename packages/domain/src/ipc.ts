@@ -415,6 +415,16 @@ export const ChatEventSchema = z.discriminatedUnion("type", [
   /// `toolCallDetail`). Shown live so a turn that pauses for several seconds says what it is doing
   /// rather than look stuck, and recorded on the reply for its list of tool calls.
   z.object({ type: z.literal("tool"), name: z.string(), detail: z.string() }).strict(),
+  /// The file the tool call just reported was longer than the model's budget, so only `sent` of its
+  /// `total` characters went to the model - see `capRead`. Belongs to the most recent `tool` event,
+  /// which is the call that read it; the panel marks that call.
+  z
+    .object({
+      type: z.literal("tool-cut"),
+      sent: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("usage"),

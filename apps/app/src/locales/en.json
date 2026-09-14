@@ -187,6 +187,8 @@
     "readingFile": "Reading {{path}}...",
     "usingTool": "Using {{tool}}...",
     "toolCalls": "Tool calls ({{calls}})",
+    "toolCallsCut": "Tool calls ({{calls}}) - {{cut}} cut short",
+    "toolCallCut": "- cut short: {{sent}} of {{total}} characters sent",
     "context": {
       "used": "About {{tokens}} of {{limit}} tokens used",
       "unknown": "About {{tokens}} tokens. Set this model's context window in Settings to see how much is left.",
@@ -311,7 +313,7 @@
       "temperature": "Temperature",
       "maxTokens": "Max tokens",
       "contextWindow": "Context window",
-      "contextWindowHint": "How many tokens this model can hold in one conversation, from the provider you are using. It is only used to show how full the context is - leave it empty if you do not know.",
+      "contextWindowHint": "How many tokens this model can hold in one conversation, from the provider you are using. It shows how full the context is, and lets your document and attachments use up to nine tenths of it - leave it empty if you do not know, and they are limited to about 60,000 characters.",
       "supportsImages": "This model accepts images",
       "makeDefault": "Start new chats with this model",
       "apiKey": "API key",

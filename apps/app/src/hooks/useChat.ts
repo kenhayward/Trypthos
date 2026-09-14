@@ -6,6 +6,7 @@ import {
   historyWithoutReply,
   noteReasoning,
   noteTool,
+  noteToolCut,
   setReply,
   wireTurns,
   type ToolCall,
@@ -96,6 +97,12 @@ export function useChat(
         const call = { name: event.name, detail: event.detail };
         setActivity(call);
         setTurns((current) => noteTool(current, call));
+        return;
+      }
+      if (event.type === "tool-cut") {
+        // The file the last call read was longer than the model's budget. Marked on that call so the
+        // user can see the model did not read the whole of it.
+        setTurns((current) => noteToolCut(current, { sent: event.sent, total: event.total }));
         return;
       }
       if (event.type === "error") {

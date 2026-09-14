@@ -186,6 +186,33 @@ describe("saved reasoning", () => {
     expect(loaded?.turns[0]).toEqual({ role: "user", content: "Hello" });
   });
 
+  // A read that had to be cut to the model's budget keeps its warning in the saved chat, so scrolling
+  // back to it still says the model did not see the whole file.
+  it("keeps how much of a read was sent", () => {
+    const tools = [
+      { name: "get_file_contents", detail: "notes/big.md", cut: { sent: 3_600, total: 5_003 } },
+    ];
+    const loaded = loadChatSession({
+      ...base,
+      turns: [{ role: "assistant", content: "Hi", tools }],
+    });
+
+    expect(loaded?.schemaVersion).toBe(5);
+    expect(loaded?.turns[0]?.tools).toEqual(tools);
+  });
+
+  // A version 4 chat has no cuts to report - reads were never cut - so it loads as it was.
+  it("loads a version 4 chat unchanged", () => {
+    const tools = [{ name: "get_file_contents", detail: "notes/a.md" }];
+    const loaded = loadChatSession({
+      ...base,
+      schemaVersion: 4,
+      turns: [{ role: "assistant", content: "Hi", tools }],
+    });
+
+    expect(loaded?.turns[0]?.tools).toEqual(tools);
+  });
+
   // The strict turn schema is what stops a half-migrated file loading as though it were whole.
   it("refuses a current chat that still carries the old field", () => {
     expect(

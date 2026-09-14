@@ -398,6 +398,26 @@ describe("the conversation a provider receives", () => {
   });
 });
 
+/// A read cut to the model's budget, reported by the shell straight after the call that read it.
+describe("a read that was cut", () => {
+  it("marks the call that read it", async () => {
+    const { bridge, push } = fakeBridge();
+    const { result } = renderHook(() => useChat(bridge, "one", () => EMPTY_CONTEXT));
+
+    await act(async () => {
+      await result.current.send("What is in there?");
+    });
+    act(() => push({ type: "tool", name: "get_file_contents", detail: "notes/big.md" }));
+    act(() => push({ type: "tool-cut", sent: 3_600, total: 5_003 }));
+    act(() => push({ type: "token", text: "It is long." }));
+    act(() => push({ type: "end" }));
+
+    expect(result.current.turns.at(-1)?.tools).toEqual([
+      { name: "get_file_contents", detail: "notes/big.md", cut: { sent: 3_600, total: 5_003 } },
+    ]);
+  });
+});
+
 /// A slash command, answered by the app.
 ///
 /// Nothing is sent, nothing streams, and neither turn goes back to a provider on the next question -

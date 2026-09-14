@@ -1481,6 +1481,16 @@ the model; and `chat:send` refuses (`bad-request`) a context whose `contextChara
 renderer is untrusted. `attachmentsCutShort(context)` - from the same resolved context the dial
 counts - drives the "cut short" / "not sent" marks on `ChatScope`'s chips.
 
+**Tool reads use the same budget, per read.** `READ_CHARACTER_LIMIT` (20,000) was declared when
+`get_file_contents` was added and never applied, so reads sent whole files of any size. It is gone;
+`chatProvider.js` passes every read - tool call and fenced block alike - through
+`capRead(content, contextCharacterBudget(profile.contextWindow))`. A cut read carries a note to the
+model saying how much it has, and the provider emits a `tool-cut` chat event (`sent`, `total`)
+immediately after the `tool` event for that read. Reads run one at a time, so `noteToolCut` marks the
+reply's latest tool call; `ChatPanel` shows the cut on that call and counts cut calls on the closed
+`<details>` summary. Saved chats keep it: `CHAT_SESSION_VERSION` 5 adds an optional `cut` to a tool call,
+with an identity migration (the version exists for the older build reading a newer file).
+
 It counts `contextTurns(context)` rather than the raw document, deliberately: the fences and the
 explanations wrapped around a file are real tokens the user pays for, and a dial counting different
 text from the request would be worse than no dial.
