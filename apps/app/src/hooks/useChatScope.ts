@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EMPTY_CONTEXT,
+  qualifyPath,
   resolveChatContext,
+  splitQualified,
   type ChatContext,
   type FolderOutline,
 } from "@trypthos/domain";
@@ -91,15 +93,37 @@ export function useChatScope(
     if (bridge === null || files.length > 0) return;
 
     const result = await bridge.workspaceOutline(folderPath);
-    if (result.ok) setLoaded({ folder: folderPath, paths: result.outline.paths });
+    if (!result.ok) return;
+
+    // Qualified here, because the outline names files from the WORKSPACE ROOT - that list is what
+    // the model is shown - while a read has to say which of the open folders it means. Left as it
+    // came, every file chosen from the picker was a read of nothing, refused and dropped.
+    const workspaceId = splitQualified(folderPath)?.workspaceId;
+    setLoaded({
+      folder: folderPath,
+      paths:
+        workspaceId === undefined
+          ? result.outline.paths
+          : result.outline.paths.map((path) => qualifyPath(workspaceId, path)),
+    });
   }, [bridge, files.length, folderPath]);
+
+  /// Why the last attach failed, as a failure reason, or null.
+  ///
+  /// Kept rather than dropped: a file that could not be read used to vanish without a word, which is
+  /// exactly what made a broken picker look like a list whose entries did nothing.
+  const [attachFailure, setAttachFailure] = useState<string | null>(null);
 
   const attach = useCallback(
     async (path: string) => {
       if (bridge === null) return;
 
       const result = await bridge.readFile(path);
-      if (!result.ok) return;
+      if (!result.ok) {
+        setAttachFailure(result.reason);
+        return;
+      }
+      setAttachFailure(null);
 
       // Deduplicated inside the update rather than before the read. Two attaches in quick
       // succession both see the same captured list, so a check outside here lets the second one
@@ -120,6 +144,7 @@ export function useChatScope(
   const clear = useCallback(() => {
     setAttachments([]);
     setIncludeFolder(false);
+    setAttachFailure(null);
   }, []);
 
   /// Built when a turn is sent, so it sees the selection and the buffer as they are then.
@@ -144,6 +169,7 @@ export function useChatScope(
     includeFolder,
     setIncludeFolder,
     attach,
+    attachFailure,
     detach,
     clear,
     context,

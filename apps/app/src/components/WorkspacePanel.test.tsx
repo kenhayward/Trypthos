@@ -1,8 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import WorkspacePanel from "./WorkspacePanel";
-import type { WorkspaceRef } from "@trypthos/domain";
+import { IMAGE_TYPE_ID, type WorkspaceRef } from "@trypthos/domain";
+import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import type { FolderState } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 
@@ -559,6 +560,79 @@ describe("the workspace menu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Open in New Window ..." }));
 
     expect(onOpenInNewWindow).toHaveBeenCalledWith("Diariz/docs/plan.md");
+  });
+
+  /// Adding a file to the chat's context from the tree, rather than hunting for it in the chat's own
+  /// picker, which lists only the selected folder.
+  describe("add to chat", () => {
+    it("adds the file whose menu was opened", async () => {
+      const onAddToChat = vi.fn();
+      panel({ onAddToChat });
+      const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
+
+      expect(onAddToChat).toHaveBeenCalledWith("Diariz/docs/plan.md");
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    // Unlike a new window, a read works for a repository file too, so the entry is offered there.
+    it("is offered for a file in a repository", async () => {
+      const onAddToChat = vi.fn();
+      panel({
+        onAddToChat,
+        workspaces: [ESSAYS],
+        folders: {
+          essays: { status: "loaded", children: [{ id: "essays/draft.md", name: "draft.md", kind: "file" }] },
+        },
+      });
+      const user = await rightClick(screen.getByRole("button", { name: /draft\.md/ }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
+      expect(onAddToChat).toHaveBeenCalledWith("essays/draft.md");
+    });
+
+    // A picture has no text to send, so offering it would only ever produce a refusal.
+    it("is not offered for a picture", async () => {
+      panel({ onAddToChat: vi.fn(), fileTypes: ["markdown", IMAGE_TYPE_ID] });
+      await rightClick(screen.getByRole("button", { name: /logo\.png/ }));
+
+      expect(screen.queryByRole("menuitem", { name: "Add to Chat" })).toBeNull();
+    });
+
+    it("is not offered for a folder", async () => {
+      panel({ onAddToChat: vi.fn() });
+      await rightClick(screen.getByRole("button", { name: /docs/ }));
+
+      expect(screen.queryByRole("menuitem", { name: "Add to Chat" })).toBeNull();
+    });
+
+    it("is not offered where there is no chat to add to", async () => {
+      panel();
+      await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      expect(screen.queryByRole("menuitem", { name: "Add to Chat" })).toBeNull();
+    });
+
+    // Dragging a file row carries its qualified path under the tree's own type - the chat panel
+    // takes that and nothing else, so dragging stray text over it attaches nothing.
+    it("lets a file be dragged, carrying its path", () => {
+      panel({ onAddToChat: vi.fn() });
+      const setData = vi.fn();
+      const dataTransfer = { setData, effectAllowed: "" };
+
+      fireEvent.dragStart(screen.getByRole("button", { name: /plan\.md/ }), { dataTransfer });
+
+      expect(setData).toHaveBeenCalledWith(TREE_FILE_TYPE, "Diariz/docs/plan.md");
+      expect(dataTransfer.effectAllowed).toBe("copy");
+    });
+
+    it("is not draggable where there is no chat to drop it on", () => {
+      panel();
+      expect(screen.getByRole("button", { name: /plan\.md/ }).getAttribute("draggable")).not.toBe(
+        "true",
+      );
+    });
   });
 
   it("refreshes that workspace when Refresh is chosen, and closes", async () => {

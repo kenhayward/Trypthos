@@ -5,6 +5,24 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.71.0",
+    date: "2026-09-14",
+    pr: 144,
+    headline: "Add files to the chat from the folder browser, and make Attach a file work",
+    summary:
+      "Choosing a file from the chat's Attach a file list did nothing: the list closed and no attachment appeared. The list named files one way and reading them needed another, so every pick was quietly refused. Picks now attach, and a file that cannot be attached - too large, not text, or no longer there - says so beside the attachments instead of vanishing without a word. You can also add a file to the chat straight from the folder browser, either with Add to Chat on the file's right-click menu, which works in any open folder or repository and opens the chat panel if it was hidden, or by dragging the file onto the chat panel, which shows that it will take it while you hold it there. Attachments now show the file's name, with its full path on hover, so a long folder name no longer hides which file it is.",
+    added: [
+      "Add to Chat on a file's right-click menu in the folder browser.",
+      "Drag a file from the folder browser onto the chat panel to attach it.",
+    ],
+    changed: [
+      "An attachment shows the file's name, with its full path on hover.",
+    ],
+    fixed: [
+      "Choosing a file from Attach a file now attaches it, and a file that cannot be attached says why.",
+    ],
+  },
+  {
     version: "0.70.0",
     date: "2026-09-14",
     pr: 142,

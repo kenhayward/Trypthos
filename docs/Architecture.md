@@ -1355,6 +1355,33 @@ strict turn schema refuses a current-version file that still carries `reads`.
 
 This is also the shape `docs/specs/reasoning-display.md` recommends for reasoning - a second use of
 it, arrived at independently.
+
+### Attachments are read by qualified path, whichever way they arrive
+
+`useChatScope.attach(path)` reads through `client.readFile`, which - like every read - needs a
+**qualified** path. The three ways in all hand it one:
+
+- **The Attach a file picker** lists `workspace:outline` for the selected folder. The outline's
+  `paths` are workspace-relative, because that list is what the MODEL is shown, so `loadFiles`
+  qualifies them with the selected folder's workspace id before the picker sees them. Until that was
+  added every pick read nothing: the refusal (`no-workspace`) was dropped, and the click looked like it
+  did nothing (#143). The test that should have caught it used a fake whose outline and reads shared
+  one namespace; the new one answers the way the shell does.
+- **Add to Chat** on a file row in `WorkspacePanel` passes the row's node id, which is already
+  qualified. Offered for any workspace (a repository file reads like a local one), never for a picture,
+  and only while `App` passes `onAddToChat` - chat shown, a shell present, and no reply streaming. It
+  also un-collapses the chat panel, since an attachment nobody can see was added nowhere.
+- **Drag and drop**: file rows are `draggable` (same condition) and set `TREE_FILE_TYPE`
+  (`application/x-trypthos-file`, `lib/treeDrag.ts`) to the node id, `effectAllowed: "copy"`.
+  `ChatPanel`'s `aside` accepts a drop only when that type is present, a model is configured and
+  nothing is streaming. An app-specific type rather than `text/plain`, so stray text is not taken and
+  CodeMirror does not insert the path as text when the drag crosses the editor.
+
+A failed read is no longer silent: `attachFailure` holds the reason, cleared by the next successful
+attach or `clear`, and `ChatScope` shows it through `attachFailureKey` (`chat.scope.attachFailed.*`),
+wording of its own rather than the editor's open/save refusals. Chips show the file name with the
+qualified path as the title, because a qualified path truncated from the right hides the name.
+
 ### The barrel is a contract the compiler cannot see
 
 `apps/desktop` is plain CommonJS, so a name it destructures from `@trypthos/domain` that the barrel

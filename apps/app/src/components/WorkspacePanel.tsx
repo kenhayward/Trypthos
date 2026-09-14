@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { enabledFileTypes, workspaceRefLabel } from "@trypthos/domain";
+import { enabledFileTypes, isImageName, workspaceRefLabel } from "@trypthos/domain";
 import type { WorkspaceRef } from "@trypthos/domain";
+import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 import type { RemoteNode } from "../lib/workspaceClient";
@@ -48,6 +49,9 @@ interface Props {
   onNewFolder: (directory: string) => void;
   /// Opens one local file in a separate document-only Electron window.
   onOpenInNewWindow: (path: string) => void;
+  /// Adds one file to the chat's context - from a file's right-click menu, or by dragging its row
+  /// onto the chat panel. Absent where there is no chat to add to, which takes both away.
+  onAddToChat?: (path: string) => void;
   onOpenFile: (node: RemoteNode) => void;
   /// The file types the user has turned on, by id. What the tree lists is filtered by these, and
   /// the footer names them.
@@ -95,6 +99,7 @@ export default function WorkspacePanel({
   onNewFile,
   onNewFolder,
   onOpenInNewWindow,
+  onAddToChat,
   onOpenFile,
   fileTypes,
   selectedFolder,
@@ -135,6 +140,10 @@ export default function WorkspacePanel({
       : null;
   const newFolderDirectory = menuWorkspace?.ref.kind === "local" ? menu?.directory ?? null : null;
   const newWindowFile = menuWorkspace?.ref.kind === "local" ? menu?.file ?? null : null;
+  // Any workspace, unlike a new window: a repository file reads like any other. Not a picture,
+  // which has no text to send and would only ever be refused.
+  const chatFile =
+    onAddToChat !== undefined && menu?.file != null && !isImageName(menu.file) ? menu.file : null;
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.
   ///
   /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
@@ -329,6 +338,7 @@ export default function WorkspacePanel({
                       open={openPaths.includes(row.node.id)}
                       dirty={dirtyPaths.includes(row.node.id)}
                       onOpen={() => onOpenFile(row.node)}
+                      draggable={onAddToChat !== undefined}
                       onContextMenu={(event) => {
                         event.stopPropagation();
                         openMenu(event, workspace.id, workspace.id, row.node.id);
@@ -370,6 +380,16 @@ export default function WorkspacePanel({
                   }}
                 >
                   {t("workspace.openInNewWindow")}
+                </ContextMenuItem>
+              )}
+              {chatFile !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onAddToChat?.(chatFile);
+                  }}
+                >
+                  {t("workspace.addToChat")}
                 </ContextMenuItem>
               )}
               {/* The same entry for a folder and a repository. What refreshing a repository changes
@@ -598,6 +618,7 @@ function FileRow({
   open,
   dirty,
   onOpen,
+  draggable,
   onContextMenu,
 }: {
   row: TreeRow;
@@ -605,6 +626,8 @@ function FileRow({
   open: boolean;
   dirty: boolean;
   onOpen: () => void;
+  /// Whether the row can be dragged onto the chat panel. Only when there is a chat to drop it on.
+  draggable: boolean;
   onContextMenu: (event: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
@@ -634,6 +657,17 @@ function FileRow({
       type="button"
       onClick={onOpen}
       onContextMenu={onContextMenu}
+      // The qualified path, under the tree's own drag type - see `TREE_FILE_TYPE`. Copy, not move:
+      // adding a file to a conversation leaves it exactly where it was.
+      draggable={draggable || undefined}
+      onDragStart={
+        draggable
+          ? (event) => {
+              event.dataTransfer.setData(TREE_FILE_TYPE, row.node.id);
+              event.dataTransfer.effectAllowed = "copy";
+            }
+          : undefined
+      }
       aria-current={selected ? "true" : undefined}
       // Three states, not two: the file you are in, the files you have open behind it, and the rest.
       // Without the middle one a click on an open file looks like it did nothing, when what it did

@@ -897,6 +897,14 @@ A reply that quietly consulted five files, or quietly did not, is one you cannot
 without pasting one into the other. Attachments are read when you attach them, so editing a file
 afterwards does not silently change what an earlier answer was about.
 
+There are three ways to attach one. **Attach a file** above the message box lists the files in the
+folder selected in the browser. **Right-click a file** in the browser and choose **Add to Chat** - it
+works for any open folder or repository, not only the selected one, and opens the chat panel if it
+was hidden. Or **drag a file** from the browser onto the chat panel, which says it will take it while
+you hold it there. Each attachment shows the file's name, with its full path on hover. A file that
+cannot be attached - too large, not text, or gone - says so beside the attachments rather than
+quietly doing nothing, and none of the three work while a reply is still arriving.
+
 A model with a **reasoning mode** shows its thinking under any reply that has some, **folded away**:
 open it when you are interested, and it stays closed otherwise. It belongs to that reply, so it is
 still there when you scroll back, and it is kept when you save the chat - shortened rather than
