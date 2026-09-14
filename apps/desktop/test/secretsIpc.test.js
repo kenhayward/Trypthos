@@ -229,6 +229,7 @@ test("every channel the preload bridge names is registered, and vice versa", asy
       "window:close",
       "document:dirty",
       "document:confirmDiscard",
+      "document:takeDraft",
       "menu:popup",
     ];
     const registered = [...ipcMain.handlers.keys()].sort();

@@ -752,6 +752,21 @@ which folder is still loading are testable without a tree or a filesystem.
   the resolved root and relative file only as its initial route, then uses the ordinary workspace
   hook and editor surface. `EditorPanel` omits tabs, header, toolbar and status in that route, while
   `windowHandlers.js` routes dirty state and close confirmation to the guard belonging to its sender.
+- **A tab moves into a document window by handoff, and closes only on acknowledgement.** The tab
+  menu's Open in New Window calls `moveToNewWindow`, which sends `file:openInNewWindow` with an
+  optional `draft: { content, revision }` (`DocumentDraftSchema`) when the tab is dirty. The text is
+  never put in the window's URL: `main.js` holds it in `documentHandoff.js`, keyed by the new
+  window's `webContents.id`, and the new renderer claims it once over `document:takeDraft` - answered
+  by the id of the SENDER, so no payload can name another window's draft. The `file:openInNewWindow`
+  invoke resolves only when that claim is made; the window closing, crashing, failing its main-frame
+  load, or not claiming within `CLAIM_TIMEOUT_MS` (30s) resolves `window-failed`, and the tab stays
+  open. On success the tab is closed without the discard prompt, but only if its content and dirty
+  flag are unchanged since the snapshot was sent - text typed while the window opened is not in it.
+  `SingleDocumentWindow` validates the claim with `TakeDraftResponse` (`lib/documentDraft.ts`) and
+  opens the draft dirty with the tab's revision (`openTarget` + `DocumentSource.dirty`), not a fresh
+  read, so a file changed on disk meanwhile is a conflict at the first save rather than an
+  overwrite. Eligibility (`canOpenInNewWindow`) is the tree's local-only rule plus "not a never-saved
+  draft".
 - **Counting is lazy, and that is measured rather than assumed.** A recursive markdown count took 5ms
   on this repo, 80ms on Diariz, and **40 seconds across 113,000 folders on a home directory** - which
   is a perfectly plausible workspace. The footer therefore counts what is on screen.

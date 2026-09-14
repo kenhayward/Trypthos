@@ -36,6 +36,7 @@ const { APP_NAME } = require("./appName");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
 const { closeDecision, createCloseGuard } = require("./closeGuard");
+const { createDocumentHandoff } = require("./documentHandoff");
 const { createUpdater } = require("./updater");
 const { createTray } = require("./tray");
 const { revealWindow } = require("./revealWindow");
@@ -47,6 +48,8 @@ let mainWindow = null;
 /// Each document-only window needs its own dirty bit and close permission. Holding them by window
 /// means the shared IPC handlers can route an event back to the renderer that sent it.
 const documentGuards = new Map();
+/// Unsaved text travelling from a tab into a document window of its own. See `documentHandoff.js`.
+const documentHandoff = createDocumentHandoff();
 
 /// Unsaved work, and whether the window may close on it. Built once and shared: the close listener
 /// reads it, and the document channels write to it. See `closeGuard.js` for the split.
@@ -144,11 +147,30 @@ function createDocumentWindow(target) {
     event.preventDefault();
     guard.requestClose();
   });
-  documentWindow.on("closed", () => documentGuards.delete(documentWindow));
+  // Read now: `webContents` cannot be reached once the window is destroyed, which is exactly when the
+  // handoff most needs to hear about it.
+  const contentsId = documentWindow.webContents.id;
+  documentWindow.on("closed", () => {
+    documentGuards.delete(documentWindow);
+    documentHandoff.abandon(contentsId);
+  });
   documentWindow.once("ready-to-show", () => documentWindow.show());
   protectNavigation(documentWindow);
-  void loadRenderer(documentWindow, target);
-  return { ok: true };
+
+  // A tab with unsaved work moving in. The answer waits until this window's page has claimed the
+  // text, so the tab it came from closes only once the text is somewhere - and a window whose page
+  // never gets that far says so, leaving the tab open.
+  const draft = target.draft ?? null;
+  const claimed = draft === null ? Promise.resolve({ ok: true }) : documentHandoff.hold(contentsId, draft);
+  if (draft !== null) {
+    documentWindow.webContents.on("render-process-gone", () => documentHandoff.abandon(contentsId));
+    documentWindow.webContents.on("did-fail-load", (_event, _code, _description, _url, isMainFrame) => {
+      if (isMainFrame) documentHandoff.abandon(contentsId);
+    });
+  }
+
+  void loadRenderer(documentWindow, { root: target.root, file: target.file });
+  return claimed;
 }
 
 /// The menu handlers, shared between the popup channel and the context-menu listener.
@@ -395,6 +417,7 @@ if (!gotLock) {
       getWindowForEvent: (event) =>
         event?.sender ? BrowserWindow.fromWebContents(event.sender) ?? mainWindow : mainWindow,
       guardForWindow: (window) => documentGuards.get(window) ?? closeGuard,
+      takeDraft: (contentsId) => documentHandoff.take(contentsId),
     });
 
     /// The recent files list, as the menus need it.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DiscardChoice } from "@trypthos/domain";
+import type { DiscardChoice, DocumentDraft } from "@trypthos/domain";
 import type { DocumentSet, OpenDocument, Revision, WorkspaceRef } from "@trypthos/domain";
 import {
   GUIDE_PATH,
@@ -156,9 +156,18 @@ export interface WorkspaceActions {
   createDirectory(directory: string, name: string): Promise<void>;
   /// Opens a local file in its own Electron window, keeping this workspace and its tabs untouched.
   openInNewWindow(path: string): Promise<void>;
+  /// Moves an open tab into its own window, unsaved text and all, then closes the tab.
+  ///
+  /// The tab closes only once the new window HAS the text, and only if nothing was typed into the
+  /// tab while that window opened. Any other outcome leaves the tab open: the worst case is the same
+  /// text in two places, never in none.
+  moveToNewWindow(path: string): Promise<void>;
   /// Opens what the app was handed from outside - a folder from File Explorer, or a markdown file
   /// within one. A file names both, because every path here is relative to one open folder.
-  openTarget(target: { root: string; file: string | null }): Promise<void>;
+  ///
+  /// `draft` is a tab's unsaved text moved into this window, opened as it was rather than read from
+  /// disk, and saved against the revision that tab had read.
+  openTarget(target: { root: string; file: string | null; draft?: DocumentDraft | null }): Promise<void>;
   /// Closes one document, asking about its unsaved work first. Nothing else is disturbed.
   closeFile(path: string): Promise<void>;
   /// Closes several, in the order given, asking about each unsaved one in turn.
@@ -274,6 +283,10 @@ export function failureKey(reason: string): string | null {
     // user has to be told their token was not saved - not that it was rejected.
     case "encryption-unavailable":
       return "errors.encryptionUnavailable";
+    // A tab that could not move into its own window. Its own key, because the question a user has
+    // after a move that did not happen is where their text went - and the answer is "still here".
+    case "window-failed":
+      return "errors.windowFailed";
     default:
       return "errors.unknown";
   }
@@ -325,6 +338,21 @@ function reportIfLocal(
   const root = rootOf(workspaces, qualified);
   const relative = splitQualified(qualified)?.path;
   if (root !== null && relative !== undefined) report?.({ root, path: relative });
+}
+
+/// Whether an open document can be moved into a window of its own.
+///
+/// The same bound the file tree's Open in New Window has - a file in a LOCAL folder, since a
+/// repository has no folder for another window to open - plus one of its own: a document that has
+/// never been saved has no file behind it for the window to reopen.
+export function canOpenInNewWindow(
+  workspaces: readonly WorkspaceInfo[],
+  documents: readonly Pick<OpenDocument, "path" | "draft">[],
+  path: string,
+): boolean {
+  const document = documents.find((open) => open.path === path);
+  if (document === undefined || document.draft) return false;
+  return rootOf(workspaces, path) !== null;
 }
 
 /// The parent of a workspace-relative directory path. "" is the root and has no parent.
@@ -730,6 +758,38 @@ export function useWorkspace(
     [client, fail],
   );
 
+  const moveToNewWindow = useCallback(
+    async (path: string) => {
+      const { documents } = stateRef.current.documents;
+      if (!canOpenInNewWindow(stateRef.current.workspaces, documents, path)) {
+        fail({ reason: "unsupported" });
+        return;
+      }
+
+      // What the window is sent, kept so it can be compared afterwards. A clean tab sends nothing:
+      // the new window reads the file like one opened from the tree.
+      const sent = documents.find((document) => document.path === path)!;
+      const result = await client.openInNewWindow(
+        path,
+        sent.dirty ? { content: sent.content, revision: sent.revision } : undefined,
+      );
+      if (!result.ok) {
+        fail(result);
+        return;
+      }
+
+      // Closed WITHOUT the unsaved-work prompt: the work was not discarded, it moved. But only if the
+      // tab still holds exactly what was sent - text typed while the window was opening is not in
+      // that window, and closing the tab would throw it away.
+      setInternal((prev) => {
+        const now = prev.documents.documents.find((document) => document.path === path);
+        if (now === undefined || now.content !== sent.content || now.dirty !== sent.dirty) return prev;
+        return { ...prev, documents: closeDocument(prev.documents, path) };
+      });
+    },
+    [client, fail],
+  );
+
   /// May this one document be thrown away?
   ///
   /// One implementation for every path that would discard it - closing its tab, opening another
@@ -932,7 +992,15 @@ export function useWorkspace(
   /// a click in the tree uses - so the prompt about unsaved work, the error banner and the revision
   /// cannot behave differently because a file arrived from Explorer.
   const openTarget = useCallback(
-    async ({ root, file }: { root: string; file: string | null }) => {
+    async ({
+      root,
+      file,
+      draft = null,
+    }: {
+      root: string;
+      file: string | null;
+      draft?: DocumentDraft | null;
+    }) => {
       // Already open: this is another tab in a folder that is already on screen, and nothing about
       // the workspace needs disturbing.
       let workspace =
@@ -954,7 +1022,27 @@ export function useWorkspace(
       // The file arrives relative to the root it was named with - from File Explorer, or from a
       // model opening something in the folder it was given - so it is qualified here, where the
       // workspace that root belongs to has just been established.
-      if (file !== null) await openPath(qualifyPath(workspace.id, file));
+      if (file === null) return;
+      const path = qualifyPath(workspace.id, file);
+
+      // A tab's unsaved text, moved into this window. Opened as the tab had it rather than read: what
+      // is on disk now is not what was being edited, and the revision is the tab's, so a file that
+      // changed underneath it is a conflict at the first save rather than a silent overwrite.
+      if (draft !== null) {
+        setInternal((prev) => ({
+          ...prev,
+          documents: openDocument(prev.documents, {
+            path,
+            content: draft.content,
+            revision: draft.revision,
+            dirty: true,
+          }),
+          busy: false,
+        }));
+        return;
+      }
+
+      await openPath(path);
     },
     [addWorkspace, client, fail, openPath],
   );
@@ -1105,6 +1193,7 @@ export function useWorkspace(
     createEmptyFile,
     createDirectory,
     openInNewWindow,
+    moveToNewWindow,
     openRepoPage: (workspaceId: string) =>
       setInternal((prev) => ({
         ...prev,

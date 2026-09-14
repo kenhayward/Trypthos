@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import EditorPanel from "./components/EditorPanel";
 import { useSettings } from "./hooks/useSettings";
 import { useWorkspace } from "./hooks/useWorkspace";
+import { draftFrom } from "./lib/documentDraft";
 import { settingsBridge, workspaceClient } from "./lib/workspaceClient";
 import { windowControls } from "./lib/windowControls";
 
@@ -28,11 +29,18 @@ export default function SingleDocumentWindow({ root, file }: Props) {
 
   // StrictMode mounts effects twice in development. Opening a document a second time would re-read
   // it and overwrite edits, so this window opens its one target exactly once.
+  //
+  // A window a tab was moved into claims that tab's unsaved text first - once, which is also why the
+  // guard above matters: a second claim would find nothing and open the file from disk instead. The
+  // tab it came from closes only once this claim has been made.
   useEffect(() => {
     if (opened.current) return;
     opened.current = true;
-    void actions.openTarget({ root, file });
-  }, [actions, file, root]);
+    void (async () => {
+      const draft = draftFrom(await client.takeDocumentDraft());
+      await actions.openTarget({ root, file, draft });
+    })();
+  }, [actions, client, file, root]);
 
   useEffect(() => {
     void windowControls().setDocumentDirty(state.anyDirty);

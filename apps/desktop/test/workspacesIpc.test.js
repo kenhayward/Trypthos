@@ -149,7 +149,29 @@ test("opens a local file in a separate window with its workspace root", async ()
     const workspace = (await ipcMain.invoke("workspace:open")).workspace;
 
     assert.deepEqual(await ipcMain.invoke("file:openInNewWindow", { path: `${workspace.id}/a.md` }), { ok: true });
-    assert.deepEqual(opened, [{ root: workspace.ref.root, file: "a.md" }]);
+
+    // A tab moving into the window brings its unsaved text and the revision it was based on, and the
+    // window is handed both - never with the workspace id still on the path.
+    const draft = { content: "one, edited", revision: { id: "rev-1" } };
+    assert.deepEqual(
+      await ipcMain.invoke("file:openInNewWindow", { path: `${workspace.id}/a.md`, draft }),
+      { ok: true },
+    );
+
+    assert.deepEqual(opened, [
+      { root: workspace.ref.root, file: "a.md", draft: null },
+      { root: workspace.ref.root, file: "a.md", draft },
+    ]);
+
+    // A draft that is not the right shape never reaches a window.
+    assert.deepEqual(
+      await ipcMain.invoke("file:openInNewWindow", {
+        path: `${workspace.id}/a.md`,
+        draft: { content: "x" },
+      }),
+      { ok: false, reason: "bad-request" },
+    );
+    assert.equal(opened.length, 2);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
     await fs.rm(userData, { recursive: true, force: true });

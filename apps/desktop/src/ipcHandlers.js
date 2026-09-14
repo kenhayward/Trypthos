@@ -946,7 +946,11 @@ function registerIpcHandlers({
     "file:openInNewWindow",
     guarded(locateQualified, OpenInNewWindowRequest, (request, workspace) => {
       if (workspace.root === null) return { ok: false, reason: "unsupported" };
-      return openInNewWindow({ root: workspace.root, file: request.path });
+      return openInNewWindow({
+        root: workspace.root,
+        file: request.path,
+        draft: request.draft ?? null,
+      });
     }),
   );
 }

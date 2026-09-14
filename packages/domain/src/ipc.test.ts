@@ -14,6 +14,7 @@ import {
   ReadRequest,
   SaveAsRequest,
   SetSecretRequest,
+  TakeDraftResponse,
   WindowStateSchema,
   WriteRequest,
 } from "./ipc";
@@ -52,6 +53,7 @@ describe("IPC_CHANNELS", () => {
       "workspace:refresh",
       "document:dirty",
       "document:confirmDiscard",
+      "document:takeDraft",
       "shell:openExternal",
       "shell:integration",
       "shell:setIntegration",
@@ -150,6 +152,45 @@ describe("OpenInNewWindowRequest", () => {
 
   it("refuses an empty file path", () => {
     expect(() => OpenInNewWindowRequest.parse({ path: "" })).toThrow();
+  });
+
+  // A tab moving to its own window takes its unsaved text with it, and the revision that text was
+  // based on - so a save from the new window still detects a file that changed on disk meanwhile.
+  it("carries a tab's unsaved text and the revision it was based on", () => {
+    const request = {
+      path: "Notes/plan.md",
+      draft: { content: "# Plan\n\nhalf written", revision: { id: "rev-1" } },
+    };
+    expect(OpenInNewWindowRequest.parse(request)).toEqual(request);
+  });
+
+  it("refuses a draft with no revision to measure a save against", () => {
+    expect(() =>
+      OpenInNewWindowRequest.parse({ path: "Notes/plan.md", draft: { content: "x" } }),
+    ).toThrow();
+  });
+
+  it("refuses anything else riding along with the draft", () => {
+    expect(() =>
+      OpenInNewWindowRequest.parse({
+        path: "Notes/plan.md",
+        draft: { content: "x", revision: { id: "r" }, root: "/etc" },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("TakeDraftResponse", () => {
+  // What a document window receives when it claims the draft it was opened with. Validated on
+  // arrival like every other message from the main process.
+  it("accepts a draft, or nothing when the window was opened without one", () => {
+    const draft = { content: "text", revision: { id: "rev-1" } };
+    expect(TakeDraftResponse.parse({ ok: true, draft })).toEqual({ ok: true, draft });
+    expect(TakeDraftResponse.parse({ ok: true, draft: null })).toEqual({ ok: true, draft: null });
+  });
+
+  it("refuses a draft of the wrong shape", () => {
+    expect(() => TakeDraftResponse.parse({ ok: true, draft: { content: 1 } })).toThrow();
   });
 });
 

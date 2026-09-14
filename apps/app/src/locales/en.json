@@ -234,6 +234,7 @@
     "branchExists": "That branch already exists. Choose another name, or commit to the branch that is already there.",
     "readOnlyToken": "Your GitHub token can read but not write. Create one at github.com/settings/tokens with write access to your repositories, then reconnect from the Accounts page of Settings.",
     "encryptionUnavailable": "This machine could not encrypt the token, so it was not saved. Trypthos never stores a credential in plain text.",
+    "windowFailed": "The new window did not open, so the tab is still here with your changes.",
     "unknown": "Something went wrong."
   },
   "about": {

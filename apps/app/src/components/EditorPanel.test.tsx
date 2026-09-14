@@ -33,6 +33,29 @@ function Harness({
 
 const modeButton = (name: string) => screen.getByRole("button", { name });
 
+// The tab menu's Open in New Window reaches whoever owns the documents - the panel only passes it on.
+it("passes the tab menu's Open in New Window through to its caller", async () => {
+  const onOpenInNewWindow = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <EditorPanel
+      workspaceName="Diariz"
+      paths={["docs/notes.md"]}
+      activePath="docs/notes.md"
+      dirty={false}
+      value={DOC}
+      onChange={vi.fn()}
+      canOpenInNewWindow={() => true}
+      onOpenInNewWindow={onOpenInNewWindow}
+    />,
+  );
+
+  await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("tab", { name: /notes\.md/ }) });
+  await user.click(screen.getByRole("menuitem", { name: "Open in New Window ..." }));
+
+  expect(onOpenInNewWindow).toHaveBeenCalledWith("docs/notes.md");
+});
+
 describe("EditorPanel", () => {
   it("shows only the document surface when used in a focused document window", () => {
     render(

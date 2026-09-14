@@ -40,7 +40,7 @@ import { useChatScope } from "./hooks/useChatScope";
 import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
-import { useWorkspace } from "./hooks/useWorkspace";
+import { canOpenInNewWindow, useWorkspace } from "./hooks/useWorkspace";
 import type { CommitChoice } from "./hooks/useWorkspace";
 import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
@@ -685,6 +685,8 @@ export default function App() {
           onActivateFile={actions.activateFile}
           onCloseFile={(path) => void actions.closeFile(path)}
           onCloseFiles={(paths) => void actions.closeFiles(paths)}
+          canOpenInNewWindow={(path) => canOpenInNewWindow(state.workspaces, state.documents, path)}
+          onOpenInNewWindow={(path) => void actions.moveToNewWindow(path)}
           onSelectionChange={(next) => (selection.current = next)}
           // The same rule the rendered surfaces get, reached the other way: CodeMirror draws link
           // text as a decorated span rather than an anchor, so the delegated handler above cannot
