@@ -625,6 +625,29 @@ describe("ChatPanel: saved conversations", () => {
     panel({ turns: [{ role: "user", content: "Hello" }], missingFile: null });
     expect(screen.queryByText(/not in the open folder/)).toBeNull();
   });
+
+  // The folder is saved as a path, so it can only come back if it is open. The attachments came
+  // back with their own text, and the note says so.
+  it("says when the folder a conversation used is not open", () => {
+    panel({ turns: [{ role: "user", content: "Hello" }], missingFolder: "Notes/docs" });
+    expect(
+      screen.getByText("This conversation used the folder Notes/docs, which is not open. Its attached files are still here."),
+    ).toBeDefined();
+  });
+
+  it("names the saved conversation on screen", () => {
+    panel({
+      turns: [{ role: "user", content: "Hello" }],
+      chats: [{ id: "c1", title: "Plan review", updatedAt: "2026-09-15T10:00:00.000Z", filePath: null }],
+      openChatId: "c1",
+    });
+    expect(screen.getByText("Saved as Plan review")).toBeDefined();
+  });
+
+  it("names nothing for a conversation that has not been saved", () => {
+    panel({ turns: [{ role: "user", content: "Hello" }] });
+    expect(screen.queryByText(/^Saved as/)).toBeNull();
+  });
 });
 
 /// What chat can see, beyond the open document.

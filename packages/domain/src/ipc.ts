@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ChatTurnSchema } from "./chatCompletion";
 import { ChatContextSchema } from "./chatContext";
+import { SessionAttachmentSchema, SessionTurnSchema } from "./chatSession";
 import { SettingsSchema } from "./settings";
 import { WorkspaceRefSchema } from "./workspaceRef";
 import { isExternalUrl } from "./markdownLink";
@@ -400,22 +401,38 @@ export const SendChatRequest = z
 
 export const CancelChatRequest = z.object({ streamId: z.string().min(1) }).strict();
 
+/// The longest name a saved conversation may be given.
+export const CHAT_TITLE_LIMIT = 120;
+
 /// Saving a conversation.
 ///
-/// The renderer sends what it holds - the turns, which model answered, which file was open - and the
-/// main process fills in the rest: the id, the timestamps, and the workspace root, which the
-/// renderer cannot name for the same reason it cannot name one to open.
+/// The renderer sends what it holds - the name the user gave it, the turns, which model answered,
+/// which file was open, what was attached - and the main process fills in the rest: the id, the
+/// timestamps, and the workspace root, which the renderer cannot name for the same reason it cannot
+/// name one to open.
 ///
 /// `id` is null for a chat that has never been saved and the id of the chat otherwise, so saving
 /// twice replaces rather than duplicates.
+///
+/// **The turns are the SAVED turn, not the wire one.** A saved chat records what the panel showed,
+/// thinking and tool calls included; checking them against `ChatTurnSchema` - what a provider
+/// receives - refused every reply that had either, and the save failed without a word (#153).
 export const SaveChatRequest = z
   .object({
     id: z.string().nullable(),
-    turns: z.array(ChatTurnSchema).min(1),
+    title: z
+      .string()
+      .refine((title) => title.trim() !== "" && title.length <= CHAT_TITLE_LIMIT, "not a usable name"),
+    turns: z.array(SessionTurnSchema).min(1),
     profileId: z.string().nullable(),
     /// Workspace-relative, as the renderer knows it. Recorded as a reference only: the file may be
     /// renamed or deleted before the chat is opened again.
     filePath: z.string().nullable(),
+    /// Each attached file with its text, so the chat can be reopened and continued however the file
+    /// has changed since.
+    attachments: z.array(SessionAttachmentSchema),
+    /// The folder chat was mapping, qualified, or null. A path only - see `ChatSessionSchema`.
+    folder: z.string().nullable(),
   })
   .strict();
 

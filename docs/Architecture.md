@@ -1754,8 +1754,21 @@ Three rules:
 - **The list carries no conversations.** Summaries only: drawing a menu should not mean reading every
   word of every saved chat.
 
-The title is derived from the first question rather than asked for. A dialog demanding a name before
-a chat can be saved is a dialog people learn to dismiss.
+The title is asked for when saving, in `SaveChatDialog`, prefilled from the open chat's own title or
+`chatTitleFrom` the first question, so the common case is one keypress.
+
+**`SaveChatRequest.turns` is `SessionTurnSchema`, not `ChatTurnSchema`.** It was the wire turn until
+0.74.0, which is strict and refuses `reasoning`, `tools` and `local` - so every conversation with a
+tool call or thinking was refused as `bad-request`, and `App` ignored the result (#153). The handler
+also wrote `schemaVersion: 1` literally; it writes `CHAT_SESSION_VERSION` now.
+
+**`CHAT_SESSION_VERSION` 6** adds `attachments: { path, content }[]` and `folder: string | null`. An
+attachment keeps its TEXT, as `useChatScope` holds it, because a reopened chat must be able to go on
+about the same words; the folder keeps only its qualified path, because a folder is only ever sent as
+an outline. The migration writes `[]` and `null` into a version 5 file. Opening a chat calls
+`useChatScope.restore`, which sets the attachments without reading anything, and turns the folder on
+and selects it in the tree only when its workspace is open - otherwise `ChatPanel` shows
+`missingFolder`.
 
 ### Beyond the open document
 

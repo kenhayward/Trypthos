@@ -20,7 +20,7 @@ import { loadPersisted, type Migration } from "./persisted";
 /// conversation: replacing an unreadable chat with an empty one would look exactly like a chat that
 /// had been lost, so it reports failure instead and the caller can say so.
 
-export const CHAT_SESSION_VERSION = 5;
+export const CHAT_SESSION_VERSION = 6;
 
 /// How much of a reply's thinking a saved chat keeps, in characters.
 ///
@@ -48,7 +48,7 @@ const SessionToolCallSchema = z
 /// NOT `ChatTurnSchema`, which is strict and describes what a PROVIDER receives. A saved chat is a
 /// record of what the panel showed, so it keeps the two things the panel records for itself - what
 /// the model thought, and the tool calls it made. Neither is ever sent back.
-const SessionTurnSchema = z
+export const SessionTurnSchema = z
   .object({
     role: z.enum(["system", "user", "assistant"]),
     content: z.string(),
@@ -81,6 +81,14 @@ export function cappedForSaving<T extends { reasoning?: string }>(
   });
 }
 
+/// A file attached to the conversation, with the text it had when the chat was saved.
+///
+/// The text rather than a reference: reopening a chat has to be able to go on asking about the same
+/// words, and by then the file may have changed, moved or gone - or its folder may not be open.
+export const SessionAttachmentSchema = z
+  .object({ path: z.string().min(1), content: z.string() })
+  .strict();
+
 export const ChatSessionSchema = z
   .object({
     schemaVersion: z.number(),
@@ -98,9 +106,15 @@ export const ChatSessionSchema = z
     /// assumes it resolves.
     profileId: z.string().nullable(),
     turns: z.array(SessionTurnSchema).min(1),
+    /// The files attached when it was saved, each with its text. See `SessionAttachmentSchema`.
+    attachments: z.array(SessionAttachmentSchema).default([]),
+    /// The folder chat was mapping, as a qualified path, or null when none was attached. Only the
+    /// path: a folder is sent to a model as a list of names, never as its contents.
+    folder: z.string().nullable().default(null),
   })
   .strict();
 
+export type SessionAttachment = z.infer<typeof SessionAttachmentSchema>;
 export type ChatSession = z.infer<typeof ChatSessionSchema>;
 
 /// What the list of saved chats shows.
@@ -116,6 +130,15 @@ export interface ChatSessionSummary {
 
 /// No migrations yet. The first shape change writes one here, in the PR that makes it.
 export const CHAT_SESSION_MIGRATIONS: Migration[] = [
+  {
+    to: 6,
+    // Version 6 keeps the files attached to a conversation, with their text, and the folder it was
+    // mapping. A chat saved before had neither kept, so it opens with none. Written out rather than
+    // left to the schema's defaults, so a version 5 file is complete after migrating - and the
+    // version exists for the other direction too: a chat written here and read by the previous
+    // build would fail its strict session schema rather than load without its attachments.
+    migrate: (input) => ({ ...input, attachments: [], folder: null }),
+  },
   {
     to: 5,
     // Version 5 lets a tool call record that its read was cut to the model's budget. Optional in the

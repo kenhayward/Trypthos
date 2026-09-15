@@ -180,7 +180,17 @@
       "empty": "No saved conversations yet.",
       "noFile": "No file",
       "delete": "Delete \"{{title}}\"",
-      "fileMissing": "This conversation was about {{file}}, which is not in the open folder any more."
+      "fileMissing": "This conversation was about {{file}}, which is not in the open folder any more.",
+      "saveTitle": "Save conversation",
+      "name": "Name",
+      "cancel": "Cancel",
+      "confirmSave": "Save",
+      "savesAttachment": "The text of 1 attached file is saved with it.",
+      "savesAttachments": "The text of {{count}} attached files is saved with it.",
+      "savesFolder": "The attached folder is saved as its path, {{folder}}.",
+      "saveFailed": "The conversation could not be saved.",
+      "openTitle": "Saved as {{title}}",
+      "folderMissing": "This conversation used the folder {{folder}}, which is not open. Its attached files are still here."
     },
     "scope": {
       "folder": "Folder",

@@ -7,7 +7,7 @@ const {
   CancelChatRequest,
   ChatIdRequest,
   SaveChatRequest,
-  chatTitleFrom,
+  CHAT_SESSION_VERSION,
   composeMessages,
   contextTurns,
   effectiveSystemPrompt,
@@ -534,13 +534,14 @@ function registerIpcHandlers({
       parsed.data.id === null ? null : await chatStore.loadSession(userDataDir, parsed.data.id);
 
     const session = {
-      schemaVersion: 1,
+      // The version this build writes. A literal 1 here, under a shape several versions on, sent
+      // every saved chat back through migrations written for files it never was.
+      schemaVersion: CHAT_SESSION_VERSION,
       // Generated HERE. An id from the renderer becomes a file name, and the shape check in the
       // store is the last line rather than the only one.
       id: existing?.id ?? randomUUID(),
-      // Derived from the conversation rather than asked for: a dialog demanding a name before a
-      // chat can be saved is a dialog people learn to dismiss.
-      title: chatTitleFrom(parsed.data.turns),
+      // The name the user gave it when saving. The dialog offers the first question as a start.
+      title: parsed.data.title.trim(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       // The renderer never names a workspace root - the main process holds the open ones, and a
@@ -549,6 +550,9 @@ function registerIpcHandlers({
       filePath: parsed.data.filePath,
       profileId: parsed.data.profileId,
       turns: parsed.data.turns,
+      // Each attached file with its text, and the attached folder as a path only.
+      attachments: parsed.data.attachments,
+      folder: parsed.data.folder,
     };
 
     const result = await chatStore.saveSession(userDataDir, session);

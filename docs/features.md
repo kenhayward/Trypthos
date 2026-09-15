@@ -900,9 +900,21 @@ there?` reaches the model exactly as you wrote it.
 
 ### Keeping a conversation
 
-Save a chat from the button at the top of the panel and it is kept between launches. It is named
-after the question that started it, so nothing asks you to invent a title. The clock icon lists what
-you have saved, with the file each conversation was about, and lets you reopen or delete any of them.
+Save a chat from the button at the top of the panel and it is kept between launches. It asks what to
+call the conversation, starting from the question that began it - or from the name it already has, if
+you saved it before - and says what goes with it:
+
+- **Attached files are saved with their text.** The conversation keeps the words it was about, so it
+  can be reopened and carried on even if the file has changed, moved or gone.
+- **An attached folder is saved as its path only.** A folder is only ever sent to a model as a list of
+  file names, so that is all there is to keep.
+
+Every question and reply is kept, with its tool calls and its thinking. The clock icon lists what you
+have saved, with the file each conversation was about, and lets you reopen or delete any of them.
+Reopening one puts it back in the chat panel as it was: the thread, the attached files with the text
+they had when it was saved, and the folder switched on and chosen again in the browser when it is
+open. When that folder is not open the panel says so, and the attached files are still there. The
+panel shows the name of the saved conversation you are in.
 
 Saving a conversation you reopened **updates** it rather than making a second copy. Clearing the
 panel starts a fresh one, so the next save is a new conversation rather than an overwrite of the
