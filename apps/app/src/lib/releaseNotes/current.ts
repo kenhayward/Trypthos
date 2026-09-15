@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.74.1",
+    date: "2026-09-15",
+    pr: 156,
+    headline: "Apply a chat edit in any view, Preview included",
+    summary:
+      "When the chat model proposed a change to the open document and the document was in Preview, pressing Apply did nothing to the document, yet the card switched to Applied, so the change was lost with no way to try again. Preview shows the document without an editor behind it, and the change was only ever handed to the editor. Apply now puts the change into the document in every view: in Preview it appears in the rendered page straight away and the document is marked unsaved, and in Live and Source it still lands where your cursor can see it, as one step you can undo.",
+    fixed: [
+      "Applying an edit the chat model proposed changes the document in Preview, instead of doing nothing while saying Applied.",
+    ],
+  },
+  {
     version: "0.74.0",
     date: "2026-09-15",
     pr: 154,

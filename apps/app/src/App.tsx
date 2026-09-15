@@ -366,10 +366,17 @@ export default function App() {
       // keystroke old, and this is a write to somebody's document.
       if (!target.ok) return false;
 
-      editor.current?.applyChange(target.from, target.to, target.insert);
+      // Into the live editor when there is one, so the change is one undo step with the caret after
+      // it. Preview has no editor mounted - and an Apply there used to write nowhere while the card
+      // said Applied (#155) - so the change goes into the document's text instead, through the same
+      // path typing takes: it shows in Preview and marks the document unsaved.
+      if (editor.current?.applyChange(target.from, target.to, target.insert) === true) return true;
+      // A read-only document refuses the text, so it is not reported as applied.
+      if (state.readOnly) return false;
+      actions.edit(state.content.slice(0, target.from) + target.insert + state.content.slice(target.to));
       return true;
     },
-    [resolveAgainstDocument],
+    [actions, resolveAgainstDocument, state.content, state.readOnly],
   );
 
   const chat = useChat(useMemo(() => chatBridge(), []), activeModel?.id ?? null, scope.context);

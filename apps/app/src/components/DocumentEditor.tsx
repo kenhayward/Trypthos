@@ -83,7 +83,10 @@ export interface EditorHandle {
   /// One transaction so it is one undo step: a user who dislikes what the model wrote presses Ctrl+Z
   /// once and has their document back. Dispatched into the live editor rather than routed through
   /// the `value` prop, which would replace the whole document and move the caret.
-  applyChange(from: number, to: number, insert: string): void;
+  ///
+  /// True when the change was written. False when there is no editor view to write it into, so the
+  /// caller can put it into the document some other way rather than report an edit that went nowhere.
+  applyChange(from: number, to: number, insert: string): boolean;
 }
 
 interface Props {
@@ -253,7 +256,7 @@ export default function DocumentEditor({
       },
       applyChange(from, to, insert) {
         const editor = view.current;
-        if (editor === null) return;
+        if (editor === null) return false;
 
         // Clamped, because the caller resolved these offsets against a document that may have been
         // edited a keystroke ago. An out-of-range change throws inside CodeMirror and takes the
@@ -272,6 +275,7 @@ export default function DocumentEditor({
           scrollIntoView: true,
         });
         editor.focus();
+        return true;
       },
     }),
     [],

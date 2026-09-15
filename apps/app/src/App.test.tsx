@@ -828,6 +828,87 @@ describe("saving and reopening a conversation", () => {
   });
 });
 
+/// Applying an edit the model proposed, whatever view the document is in.
+///
+/// Preview has no editing surface mounted, and an Apply there once wrote nowhere while the card
+/// said Applied - the edit lost, with no way to try it again (#155).
+describe("applying a proposed edit", () => {
+  function shell() {
+    const chat: { push: ((event: unknown) => void) | null } = { push: null };
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] },
+          workspaces: [{ kind: "local" as const, root: "D:/Notes" }],
+        },
+      }),
+      writeSettings: async () => {},
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
+        ok: true as const,
+        workspace: { id: "Notes", name: "Notes", ref },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [{ id: "Notes/plan.md", name: "plan.md", kind: "file" as const }],
+      }),
+      readFile: async () => ({ ok: true as const, content: "# Plan\n", revision: { id: "r1" } }),
+      sendChat: async () => ({ ok: true as const, streamId: "s1" }),
+      cancelChat: async () => {},
+      onChatEvent: (listener: (message: unknown) => void) => {
+        chat.push = (event) => listener({ streamId: "s1", event });
+        return () => {};
+      },
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+    return { chat };
+  }
+
+  async function proposeAppend(view: "Live" | "Source" | "Preview") {
+    const user = userEvent.setup();
+    const { chat } = shell();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    await user.click(await screen.findByRole("button", { name: /plan\.md/ }));
+    await screen.findByRole("tab", { name: /plan\.md/ });
+    await user.click(screen.getByRole("button", { name: view }));
+
+    const panel = screen.getByRole("complementary", { name: "Chat" });
+    await user.type(within(panel).getByRole("textbox", { name: "Message" }), "Add a line");
+    await user.click(within(panel).getByRole("button", { name: "Send" }));
+    act(() => {
+      chat.push?.({ type: "token", text: "Here it is.\n\n```trypthos-edit append\nShip on Friday.\n```" });
+      chat.push?.({ type: "end" });
+    });
+
+    await user.click(await within(panel).findByRole("button", { name: "Apply" }));
+    return panel;
+  }
+
+  it("applies it to a document in Preview, and marks the document unsaved", async () => {
+    const panel = await proposeAppend("Preview");
+
+    const preview = await screen.findByLabelText("Markdown preview");
+    expect(await within(preview).findByText("Ship on Friday.")).toBeDefined();
+    expect(screen.getByText("Unsaved")).toBeDefined();
+    expect(within(panel).getByText("Applied")).toBeDefined();
+  });
+
+  it("still applies it in Source", async () => {
+    const panel = await proposeAppend("Source");
+
+    expect(await screen.findByText("Unsaved")).toBeDefined();
+    expect(within(panel).getByText("Applied")).toBeDefined();
+  });
+});
+
 /// File > New, from the menu to a tab with a name and nowhere to be.
 describe("making a new file", () => {
   function shell(): {
