@@ -59,6 +59,16 @@ where a rename would be a commit.
 Explorer** - **Open in Finder** on macOS. A folder opens; a file opens the folder it is in, with the
 file selected. A file Trypthos does not open still has this menu, so it can be found or renamed.
 
+**Open an Obsidian vault without browsing for it.** When Obsidian is installed - Trypthos looks for
+the list of vaults Obsidian keeps, in `%APPDATA%obsidian` on Windows and `~/Library/Application
+Support/obsidian` on macOS - an Obsidian button sits to the left of the GitHub one. It lists every
+vault Obsidian knows about by name, with its folder under the name; click one to open it, or Cancel.
+A vault whose folder has been moved or deleted since is listed with **Folder not found** and cannot
+be chosen. The vault opens as a folder like any other - the same tree, menu, rename, refresh and
+saving - with Obsidian's logo on its row instead of a folder, and it comes back as a vault next time
+you start. Choosing a vault that is already open, as a vault or as a plain folder, selects it rather
+than opening it twice. Without Obsidian installed the button is not there.
+
 **Give one file the whole window.** Right-click an openable local file and choose **Open in New
 Window**. It opens in a separate native window with only that document, no folder browser, chat panel
 or tabs. It remains editable and has the normal save shortcut and unsaved-change question, so focusing

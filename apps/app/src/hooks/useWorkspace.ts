@@ -104,6 +104,12 @@ export interface WorkspaceActions {
   /// and this takes one that was arrived at some other way. Everything after the reference is
   /// identical, which is what keeps the tree, the tabs and the error banner one implementation.
   openRef(ref: WorkspaceRef): Promise<void>;
+  /// Opens one of Obsidian's vaults, by Obsidian's id for it, and selects it.
+  ///
+  /// Selected as well as added, because the shell answers a vault that is already open - as a vault
+  /// or as a plain folder - with that workspace, and a click that then changed nothing on screen
+  /// would look like it had failed.
+  openVault(id: string): Promise<void>;
   /// Opens remembered workspaces on launch, without asking. Each is opened in turn, and one that has
   /// since been deleted - or a repository that can no longer be seen - is skipped in silence.
   reopen(refs: readonly WorkspaceRef[]): Promise<void>;
@@ -946,6 +952,18 @@ export function useWorkspace(
     [addWorkspace, client, fail],
   );
 
+  const openVault = useCallback(
+    async (id: string) => {
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      const result = await client.openObsidianVault(id);
+      if (!result.ok) return fail(result);
+
+      await addWorkspace(result.workspace);
+      setInternal((prev) => ({ ...prev, selectedFolder: result.workspace.id }));
+    },
+    [addWorkspace, client, fail],
+  );
+
   const closeWorkspace = useCallback(
     async (workspaceId: string) => {
       // Its documents first, one at a time, and the first cancel stops the whole close: a folder
@@ -1236,6 +1254,7 @@ export function useWorkspace(
   const actions: WorkspaceActions = {
     open,
     openRef,
+    openVault,
     closeWorkspace,
     reopen,
     toggleFolder,

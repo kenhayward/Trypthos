@@ -27,6 +27,7 @@ import RenameDialog from "./components/RenameDialog";
 import SaveChatDialog from "./components/SaveChatDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
+import ObsidianVaultDialog from "./components/ObsidianVaultDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
 import RepoPage from "./components/RepoPage";
 import FindDialog from "./components/FindDialog";
@@ -133,10 +134,26 @@ export default function App() {
   /// True while the repository picker is open. Its own flag rather than a settings page: choosing a
   /// repository is an act like opening a folder, not a preference.
   const [pickingRepo, setPickingRepo] = useState(false);
+  /// True while the Obsidian vault picker is open.
+  const [pickingVault, setPickingVault] = useState(false);
+  /// Whether Obsidian is installed, which is whether its button is in the browser's header at all.
+  /// Asked once at launch: the answer is whether Obsidian's list of vaults exists, and an
+  /// installation made while the app is open can wait for the next launch.
+  const [obsidianInstalled, setObsidianInstalled] = useState(false);
   /// True while the release notes are open. Its own flag rather than a settings page: the notes are
   /// lazily loaded, and the settings dialog is eager.
   const [readingNotes, setReadingNotes] = useState(false);
   const client = useMemo(() => workspaceClient(), []);
+  const loadVaults = useCallback(() => client.obsidianVaults(), [client]);
+  useEffect(() => {
+    let current = true;
+    void loadVaults().then((result) => {
+      if (current) setObsidianInstalled(result.ok && result.installed);
+    });
+    return () => {
+      current = false;
+    };
+  }, [loadVaults]);
   const platform = useMemo(() => currentPlatform(), []);
   const bridge = useMemo(() => settingsBridge(), []);
   /// The GitHub half of the shell, or null in the browser preview. Read once: it is the preload
@@ -689,6 +706,7 @@ export default function App() {
           dirtyPaths={state.dirtyPaths}
           onOpenWorkspace={() => void actions.open()}
           onOpenRepo={() => setPickingRepo(true)}
+          onOpenVault={obsidianInstalled ? () => setPickingVault(true) : undefined}
           onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
           onRetryFolder={(path) => void actions.retryFolder(path)}
@@ -910,6 +928,19 @@ export default function App() {
             // the panel while that happens hides the thing the user just asked to see.
             setPickingRepo(false);
             void actions.openRef(ref);
+          }}
+        />
+      )}
+
+      {pickingVault && (
+        <ObsidianVaultDialog
+          loadVaults={loadVaults}
+          onCancel={() => setPickingVault(false)}
+          onOpen={(id) => {
+            // Closed first, as the repository picker is, so the tree the vault lands in is not
+            // hidden behind the dialog that chose it.
+            setPickingVault(false);
+            void actions.openVault(id);
           }}
         />
       )}

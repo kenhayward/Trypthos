@@ -58,6 +58,23 @@ export interface RemoteNode {
 export type Failure = { ok: false; reason: string };
 
 export type OpenResult = { ok: true; workspace: WorkspaceInfo } | Failure;
+
+/// One vault from Obsidian's own list, as the shell read it.
+export interface ObsidianVaultEntry {
+  /// Obsidian's id for the vault, and the only thing sent back to open it.
+  id: string;
+  name: string;
+  /// The folder, shown so two vaults with one name can be told apart. Never sent back.
+  path: string;
+  /// False when the folder Obsidian remembers is no longer there.
+  available: boolean;
+}
+
+/// Obsidian's vaults. `installed` is whether its list exists at all, which is what decides whether
+/// the picker is offered.
+export type ObsidianVaultsResult =
+  | { ok: true; installed: boolean; vaults: ObsidianVaultEntry[] }
+  | Failure;
 export type ListResult = { ok: true; nodes: RemoteNode[] } | Failure;
 export type CreateDirectoryResult = { ok: true } | Failure;
 export type ReadResult =
@@ -142,6 +159,11 @@ export interface WorkspaceClient {
   /// Shows the entry at this qualified path in Explorer or Finder: a folder opened, a file selected
   /// in the folder that holds it.
   revealEntry(path: string): Promise<{ ok: true } | Failure>;
+  /// Obsidian's list of vaults, read fresh each time - see `ObsidianVaultsResult`.
+  obsidianVaults(): Promise<ObsidianVaultsResult>;
+  /// Opens one vault by Obsidian's id for it. The shell finds the folder, so the renderer never names
+  /// one; a vault already open answers the workspace it is open as.
+  openObsidianVault(id: string): Promise<OpenResult>;
   readFile(path: string): Promise<ReadResult>;
   /// Reads an image, which does not go through `readFile` - see `ImageResult`.
   readImage(path: string): Promise<ImageResult>;
@@ -384,6 +406,8 @@ export const browserClient: WorkspaceClient = {
   createDirectory: async () => unavailable(),
   renameEntry: async () => unavailable(),
   revealEntry: async () => unavailable(),
+  obsidianVaults: async () => unavailable(),
+  openObsidianVault: async () => unavailable(),
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),

@@ -26,6 +26,7 @@ const {
   RefreshWorkspaceRequest,
   SetBranchRequest,
   OpenWorkspaceRefRequest,
+  OpenVaultRequest,
   workspaceRefKey,
   FilterRequest,
   FindRequest,
@@ -50,6 +51,7 @@ const {
 } = require("@trypthos/domain");
 const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
 const { openWorkspaceFor } = require("./providers");
+const { readObsidianVaults } = require("./obsidianVaults");
 const chatStore = require("./chatStore");
 const { outlineWorkspace } = require("./workspaceOutline");
 const { createFolderToolRunner } = require("./folderToolRunner");
@@ -233,6 +235,10 @@ function registerIpcHandlers({
   /// that it is unsupported, so the renderer has one place to ask rather than a platform check of
   /// its own.
   explorerIntegration = null,
+  /// Where Obsidian keeps its list of vaults, or null where there is none to look for. Passed in
+  /// because the app-data directory belongs to `main.js` - and so a test can point it at a file of
+  /// its own rather than at whatever the machine running it has installed.
+  obsidianConfigPath = null,
 }) {
   // The registry is the only record of whether the entries are there: the user can remove them
   // without telling us, so a copy in settings would be a second answer that could disagree with what
@@ -751,6 +757,27 @@ function registerIpcHandlers({
     }
 
     return await openWorkspaceRef({ kind: "local", root: result.filePaths[0] }, providerDeps);
+  });
+
+  /// Obsidian's vaults, for the picker - and whether Obsidian is installed at all, which is whether
+  /// the picker is offered. Folder paths go to the renderer to be shown, never to be sent back.
+  ipcMain.handle("obsidian:vaults", async () => ({ ok: true, ...(await readObsidianVaults(obsidianConfigPath)) }));
+
+  /// Opening one vault, named by Obsidian's id for it.
+  ///
+  /// The list is read again and the folder taken from there, so this can only open a vault Obsidian
+  /// lists - a renderer cannot make it open some other folder by sending one. What opens is an
+  /// ordinary local folder that remembers it came from Obsidian, through the same registry and
+  /// deduplication as every other workspace: a vault already open as a folder answers that folder.
+  ipcMain.handle("obsidian:openVault", async (_event, payload) => {
+    const parsed = OpenVaultRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    const { vaults } = await readObsidianVaults(obsidianConfigPath);
+    const vault = vaults.find((candidate) => candidate.id === parsed.data.id);
+    if (vault === undefined) return { ok: false, reason: "not-found" };
+
+    return await openWorkspaceRef({ kind: "local", root: vault.path, origin: "obsidian" }, providerDeps);
   });
 
   /// Closing one workspace. The tabs that belonged to it are the renderer's business; what happens

@@ -1207,6 +1207,69 @@ describe("opening a GitHub repository", () => {
   });
 });
 
+/// Obsidian's vaults, through the whole window.
+///
+/// Whether the button is there at all is decided by the shell finding Obsidian's list of vaults, so
+/// both halves are asserted here rather than in the panel alone.
+describe("opening an Obsidian vault", () => {
+  const GARDEN = {
+    id: "Garden",
+    name: "Garden",
+    ref: { kind: "local" as const, root: "D:/Vaults/Garden", origin: "obsidian" as const },
+    truncated: false,
+  };
+
+  function shellWithObsidian(installed = true) {
+    const opened: string[] = [];
+    shellWithGitHub({
+      obsidianVaults: async () => ({
+        ok: true as const,
+        installed,
+        vaults: installed ? [{ id: "aaaa1111bbbb2222", name: "Garden", path: "D:/Vaults/Garden", available: true }] : [],
+      }),
+      openObsidianVault: async (id: string) => {
+        opened.push(id);
+        return { ok: true as const, workspace: GARDEN };
+      },
+    });
+    return { opened };
+  }
+
+  it("offers no vault button where Obsidian is not installed", async () => {
+    shellWithObsidian(false);
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Open GitHub repository" });
+    expect(screen.queryByRole("button", { name: "Open Obsidian vault" })).toBeNull();
+  });
+
+  it("opens the vault that was chosen, and selects it in the browser", async () => {
+    const { opened } = shellWithObsidian();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Obsidian vault" }));
+    await user.click(await screen.findByRole("button", { name: /Garden/ }));
+
+    expect(opened).toEqual(["aaaa1111bbbb2222"]);
+    expect(screen.queryByRole("dialog", { name: "Open Obsidian vault" })).toBeNull();
+    const row = await screen.findByRole("button", { name: "Garden" });
+    await waitFor(() => expect(row.getAttribute("aria-current")).toBe("true"));
+  });
+
+  it("closes the picker without opening anything when it is cancelled", async () => {
+    const { opened } = shellWithObsidian();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Obsidian vault" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog", { name: "Open Obsidian vault" })).toBeNull();
+    expect(opened).toEqual([]);
+  });
+});
+
 /// A repository's own page, through the whole window.
 describe("the repository page", () => {
   it("opens when the repository's row is clicked, and shows its statistics and README", async () => {

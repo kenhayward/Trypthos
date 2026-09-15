@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { enabledFileTypes, isImageName, workspaceRefLabel } from "@trypthos/domain";
-import type { Platform, WorkspaceRef } from "@trypthos/domain";
+import { enabledFileTypes, isImageName, workspaceRefLabel, workspaceRefMark } from "@trypthos/domain";
+import type { Platform, WorkspaceMark, WorkspaceRef } from "@trypthos/domain";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
@@ -36,6 +36,9 @@ interface Props {
   /// Opens the repository picker. A separate act from `onOpenWorkspace` because it asks a different
   /// question - the folder picker is the operating system's, and this one is ours.
   onOpenRepo: () => void;
+  /// Opens the Obsidian vault picker. Absent where Obsidian is not installed, which takes the button
+  /// away - a picker that could only ever be empty is not worth a place in the header.
+  onOpenVault?: () => void;
   onFilterChange: (filter: string) => void;
   onToggleFolder: (path: string) => void;
   onRetryFolder: (path: string) => void;
@@ -99,6 +102,7 @@ export default function WorkspacePanel({
   dirtyPaths,
   onOpenWorkspace,
   onOpenRepo,
+  onOpenVault,
   onFilterChange,
   onToggleFolder,
   onRetryFolder,
@@ -244,9 +248,20 @@ export default function WorkspacePanel({
             <path d="M15 6l-6 6 6 6" />
           </Glyph>
         </button>
-        {/* One button per source rather than a menu behind one. There are two, the panel header has
-            room for two, and a menu would put the only cloud source Trypthos has behind a click that
-            says nothing about what is in it. This is the place a third one changes shape. */}
+        {/* One button per source rather than a menu behind one. The panel header has room for the
+            three, and a menu would put each behind a click that says nothing about what is in it.
+            Obsidian's is there only when Obsidian is installed. A fourth is where this changes shape. */}
+        {onOpenVault !== undefined && (
+          <button
+            type="button"
+            onClick={onOpenVault}
+            aria-label={t("workspace.openVault")}
+            title={t("workspace.openVault")}
+            className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+          >
+            <SourceGlyph mark="obsidian" className="size-4" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenRepo}
@@ -254,7 +269,7 @@ export default function WorkspacePanel({
           title={t("workspace.openRepo")}
           className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
         >
-          <SourceGlyph kind="github" className="size-4" />
+          <SourceGlyph mark="github" className="size-4" />
         </button>
         <button
           type="button"
@@ -553,9 +568,11 @@ function WorkspaceRow({
               A failing workspace overrides both, because what is wrong with it matters more than
               where it came from. */}
           <SourceGlyph
-            kind={workspace.ref.kind}
+            mark={workspaceRefMark(workspace.ref)}
             className={
-              status === "error" ? "size-3.5 text-danger" : `size-3.5 ${sourceColour(workspace.ref.kind)}`
+              status === "error"
+                ? "size-3.5 text-danger"
+                : `size-3.5 ${sourceColour(workspaceRefMark(workspace.ref))}`
             }
           />
           <span className="min-w-0 truncate">{workspace.name}</span>
@@ -777,31 +794,43 @@ function Chevron({ open }: { open: boolean }) {
 /// same in the tree.
 ///
 /// A class rather than a hex, so both themes are answered by the token the rest of the app reads.
-function sourceColour(kind: WorkspaceRef["kind"]): string {
-  switch (kind) {
+function sourceColour(mark: WorkspaceMark): string {
+  switch (mark) {
     case "github":
       return "text-accent";
     case "local":
       return "text-leaf";
+    case "obsidian":
+      return "text-obsidian";
   }
 }
 
-/// The mark for one provider.
+/// The mark for one provider, or for a folder opened as an Obsidian vault.
 ///
-/// A `switch` over the kind rather than a lookup with a fallback, so adding a provider to the schema
+/// A `switch` over the mark rather than a lookup with a fallback, so adding a provider to the schema
 /// and forgetting its icon is a type error here rather than a folder icon on a repository.
-function SourceGlyph({ kind, className }: { kind: WorkspaceRef["kind"]; className?: string }) {
-  switch (kind) {
+///
+/// `data-mark` says which was drawn, since an outline at this size is not something a test can read.
+function SourceGlyph({ mark, className }: { mark: WorkspaceMark; className?: string }) {
+  switch (mark) {
     case "github":
       return (
-        <Glyph className={className}>
+        <Glyph className={className} mark="github">
           <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
         </Glyph>
       );
     case "local":
       return (
-        <Glyph className={className}>
+        <Glyph className={className} mark="local">
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+        </Glyph>
+      );
+    case "obsidian":
+      // Obsidian's crystal, as an outline with its facets, drawn in the same stroke as the other marks.
+      return (
+        <Glyph className={className} mark="obsidian">
+          <path d="M14.5 2 6.5 8.5 5 15.5l5 6.5 8-2.5 1.5-10.5Z" />
+          <path d="M14.5 2 11 12l-1 10M6.5 8.5 11 12l7 7.5M11 12l8.5-3" />
         </Glyph>
       );
   }

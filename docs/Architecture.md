@@ -469,6 +469,23 @@ are case-insensitive there) while leaving a local root alone (Linux tells `/ws` 
 shell deduplicates open workspaces with it and the renderer compares the persisted list with it, so
 the two cannot disagree.
 
+**An Obsidian vault is a local reference with an `origin`, not a provider.** A vault is a folder and
+is read, listed, guarded and saved exactly as one, so it stays `kind: "local"` and carries
+`origin: "obsidian"` (settings version 18, whose migration writes nothing: the field is optional, and
+the version exists so the previous build refuses a file it could not parse rather than losing every
+remembered workspace). `workspaceRefKey` ignores `origin`, so a vault already open as a plain folder
+is one workspace, and `workspaceRefMark` is what the row draws: the provider's mark, or Obsidian's.
+
+The vault list is Obsidian's own `obsidian.json` under the platform app-data folder (`appData` in
+Electron: `%APPDATA%` on Windows, `~/Library/Application Support` on macOS), whose path `main.js`
+passes to the handlers as `obsidianConfigPath`. `obsidian:vaults` answers `{ installed, vaults }` -
+`installed` is whether that file exists, which is whether the browser shows the button - with each
+vault's id, name, folder and whether the folder is still there; `obsidianVaultsFrom` in the domain
+parses entries one at a time so one unreadable entry does not empty the list. `obsidian:openVault`
+takes **only Obsidian's id** (`OpenVaultRequest`), reads the file again and opens the folder that id
+names through the ordinary `openWorkspaceRef`. The renderer is shown folder paths but never sends one
+back, so this channel cannot be turned into "open any folder".
+
 **Adding a provider is three edits, and two tests catch the ones you forget:** a kind in
 `workspaceRef.ts` (which also extends `PROVIDER_KINDS`), a row in `providers.js`, and a case in the
 interface's `SourceGlyph`. `providers.test.js` walks `PROVIDER_KINDS` against the registry, and
@@ -2087,7 +2104,8 @@ no corrections while the chat box and settings fields had them, and nothing woul
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
-`workspace:filter`, `workspace:close`, `workspace:refresh`, `workspace:createDirectory`, `workspace:rename`, `workspace:reveal`), cloud accounts (`github:status`, `github:connect`,
+`workspace:filter`, `workspace:close`, `workspace:refresh`, `workspace:createDirectory`, `workspace:rename`, `workspace:reveal`), Obsidian's vaults
+(`obsidian:vaults`, `obsidian:openVault`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys

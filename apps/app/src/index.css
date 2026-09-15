@@ -44,6 +44,7 @@
   --color-text-selection-idle: var(--tp-text-selection-idle);
   --color-selected-ink: var(--tp-selected-ink);
   --color-leaf: var(--tp-leaf);
+  --color-obsidian: var(--tp-obsidian);
   --color-danger: var(--tp-danger);
   --color-danger-strong: var(--tp-danger-strong);
   --color-gutter: var(--tp-gutter);
@@ -126,6 +127,8 @@
 
   /* Diariz green: folders and links. */
   --tp-leaf: #2e7d6b;
+  /* Obsidian violet: the mark on a folder opened as a vault. */
+  --tp-obsidian: #7c3aed;
 
   --tp-danger: #dc2626;
   --tp-danger-strong: #e5484d;
@@ -187,6 +190,7 @@
 
     /* The repo's CSS only ever defined the light green, so the dark one is new here. */
     --tp-leaf: #5fc3ab;
+    --tp-obsidian: #a78bfa;
 
     --tp-danger: #ff8b8f;
     --tp-danger-strong: #e5484d;
@@ -244,6 +248,7 @@
   --tp-find-active-edge: #ffcc70;
 
   --tp-leaf: #5fc3ab;
+  --tp-obsidian: #a78bfa;
 
   --tp-danger: #ff8b8f;
   --tp-danger-strong: #e5484d;

@@ -43,7 +43,7 @@ describe("design tokens", () => {
       "--tp-ink", "--tp-ink-2", "--tp-ink-3", "--tp-ink-4", "--tp-ink-5", "--tp-faint",
       "--tp-accent", "--tp-accent-strong", "--tp-selected", "--tp-selected-ink",
       "--tp-text-selection", "--tp-text-selection-idle",
-      "--tp-leaf", "--tp-danger", "--tp-danger-strong",
+      "--tp-leaf", "--tp-obsidian", "--tp-danger", "--tp-danger-strong",
       "--tp-gutter", "--tp-marker", "--tp-tok-head", "--tp-tok-strong",
       "--tp-tok-code", "--tp-tok-quote", "--tp-caret-line",
       "--tp-tok-keyword", "--tp-tok-string", "--tp-tok-comment",
