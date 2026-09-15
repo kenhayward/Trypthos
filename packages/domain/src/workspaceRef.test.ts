@@ -5,6 +5,7 @@ import {
   sameWorkspaceRef,
   workspaceRefKey,
   workspaceRefLabel,
+  workspaceRefMark,
   workspaceRefName,
 } from "./workspaceRef";
 
@@ -28,6 +29,18 @@ describe("a workspace reference", () => {
   it("refuses a field it does not know", () => {
     const extra = { kind: "local", root: "D:\\Notes", branch: "main" };
     expect(WorkspaceRefSchema.safeParse(extra).success).toBe(false);
+  });
+
+  // A folder chosen from Obsidian's vault list is still a local folder - it is read and saved
+  // exactly as one - but it remembers where it was chosen from, which is what draws its mark.
+  it("accepts a local folder that was opened as an Obsidian vault", () => {
+    const parsed = WorkspaceRefSchema.parse({ kind: "local", root: "D:\\Garden", origin: "obsidian" });
+    expect(parsed).toEqual({ kind: "local", root: "D:\\Garden", origin: "obsidian" });
+  });
+
+  it("refuses an origin it has never heard of", () => {
+    const other = { kind: "local", root: "D:\\Garden", origin: "logseq" };
+    expect(WorkspaceRefSchema.safeParse(other).success).toBe(false);
   });
 
   it("refuses a GitHub repository named by half a name", () => {
@@ -57,6 +70,14 @@ describe("the key a reference is deduplicated by", () => {
   it("leaves a local root exactly as it was given", () => {
     expect(workspaceRefKey({ kind: "local", root: "/ws" })).not.toEqual(
       workspaceRefKey({ kind: "local", root: "/WS" }),
+    );
+  });
+
+  // One folder is one workspace however it was chosen. Opening a vault that is already open as a
+  // plain folder selects that folder rather than drawing a second tree over the same files.
+  it("ignores where a local folder was chosen from", () => {
+    expect(workspaceRefKey({ kind: "local", root: "/v/Garden", origin: "obsidian" })).toEqual(
+      workspaceRefKey({ kind: "local", root: "/v/Garden" }),
     );
   });
 
@@ -108,6 +129,17 @@ describe("the list of provider kinds", () => {
     }
     expect(PROVIDER_KINDS).toContain("local");
     expect(PROVIDER_KINDS).toContain("github");
+  });
+});
+
+describe("the mark a workspace is drawn with", () => {
+  it("is the provider's for a folder and a repository", () => {
+    expect(workspaceRefMark({ kind: "local", root: "/v/Notes" })).toBe("local");
+    expect(workspaceRefMark({ kind: "github", owner: "ada", repo: "notes" })).toBe("github");
+  });
+
+  it("is Obsidian's for a folder opened as a vault", () => {
+    expect(workspaceRefMark({ kind: "local", root: "/v/Garden", origin: "obsidian" })).toBe("obsidian");
   });
 });
 

@@ -10,9 +10,12 @@
 /// thing. A mark with no label is a mark nobody can read out.
 export default function Glyph({
   className = "size-3.5",
+  mark,
   children,
 }: {
   className?: string;
+  /// Which mark this is, for a glyph that stands for something - see `SourceGlyph`.
+  mark?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -20,6 +23,7 @@ export default function Glyph({
       viewBox="0 0 24 24"
       aria-hidden="true"
       className={className}
+      data-mark={mark}
       fill="none"
       stroke="currentColor"
       strokeWidth="1.75"

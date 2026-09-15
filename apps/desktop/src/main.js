@@ -421,6 +421,10 @@ if (!gotLock) {
         packaged: app.isPackaged,
         exePath: process.execPath,
       }),
+      // Obsidian's own list of vaults. `appData` is the per-user folder every app keeps its settings
+      // under - %APPDATA% on Windows, ~/Library/Application Support on macOS - and Obsidian's is the
+      // `obsidian` folder in it. A file that is not there means Obsidian is not installed.
+      obsidianConfigPath: path.join(app.getPath("appData"), "obsidian", "obsidian.json"),
     });
     registerWindowHandlers({
       ipcMain,

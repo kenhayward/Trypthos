@@ -694,7 +694,7 @@ describe("the reply timeout on a profile", () => {
     };
 
     const loaded = loadSettings(before);
-    expect(loaded.schemaVersion).toBe(17);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
     expect(loaded.chat.profiles[0]?.timeoutMinutes).toBe(10);
     expect(loaded.chat.profiles[0]?.model).toBe("qwen3.8-27b");
   });
@@ -802,5 +802,28 @@ describe("the workspaces a settings file remembers", () => {
       workspaces: [{ kind: "dropbox", accountId: "1" }],
     });
     expect(settings).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+/// Where a remembered folder was chosen from, added at version 18.
+///
+/// The field is optional, so an old file loads either way. The version is for the OTHER direction,
+/// as with the reply timeout: the reference is strict, so a file written here and read by the
+/// previous build would fail to parse and take every remembered workspace with it.
+describe("a folder remembered as an Obsidian vault", () => {
+  it("comes back as the vault it was opened as", () => {
+    const settings = loadSettings({
+      ...DEFAULT_SETTINGS,
+      workspaces: [{ kind: "local", root: "/v/Garden", origin: "obsidian" }],
+    });
+    expect(settings.workspaces).toEqual([{ kind: "local", root: "/v/Garden", origin: "obsidian" }]);
+  });
+
+  it("leaves the folders remembered before version 18 exactly as they were", () => {
+    const before = { ...DEFAULT_SETTINGS, schemaVersion: 17, workspaces: [{ kind: "local", root: "/v/Notes" }] };
+
+    const loaded = loadSettings(before);
+    expect(loaded.schemaVersion).toBe(18);
+    expect(loaded.workspaces).toEqual([{ kind: "local", root: "/v/Notes" }]);
   });
 });

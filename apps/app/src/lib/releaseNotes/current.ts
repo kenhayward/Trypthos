@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.77.0",
+    date: "2026-09-15",
+    pr: 159,
+    headline: "Open an Obsidian vault from Obsidian's own list",
+    summary:
+      "If Obsidian is installed, the folder browser now has an Obsidian button to the left of the GitHub one. It lists every vault Obsidian knows about on this computer, by name with its folder underneath, read from Obsidian's own list of vaults each time you open it. Click a vault to open it, or Cancel. A vault whose folder has been moved or deleted since Obsidian last saw it is listed as Folder not found and cannot be chosen. The vault opens as a folder, and behaves exactly as any other folder does - the same tree, right-click menu, rename, refresh and saving - with Obsidian's logo on its row so you can tell it apart, and it reopens as a vault next time you start Trypthos. Choosing a vault that is already open, whether you opened it as a vault or as an ordinary folder, selects it in the browser rather than opening a second copy. Without Obsidian installed the button does not appear.",
+    added: [
+      "An Obsidian button in the folder browser, shown when Obsidian is installed, that lists its vaults and opens the one you choose.",
+      "Obsidian's logo on the row of a folder opened as a vault.",
+    ],
+  },
+  {
     version: "0.76.0",
     date: "2026-09-15",
     pr: 158,

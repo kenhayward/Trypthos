@@ -72,6 +72,27 @@ test("a close the renderer forces after Don't Save closes the window, dirty or n
   assert.equal(window.closed, true);
 });
 
+test("the vault calls reach their handlers with what the renderer passed", async () => {
+  const { bridge, ipcMain } = loadBridge();
+  const received = [];
+  ipcMain.handle("obsidian:vaults", async (_event, payload) => {
+    received.push(["vaults", payload]);
+    return { ok: true, installed: false, vaults: [] };
+  });
+  ipcMain.handle("obsidian:openVault", async (_event, payload) => {
+    received.push(["open", payload]);
+    return { ok: false, reason: "not-found" };
+  });
+
+  await bridge.obsidianVaults();
+  await bridge.openObsidianVault("aaaa1111bbbb2222");
+
+  assert.deepEqual(received, [
+    ["vaults", undefined],
+    ["open", { id: "aaaa1111bbbb2222" }],
+  ]);
+});
+
 test("an unforced close from the title bar still asks about unsaved work", async () => {
   const { bridge, ipcMain } = loadBridge();
   const guard = createCloseGuard({ dialog: {}, send: () => {} });

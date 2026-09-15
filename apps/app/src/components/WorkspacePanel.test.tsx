@@ -456,6 +456,59 @@ describe("the sources a workspace can be opened from", () => {
     expect(props.onOpenWorkspace).not.toHaveBeenCalled();
   });
 
+  // Offered only where Obsidian is installed, which the panel is told by being given somewhere to
+  // send the press. A button that opened an empty picker on a machine without it would be noise.
+  it("offers Obsidian's vaults only when there is a picker to open", () => {
+    panel();
+    expect(screen.queryByRole("button", { name: "Open Obsidian vault" })).toBeNull();
+  });
+
+  it("puts the vault button to the left of the repository button", () => {
+    panel({ onOpenVault: vi.fn() });
+
+    const header = screen.getByRole("button", { name: "Open Obsidian vault" }).parentElement!;
+    const names = within(header)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+    expect(names.indexOf("Open Obsidian vault")).toBe(names.indexOf("Open GitHub repository") - 1);
+  });
+
+  it("asks for the vault picker when the vault button is pressed", async () => {
+    const onOpenVault = vi.fn();
+    const props = panel({ onOpenVault });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Open Obsidian vault" }));
+
+    expect(onOpenVault).toHaveBeenCalled();
+    expect(props.onOpenRepo).not.toHaveBeenCalled();
+    expect(props.onOpenWorkspace).not.toHaveBeenCalled();
+  });
+
+  // A vault is a folder underneath, but it was chosen as a vault and is drawn as one.
+  it("draws a vault's row with its own mark, distinct from a folder's and a repository's", () => {
+    panel({
+      workspaces: [
+        { id: "Notes", name: "Notes", ref: { kind: "local" as const, root: "D:/Notes" }, truncated: false },
+        { id: "essays", name: "essays", ref: { kind: "github" as const, owner: "ada", repo: "essays" }, truncated: false },
+        {
+          id: "Garden",
+          name: "Garden",
+          ref: { kind: "local" as const, root: "D:/Garden", origin: "obsidian" as const },
+          truncated: false,
+        },
+      ],
+    });
+
+    const markOf = (name: string) => [...screen.getByRole("button", { name }).querySelectorAll("svg")].at(-1);
+
+    expect(markOf("Garden")?.getAttribute("data-mark")).toBe("obsidian");
+    expect(markOf("Notes")?.getAttribute("data-mark")).toBe("local");
+    expect(markOf("Garden")?.getAttribute("class")).not.toBe(markOf("Notes")?.getAttribute("class"));
+    expect(markOf("Garden")?.getAttribute("class")).not.toBe(markOf("essays")?.getAttribute("class"));
+    // Still a folder: the tooltip names its path, exactly as for any other.
+    expect(screen.getByRole("button", { name: "Garden" }).getAttribute("title")).toBe("D:/Garden");
+  });
+
   // A folder and a repository sit in the same tree and behave very differently - one can be saved
   // into and the other cannot - so the row says which it is rather than looking alike.
   it("draws a repository's row differently from a folder's", () => {
@@ -516,6 +569,21 @@ describe("the workspace menu", () => {
     await user.pointer({ keys: "[MouseRight]", target });
     return user;
   }
+
+  // A vault is a local folder in everything but its mark, so its menu is a folder's.
+  it("offers a vault the same actions as a folder", async () => {
+    const GARDEN = {
+      id: "Garden",
+      name: "Garden",
+      ref: { kind: "local" as const, root: "D:/Garden", origin: "obsidian" as const },
+      truncated: false,
+    };
+    panel({ workspaces: [GARDEN], folders: { Garden: { status: "loaded", children: [] } } });
+    await rightClick(screen.getByRole("button", { name: /^Garden$/ }));
+
+    const items = screen.getAllByRole("menuitem").map((item) => item.textContent);
+    expect(items).toEqual(["New Folder ...", "Open in Explorer", "Refresh"]);
+  });
 
   it("opens on a right-click of the workspace's row, with New Folder first", async () => {
     panel();

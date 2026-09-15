@@ -22,6 +22,14 @@ export const LocalWorkspaceRefSchema = z
     /// Absolute path to the folder. Chosen by the user through the native dialog, never named by
     /// the renderer - see the note at the top of `preload.js`.
     root: z.string().min(1),
+    /// Where the folder was chosen from, when that was somewhere other than the folder dialog.
+    ///
+    /// Only Obsidian's vault list, so far. A vault is read and saved exactly as any other folder -
+    /// this changes the mark it is drawn with, not what it is - and it is part of the reference so
+    /// that the settings file brings the vault back as one next launch. Absent is a plain folder.
+    ///
+    /// Not part of `workspaceRefKey`: one folder is one workspace however it was chosen.
+    origin: z.literal("obsidian").optional(),
   })
   .strict();
 
@@ -70,6 +78,14 @@ export function workspaceRefName(ref: WorkspaceRef): string {
   // A drive root has no segment to take, and an empty name would leave the workspace called
   // "Folder" - which says less than "D:\" does.
   return lastSegment(ref.root) || ref.root;
+}
+
+/// Which mark a workspace's row is drawn with: its provider's, or Obsidian's for a folder that was
+/// opened as a vault.
+export type WorkspaceMark = ProviderKind | "obsidian";
+
+export function workspaceRefMark(ref: WorkspaceRef): WorkspaceMark {
+  return ref.kind === "local" && ref.origin === "obsidian" ? "obsidian" : ref.kind;
 }
 
 /// A string that is the same for two references naming the same place, and different otherwise.

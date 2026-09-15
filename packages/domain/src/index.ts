@@ -312,6 +312,7 @@ export {
   OpenInNewWindowRequest,
   TakeDraftResponse,
   OpenWorkspaceRefRequest,
+  OpenVaultRequest,
   ConnectGitHubRequest,
   BranchesRequest,
   ListReposRequest,
@@ -347,9 +348,13 @@ export {
   sameWorkspaceRef,
   workspaceRefKey,
   workspaceRefLabel,
+  workspaceRefMark,
   workspaceRefName,
 } from "./workspaceRef";
-export type { ProviderKind, WorkspaceRef } from "./workspaceRef";
+export type { ProviderKind, WorkspaceMark, WorkspaceRef } from "./workspaceRef";
+
+export { ObsidianVaultIdSchema, obsidianVaultsFrom } from "./obsidianVaults";
+export type { ObsidianVault } from "./obsidianVaults";
 
 export {
   API_VERSION,

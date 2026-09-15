@@ -90,6 +90,13 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
     // interface rather than most of it.
     repoBranches: async () => ({ ok: true as const, branches: ["main"], branch: null, readingBranch: "main" }),
     setRepoBranch: async (_workspaceId: string, branch: string) => ({ ok: true as const, branch }),
+    // Obsidian's vaults. Not installed unless a test says otherwise; opening one answers a local
+    // folder that remembers it came from Obsidian, as the shell does.
+    obsidianVaults: async () => ({ ok: true as const, installed: false, vaults: [] }),
+    openObsidianVault: async () => ({
+      ok: true as const,
+      workspace: { id: "Garden", name: "Garden", ref: { kind: "local" as const, root: "/Garden", origin: "obsidian" as const }, truncated: false },
+    }),
     ...overrides,
   };
 
@@ -2844,5 +2851,71 @@ describe("refreshing a workspace", () => {
 
     expect(fs.listed).toEqual(["ws"]);
     expect(names(result.current.state, "ws-archive")).toEqual(["old.md"]);
+  });
+});
+
+/// Opening one of Obsidian's vaults from the picker.
+///
+/// The vault is named by Obsidian's id and the shell answers with the folder, so what this hook adds
+/// is what happens on screen: the vault is in the tree, expanded, and selected - including when it
+/// was already open, which is where a second tree over the same folder would otherwise appear.
+describe("opening an Obsidian vault", () => {
+  it("adds the vault, lists it and selects it", async () => {
+    const opened: string[] = [];
+    const { client } = fakeClient({
+      openObsidianVault: async (id) => {
+        opened.push(id);
+        return {
+          ok: true as const,
+          workspace: { id: "Garden", name: "Garden", ref: { kind: "local" as const, root: "/Garden", origin: "obsidian" as const }, truncated: false },
+        };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openVault("aaaa1111bbbb2222");
+    });
+
+    expect(opened).toEqual(["aaaa1111bbbb2222"]);
+    expect(result.current.state.workspaces.map((workspace) => workspace.id)).toEqual(["Garden"]);
+    expect(result.current.state.folders["Garden"]?.status).toBe("loaded");
+    expect(result.current.state.selectedFolder).toBe("Garden");
+  });
+
+  it("selects the workspace it is already open as rather than adding another", async () => {
+    const { client } = fakeClient({
+      openObsidianVault: async () => ({
+        ok: true as const,
+        workspace: { id: "ws", name: "ws", ref: { kind: "local" as const, root: "/ws" }, truncated: false },
+      }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    act(() => result.current.actions.selectFolder("ws/notes"));
+
+    await act(async () => {
+      await result.current.actions.openVault("aaaa1111bbbb2222");
+    });
+
+    expect(result.current.state.workspaces.map((workspace) => workspace.id)).toEqual(["ws"]);
+    expect(result.current.state.selectedFolder).toBe("ws");
+  });
+
+  it("says so when the vault's folder has gone, and selects nothing", async () => {
+    const { client } = fakeClient({
+      openObsidianVault: async () => ({ ok: false as const, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openVault("aaaa1111bbbb2222");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.notFound");
+    expect(result.current.state.workspaces).toEqual([]);
+    expect(result.current.state.selectedFolder).toBe("");
   });
 });

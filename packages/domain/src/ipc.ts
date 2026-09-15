@@ -6,6 +6,7 @@ import { SettingsSchema } from "./settings";
 import { WorkspaceRefSchema } from "./workspaceRef";
 import { isExternalUrl } from "./markdownLink";
 import { renameTarget } from "./entryName";
+import { ObsidianVaultIdSchema } from "./obsidianVaults";
 
 /// The IPC contract between the renderer and the shell.
 ///
@@ -64,6 +65,8 @@ export const IPC_CHANNELS = [
   "github:setBranch",
   "workspace:rename",
   "workspace:reveal",
+  "obsidian:vaults",
+  "obsidian:openVault",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -221,6 +224,15 @@ export const ReadRequest = z.object({ path: relativePath.min(1) }).strict();
 /// same round trip `workspace:reopen` made before this channel generalised it, and the shell still
 /// checks the folder exists and is a directory rather than trusting the string.
 export const OpenWorkspaceRefRequest = z.object({ ref: WorkspaceRefSchema }).strict();
+
+/// Opening one of Obsidian's vaults, named by Obsidian's id for it.
+///
+/// An id rather than a folder: the shell reads Obsidian's list again and opens the folder the id
+/// names there, so this channel can only ever open a vault Obsidian knows about - never whatever
+/// folder a renderer chose to send.
+export const OpenVaultRequest = z.object({ id: ObsidianVaultIdSchema }).strict();
+
+export type OpenVaultRequest = z.infer<typeof OpenVaultRequest>;
 
 export type OpenWorkspaceRefRequest = z.infer<typeof OpenWorkspaceRefRequest>;
 

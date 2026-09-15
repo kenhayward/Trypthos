@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// Shows an entry in Explorer or Finder. The absolute path is worked out in the main process and
   /// never comes back here.
   revealEntry: (path) => ipcRenderer.invoke("workspace:reveal", { path }),
+  /// Obsidian's vaults, and whether it is installed. Opened by Obsidian's id for the vault, never by
+  /// its folder - see the note at the top of this file.
+  obsidianVaults: () => ipcRenderer.invoke("obsidian:vaults"),
+  openObsidianVault: (id) => ipcRenderer.invoke("obsidian:openVault", { id }),
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
   /// refuses anything binary - see the handler.

@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 17;
+export const SETTINGS_VERSION = 18;
 
 export const SettingsSchema = z
   .object({
@@ -158,6 +158,14 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 18,
+    // Version 18 lets a remembered folder say it was opened as an Obsidian vault. Optional, so every
+    // folder remembered before it stays a plain folder and nothing is written. The version is for the
+    // OTHER direction, as with 17: the reference is strict, so a file written here and read by the
+    // previous build would fail to parse and take every remembered workspace with it.
+    migrate: (input) => input,
+  },
   {
     to: 17,
     // Version 17 gives each model a reply timeout. An existing profile gets the default ten minutes -

@@ -10,6 +10,7 @@ import {
   IPC_CHANNELS,
   OpenExternalRequest,
   OpenInNewWindowRequest,
+  OpenVaultRequest,
   ListRequest,
   CreateDirectoryRequest,
   RenameRequest,
@@ -70,6 +71,8 @@ describe("IPC_CHANNELS", () => {
       "github:setBranch",
       "workspace:rename",
       "workspace:reveal",
+      "obsidian:vaults",
+      "obsidian:openVault",
     ]);
   });
 
@@ -204,6 +207,19 @@ describe("RevealRequest", () => {
 
   it("refuses anything but a path", () => {
     expect(() => RevealRequest.parse({ path: "Notes", open: true })).toThrow();
+  });
+});
+
+/// A vault is named by the id in Obsidian's own list, never by its folder: the shell reads that list
+/// again and opens what it names, so the renderer cannot turn "open a vault" into "open any folder".
+describe("OpenVaultRequest", () => {
+  it("accepts a vault id", () => {
+    expect(OpenVaultRequest.parse({ id: "0a1b2c3d4e5f6a7b" })).toEqual({ id: "0a1b2c3d4e5f6a7b" });
+  });
+
+  it("refuses a folder in place of an id", () => {
+    expect(OpenVaultRequest.safeParse({ id: "D:\\Garden" }).success).toBe(false);
+    expect(OpenVaultRequest.safeParse({ id: "0a1b", root: "D:\\Garden" }).success).toBe(false);
   });
 });
 
