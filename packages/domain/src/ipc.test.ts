@@ -16,6 +16,7 @@ import {
   RevealRequest,
   ReadRequest,
   SaveAsRequest,
+  SaveChatRequest,
   SetSecretRequest,
   TakeDraftResponse,
   WindowStateSchema,
@@ -448,5 +449,50 @@ describe("SaveAsRequest", () => {
 
   it("refuses a request with no content, which is not a save", () => {
     expect(SaveAsRequest.safeParse({ path: "a.md" }).success).toBe(false);
+  });
+});
+
+/// Saving a conversation, as the panel holds it.
+describe("SaveChatRequest", () => {
+  const request = {
+    id: null,
+    title: "Folder tour",
+    turns: [
+      { role: "user", content: "What is in there?" },
+      {
+        role: "assistant",
+        content: "A plan.",
+        reasoning: "Look first.",
+        reasoningTruncated: true,
+        tools: [{ name: "list_directory", detail: "notes", cut: { sent: 1, total: 2 } }],
+      },
+      { role: "user", content: "/tools", local: true },
+    ],
+    profileId: "one",
+    filePath: "Notes/plan.md",
+    attachments: [{ path: "Notes/a.md", content: "# A\n" }],
+    folder: "Notes/docs",
+  };
+
+  // Its turns were once the WIRE turn, which refuses a reply's thinking and tool calls - so every
+  // real conversation was refused, and the panel said nothing (#153).
+  it("accepts the turns the panel holds, thinking and tool calls included", () => {
+    expect(SaveChatRequest.parse(request)).toEqual(request);
+  });
+
+  it("requires a name, and refuses one that is only spaces", () => {
+    expect(SaveChatRequest.safeParse({ ...request, title: undefined }).success).toBe(false);
+    expect(SaveChatRequest.safeParse({ ...request, title: "   " }).success).toBe(false);
+    expect(SaveChatRequest.safeParse({ ...request, title: "x".repeat(121) }).success).toBe(false);
+  });
+
+  it("still refuses a turn carrying a field no saved chat has", () => {
+    const turns = [{ role: "user", content: "Hi", endpoint: "http://elsewhere" }];
+    expect(SaveChatRequest.safeParse({ ...request, turns }).success).toBe(false);
+  });
+
+  it("refuses an attachment without its text, and a folder that is not a path", () => {
+    expect(SaveChatRequest.safeParse({ ...request, attachments: [{ path: "a.md" }] }).success).toBe(false);
+    expect(SaveChatRequest.safeParse({ ...request, folder: 3 }).success).toBe(false);
   });
 });

@@ -1,12 +1,23 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatSession } from "@trypthos/domain";
-import { useChatHistory, type ChatHistoryBridge } from "./useChatHistory";
+import { useChatHistory, type ChatHistoryBridge, type SavedChat } from "./useChatHistory";
 
 const TURNS: ChatSession["turns"] = [
   { role: "user", content: "Summarise this" },
   { role: "assistant", content: "It is a plan." },
 ];
+
+/// What the panel hands over when a conversation is saved, with the named parts changed.
+const chat = (overrides: Partial<SavedChat> = {}): SavedChat => ({
+  title: "Summarise this",
+  turns: TURNS,
+  profileId: "one",
+  filePath: "plan.md",
+  attachments: [],
+  folder: null,
+  ...overrides,
+});
 
 /// A shell that keeps saved chats in memory, so the hook's own bookkeeping is what is under test.
 function fakeBridge() {
@@ -33,21 +44,23 @@ function fakeBridge() {
         ? { ok: false as const, reason: "not-found" }
         : { ok: true as const, chat };
     }),
-    saveChat: vi.fn(async ({ id, turns, profileId, filePath }) => {
+    saveChat: vi.fn(async ({ id, title, turns, profileId, filePath, attachments, folder }) => {
       next += 1;
       const chatId = id ?? `chat-${next}`;
       saved.set(chatId, {
-        schemaVersion: 1,
+        schemaVersion: 6,
         id: chatId,
-        title: "Summarise this",
+        title,
         createdAt: "2026-09-03T10:00:00.000Z",
         updatedAt: `2026-09-03T10:0${next}:00.000Z`,
         workspaceRoot: "D:/Notes",
         filePath,
         profileId,
         turns,
+        attachments,
+        folder,
       });
-      return { ok: true as const, id: chatId, title: "Summarise this" };
+      return { ok: true as const, id: chatId, title };
     }),
     deleteChat: vi.fn(async (id: string) => {
       saved.delete(id);
@@ -66,7 +79,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
 
     expect(result.current.chats.map((chat) => chat.title)).toEqual(["Summarise this"]);
@@ -78,10 +91,10 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
     await act(async () => {
-      await result.current.save([...TURNS, { role: "user", content: "More" }], "one", "plan.md");
+      await result.current.save(chat({ turns: [...TURNS, { role: "user", content: "More" }] }));
     });
 
     expect(result.current.chats).toHaveLength(1);
@@ -92,7 +105,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
 
     expect(result.current.openId).not.toBeNull();
@@ -103,10 +116,34 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save([], null, null);
+      await result.current.save(chat({ turns: [] }));
     });
 
     expect(saved.size).toBe(0);
+  });
+
+  // The whole conversation goes to the shell: the name given, and what it was held with.
+  it("saves under the name given, with the attachments' text and the folder's path", async () => {
+    const { bridge } = fakeBridge();
+    const { result } = history(bridge);
+    const attachments = [{ path: "Notes/a.md", content: "# A" }];
+
+    let outcome: Awaited<ReturnType<typeof result.current.save>> | null = null;
+    await act(async () => {
+      outcome = await result.current.save(chat({ title: "Plan review", attachments, folder: "Notes/docs" }));
+    });
+
+    expect(outcome).toMatchObject({ ok: true, title: "Plan review" });
+    expect(bridge.saveChat).toHaveBeenCalledWith({
+      id: null,
+      title: "Plan review",
+      turns: TURNS,
+      profileId: "one",
+      filePath: "plan.md",
+      attachments,
+      folder: "Notes/docs",
+    });
+    expect(result.current.chats.map((saved) => saved.title)).toEqual(["Plan review"]);
   });
 
   it("opens a saved chat", async () => {
@@ -114,7 +151,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
 
     let opened: ChatSession | null = null;
@@ -148,7 +185,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
     await act(async () => {
       await result.current.remove(result.current.chats[0]!.id);
@@ -163,7 +200,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
     const id = result.current.openId!;
     await act(async () => {
@@ -178,7 +215,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "a.md");
+      await result.current.save(chat({ filePath: "a.md" }));
     });
     const first = result.current.openId!;
     await act(async () => {
@@ -194,7 +231,7 @@ describe("useChatHistory", () => {
     const { result } = history(bridge);
 
     await act(async () => {
-      await result.current.save(TURNS, "one", "plan.md");
+      await result.current.save(chat());
     });
     act(() => result.current.forget());
 
@@ -206,7 +243,7 @@ describe("useChatHistory", () => {
     const { result } = history(null);
 
     await act(async () => {
-      await result.current.save(TURNS, null, null);
+      await result.current.save(chat());
       await result.current.remove("anything");
     });
 

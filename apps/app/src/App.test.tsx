@@ -691,6 +691,143 @@ describe("adding a file to the chat from the folder browser", () => {
   });
 });
 
+/// Saving a conversation and opening it again, end to end: the name asked for, what goes with it,
+/// and what comes back.
+describe("saving and reopening a conversation", () => {
+  function shell() {
+    const saves: Record<string, unknown>[] = [];
+    const stored = new Map<string, Record<string, unknown>>();
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] },
+          workspaces: [{ kind: "local" as const, root: "D:/Notes" }],
+        },
+      }),
+      writeSettings: async () => {},
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
+        ok: true as const,
+        workspace: { id: "Notes", name: "Notes", ref },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [{ id: "Notes/plan.md", name: "plan.md", kind: "file" as const }],
+      }),
+      workspaceOutline: async (path: string) => ({
+        ok: true as const,
+        outline: { path, paths: ["plan.md"], truncated: false },
+      }),
+      readFile: async () => ({ ok: true as const, content: "# Plan", revision: { id: "r1" } }),
+      sendChat: async () => ({ ok: true as const, streamId: "s1" }),
+      cancelChat: async () => {},
+      onChatEvent: () => () => {},
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+      listChats: async () => ({
+        ok: true as const,
+        chats: [...stored.values()].map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          updatedAt: "2026-09-15T10:00:00.000Z",
+          filePath: chat.filePath,
+        })),
+      }),
+      loadChat: async (id: string) => ({
+        ok: true as const,
+        chat: {
+          schemaVersion: 6,
+          createdAt: "2026-09-15T10:00:00.000Z",
+          updatedAt: "2026-09-15T10:00:00.000Z",
+          workspaceRoot: "D:/Notes",
+          ...stored.get(id),
+        },
+      }),
+      saveChat: async (request: Record<string, unknown>) => {
+        saves.push(request);
+        const id = (request.id as string | null) ?? "3f1a1a2e-0000-4000-8000-000000000000";
+        stored.set(id, { ...request, id });
+        return { ok: true as const, id, title: request.title };
+      },
+      deleteChat: async () => ({ ok: true as const }),
+    } as unknown as typeof window.trypthos;
+    return { saves };
+  }
+
+  it("asks for a name, and saves the turns with the attached file's text and the folder's path", async () => {
+    const user = userEvent.setup();
+    const { saves } = shell();
+    render(<App />);
+    const chat = await screen.findByRole("complementary", { name: "Chat" });
+
+    // A file attached from the tree, and the workspace folder attached as a map.
+    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: /plan\.md/ }) });
+    await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
+    await within(chat).findByRole("button", { name: "Remove Notes/plan.md" });
+    await user.click(within(chat).getByRole("button", { name: /^Folder/ }));
+    await user.type(within(chat).getByRole("textbox", { name: "Message" }), "/tools");
+    await user.click(within(chat).getByRole("button", { name: "Send" }));
+    await within(chat).findByText(/Model tools/);
+
+    await user.click(within(chat).getByRole("button", { name: "Save this conversation" }));
+    const name = screen.getByRole("textbox", { name: "Name" });
+    expect((name as HTMLInputElement).value).toBe("/tools");
+    expect(screen.getByText("The text of 1 attached file is saved with it.")).toBeDefined();
+    await user.clear(name);
+    await user.type(name, "Tools tour");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0]).toMatchObject({
+      id: null,
+      title: "Tools tour",
+      attachments: [{ path: "Notes/plan.md", content: "# Plan" }],
+      folder: "Notes",
+    });
+    expect((saves[0]!.turns as unknown[]).length).toBe(2);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await within(chat).findByText("Saved as Tools tour")).toBeDefined();
+  });
+
+  it("opens a saved conversation with its turns and attachments back in the panel", async () => {
+    const user = userEvent.setup();
+    shell();
+    render(<App />);
+    const chat = await screen.findByRole("complementary", { name: "Chat" });
+
+    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: /plan\.md/ }) });
+    await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
+    await within(chat).findByRole("button", { name: "Remove Notes/plan.md" });
+    await user.click(within(chat).getByRole("button", { name: /^Folder/ }));
+    await user.type(within(chat).getByRole("textbox", { name: "Message" }), "/tools");
+    await user.click(within(chat).getByRole("button", { name: "Send" }));
+    await within(chat).findByText(/Model tools/);
+    await user.click(within(chat).getByRole("button", { name: "Save this conversation" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await within(chat).findByText("Saved as /tools");
+
+    // A new conversation: nothing on screen, nothing attached.
+    await user.click(within(chat).getByRole("button", { name: "Clear the conversation" }));
+    expect(within(chat).queryByText(/Model tools/)).toBeNull();
+    expect(within(chat).queryByRole("button", { name: "Remove Notes/plan.md" })).toBeNull();
+
+    await user.click(within(chat).getByRole("button", { name: "Saved conversations" }));
+    await user.click(await within(chat).findByRole("button", { name: /^\/tools/ }));
+
+    expect(await within(chat).findByText(/Model tools/)).toBeDefined();
+    expect(within(chat).getByRole("button", { name: "Remove Notes/plan.md" })).toBeDefined();
+    expect(within(chat).getByRole("button", { name: /^Folder/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(chat).getByText("Saved as /tools")).toBeDefined();
+  });
+});
+
 /// File > New, from the menu to a tab with a name and nowhere to be.
 describe("making a new file", () => {
   function shell(): {

@@ -67,7 +67,7 @@ export {
   loadChatSession,
   summariseSession,
 } from "./chatSession";
-export type { ChatSession, ChatSessionSummary } from "./chatSession";
+export type { ChatSession, ChatSessionSummary, SessionAttachment } from "./chatSession";
 
 export { findHeadings, resolveEdit } from "./documentEdit";
 export type { EditOp, EditTarget, Heading, ProposedEdit } from "./documentEdit";
@@ -265,6 +265,7 @@ export {
   CancelChatRequest,
   ChatIdRequest,
   SaveChatRequest,
+  CHAT_TITLE_LIMIT,
   ChatEventMessage,
   CLOSE_REQUESTED_CHANNEL,
   ChatEventSchema,

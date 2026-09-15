@@ -145,6 +145,21 @@ export function useChatScope(
     setAttachments((current) => current.filter((attachment) => attachment.path !== path));
   }, []);
 
+  /// Each attachment with the text it was attached with, for a conversation being saved.
+  const saved = useCallback(() => attachments, [attachments]);
+
+  /// Puts back what a saved conversation was held with: its attachments, with the text they had
+  /// then, and whether the folder was attached. Nothing is read - the conversation was about those
+  /// words, and the file may have changed or gone since.
+  const restore = useCallback(
+    (restored: readonly { path: string; content: string }[], folder: boolean) => {
+      setAttachments(restored.map(({ path, content }) => ({ path, content })));
+      setIncludeFolder(folder);
+      setAttachFailure(null);
+    },
+    [],
+  );
+
   const clear = useCallback(() => {
     setAttachments([]);
     setIncludeFolder(false);
@@ -179,6 +194,8 @@ export function useChatScope(
     attachFailure,
     detach,
     clear,
+    saved,
+    restore,
     context,
   };
 }

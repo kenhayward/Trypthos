@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.74.0",
+    date: "2026-09-15",
+    pr: 154,
+    headline: "Saving a chat works, asks for a name, and keeps what was attached",
+    summary:
+      "Save this conversation did nothing for most conversations: a reply that made a tool call or showed its thinking was refused when saving, and nothing on screen said so, so the conversation never appeared under Saved conversations. It saves now, and asks what to call the conversation, starting from the question that began it or from the name it was saved under before. It also says what is kept with it. The text of every attached file is saved inside the conversation, so it still has the same words to go on however the file changes later. An attached folder is saved as its path only, because a folder is only ever sent to a model as a list of names. Opening a saved conversation from the clock icon puts it back in the chat panel: every question and reply, with their tool calls and thinking, the attached files with the text they had, and the folder switched on and chosen again if it is open - if it is not, the panel says so. The panel shows the name of the saved conversation you are in, and saving it again updates it.",
+    added: [
+      "Saving a conversation asks for a name, and says what is saved with it.",
+      "A saved conversation keeps the text of its attached files and the path of its attached folder, and reopening it restores them.",
+      "The chat panel shows the name of the saved conversation on screen.",
+    ],
+    fixed: [
+      "Saving a conversation whose replies made tool calls or showed their thinking works, instead of silently doing nothing.",
+    ],
+  },
+  {
     version: "0.73.1",
     date: "2026-09-15",
     pr: 152,

@@ -197,7 +197,7 @@ describe("saved reasoning", () => {
       turns: [{ role: "assistant", content: "Hi", tools }],
     });
 
-    expect(loaded?.schemaVersion).toBe(5);
+    expect(loaded?.schemaVersion).toBe(CHAT_SESSION_VERSION);
     expect(loaded?.turns[0]?.tools).toEqual(tools);
   });
 
@@ -308,5 +308,54 @@ describe("a locally answered turn", () => {
     expect(loaded).not.toBeNull();
     expect(loaded?.turns[0]?.local).toBeUndefined();
     expect(loaded?.schemaVersion).toBe(CHAT_SESSION_VERSION);
+  });
+});
+
+/// What a conversation was held against, kept with it.
+///
+/// An attached file is kept WHOLE - reopening the chat must be able to go on asking about the same
+/// text, and the file on disk may have changed or gone. A folder is only ever a map, so only its
+/// path is kept.
+describe("a chat's attachments and folder", () => {
+  const base = {
+    schemaVersion: CHAT_SESSION_VERSION,
+    id: "abc",
+    title: "A chat",
+    createdAt: "2026-09-15T10:00:00.000Z",
+    updatedAt: "2026-09-15T10:00:00.000Z",
+    workspaceRoot: null,
+    filePath: null,
+    profileId: null,
+    turns: [{ role: "user", content: "Hello" }],
+  };
+
+  it("keeps each attached file's contents and the folder's path", () => {
+    const loaded = loadChatSession({
+      ...base,
+      attachments: [{ path: "Notes/plan.md", content: "# Plan\n" }],
+      folder: "Notes/docs",
+    });
+
+    expect(loaded?.attachments).toEqual([{ path: "Notes/plan.md", content: "# Plan\n" }]);
+    expect(loaded?.folder).toBe("Notes/docs");
+  });
+
+  it("loads a chat saved before attachments were kept, with none", () => {
+    const loaded = loadChatSession({ ...base, schemaVersion: 5 });
+
+    expect(loaded?.schemaVersion).toBe(CHAT_SESSION_VERSION);
+    expect(loaded?.attachments).toEqual([]);
+    expect(loaded?.folder).toBeNull();
+  });
+
+  it("refuses an attachment that is not a path and its text", () => {
+    expect(loadChatSession({ ...base, attachments: [{ path: "a.md" }], folder: null })).toBeNull();
+    expect(
+      loadChatSession({ ...base, attachments: [{ path: "a.md", content: "x", root: "/" }], folder: null }),
+    ).toBeNull();
+  });
+
+  it("is on version 6", () => {
+    expect(CHAT_SESSION_VERSION).toBe(6);
   });
 });

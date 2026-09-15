@@ -273,3 +273,44 @@ describe("the folder chat maps", () => {
     await waitFor(() => expect(result.current.files).toHaveLength(0));
   });
 });
+
+/// A saved conversation keeps what was attached with its text, and reopening it puts that back.
+describe("saving and reopening", () => {
+  it("hands over each attachment with the text that was attached", async () => {
+    const bridge = fakeBridge({ "notes/risks.md": "# Risks" });
+    const { result } = scope(bridge);
+
+    await act(async () => {
+      await result.current.attach("notes/risks.md");
+    });
+
+    expect(result.current.saved()).toEqual([{ path: "notes/risks.md", content: "# Risks" }]);
+  });
+
+  // The saved text, not the file as it is now: the conversation was about those words, and the file
+  // may have changed or gone - so nothing is read.
+  it("restores saved attachments and the folder switch without reading anything", async () => {
+    const bridge = fakeBridge();
+    const { result } = scope(bridge);
+
+    act(() => result.current.restore([{ path: "notes/old.md", content: "# As it was" }], true));
+
+    expect(bridge.readFile).not.toHaveBeenCalled();
+    expect(result.current.attachments).toEqual(["notes/old.md"]);
+    expect(result.current.includeFolder).toBe(true);
+    expect(result.current.context().attachments[0]).toMatchObject({ path: "notes/old.md", text: "# As it was" });
+  });
+
+  it("replaces whatever was attached before", async () => {
+    const bridge = fakeBridge({ "notes/risks.md": "# Risks" });
+    const { result } = scope(bridge);
+    await act(async () => {
+      await result.current.attach("notes/risks.md");
+    });
+
+    act(() => result.current.restore([], false));
+
+    expect(result.current.attachments).toEqual([]);
+    expect(result.current.includeFolder).toBe(false);
+  });
+});

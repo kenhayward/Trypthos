@@ -7,6 +7,7 @@ import {
   contextTokens,
   defaultChatProfile,
   cappedForSaving,
+  chatTitleFrom,
   effectiveSystemPrompt,
   fileTypeFor,
   noteRecentFile,
@@ -23,6 +24,7 @@ import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
 import NewFolderDialog from "./components/NewFolderDialog";
 import RenameDialog from "./components/RenameDialog";
+import SaveChatDialog from "./components/SaveChatDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
@@ -406,6 +408,10 @@ export default function App() {
   /// Kept rather than checked on every render: it is a fact about the chat that was opened, and the
   /// answer would not change until a different one is.
   const [missingChatFile, setMissingChatFile] = useState<string | null>(null);
+  /// The folder a reopened conversation was mapping, when that folder is not open now.
+  const [missingChatFolder, setMissingChatFolder] = useState<string | null>(null);
+  /// True while the conversation is being named for saving.
+  const [namingChat, setNamingChat] = useState(false);
 
   /// Opens a saved conversation.
   ///
@@ -421,8 +427,19 @@ export default function App() {
       setMissingChatFile(
         session.filePath !== null && session.filePath !== state.file?.path ? session.filePath : null,
       );
+
+      // What it was held with comes back too: its attachments with the text they had when it was
+      // saved, and its folder - chosen again in the browser, when that folder is open - so the
+      // conversation can carry on where it left off.
+      const folder = session.folder;
+      const workspaceId = folder === null ? undefined : splitQualified(folder)?.workspaceId;
+      const folderOpen =
+        folder !== null && state.workspaces.some((workspace) => workspace.id === workspaceId);
+      if (folderOpen) actions.selectFolder(folder);
+      scope.restore(session.attachments, folderOpen);
+      setMissingChatFolder(folder !== null && !folderOpen ? folder : null);
     },
-    [chat, history, state.file?.path],
+    [actions, chat, history, scope, state.file?.path, state.workspaces],
   );
 
   // Reopening the folders the app was last closed with. Only once, and only after settings have
@@ -792,6 +809,7 @@ export default function App() {
                   // than overwrite the one that was open.
                   history.forget();
                   setMissingChatFile(null);
+                  setMissingChatFolder(null);
                   // A new conversation should not silently inherit the last one's attachments.
                   scope.clear();
                   chat.clear();
@@ -802,6 +820,7 @@ export default function App() {
                 chats={history.chats}
                 openChatId={history.openId}
                 missingFile={missingChatFile}
+                missingFolder={missingChatFolder}
                 scope={{
                   attachments: scope.attachments,
                   files: scope.files,
@@ -815,16 +834,7 @@ export default function App() {
                   attachFailure: scope.attachFailure,
                   cutShort,
                 }}
-                onSaveChat={() =>
-                  // The panel's turns, not the wire ones: a saved chat is a record of what was
-                  // shown, so it keeps the thinking and the files each reply read. Capped on the
-                  // way, because chain of thought is often longer than the answer.
-                  void history.save(
-                    cappedForSaving(chat.turns),
-                    activeModel?.id ?? null,
-                    state.file?.path ?? null,
-                  )
-                }
+                onSaveChat={() => setNamingChat(true)}
                 onOpenChat={(id) => void openChat(id)}
                 onDeleteChat={(id) => void history.remove(id)}
               />
@@ -909,6 +919,34 @@ export default function App() {
             setNamingFile(false);
             if (typeof directory === "string") void actions.createEmptyFile(directory, name);
             else actions.newDocument(name);
+          }}
+        />
+      )}
+
+      {namingChat && showChat && (
+        <SaveChatDialog
+          // The open chat keeps its own name; a new one starts from the question that began it.
+          suggested={
+            history.chats.find((saved) => saved.id === history.openId)?.title ?? chatTitleFrom(chat.turns)
+          }
+          attachments={scope.attachments.length}
+          folder={scope.includeFolder ? state.selectedFolder : null}
+          onCancel={() => setNamingChat(false)}
+          onSave={async (title) => {
+            const result = await history.save({
+              title,
+              // The panel's turns, not the wire ones: a saved chat is a record of what was shown,
+              // so it keeps the thinking and the tool calls. Capped on the way, because chain of
+              // thought is often longer than the answer.
+              turns: cappedForSaving(chat.turns),
+              profileId: activeModel?.id ?? null,
+              filePath: state.file?.path ?? null,
+              // Each attached file with its text, and the folder as its path only.
+              attachments: scope.saved(),
+              folder: scope.includeFolder ? state.selectedFolder : null,
+            });
+            if (result.ok) setNamingChat(false);
+            return result.ok;
           }}
         />
       )}

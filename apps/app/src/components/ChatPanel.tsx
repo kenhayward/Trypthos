@@ -61,6 +61,8 @@ interface Props {
   /// Set when the chat that was opened names a file that is not there any more. The conversation
   /// still opens - it is the user's own words - and this says what it was about.
   missingFile: string | null;
+  /// The folder a reopened conversation was mapping, when that folder is not open. Null otherwise.
+  missingFolder?: string | null;
   onSaveChat: () => void;
   /// What chat can see beyond the open document.
   scope: {
@@ -116,12 +118,15 @@ export default function ChatPanel({
   chats,
   openChatId,
   missingFile,
+  missingFolder = null,
   onSaveChat,
   scope,
   onOpenChat,
   onDeleteChat,
 }: Props) {
   const { t, i18n } = useTranslation();
+  /// The name of the saved conversation on screen, or undefined when it has not been saved.
+  const openTitle = chats.find((chat) => chat.id === openChatId)?.title;
   /// Character counts in a cut read's warning, grouped the way the reader's language groups them.
   const numbers = useMemo(() => new Intl.NumberFormat(i18n.language), [i18n.language]);
   const [input, setInput] = useState("");
@@ -333,6 +338,13 @@ export default function ChatPanel({
         onScroll={onThreadScroll}
         className="min-h-0 grow space-y-3 overflow-y-auto p-3"
       >
+        {/* Which saved conversation this is, once it has been saved or opened - the only place the
+            name given to it is shown outside the list. */}
+        {openTitle !== undefined && turns.length > 0 && (
+          <p className="truncate text-xs text-ink-4" title={openTitle}>
+            {t("chat.history.openTitle", { title: openTitle })}
+          </p>
+        )}
         {models.length === 0 ? (
           <div className="text-ui text-ink-4">
             <p>{t("chat.notConfigured")}</p>
@@ -493,6 +505,12 @@ export default function ChatPanel({
         {/* A chat opened against a file that has since gone. The conversation is the user's own
             words and still opens; this says what it was about, so a reply referring to "the
             document" is not a mystery. */}
+        {missingFolder !== null && (
+          <p className="rounded border border-rule px-2 py-1.5 text-xs text-ink-4">
+            {t("chat.history.folderMissing", { folder: missingFolder })}
+          </p>
+        )}
+
         {missingFile !== null && (
           <p className="rounded border border-rule px-2 py-1.5 text-xs text-ink-4">
             {t("chat.history.fileMissing", { file: missingFile })}

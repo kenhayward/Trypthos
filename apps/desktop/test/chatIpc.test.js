@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { DEFAULT_SETTINGS } = require("@trypthos/domain");
+const { CHAT_SESSION_VERSION, DEFAULT_SETTINGS } = require("@trypthos/domain");
 const { registerIpcHandlers } = require("../src/ipcHandlers");
 const { writeSettings } = require("../src/settingsStore");
 
@@ -83,7 +83,7 @@ async function withHandlers(body, options = {}) {
       chat,
     });
 
-    await body({ ipcMain, sent, runs });
+    await body({ ipcMain, sent, runs, userDataDir: dir });
   } finally {
     console.error = noise;
     await fs.rm(dir, { recursive: true, force: true });
@@ -343,49 +343,94 @@ const conversation = [
   { role: "assistant", content: "It is a plan." },
 ];
 
+/// A whole save request, as the panel sends one, with the named fields changed.
+const saveRequest = (overrides = {}) => ({
+  id: null,
+  title: "About the plan",
+  turns: conversation,
+  profileId: null,
+  filePath: null,
+  attachments: [],
+  folder: null,
+  ...overrides,
+});
+
 test("saves a conversation and gives back its id", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("chats:save", {
-      id: null,
-      turns: conversation,
-      profileId: "one",
-      filePath: "plan.md",
-    });
+    const result = await ipcMain.invoke("chats:save", saveRequest({ profileId: "one", filePath: "plan.md" }));
 
     assert.equal(result.ok, true);
     assert.match(result.id, /^[0-9a-f-]{36}$/);
   });
 });
 
-// Derived, not asked for. A dialog demanding a name before a chat can be saved is one people learn
-// to dismiss.
-test("names the chat after the question that started it", async () => {
+// What the panel actually holds: a reply carries its thinking and its tool calls, and a slash
+// command's answer is marked local. The save above uses bare wire turns, which is how a save that
+// refused every real conversation passed its tests (#153).
+test("saves the turns the panel holds, thinking and tool calls included", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    const result = await ipcMain.invoke("chats:save", {
+    const turns = [
+      { role: "user", content: "What is in there?" },
+      {
+        role: "assistant",
+        content: "A plan.",
+        reasoning: "Look at the folder first.",
+        tools: [{ name: "list_directory", detail: "notes", cut: { sent: 10, total: 20 } }],
+      },
+      { role: "user", content: "/tools", local: true },
+    ];
+    const saved = await ipcMain.invoke("chats:save", {
       id: null,
-      turns: conversation,
+      title: "Folder tour",
+      turns,
       profileId: null,
       filePath: null,
+      attachments: [],
+      folder: null,
     });
 
-    assert.equal(result.title, "Summarise this document");
+    assert.equal(saved.ok, true, `refused: ${saved.reason}`);
+    const loaded = await ipcMain.invoke("chats:load", { id: saved.id });
+    assert.deepEqual(loaded.chat.turns, turns);
+  });
+});
+
+// Named by the user when it is saved, trimmed.
+test("keeps the name the chat was saved with", async () => {
+  await withHandlers(async ({ ipcMain }) => {
+    const result = await ipcMain.invoke("chats:save", saveRequest({ title: "  Plan review  " }));
+
+    assert.equal(result.title, "Plan review");
+    assert.equal((await ipcMain.invoke("chats:list")).chats[0].title, "Plan review");
+  });
+});
+
+// An attached file is kept with its text, so the chat can go on about the same words however the
+// file has changed. A folder is only ever a map, so only its path is kept.
+test("keeps each attached file's text and the attached folder's path", async () => {
+  await withHandlers(async ({ ipcMain, userDataDir }) => {
+    const attachments = [{ path: "Notes/plan.md", content: "# Plan\n\nShip it.\n" }];
+    const saved = await ipcMain.invoke("chats:save", saveRequest({ attachments, folder: "Notes/docs" }));
+
+    const loaded = await ipcMain.invoke("chats:load", { id: saved.id });
+    assert.deepEqual(loaded.chat.attachments, attachments);
+    assert.equal(loaded.chat.folder, "Notes/docs");
+
+    // Written at the version it is, so the next build migrates from the right place.
+    const onDisk = JSON.parse(
+      await fs.readFile(path.join(userDataDir, "chats", `${saved.id}.json`), "utf8"),
+    );
+    assert.equal(onDisk.schemaVersion, CHAT_SESSION_VERSION);
   });
 });
 
 test("saving the same chat again replaces it", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    const first = await ipcMain.invoke("chats:save", {
-      id: null,
-      turns: conversation,
-      profileId: null,
-      filePath: null,
-    });
-    await ipcMain.invoke("chats:save", {
+    const first = await ipcMain.invoke("chats:save", saveRequest());
+    await ipcMain.invoke("chats:save", saveRequest({
       id: first.id,
       turns: [...conversation, { role: "user", content: "And again" }],
-      profileId: null,
-      filePath: null,
-    });
+    }));
 
     const list = await ipcMain.invoke("chats:list");
     assert.equal(list.chats.length, 1);
@@ -397,12 +442,7 @@ test("saving the same chat again replaces it", async () => {
 
 test("lists saved conversations without their contents", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    await ipcMain.invoke("chats:save", {
-      id: null,
-      turns: conversation,
-      profileId: null,
-      filePath: "plan.md",
-    });
+    await ipcMain.invoke("chats:save", saveRequest({ filePath: "plan.md" }));
 
     const list = await ipcMain.invoke("chats:list");
     assert.equal(list.chats.length, 1);
@@ -413,12 +453,7 @@ test("lists saved conversations without their contents", async () => {
 
 test("deletes a conversation", async () => {
   await withHandlers(async ({ ipcMain }) => {
-    const saved = await ipcMain.invoke("chats:save", {
-      id: null,
-      turns: conversation,
-      profileId: null,
-      filePath: null,
-    });
+    const saved = await ipcMain.invoke("chats:save", saveRequest());
 
     assert.deepEqual(await ipcMain.invoke("chats:delete", { id: saved.id }), { ok: true });
     assert.deepEqual((await ipcMain.invoke("chats:list")).chats, []);
