@@ -85,20 +85,23 @@ export async function followWikiLink(written: string, handlers: MarkdownLinkHand
   // The same rule as any link: what the folder browser would not open, a link does not open either.
   if (!isOpenable(name, handlers.fileTypes)) return;
 
-  const workspaceId =
-    (handlers.fromPath === null ? null : splitQualified(handlers.fromPath)?.workspaceId) ??
-    handlers.workspaceId ??
-    null;
-  if (workspaceId !== null && handlers.findByName !== undefined) {
-    const found = await handlers.findByName(name, workspaceId);
-    const target = pickWikiTarget(found, fileName, handlers.fromPath);
-    if (target !== null) {
-      handlers.openDocument(target);
-      return;
-    }
-  }
+  const target = await findWikiTarget(link.target, handlers.fromPath, handlers);
+  if (target !== null) handlers.openDocument(target);
+  else followLink(fileName, handlers);
+}
 
-  followLink(fileName, handlers);
+/// The qualified path of the file a wiki link's target names, found by name in the linking note's
+/// workspace, or null when nothing there has that name.
+export async function findWikiTarget(
+  target: string,
+  fromPath: string | null,
+  where: Pick<MarkdownLinkHandlers, "workspaceId" | "findByName">,
+): Promise<string | null> {
+  const fileName = wikiLinkFileName(target);
+  const name = fileName.slice(fileName.lastIndexOf("/") + 1);
+  const workspaceId = (fromPath === null ? null : splitQualified(fromPath)?.workspaceId) ?? where.workspaceId ?? null;
+  if (workspaceId === null || where.findByName === undefined) return null;
+  return pickWikiTarget(await where.findByName(name, workspaceId), fileName, fromPath);
 }
 
 export function markdownLinkHandler(handlers: MarkdownLinkHandlers) {

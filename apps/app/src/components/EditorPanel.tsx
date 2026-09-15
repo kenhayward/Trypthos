@@ -61,6 +61,8 @@ interface Props {
   /// Finds files in a workspace by name, for Obsidian's wiki links and embeds - see
   /// `MarkdownPreview`.
   findByName?: (name: string, workspaceId: string) => Promise<readonly string[]>;
+  /// Reads a note's text, for an Obsidian embed shown in place in Preview.
+  readDocument?: (path: string) => Promise<string | null>;
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
@@ -83,6 +85,8 @@ interface Props {
   /// surface in the window. This exists because CodeMirror draws link text as a decorated span, which
   /// no anchor handler can see.
   onFollowLink?: (href: string) => void;
+  /// An Obsidian wiki link was followed in Live mode, with its target as written between the brackets.
+  onFollowWikiLink?: (target: string) => void;
   /// The view a document opens in, from settings.
   ///
   /// A default, not a mode: the header still decides what THIS document shows. Optional because a
@@ -143,6 +147,7 @@ export default function EditorPanel({
   readImage,
   vault = false,
   findByName,
+  readDocument,
   onChange,
   onActivateFile,
   onCloseFile,
@@ -151,6 +156,7 @@ export default function EditorPanel({
   onOpenInNewWindow,
   onSelectionChange,
   onFollowLink,
+  onFollowWikiLink,
   defaultMode = DEFAULT_EDITOR_MODE,
   fileTypes = NO_FILE_TYPES,
   ref,
@@ -360,6 +366,8 @@ export default function EditorPanel({
             onCaret={(line, column) => setCaret({ line, column })}
             onSelectionChange={onSelectionChange}
             onFollowLink={onFollowLink}
+            onFollowWikiLink={onFollowWikiLink}
+            flavour={flavour}
             readOnly={readOnly}
             ref={attach}
             ariaLabel={t("editor.surface")}
@@ -380,6 +388,7 @@ export default function EditorPanel({
             fromPath={activePath}
             flavour={flavour}
             findByName={findByName}
+            readDocument={readDocument}
           />
         )}
       </div>

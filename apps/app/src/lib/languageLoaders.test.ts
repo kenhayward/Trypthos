@@ -87,6 +87,31 @@ describe("LANGUAGE_LOADERS", () => {
     expect(LANGUAGE_LOADERS.text).toBeNull();
   });
 
+  /// What the markdown editor understands: GFM always - tables, strikethrough, task lists - and
+  /// Obsidian's marks for an Obsidian document only.
+  describe("markdown", () => {
+    const names = async (text: string, flavour: "gfm" | "obsidian") => {
+      const support = await LANGUAGE_LOADERS.markdown!({ name: "note.md", fileTypes: ALL_TYPES, flavour });
+      const found = new Set<string>();
+      support.language.parser.parse(text).iterate({ enter: (node) => void found.add(node.name) });
+      return found;
+    };
+
+    it("parses GFM in both flavours", async () => {
+      for (const flavour of ["gfm", "obsidian"] as const) {
+        const found = await names("| a |\n|---|\n| 1 |\n\n~~gone~~\n\n- [x] done", flavour);
+        expect([...found]).toEqual(expect.arrayContaining(["Table", "Strikethrough", "Task"]));
+      }
+    });
+
+    it("parses Obsidian's marks only for an Obsidian document", async () => {
+      const text = "[[Plan]] and ==this== #tag";
+      expect([...(await names(text, "obsidian"))]).toEqual(expect.arrayContaining(["WikiLink", "Highlight", "Tag"]));
+      const gfm = await names(text, "gfm");
+      expect(gfm.has("WikiLink") || gfm.has("Highlight") || gfm.has("Tag")).toBe(false);
+    });
+  });
+
   it("loads a language when asked", async () => {
     const support = await LANGUAGE_LOADERS.json!({ name: "data.json", fileTypes: ALL_TYPES });
     expect(support.language.name).toBe("json");

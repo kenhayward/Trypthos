@@ -54,7 +54,7 @@ import { answerFor } from "./lib/commandAnswers";
 import { openExternal } from "./lib/externalLinks";
 import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
 
-import { followLink, markdownLinkHandler } from "./lib/markdownLinks";
+import { followLink, followWikiLink, markdownLinkHandler } from "./lib/markdownLinks";
 import type { SettingsSection } from "./lib/settingsSections";
 import {
   chatBridge,
@@ -591,6 +591,16 @@ export default function App() {
     [client],
   );
 
+  /// A note's text, for an Obsidian embed shown in Preview. As it is on disk: an embed shows the note
+  /// that was saved, the way Obsidian does.
+  const readDocument = useCallback(
+    async (path: string): Promise<string | null> => {
+      const result = await client.readFile(path);
+      return result.ok ? result.content : null;
+    },
+    [client],
+  );
+
   const linkHandlers = useMemo(
     () => ({
       fromPath: state.file?.path ?? null,
@@ -734,6 +744,7 @@ export default function App() {
               ?.vault === true
           }
           findByName={findByName}
+          readDocument={readDocument}
           page={
             repoPageId === null ? null : (
               <RepoPage
@@ -760,6 +771,7 @@ export default function App() {
           // text as a decorated span rather than an anchor, so the delegated handler above cannot
           // see it and the editor reports the click instead.
           onFollowLink={(href) => followLink(href, linkHandlers)}
+          onFollowWikiLink={(target) => void followWikiLink(target, linkHandlers)}
           ref={editor}
           onChange={actions.edit}
           // Only for the document the matches were found in. Switching to another tab must not leave

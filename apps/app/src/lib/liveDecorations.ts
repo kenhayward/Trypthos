@@ -23,7 +23,24 @@ export interface Range {
 }
 
 /// Markers hidden regardless of what encloses them.
-const ALWAYS_HIDDEN = new Set(["HeaderMark", "EmphasisMark", "QuoteMark", "LinkMark"]);
+///
+/// GFM's strikethrough, and Obsidian's brackets, highlight and math markers. A wiki link with an
+/// alias reads as the alias, so its target and bar go with the brackets - the parser names an aliased
+/// target apart from one that is the link's only text. Comment markers are NOT here: Obsidian shows a
+/// comment while editing, and hiding its markers would leave text that looks like prose and is not.
+const ALWAYS_HIDDEN = new Set([
+  "HeaderMark",
+  "EmphasisMark",
+  "QuoteMark",
+  "LinkMark",
+  "StrikethroughMark",
+  "WikiLinkMark",
+  "EmbedMark",
+  "WikiLinkAliasedTarget",
+  "WikiLinkBar",
+  "HighlightMark",
+  "InlineMathMark",
+]);
 
 /// Content nodes and the class that gives them their rendered appearance.
 const FORMAT_CLASSES: Record<string, string> = {
@@ -38,6 +55,17 @@ const FORMAT_CLASSES: Record<string, string> = {
   InlineCode: "cm-live-code",
   Link: "cm-live-link",
   Blockquote: "cm-live-quote",
+  Strikethrough: "cm-live-strike",
+  WikiLink: "cm-live-link",
+  Embed: "cm-live-link",
+  Highlight: "cm-live-highlight",
+  Comment: "cm-live-comment",
+  BlockComment: "cm-live-comment",
+  Tag: "cm-live-tag",
+  InlineMath: "cm-live-math",
+  BlockMath: "cm-live-math",
+  BlockId: "cm-live-block-id",
+  CalloutMark: "cm-live-callout",
 };
 
 /// Whether this node is punctuation Live mode hides.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { imageSource, pickWikiTarget, splitQualified } from "@trypthos/domain";
+import { readMarkdownImage } from "../lib/markdownImages";
 import type { ImageResult } from "../lib/workspaceClient";
 
 /// Pictures in rendered markdown, read through the provider.
@@ -57,28 +57,15 @@ export function useMarkdownImages(
         if (asked.current.has(source)) continue;
         asked.current.add(source);
 
-        // The boundary is the domain's, and it is asked BEFORE the shell is: a source that climbs
-        // out of the workspace, or names something that is not a picture, is never requested.
-        const target = imageSource(source, fromPath, workspaceId);
-        if (target.kind !== "image") continue;
-
-        let read = await readImage(target.path);
+        const data = await readMarkdownImage(source, fromPath, workspaceId, readImage, {
+          embed: embeds.has(source),
+          findByName,
+        });
         if (!live) return;
-
-        const workspace = splitQualified(target.path)?.workspaceId;
-        if (!read.ok && embeds.has(source) && findByName !== undefined && workspace !== undefined) {
-          const name = source.slice(source.lastIndexOf("/") + 1);
-          const found = pickWikiTarget(await findByName(name, workspace), source, fromPath);
-          if (!live) return;
-          if (found !== null) read = await readImage(found);
-          if (!live) return;
-        }
-
         // A picture that cannot be read is left as the author wrote it. A broken image is better
         // than a wrong one, and there is nothing useful to put in its place.
-        if (!read.ok) continue;
+        if (data === null) continue;
 
-        const data = read.dataUrl;
         setResolved((prev) => ({ ...prev, [source]: data }));
       }
     })();

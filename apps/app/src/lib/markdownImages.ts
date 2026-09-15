@@ -1,4 +1,6 @@
+import { imageSource, pickWikiTarget, splitQualified } from "@trypthos/domain";
 import type { ResolvedImages } from "../hooks/useMarkdownImages";
+import type { ImageResult } from "./workspaceClient";
 
 /// Finding the pictures in rendered markdown, and putting the read ones back.
 ///
@@ -35,6 +37,36 @@ export function imageSourcesIn(html: string): string[] {
   }
 
   return [...found];
+}
+
+/// Reads one picture in rendered markdown, as a data URL, or null when it cannot be read.
+///
+/// The boundary is the domain's and is asked BEFORE the shell: a source that climbs out of the
+/// workspace, or names something that is not a picture, is never requested. An Obsidian embed names a
+/// picture rather than placing it, so one not beside its note is searched for by name - and only an
+/// embed is. Shared by the document's own pictures and those inside an embedded note, which are read
+/// relative to that note.
+export async function readMarkdownImage(
+  source: string,
+  fromPath: string | null,
+  workspaceId: string | null,
+  readImage: (path: string) => Promise<ImageResult>,
+  { embed = false, findByName }: {
+    embed?: boolean;
+    findByName?: (name: string, workspaceId: string) => Promise<readonly string[]>;
+  } = {},
+): Promise<string | null> {
+  const target = imageSource(source, fromPath, workspaceId);
+  if (target.kind !== "image") return null;
+
+  let read = await readImage(target.path);
+  const workspace = splitQualified(target.path)?.workspaceId;
+  if (!read.ok && embed && findByName !== undefined && workspace !== undefined) {
+    const name = source.slice(source.lastIndexOf("/") + 1);
+    const found = pickWikiTarget(await findByName(name, workspace), source, fromPath);
+    if (found !== null) read = await readImage(found);
+  }
+  return read.ok ? read.dataUrl : null;
 }
 
 /// The sources of Obsidian embeds, `![[diagram.png]]` - pictures named rather than placed, which may

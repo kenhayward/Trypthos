@@ -71,6 +71,10 @@ function hideTo(view: EditorView, range: SyntaxRange): number {
 
 /// Where a link's target is written on the rendered element.
 const LINK_TARGET = "data-link-target";
+/// Where an Obsidian wiki link's target is written, as written between its brackets and before any
+/// alias. Its own attribute, because a wiki link names a note rather than a path and is followed by a
+/// name search rather than by `followLink`.
+const WIKI_TARGET = "data-wiki-target";
 
 /// A link's target, read out of the document.
 ///
@@ -87,6 +91,14 @@ function linkTargetOf(view: EditorView, node: SyntaxNode): string | null {
   return text === "" ? null : text;
 }
 
+/// A wiki link's target, as written - `Plan#Goals` for `[[Plan#Goals|the goals]]`.
+function wikiTargetOf(view: EditorView, node: SyntaxNode): string | null {
+  const target = node.getChild("WikiLinkTarget") ?? node.getChild("WikiLinkAliasedTarget");
+  if (target === null) return null;
+  const text = view.state.doc.sliceString(target.from, target.to).trim();
+  return text === "" ? null : text;
+}
+
 /// Following a link from the editing surface.
 ///
 /// `mousedown` rather than `click`, because CodeMirror places the caret on mousedown: by the time a
@@ -95,6 +107,7 @@ function linkTargetOf(view: EditorView, node: SyntaxNode): string | null {
 export function followLinks(options: {
   platform: "darwin" | "win32" | "linux";
   onFollow: (href: string) => void;
+  onFollowWiki?: (target: string) => void;
 }) {
   return EditorView.domEventHandlers({
     mousedown(event) {
@@ -102,6 +115,13 @@ export function followLinks(options: {
 
       const target = event.target;
       if (!(target instanceof Element)) return false;
+
+      const wiki = target.closest(`[${WIKI_TARGET}]`)?.getAttribute(WIKI_TARGET);
+      if (wiki && options.onFollowWiki !== undefined) {
+        event.preventDefault();
+        options.onFollowWiki(wiki);
+        return true;
+      }
 
       const href = target.closest(`[${LINK_TARGET}]`)?.getAttribute(LINK_TARGET);
       if (!href) return false;
@@ -154,10 +174,15 @@ function buildDecorations(view: EditorView): DecorationSet {
           // the hover readout, which is the only way to see where a link goes without moving the
           // caret onto its line, and the data attribute is what a modified click reads.
           const target = node.name === "Link" ? linkTargetOf(view, node.node) : null;
-          const spec =
-            target === null
-              ? { class: formatClass }
-              : { class: formatClass, attributes: { title: target, [LINK_TARGET]: target } };
+          // An embed names a note the way a wiki link does, and is followed the same way.
+          const wiki = node.name === "WikiLink" || node.name === "Embed" ? wikiTargetOf(view, node.node) : null;
+          const attributes: Record<string, string> | undefined =
+            wiki !== null
+              ? { title: wiki, [WIKI_TARGET]: wiki }
+              : target === null
+                ? undefined
+                : { title: target, [LINK_TARGET]: target };
+          const spec = attributes === undefined ? { class: formatClass } : { class: formatClass, attributes };
           collected.push(Decoration.mark(spec).range(node.from, node.to));
           // Deliberately no early return: the heading still has a hash inside it to hide.
         }
@@ -232,6 +257,14 @@ export const liveTheme = EditorView.theme({
   },
   ".cm-live-quote": { color: "var(--color-tok-quote)", fontStyle: "italic" },
   ".cm-live-bullet": { color: "var(--color-ink-4)" },
+  ".cm-live-strike": { textDecoration: "line-through" },
+  // Obsidian's marks, in an Obsidian document. Every colour a token, as everywhere in the editor.
+  ".cm-live-highlight": { backgroundColor: "var(--color-find-match)", borderRadius: "2px" },
+  ".cm-live-comment": { color: "var(--color-ink-4)", fontStyle: "italic" },
+  ".cm-live-tag": { color: "var(--color-accent)" },
+  ".cm-live-math": { fontFamily: "var(--font-mono, ui-monospace, monospace)", color: "var(--color-tok-code)" },
+  ".cm-live-block-id": { color: "var(--color-faint)" },
+  ".cm-live-callout": { color: "var(--color-accent)", fontWeight: "600" },
 
   // The line the caret is on, tinted so the revealed markers read as a state rather than as the
   // document suddenly containing extra characters.

@@ -376,11 +376,15 @@ function obsidianInline(): MarkedExtension {
             const alt = size === null && link.alias !== null ? link.alias : link.target;
             return `<img src="${escapeHtml(link.target)}" alt="${escapeHtml(alt)}"${dimensions} data-embed="">`;
           }
-          // Another note's contents shown here come later. Until then an embed is a link to it.
           const href = wikiHref(inner);
           const label = escapeHtml(wikiLabel(inner));
           if (href === null) return label;
-          return `<a href="${escapeHtml(href)}" title="${escapeHtml(link.target)}" data-md-link="" data-wikilink="${escapeHtml(inner.split("|")[0]!)}" class="md-embed">${label}</a>`;
+          const written = escapeHtml(inner.split("|")[0]!);
+          const anchor = `<a href="${escapeHtml(href)}" title="${escapeHtml(link.target)}" data-md-link="" data-wikilink="${written}" class="md-embed">${label}</a>`;
+          // A note is shown in place once it has been read - see `transclusions`. Anything else Obsidian
+          // embeds that the app cannot show, a PDF or a recording, stays a link to it.
+          const note = link.target === "" || wikiLinkFileName(link.target).toLowerCase().endsWith(".md");
+          return note ? `<span class="md-transclusion" data-embed-note="${written}">${anchor}</span>` : anchor;
         },
       },
       {
@@ -452,6 +456,41 @@ function obsidianInline(): MarkedExtension {
   };
 }
 
+/// Obsidian's math: `$inline$` and `$$display$$`, in LaTeX.
+///
+/// Marked here and typeset after rendering, by `richBlocks`, so KaTeX is loaded only for a document
+/// that uses it. What is marked is the TeX as TEXT - escaped, and taken before emphasis and the rest
+/// can read `a_1 * b_2` as markdown.
+///
+/// Inline math follows Obsidian's rule, which is what keeps prose about money from becoming an
+/// equation: no space just inside either dollar, and no digit straight after the closing one.
+function obsidianMath(): MarkedExtension {
+  return {
+    extensions: [
+      {
+        name: "blockMath",
+        level: "block",
+        start: (src) => src.match(/^ {0,3}\$\$/m)?.index,
+        tokenizer(src) {
+          const match = /^ {0,3}\$\$([\s\S]+?)\$\$[ \t]*(?:\n+|$)/.exec(src);
+          return match === null ? undefined : { type: "blockMath", raw: match[0], tex: match[1]!.trim() };
+        },
+        renderer: (token) => `<div class="md-math" data-display="">${escapeHtml(String(token.tex))}</div>\n`,
+      },
+      {
+        name: "inlineMath",
+        level: "inline",
+        start: (src) => src.indexOf("$"),
+        tokenizer(src) {
+          const match = /^\$(?=[^\s$])((?:\\.|[^$\\\n])*?[^\s\\])\$(?!\d)/.exec(src);
+          return match === null ? undefined : { type: "inlineMath", raw: match[0], tex: match[1] };
+        },
+        renderer: (token) => `<span class="md-math">${escapeHtml(String(token.tex))}</span>`,
+      },
+    ],
+  };
+}
+
 /// Obsidian's block comments: `%%` alone on a line, to the next `%%` line.
 function obsidianBlocks(): MarkedExtension {
   return {
@@ -494,5 +533,5 @@ function obsidianBlocks(): MarkedExtension {
 /// Everything a flavour adds to marked, in the order it must be tried.
 export function flavourExtensions(flavour: MarkdownFlavour): MarkedExtension[] {
   const shared = [headingIds(), footnotes(flavour), callouts(flavour)];
-  return flavour === "obsidian" ? [...shared, obsidianBlocks(), obsidianInline()] : shared;
+  return flavour === "obsidian" ? [...shared, obsidianMath(), obsidianBlocks(), obsidianInline()] : shared;
 }

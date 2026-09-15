@@ -229,16 +229,66 @@ describe("Obsidian", () => {
       expect([two?.getAttribute("width"), two?.getAttribute("height")]).toEqual(["100", "145"]);
     });
 
-    // Showing another note's contents inside this one comes later; until then it is a link to it.
-    it("links an embedded note rather than leaving the marks", () => {
-      const link = obsidian("![[Plan#Goals]]").querySelector("a.md-embed");
+    // The note's contents are put in place after rendering - see `transclusions`. Until they arrive,
+    // and if they never do, the embed is a link to the note.
+    it("marks an embedded note for its contents, holding a link to it meanwhile", () => {
+      const embed = obsidian("![[Plan#Goals]]").querySelector(".md-transclusion");
+      expect(embed?.getAttribute("data-embed-note")).toBe("Plan#Goals");
+      const link = embed?.querySelector("a.md-embed");
       expect(link?.getAttribute("href")).toBe("Plan.md");
       expect(link?.textContent).toBe("Plan > Goals");
     });
+
+    // A picture is drawn, and anything else Obsidian embeds that the app cannot show is a link.
+    it("links an embed of a file that is neither a note nor a picture", () => {
+      const body = obsidian("![[Handbook.pdf#page=3]]");
+      expect(body.querySelector(".md-transclusion")).toBeNull();
+      expect(body.querySelector("a.md-embed")?.getAttribute("href")).toBe("Handbook.pdf");
+    });
   });
 
-  // Math arrives with a later release. Until then it is the text that was written.
-  it("leaves math as written", () => {
-    expect(obsidian("$e^{i\\pi}$").textContent).toContain("$e^{i\\pi}$");
+  /// Math is marked here and typeset after rendering - see `richBlocks`. What is marked is the TeX as
+  /// written, as text, so nothing between the dollars is read as markdown on the way.
+  describe("math", () => {
+    it("marks inline math, keeping its TeX as text", () => {
+      const math = obsidian("Euler: $e^{i\\pi} + 1 = 0$ and *more*.").querySelector("span.md-math");
+      expect(math?.textContent).toBe("e^{i\\pi} + 1 = 0");
+      expect(math?.hasAttribute("data-display")).toBe(false);
+    });
+
+    it("does not read markdown inside it", () => {
+      expect(obsidian("$a_1 * b_2 * c$").querySelector("em")).toBeNull();
+    });
+
+    it("marks a display block", () => {
+      const block = obsidian("Before\n\n$$\n\\begin{vmatrix}a & b\\\\ c & d\\end{vmatrix}\n$$\n\nAfter").querySelector("div.md-math");
+      expect(block?.hasAttribute("data-display")).toBe(true);
+      expect(block?.textContent).toBe("\\begin{vmatrix}a & b\\\\ c & d\\end{vmatrix}");
+    });
+
+    it("marks a display block written on one line", () => {
+      expect(obsidian("$$x^2$$").querySelector("div.md-math")?.textContent).toBe("x^2");
+    });
+
+    // The rules that keep a sentence about money from becoming an equation.
+    it.each([
+      ["money", "It costs $5 and $10."],
+      ["a space inside the opening dollar", "$ x $"],
+      ["a closing dollar followed by a digit", "$x$1"],
+      ["an escaped dollar", "\\$x$"],
+    ])("leaves %s as text", (_name, text) => {
+      expect(obsidian(text).querySelector(".md-math")).toBeNull();
+    });
+
+    it("is Obsidian's only - GFM leaves the dollars as written", () => {
+      expect(gfm("$x^2$").querySelector(".md-math")).toBeNull();
+      expect(gfm("$x^2$").textContent).toContain("$x^2$");
+    });
+
+    it("carries nothing from the TeX into markup", () => {
+      const body = obsidian('$<img src=x onerror="alert(1)">$');
+      expect(body.querySelector("img, [onerror]")).toBeNull();
+      expect(body.querySelector(".md-math")?.textContent).toContain("<img");
+    });
   });
 });
