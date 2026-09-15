@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.73.1",
+    date: "2026-09-15",
+    pr: 152,
+    headline: "Don't Save closes the window again",
+    summary:
+      "Closing a window with unsaved changes asks whether to save them. Choosing Don't Save did not close the window: the same question came straight back, and kept coming back, so the only ways out were to save the changes or cancel. Trypthos did ask, and did hear the answer, but the part of the app that closes the window was never told that you had already been asked, so it asked again. Don't Save now closes the window and leaves the file as it was on disk, in the main window and in a document opened in its own window.",
+    fixed: [
+      "Choosing Don't Save when closing a window with unsaved changes closes it, instead of asking again.",
+    ],
+  },
+  {
     version: "0.73.0",
     date: "2026-09-15",
     pr: 150,
