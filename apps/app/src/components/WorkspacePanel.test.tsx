@@ -52,6 +52,9 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onNewFile: vi.fn(),
     onNewFolder: vi.fn(),
     onOpenInNewWindow: vi.fn(),
+    onRename: vi.fn(),
+    onRevealEntry: vi.fn(),
+    platform: "win32" as const,
     onOpenFile: vi.fn(),
     fileTypes: ["markdown"] as readonly string[],
     selectedFolder: "",
@@ -560,6 +563,93 @@ describe("the workspace menu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Open in New Window ..." }));
 
     expect(onOpenInNewWindow).toHaveBeenCalledWith("Diariz/docs/plan.md");
+  });
+
+  describe("open in Explorer", () => {
+    it.each([
+      [/plan\.md/, "Diariz/docs/plan.md"],
+      [/docs/, "Diariz/docs"],
+      [/^Diariz$/, "Diariz"],
+    ])("shows the entry right-clicked, %s", async (row, path) => {
+      const onRevealEntry = vi.fn();
+      panel({ onRevealEntry });
+      const user = await rightClick(screen.getByRole("button", { name: row }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Open in Explorer" }));
+
+      expect(onRevealEntry).toHaveBeenCalledWith(path);
+      expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    // Cross-platform from day one: the Mac's file manager is Finder, and the menu says so.
+    it("names Finder on macOS", async () => {
+      panel({ platform: "darwin" });
+      await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      expect(screen.getByRole("menuitem", { name: "Open in Finder" })).toBeDefined();
+      expect(screen.queryByRole("menuitem", { name: "Open in Explorer" })).toBeNull();
+    });
+
+    it("is not offered in a repository, which has no folder on disk", async () => {
+      panel({
+        workspaces: [ESSAYS],
+        folders: {
+          essays: { status: "loaded", children: [{ id: "essays/draft.md", name: "draft.md", kind: "file" }] },
+        },
+      });
+      await rightClick(screen.getByRole("button", { name: /draft\.md/ }));
+
+      expect(screen.queryByRole("menuitem", { name: "Open in Explorer" })).toBeNull();
+    });
+  });
+
+  describe("rename", () => {
+    it.each([
+      [/plan\.md/, "Diariz/docs/plan.md"],
+      [/docs/, "Diariz/docs"],
+    ])("renames the entry right-clicked, %s", async (row, path) => {
+      const onRename = vi.fn();
+      panel({ onRename });
+      const user = await rightClick(screen.getByRole("button", { name: row }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+
+      expect(onRename).toHaveBeenCalledWith(path);
+    });
+
+    // The workspace folder is what was opened; renaming it would pull the root out from under every
+    // path in the tree.
+    it("is not offered for the workspace itself", async () => {
+      panel();
+      await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
+
+      expect(screen.queryByRole("menuitem", { name: "Rename ..." })).toBeNull();
+    });
+
+    it("is not offered in a repository, where it would be a commit", async () => {
+      panel({
+        workspaces: [ESSAYS],
+        folders: {
+          essays: { status: "loaded", children: [{ id: "essays/draft.md", name: "draft.md", kind: "file" }] },
+        },
+      });
+      await rightClick(screen.getByRole("button", { name: /draft\.md/ }));
+
+      expect(screen.queryByRole("menuitem", { name: "Rename ..." })).toBeNull();
+    });
+
+    // A file Trypthos does not open is still a file somebody may want to rename or find on disk -
+    // but not one to open in a window.
+    it("is offered for a file the app does not open, without Open in New Window", async () => {
+      const onRename = vi.fn();
+      panel({ onRename });
+      const user = await rightClick(screen.getByText("Diariz/logo.png"));
+
+      expect(screen.queryByRole("menuitem", { name: "Open in New Window ..." })).toBeNull();
+      expect(screen.getByRole("menuitem", { name: "Open in Explorer" })).toBeDefined();
+      await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+      expect(onRename).toHaveBeenCalledWith("Diariz/logo.png");
+    });
   });
 
   /// Adding a file to the chat's context from the tree, rather than hunting for it in the chat's own

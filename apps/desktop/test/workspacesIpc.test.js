@@ -23,7 +23,7 @@ function fakeIpcMain() {
 }
 
 /// Two real folders on disk, opened one after the other through the dialog.
-async function withTwoWorkspaces(first, second, body) {
+async function withTwoWorkspaces(first, second, body, dependencies = {}) {
   const roots = [];
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-multi-data-"));
 
@@ -59,6 +59,7 @@ async function withTwoWorkspaces(first, second, body) {
         register: async () => ({ ok: true }),
         unregister: async () => ({ ok: true }),
       },
+      ...dependencies,
     });
 
     const one = (await ipcMain.invoke("workspace:open")).workspace;
@@ -115,6 +116,60 @@ test("creates a directory in the workspace the qualified path names", async () =
     );
     assert.equal((await fs.stat(path.join(roots[0], "archive"))).isDirectory(), true);
   });
+});
+
+test("renames an entry in the workspace the path names, and answers with its qualified path", async () => {
+  await withTwoWorkspaces(
+    { "docs/a.md": "one" },
+    { "docs/a.md": "two" },
+    async ({ ipcMain, one, roots }) => {
+      assert.deepEqual(
+        await ipcMain.invoke("workspace:rename", { path: `${one.id}/docs/a.md`, name: "b.md" }),
+        { ok: true, path: `${one.id}/docs/b.md` },
+      );
+      assert.equal(await fs.readFile(path.join(roots[0], "docs", "b.md"), "utf8"), "one");
+      // The same path in the other workspace is a different file, and is left alone.
+      assert.equal(await fs.readFile(path.join(roots[1], "docs", "a.md"), "utf8"), "two");
+    },
+  );
+});
+
+test("refuses a rename to a name Windows cannot hold, before touching the disk", async () => {
+  await withTwoWorkspaces({ "a.md": "one" }, { "b.md": null }, async ({ ipcMain, one, roots }) => {
+    for (const name of ["CON", "sub/b.md", "b?.md"]) {
+      assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${one.id}/a.md`, name }), {
+        ok: false,
+        reason: "bad-request",
+      });
+    }
+    assert.equal(await fs.readFile(path.join(roots[0], "a.md"), "utf8"), "one");
+  });
+});
+
+test("shows a file, a folder or the workspace itself in the file manager", async () => {
+  const revealed = [];
+  await withTwoWorkspaces(
+    { "docs/a.md": null },
+    { "b.md": null },
+    async ({ ipcMain, one, roots }) => {
+      assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${one.id}/docs/a.md` }), {
+        ok: true,
+      });
+      assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${one.id}/docs` }), { ok: true });
+      assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: one.id }), { ok: true });
+      assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${one.id}/gone.md` }), {
+        ok: false,
+        reason: "not-found",
+      });
+
+      assert.deepEqual(revealed, [
+        { path: path.join(roots[0], "docs", "a.md"), kind: "file" },
+        { path: path.join(roots[0], "docs"), kind: "directory" },
+        { path: roots[0], kind: "directory" },
+      ]);
+    },
+    { revealPath: async (target) => revealed.push(target) },
+  );
 });
 
 test("opens a local file in a separate window with its workspace root", async () => {

@@ -88,6 +88,9 @@ const DYNAMIC_PREFIXES = [
   // Chosen by `attachFailureKey` from the reason a read was refused, so the chat's scope bar can say
   // why a file was not added. `attachFailure.test` checks the other direction against the catalogue.
   "chat.scope.attachFailed.",
+  // Built from RENAME_PROBLEMS as the rename dialog says what is wrong with a name, plus the shell's
+  // own refusal chosen in `useWorkspace`. `RenameDialog.test` checks the other direction.
+  "rename.problems.",
 ];
 
 function usedKeys(): Map<string, string[]> {

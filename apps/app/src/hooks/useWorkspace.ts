@@ -15,6 +15,8 @@ import {
   isImageName,
   isOpen,
   markSaved,
+  movedPath,
+  movePaths,
   draftPath,
   openDocument,
   qualifyPath,
@@ -154,6 +156,14 @@ export interface WorkspaceActions {
   createEmptyFile(directory: string, name: string): Promise<void>;
   /// Creates one local directory and adds it to its already-loaded parent in the workspace tree.
   createDirectory(directory: string, name: string): Promise<void>;
+  /// Renames a local file or folder where it is. The tree, the open tabs and the folder chat is using
+  /// all follow, and unsaved work stays unsaved - nothing was written.
+  ///
+  /// Answers null when it worked, or the translation key of what went wrong. Said by the rename
+  /// dialog, which stays open, rather than by the banner: the user is still choosing a name.
+  renameEntry(path: string, name: string): Promise<string | null>;
+  /// Shows a local file or folder in Explorer or Finder.
+  revealEntry(path: string): Promise<void>;
   /// Opens a local file in its own Electron window, keeping this workspace and its tabs untouched.
   openInNewWindow(path: string): Promise<void>;
   /// Moves an open tab into its own window, unsaved text and all, then closes the tab.
@@ -372,6 +382,34 @@ export function withoutSubtree(
   const prefix = `${path}/`;
   return Object.fromEntries(
     Object.entries(folders).filter(([key]) => key !== path && !key.startsWith(prefix)),
+  );
+}
+
+/// The folder map after the entry at `from` was renamed to `to`.
+///
+/// Rewritten rather than listed again, so what was expanded inside a renamed folder stays expanded
+/// and nothing is read from disk: a rename moves no bytes, so every listing here is still true under
+/// its new name.
+function movedFolders(
+  folders: Record<string, FolderState>,
+  from: string,
+  to: string,
+  name: string,
+): Record<string, FolderState> {
+  return Object.fromEntries(
+    Object.entries(folders).map(([key, folder]) => [
+      movedPath(key, from, to) ?? key,
+      folder.children === undefined
+        ? folder
+        : {
+            ...folder,
+            children: folder.children.map((node) => {
+              const id = movedPath(node.id, from, to);
+              if (id === null) return node;
+              return node.id === from ? { ...node, id, name } : { ...node, id };
+            }),
+          },
+    ]),
   );
 }
 
@@ -739,6 +777,41 @@ export function useWorkspace(
             : prev.folders;
         return { ...prev, folders, busy: false };
       });
+    },
+    [client, fail],
+  );
+
+  const renameEntry = useCallback(
+    async (path: string, name: string): Promise<string | null> => {
+      if (rootOf(stateRef.current.workspaces, path) === null) return "errors.unsupported";
+
+      const result = await client.renameEntry(path, name);
+      if (!result.ok) {
+        if (result.reason === "conflict") return "rename.problems.taken";
+        if (result.reason === "permission-denied") return "rename.problems.denied";
+        return failureKey(result.reason) ?? "errors.unknown";
+      }
+
+      const to = result.path;
+      setInternal((prev) => ({
+        ...prev,
+        folders: movedFolders(prev.folders, path, to, name),
+        documents: movePaths(prev.documents, path, to),
+        selectedFolder: movedPath(prev.selectedFolder, path, to) ?? prev.selectedFolder,
+      }));
+      return null;
+    },
+    [client],
+  );
+
+  const revealEntry = useCallback(
+    async (path: string) => {
+      if (rootOf(stateRef.current.workspaces, path) === null) {
+        fail({ reason: "unsupported" });
+        return;
+      }
+      const result = await client.revealEntry(path);
+      if (!result.ok) fail(result);
     },
     [client, fail],
   );
@@ -1192,6 +1265,8 @@ export function useWorkspace(
       }),
     createEmptyFile,
     createDirectory,
+    renameEntry,
+    revealEntry,
     openInNewWindow,
     moveToNewWindow,
     openRepoPage: (workspaceId: string) =>

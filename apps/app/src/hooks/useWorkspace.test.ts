@@ -56,6 +56,8 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
           ],
     }),
     createDirectory: async () => ({ ok: true }),
+    renameEntry: async (path) => ({ ok: true, path }),
+    revealEntry: async () => ({ ok: true }),
     openInNewWindow: async () => ({ ok: true }),
     // A document window's claim on the text it was opened with. This hook never claims; the window
     // around it does - see `SingleDocumentWindow`.
@@ -1966,6 +1968,152 @@ describe("creating a folder in a workspace", () => {
       name: "ideas",
       kind: "directory",
     });
+  });
+});
+
+describe("renaming an entry in a workspace", () => {
+  it("renames a file, and the tree row and its open tab follow with unsaved work intact", async () => {
+    const renamed: [string, string][] = [];
+    const { client } = fakeClient({
+      renameEntry: async (path, name) => {
+        renamed.push([path, name]);
+        return { ok: true as const, path: `ws/${name}` };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.openFile({ id: "ws/a.md", name: "a.md", kind: "file" });
+    });
+    act(() => result.current.actions.edit("unsaved"));
+
+    let problem: string | null = "not called";
+    await act(async () => {
+      problem = await result.current.actions.renameEntry("ws/a.md", "z.md");
+    });
+
+    expect(problem).toBeNull();
+    expect(renamed).toEqual([["ws/a.md", "z.md"]]);
+    expect(result.current.state.folders.ws?.children).toContainEqual({ id: "ws/z.md", name: "z.md", kind: "file" });
+    expect(result.current.state.folders.ws?.children?.some((node) => node.id === "ws/a.md")).toBe(false);
+    expect(result.current.state.file).toEqual({ path: "ws/z.md", name: "z.md", revision: { id: "r1" } });
+    expect(result.current.state.content).toBe("unsaved");
+    expect(result.current.state.dirty).toBe(true);
+  });
+
+  it("renames a folder, keeping what was expanded inside it and the folder chat is using", async () => {
+    const { client } = fakeClient({
+      renameEntry: async () => ({ ok: true as const, path: "ws/journal" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.open();
+    });
+    await act(async () => {
+      await result.current.actions.toggleFolder("ws/notes");
+    });
+    act(() => result.current.actions.selectFolder("ws/notes"));
+    await act(async () => {
+      await result.current.actions.openFile({ id: "ws/notes/inner.md", name: "inner.md", kind: "file" });
+    });
+
+    await act(async () => {
+      await result.current.actions.renameEntry("ws/notes", "journal");
+    });
+
+    expect(result.current.state.folders["ws/notes"]).toBeUndefined();
+    expect(result.current.state.folders["ws/journal"]?.children).toEqual([
+      { id: "ws/journal/inner.md", name: "inner.md", kind: "file" },
+    ]);
+    expect(result.current.state.folders.ws?.children).toContainEqual({
+      id: "ws/journal",
+      name: "journal",
+      kind: "directory",
+    });
+    expect(result.current.state.selectedFolder).toBe("ws/journal");
+    expect(result.current.state.activePath).toBe("ws/journal/inner.md");
+  });
+
+  it("answers what went wrong for the dialog to show, and changes nothing", async () => {
+    const { client } = fakeClient({
+      renameEntry: async () => ({ ok: false as const, reason: "conflict" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    let problem: string | null = null;
+    await act(async () => {
+      problem = await result.current.actions.renameEntry("ws/a.md", "b.md");
+    });
+
+    // The same words the dialog uses when it can see the clash itself - to the user it is one problem.
+    expect(problem).toBe("rename.problems.taken");
+    expect(result.current.state.folders.ws?.children).toContainEqual({ id: "ws/a.md", name: "a.md", kind: "file" });
+    // The dialog is where this is said. A banner as well would say it twice.
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  // On Windows a file another program holds open refuses a rename as a permission problem, so the
+  // words cover both rather than telling somebody they lack access to their own file.
+  it("words a refused rename for renaming, not for opening", async () => {
+    const { client } = fakeClient({
+      renameEntry: async () => ({ ok: false as const, reason: "permission-denied" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    let problem: string | null = null;
+    await act(async () => {
+      problem = await result.current.actions.renameEntry("ws/a.md", "b.md");
+    });
+
+    expect(problem).toBe("rename.problems.denied");
+  });
+});
+
+describe("showing an entry in the file manager", () => {
+  it("asks the shell to show the path it was given", async () => {
+    const revealed: string[] = [];
+    const { client } = fakeClient({
+      revealEntry: async (path) => {
+        revealed.push(path);
+        return { ok: true as const };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    await act(async () => {
+      await result.current.actions.revealEntry("ws/notes");
+    });
+
+    expect(revealed).toEqual(["ws/notes"]);
+  });
+
+  it("says so when the entry has gone", async () => {
+    const { client } = fakeClient({
+      revealEntry: async () => ({ ok: false as const, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    await act(async () => {
+      await result.current.actions.revealEntry("ws/gone.md");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.notFound");
   });
 });
 

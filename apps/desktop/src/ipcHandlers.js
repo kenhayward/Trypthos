@@ -37,6 +37,8 @@ const {
   withinFolder,
   ListRequest,
   CreateDirectoryRequest,
+  RenameRequest,
+  RevealRequest,
   OutlineRequest,
   MAX_IMAGE_FILE_BYTES,
   ReadImageRequest,
@@ -220,6 +222,9 @@ function registerIpcHandlers({
   createGitHub = null,
   chat,
   openExternal = async () => {},
+  /// Shows an absolute path in the operating system's file manager: a folder opened, a file shown
+  /// selected in the folder that holds it. Passed in because `shell` belongs to `main.js`.
+  revealPath = async () => {},
   /// Trypthos's entries in File Explorer's right-click menu. Optional, because everywhere but a
   /// packaged Windows build there is nothing to write - the handlers still exist there, and answer
   /// that it is unsupported, so the renderer has one place to ask rather than a platform check of
@@ -823,6 +828,36 @@ function registerIpcHandlers({
         return { ok: false, reason: "unsupported" };
       }
       return workspace.provider.createDirectory(request.path);
+    }),
+  );
+
+  /// Renaming, like making a folder, is a filesystem feature: in a repository it would be a commit
+  /// that deletes one path and adds another, which needs a branch and a message. The name was checked
+  /// by the schema; the provider checks the folder it lands in and whether the name is free.
+  ipcMain.handle(
+    "workspace:rename",
+    guarded(locateQualified, RenameRequest, async (request, workspace) => {
+      if (workspace.root === null || typeof workspace.provider.rename !== "function") {
+        return { ok: false, reason: "unsupported" };
+      }
+      const result = await workspace.provider.rename(request.path, request.name);
+      return result.ok ? { ok: true, path: qualifyPath(workspace.id, result.path) } : result;
+    }),
+  );
+
+  /// Open in Explorer. The renderer names an entry; the absolute path it becomes is worked out HERE,
+  /// through the provider's guard, and never sent back - the renderer has no use for where a
+  /// workspace is on disk beyond what its reference already says.
+  ipcMain.handle(
+    "workspace:reveal",
+    guarded(locateQualified, RevealRequest, async (request, workspace) => {
+      if (workspace.root === null || typeof workspace.provider.locate !== "function") {
+        return { ok: false, reason: "unsupported" };
+      }
+      const located = await workspace.provider.locate(request.path);
+      if (!located.ok) return located;
+      await revealPath({ path: located.path, kind: located.kind });
+      return { ok: true };
     }),
   );
 

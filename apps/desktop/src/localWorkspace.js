@@ -133,6 +133,81 @@ function createLocalWorkspace({ root, guard }) {
       }
     },
 
+    /// Gives one file or folder a new name in the folder it is already in, and answers with its new
+    /// workspace-relative path.
+    ///
+    /// The ENTRY is renamed, never what a link points at: its parent is resolved and checked, and
+    /// the entry itself is looked at with `lstat`. A link is refused outright - the tree never lists
+    /// one, so nothing the user can see is asking for it.
+    ///
+    /// `fs.rename` replaces an existing file without a word on every platform, so whether the name is
+    /// free is checked first. The one existing entry allowed is the entry itself, reached by a name
+    /// that differs only in case - which Windows and a default macOS volume treat as the same file,
+    /// and which is exactly how a user fixes the case of a name.
+    async rename(relativePath, name) {
+      const lexical = guard.resolve(relativePath);
+      if (!lexical.ok) return failure("permission-denied");
+
+      const absolute = path.resolve(root, relativePath);
+      // The workspace folder is what the app opened, and renaming it would pull the root out from
+      // under every open path. Refused however it is spelled.
+      if (path.relative(root, absolute) === "") return failure("permission-denied");
+
+      const target = path.join(path.dirname(relativePath), name).split(path.sep).join("/");
+      if (!guard.resolve(target).ok || path.dirname(path.resolve(root, target)) !== path.dirname(absolute)) {
+        return failure("permission-denied");
+      }
+
+      let parent;
+      try {
+        parent = await fs.realpath(path.dirname(absolute));
+      } catch (error) {
+        return mapError(error);
+      }
+      if (!guard.contains(parent)) return failure("permission-denied");
+
+      const from = path.join(parent, path.basename(absolute));
+      const to = path.join(parent, name);
+
+      let source;
+      try {
+        source = await fs.lstat(from, { bigint: true });
+      } catch (error) {
+        return mapError(error);
+      }
+      if (source.isSymbolicLink()) return failure("permission-denied");
+
+      try {
+        const existing = await fs.lstat(to, { bigint: true });
+        const itself = existing.ino === source.ino && existing.dev === source.dev;
+        if (!itself) return failure("conflict");
+      } catch (error) {
+        if (error.code !== "ENOENT") return mapError(error);
+      }
+
+      try {
+        await fs.rename(from, to);
+      } catch (error) {
+        return mapError(error);
+      }
+      return { ok: true, path: target.startsWith("./") ? target.slice(2) : target };
+    },
+
+    /// Where one entry is on disk, and whether it is a file or a folder - for showing it in the
+    /// operating system's file manager. The same guard as a read, so the answer is never a path
+    /// outside the workspace.
+    async locate(relativePath) {
+      const resolved = await resolve(relativePath || ".", { mustExist: true });
+      if (!resolved.ok) return resolved;
+
+      try {
+        const stats = await fs.stat(resolved.path);
+        return { ok: true, path: resolved.path, kind: stats.isDirectory() ? "directory" : "file" };
+      } catch (error) {
+        return mapError(error);
+      }
+    },
+
     /// Reads a file, or refuses it.
     ///
     /// Three refusals live here rather than in the renderer, because the renderer only ever sees

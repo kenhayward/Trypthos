@@ -74,6 +74,39 @@ function panel() {
 /// a closed block has a real size while being out of sight.
 const shown = (element: Element) => element.checkVisibility();
 
+/// The question box, measured. Only a browser can say how tall a textarea is.
+describe("the message box, rendered", () => {
+  const box = () => screen.getByLabelText<HTMLTextAreaElement>("Message");
+  const height = () => box().getBoundingClientRect().height;
+
+  it("starts two lines tall, and grows with what is typed", async () => {
+    panel();
+    const empty = height();
+
+    await userEvent.fill(box(), "one\ntwo\nthree\nfour\nfive");
+    const five = height();
+    expect(five).toBeGreaterThan(empty + 20);
+    // Grown to fit: nothing typed is scrolled out of sight.
+    expect(box().scrollHeight).toBeLessThanOrEqual(box().clientHeight + 1);
+
+    await userEvent.fill(box(), "one");
+    expect(height()).toBe(empty);
+  });
+
+  // A long paste must not push the conversation off the panel. Past a limit the box stops growing
+  // and scrolls instead.
+  it("stops growing at a limit and scrolls past it", async () => {
+    panel();
+
+    await userEvent.fill(box(), Array.from({ length: 60 }, (_, n) => `line ${n}`).join("\n"));
+    const tall = height();
+    expect(box().scrollHeight).toBeGreaterThan(box().clientHeight);
+
+    await userEvent.fill(box(), Array.from({ length: 120 }, (_, n) => `line ${n}`).join("\n"));
+    expect(height()).toBe(tall);
+  });
+});
+
 describe("the tool calls a reply made, rendered", () => {
   it("shows only the summary until it is opened", async () => {
     panel();

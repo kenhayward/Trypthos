@@ -752,6 +752,19 @@ which folder is still loading are testable without a tree or a filesystem.
   the resolved root and relative file only as its initial route, then uses the ordinary workspace
   hook and editor surface. `EditorPanel` omits tabs, header, toolbar and status in that route, while
   `windowHandlers.js` routes dirty state and close confirmation to the guard belonging to its sender.
+- **Rename and reveal are local-only, and the renderer names an entry, never a place.**
+  `workspace:rename` takes a qualified path and a NAME; `RenameRequest` validates the name with the
+  domain's `renameTarget` (the Windows rule on every platform: no separators or `:*?"<>|`, no control
+  characters, no reserved device name, no trailing dot, at most 255 characters), so no rename can
+  become a move. The provider's `rename` resolves the entry's PARENT through `realpath` and the guard,
+  `lstat`s the entry itself (a link is refused), and checks the target with `lstat` before
+  `fs.rename` - which replaces silently on every platform - allowing only the same dev/inode, which is
+  how a case-only rename passes on a case-insensitive volume. The workspace root is refused. The
+  renderer's `renameEntry` then rewrites, rather than re-lists, the folder map (`movedFolders`), open
+  documents (`movePaths`, keeping text, revision and dirty) and the selected folder with
+  `movedPath`. `workspace:reveal` resolves an entry through the provider's `locate` and hands the
+  absolute path to an injected `revealPath`: `shell.openPath` for a folder, `shell.showItemInFolder`
+  for a file. The absolute path is never sent back to the renderer.
 - **A tab moves into a document window by handoff, and closes only on acknowledgement.** The tab
   menu's Open in New Window calls `moveToNewWindow`, which sends `file:openInNewWindow` with an
   optional `draft: { content, revision }` (`DocumentDraftSchema`) when the tab is dirty. The text is
@@ -1983,7 +1996,7 @@ no corrections while the chat box and settings fields had them, and nothing woul
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
-`workspace:filter`, `workspace:close`, `workspace:refresh`), cloud accounts (`github:status`, `github:connect`,
+`workspace:filter`, `workspace:close`, `workspace:refresh`, `workspace:createDirectory`, `workspace:rename`, `workspace:reveal`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys

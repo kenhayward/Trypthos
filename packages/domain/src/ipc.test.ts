@@ -12,6 +12,8 @@ import {
   OpenInNewWindowRequest,
   ListRequest,
   CreateDirectoryRequest,
+  RenameRequest,
+  RevealRequest,
   ReadRequest,
   SaveAsRequest,
   SetSecretRequest,
@@ -65,6 +67,8 @@ describe("IPC_CHANNELS", () => {
       "github:repoInfo",
       "github:branches",
       "github:setBranch",
+      "workspace:rename",
+      "workspace:reveal",
     ]);
   });
 
@@ -166,6 +170,39 @@ describe("CreateDirectoryRequest", () => {
 
   it("requires a directory below the workspace root", () => {
     expect(() => CreateDirectoryRequest.parse({ path: "" })).toThrow();
+  });
+});
+
+describe("RenameRequest", () => {
+  it("accepts an entry below the root and the name it should have", () => {
+    expect(RenameRequest.parse({ path: "Notes/a.md", name: "b.md" })).toEqual({
+      path: "Notes/a.md",
+      name: "b.md",
+    });
+  });
+
+  it("refuses to rename without a path", () => {
+    expect(() => RenameRequest.parse({ path: "", name: "b.md" })).toThrow();
+  });
+
+  // The dialog checks these too, but the renderer having checked is not a check - and a name
+  // carrying a separator would be a move to somewhere the renderer chose.
+  it.each(["", "  b.md", "b.md ", "../b.md", "sub/b.md", "a\\b.md", "CON", "b.", "a:b"])(
+    "refuses the name %j",
+    (name) => {
+      expect(() => RenameRequest.parse({ path: "Notes/a.md", name })).toThrow();
+    },
+  );
+});
+
+describe("RevealRequest", () => {
+  it("accepts any entry, the root included", () => {
+    expect(RevealRequest.parse({ path: "Notes" })).toEqual({ path: "Notes" });
+    expect(RevealRequest.parse({ path: "Notes/docs/a.md" })).toEqual({ path: "Notes/docs/a.md" });
+  });
+
+  it("refuses anything but a path", () => {
+    expect(() => RevealRequest.parse({ path: "Notes", open: true })).toThrow();
   });
 });
 

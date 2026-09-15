@@ -4,6 +4,7 @@ import { ChatContextSchema } from "./chatContext";
 import { SettingsSchema } from "./settings";
 import { WorkspaceRefSchema } from "./workspaceRef";
 import { isExternalUrl } from "./markdownLink";
+import { renameTarget } from "./entryName";
 
 /// The IPC contract between the renderer and the shell.
 ///
@@ -60,6 +61,8 @@ export const IPC_CHANNELS = [
   "github:repoInfo",
   "github:branches",
   "github:setBranch",
+  "workspace:rename",
+  "workspace:reveal",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -175,6 +178,29 @@ export const ListRequest = z.object({ path: relativePath }).strict();
 /// Makes exactly one directory inside an open workspace. The provider owns the actual boundary
 /// check; this contract only says which workspace-relative target it was asked to make.
 export const CreateDirectoryRequest = z.object({ path: relativePath.min(1) }).strict();
+
+/// Gives one file or folder a new name in the folder it is already in.
+///
+/// A NAME, never a destination: it is checked here against the same rule the dialog uses, which
+/// refuses both separators, so no rename can move an entry anywhere the renderer chose. Exactly as
+/// typed - a name with padding the dialog would have trimmed is a renderer that skipped the dialog.
+/// Whether the name is free is not something a schema can know; the provider answers that.
+export const RenameRequest = z
+  .object({
+    path: relativePath.min(1),
+    name: z
+      .string()
+      .refine(
+        (name) =>
+          name === name.trim() && renameTarget(name, { current: "", siblings: [] }).ok,
+        "not a usable name",
+      ),
+  })
+  .strict();
+
+/// Shows one file or folder in the operating system's file manager. "" - the qualified root alone -
+/// is the workspace folder itself.
+export const RevealRequest = z.object({ path: relativePath }).strict();
 
 /// The folder chat should map. "" is the workspace root.
 ///
@@ -466,6 +492,8 @@ export type SetSecretRequest = z.infer<typeof SetSecretRequest>;
 export type DeleteSecretRequest = z.infer<typeof DeleteSecretRequest>;
 export type ListRequest = z.infer<typeof ListRequest>;
 export type CreateDirectoryRequest = z.infer<typeof CreateDirectoryRequest>;
+export type RenameRequest = z.infer<typeof RenameRequest>;
+export type RevealRequest = z.infer<typeof RevealRequest>;
 export type OutlineRequest = z.infer<typeof OutlineRequest>;
 export type ReadRequest = z.infer<typeof ReadRequest>;
 export type CloseWorkspaceRequest = z.infer<typeof CloseWorkspaceRequest>;

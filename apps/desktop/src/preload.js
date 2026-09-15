@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("trypthos", {
   refreshWorkspace: (workspaceId) => ipcRenderer.invoke("workspace:refresh", { workspaceId }),
   listDirectory: (path) => ipcRenderer.invoke("workspace:list", { path }),
   createDirectory: (path) => ipcRenderer.invoke("workspace:createDirectory", { path }),
+  /// A new NAME for an entry, never a destination - see `RenameRequest`.
+  renameEntry: (path, name) => ipcRenderer.invoke("workspace:rename", { path, name }),
+  /// Shows an entry in Explorer or Finder. The absolute path is worked out in the main process and
+  /// never comes back here.
+  revealEntry: (path) => ipcRenderer.invoke("workspace:reveal", { path }),
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
   /// refuses anything binary - see the handler.

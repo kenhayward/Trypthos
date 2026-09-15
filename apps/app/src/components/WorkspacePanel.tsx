@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enabledFileTypes, isImageName, workspaceRefLabel } from "@trypthos/domain";
-import type { WorkspaceRef } from "@trypthos/domain";
+import type { Platform, WorkspaceRef } from "@trypthos/domain";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
@@ -49,6 +49,13 @@ interface Props {
   onNewFolder: (directory: string) => void;
   /// Opens one local file in a separate document-only Electron window.
   onOpenInNewWindow: (path: string) => void;
+  /// Asks for a new name for one local file or folder. Not offered for a workspace's own row - that
+  /// folder is what was opened - nor in a repository, where a rename would be a commit.
+  onRename: (path: string) => void;
+  /// Shows one local file or folder, or a local workspace itself, in Explorer or Finder.
+  onRevealEntry: (path: string) => void;
+  /// Which file manager the menu names: Explorer on Windows, Finder on macOS.
+  platform: Platform;
   /// Adds one file to the chat's context - from a file's right-click menu, or by dragging its row
   /// onto the chat panel. Absent where there is no chat to add to, which takes both away.
   onAddToChat?: (path: string) => void;
@@ -99,6 +106,9 @@ export default function WorkspacePanel({
   onNewFile,
   onNewFolder,
   onOpenInNewWindow,
+  onRename,
+  onRevealEntry,
+  platform,
   onAddToChat,
   onOpenFile,
   fileTypes,
@@ -117,14 +127,28 @@ export default function WorkspacePanel({
     workspaceId: string;
     directory: string;
     file: string | null;
+    /// The entry that was right-clicked: a file, a folder, or the workspace's own id for its row and
+    /// the space around the rows.
+    target: string;
+    /// False for a file row the app does not open, which can still be renamed or found on disk.
+    openable: boolean;
     x: number;
     y: number;
   } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const openMenu = useCallback(
-    (event: React.MouseEvent, workspaceId: string, directory: string, file: string | null = null) => {
+    (
+      event: React.MouseEvent,
+      workspaceId: string,
+      directory: string,
+      { file = null, target = file ?? directory, openable = true }: {
+        file?: string | null;
+        target?: string;
+        openable?: boolean;
+      } = {},
+    ) => {
       event.preventDefault();
-      setMenu({ workspaceId, directory, file, x: event.clientX, y: event.clientY });
+      setMenu({ workspaceId, directory, file, target, openable, x: event.clientX, y: event.clientY });
     },
     [],
   );
@@ -139,11 +163,18 @@ export default function WorkspacePanel({
       ? selectedFolder
       : null;
   const newFolderDirectory = menuWorkspace?.ref.kind === "local" ? menu?.directory ?? null : null;
-  const newWindowFile = menuWorkspace?.ref.kind === "local" ? menu?.file ?? null : null;
+  const local = menuWorkspace?.ref.kind === "local";
+  const newWindowFile = local && menu?.openable === true ? menu.file : null;
+  // A folder on disk is the one thing both of these need, and the workspace's own folder is the
+  // one entry that can be shown but not renamed.
+  const revealTarget = local ? (menu?.target ?? null) : null;
+  const renameTargetPath = revealTarget !== null && revealTarget !== menuWorkspace?.id ? revealTarget : null;
   // Any workspace, unlike a new window: a repository file reads like any other. Not a picture,
   // which has no text to send and would only ever be refused.
   const chatFile =
-    onAddToChat !== undefined && menu?.file != null && !isImageName(menu.file) ? menu.file : null;
+    onAddToChat !== undefined && menu?.file != null && menu.openable && !isImageName(menu.file)
+      ? menu.file
+      : null;
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.
   ///
   /// Not a variation of one walk. A filter is a search of every open folder, so what it draws comes
@@ -341,7 +372,10 @@ export default function WorkspacePanel({
                       draggable={onAddToChat !== undefined}
                       onContextMenu={(event) => {
                         event.stopPropagation();
-                        openMenu(event, workspace.id, workspace.id, row.node.id);
+                        openMenu(event, workspace.id, workspace.id, {
+                          file: row.node.id,
+                          openable: row.openable,
+                        });
                       }}
                     />
                   ),
@@ -390,6 +424,26 @@ export default function WorkspacePanel({
                   }}
                 >
                   {t("workspace.addToChat")}
+                </ContextMenuItem>
+              )}
+              {renameTargetPath !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onRename(renameTargetPath);
+                  }}
+                >
+                  {t("workspace.rename")}
+                </ContextMenuItem>
+              )}
+              {revealTarget !== null && (
+                <ContextMenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    onRevealEntry(revealTarget);
+                  }}
+                >
+                  {platform === "darwin" ? t("workspace.revealInFinder") : t("workspace.revealInExplorer")}
                 </ContextMenuItem>
               )}
               {/* The same entry for a folder and a repository. What refreshing a repository changes
@@ -639,6 +693,7 @@ function FileRow({
     return (
       <div
         aria-disabled="true"
+        onContextMenu={onContextMenu}
         title={t("workspace.cannotOpen")}
         style={indent(row.depth + 1)}
         className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-faint"

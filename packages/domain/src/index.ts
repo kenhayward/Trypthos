@@ -128,6 +128,8 @@ export {
   emptyDocumentSet,
   isOpen,
   markSaved,
+  movedPath,
+  movePaths,
   openDocument,
   openPaths,
   TAB_CLOSE_ACTIONS,
@@ -177,6 +179,8 @@ export {
   imageMediaType,
   isImageName,
 } from "./imageFiles";
+export { MAX_ENTRY_NAME_LENGTH, RENAME_PROBLEMS, renameTarget } from "./entryName";
+export type { RenameProblem, RenameTarget } from "./entryName";
 export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes, newFolderName } from "./newFile";
 export type { NewFileType } from "./newFile";
 
@@ -275,6 +279,8 @@ export {
   SetIntegrationRequest,
   ListRequest,
   CreateDirectoryRequest,
+  RenameRequest,
+  RevealRequest,
   OutlineRequest,
   OpenExternalRequest,
   SendChatRequest,
