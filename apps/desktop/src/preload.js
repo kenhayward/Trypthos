@@ -165,7 +165,9 @@ contextBridge.exposeInMainWorld("trypthos", {
 
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
-  closeWindow: () => ipcRenderer.invoke("window:close"),
+  /// `force` is the renderer saying it has already asked about unsaved work and been told to go
+  /// ahead. Dropping it here left the shell asking again, forever - see `closeGuard`.
+  closeWindow: (force = false) => ipcRenderer.invoke("window:close", { force: force === true }),
 
   /// Trypthos's entries in File Explorer's right-click menu: whether they can be there, whether they
   /// are, and turning them on or off. The registry itself is the record, so the renderer asks rather
