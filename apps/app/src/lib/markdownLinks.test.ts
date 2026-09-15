@@ -133,3 +133,99 @@ describe("markdownLinkHandler", () => {
     });
   });
 });
+
+/// Obsidian's wiki links name a note, not a path - so following one is a search of the workspace
+/// for that name, and a choice among what it finds.
+describe("following a wiki link", () => {
+  const openDocument = vi.fn();
+  const openExternal = vi.fn();
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    openDocument.mockReset();
+    openExternal.mockReset();
+  });
+
+  function handlerFinding(found: string[]) {
+    const findByName = vi.fn(async () => found);
+    const handle = markdownLinkHandler({
+      fromPath: "Notes/projects/today.md",
+      fileTypes: ["markdown"],
+      openDocument,
+      openExternal,
+      findByName,
+    });
+    return { handle, findByName };
+  }
+
+  it("searches its workspace for the note's name and opens the nearest match", async () => {
+    const { handle, findByName } = handlerFinding(["Notes/Plan.md", "Notes/projects/Plan.md"]);
+    const { event, preventDefault } = clickOn('<a href="Plan.md" data-md-link="" data-wikilink="Plan">Plan</a>');
+
+    handle(event);
+
+    expect(preventDefault).toHaveBeenCalled();
+    await vi.waitFor(() => expect(openDocument).toHaveBeenCalledWith("Notes/projects/Plan.md"));
+    expect(findByName).toHaveBeenCalledWith("Plan.md", "Notes");
+  });
+
+  it("follows a link that names folders from the workspace", async () => {
+    const { handle } = handlerFinding(["Notes/archive/Plan.md", "Notes/Plan.md"]);
+    const { event } = clickOn('<a href="archive/Plan.md" data-md-link="" data-wikilink="archive/Plan#Goals">x</a>');
+
+    handle(event);
+
+    await vi.waitFor(() => expect(openDocument).toHaveBeenCalledWith("Notes/archive/Plan.md"));
+  });
+
+  // No note by that name: the link is tried as a path, which is what reports that it is not there.
+  it("falls back to the path beside the note when the search finds nothing", async () => {
+    const { handle } = handlerFinding([]);
+    const { event } = clickOn('<a href="Missing.md" data-md-link="" data-wikilink="Missing">Missing</a>');
+
+    handle(event);
+
+    await vi.waitFor(() => expect(openDocument).toHaveBeenCalledWith("Notes/projects/Missing.md"));
+  });
+
+  it("opens nothing the folder browser would not, like a picture", async () => {
+    const { handle, findByName } = handlerFinding(["Notes/diagram.png"]);
+    const { event } = clickOn('<a href="diagram.png" data-md-link="" data-wikilink="diagram.png">d</a>');
+
+    handle(event);
+    await Promise.resolve();
+
+    expect(findByName).not.toHaveBeenCalled();
+    expect(openDocument).not.toHaveBeenCalled();
+  });
+
+  it("scrolls to a heading in the same note, by the id the renderer gave it", () => {
+    const { handle, findByName } = handlerFinding([]);
+    const { event, container } = clickOn('<a href="#goals--plans" data-md-link="" data-wikilink="#Goals &amp; plans">g</a>');
+    const heading = document.createElement("h2");
+    heading.id = "md-goals--plans";
+    heading.scrollIntoView = vi.fn();
+    container.append(heading);
+
+    handle(event);
+
+    expect(heading.scrollIntoView).toHaveBeenCalled();
+    expect(findByName).not.toHaveBeenCalled();
+  });
+});
+
+describe("an in-page link", () => {
+  // Rendered headings and footnotes carry a prefixed id, so an author's `#section` still lands.
+  it("finds the renderer's prefixed id", () => {
+    document.body.innerHTML = "";
+    const { event, container } = clickOn('<a href="#fn-1" data-md-link="">1</a>');
+    const note = document.createElement("li");
+    note.id = "md-fn-1";
+    note.scrollIntoView = vi.fn();
+    container.append(note);
+
+    markdownLinkHandler({ fromPath: "a.md", fileTypes: ["markdown"], openDocument: vi.fn(), openExternal: vi.fn() })(event);
+
+    expect(note.scrollIntoView).toHaveBeenCalled();
+  });
+});

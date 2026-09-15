@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.75.0",
+    date: "2026-09-15",
+    pr: 157,
+    headline: "Read Obsidian notes as Obsidian shows them, and GitHub's extras everywhere",
+    summary:
+      "Preview now renders notes written in Obsidian in their full layout. Files from Obsidian and from GitHub are both .md, so Trypthos decides from what a file contains: wiki links, embeds, highlights, comments, inline footnotes, block ids and Obsidian's callouts all mean Obsidian, and a file inside an Obsidian vault - a folder with an .obsidian folder in it or above it - always is. A chip in the status bar says GFM or Obsidian, explains what decided it when you hover, and lets you choose for that file until the app is closed; choosing never changes the file. In an Obsidian note, Preview shows wiki links that open the note they name wherever it is in the folder, preferring the one nearest, embedded pictures found by name in an attachments folder and drawn at the size given, highlights, tags, callouts of every Obsidian type with titles and folding, inline footnotes, tasks ticked with any mark, and a line break wherever the author made one; comments and block ids are hidden. Some of this is what GitHub itself shows beyond GFM, so every markdown document now gets it: numbered footnotes gathered at the end, GitHub's five alerts, and front matter shown as a table of properties instead of a rule and a heading. Headings can now be linked to within a document. Mathematics, Mermaid diagrams, embedded notes shown in place, and these marks in the Live and Source views come in later releases.",
+    added: [
+      "A status bar chip naming the markdown flavour - GFM or Obsidian - detected from the file and its folder, and choosable per file.",
+      "Obsidian rendering in Preview: wiki links, picture embeds, highlights, comments, tags, callouts with titles and folding, inline footnotes, block ids and line breaks.",
+      "Footnotes, GitHub alerts and front matter as a properties table, in every markdown document.",
+      "Links to a heading in the same document land on it.",
+    ],
+    changed: [
+      "The Markdown Syntax Guide covers both flavours and what GitHub renders beyond GFM.",
+    ],
+  },
+  {
     version: "0.74.1",
     date: "2026-09-15",
     pr: 156,

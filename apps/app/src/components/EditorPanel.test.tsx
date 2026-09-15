@@ -762,3 +762,82 @@ describe("EditorPanel: showing what Find found", () => {
     expect(screen.queryByTestId("document-editor")).toBeNull();
   });
 });
+
+/// Which markdown a document is rendered as, chosen per document for as long as the app is open.
+describe("the markdown flavour", () => {
+  const OBSIDIAN_NOTE = "# Plan\n\nSee [[Goals]] and ==this==.\n";
+
+  const panel = (activePath: string, value: string, extra: Partial<React.ComponentProps<typeof EditorPanel>> = {}) => (
+    <EditorPanel
+      workspaceName="Notes"
+      paths={["Notes/plan.md", "Notes/readme.md", "Notes/data.json"]}
+      activePath={activePath}
+      dirty={false}
+      value={value}
+      defaultMode="preview"
+      fileTypes={["markdown", "json"]}
+      onChange={vi.fn()}
+      {...extra}
+    />
+  );
+
+  it("renders a note with Obsidian's marks as Obsidian, and says so", () => {
+    render(panel("Notes/plan.md", OBSIDIAN_NOTE));
+
+    expect(screen.getByRole("button", { name: "Markdown flavour: Obsidian" })).toBeDefined();
+    const preview = screen.getByLabelText("Markdown preview");
+    expect(preview.querySelector("a[data-wikilink]")?.textContent).toBe("Goals");
+    expect(preview.querySelector("mark")?.textContent).toBe("this");
+  });
+
+  it("renders a note in an Obsidian vault as Obsidian whatever it contains", () => {
+    render(panel("Notes/readme.md", "# Plain\n\nNothing special.", { vault: true }));
+    expect(screen.getByRole("button", { name: "Markdown flavour: Obsidian" })).toBeDefined();
+  });
+
+  it("lets the reader choose, for that document only, until the app is closed", async () => {
+    const user = userEvent.setup();
+    const view = render(panel("Notes/plan.md", OBSIDIAN_NOTE));
+
+    await user.click(screen.getByRole("button", { name: "Markdown flavour: Obsidian" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "GFM" }));
+
+    expect(screen.getByRole("button", { name: "Markdown flavour: GFM" })).toBeDefined();
+    expect(screen.getByLabelText("Markdown preview").textContent).toContain("[[Goals]]");
+
+    // Another document is judged on its own.
+    view.rerender(panel("Notes/readme.md", OBSIDIAN_NOTE));
+    expect(screen.getByRole("button", { name: "Markdown flavour: Obsidian" })).toBeDefined();
+
+    // And the first keeps the reader's choice when it comes back.
+    view.rerender(panel("Notes/plan.md", OBSIDIAN_NOTE));
+    expect(screen.getByRole("button", { name: "Markdown flavour: GFM" })).toBeDefined();
+  });
+
+  // A mode is a view, never a transform - and so is a flavour.
+  it("never writes to the document when the flavour changes", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(panel("Notes/plan.md", OBSIDIAN_NOTE, { onChange }));
+
+    await user.click(screen.getByRole("button", { name: "Markdown flavour: Obsidian" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "GFM" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("is not offered for a document that is not markdown", () => {
+    render(panel("Notes/data.json", '{ "a": 1 }', { defaultMode: "source" }));
+    expect(screen.queryByRole("button", { name: /Markdown flavour/ })).toBeNull();
+  });
+
+  // The chip's wording is built from the signal names, so the catalogue guard cannot see it.
+  it("has words for every mark the detection counts", async () => {
+    const { FLAVOUR_SIGNALS } = await import("@trypthos/domain");
+    const { default: i18n } = await import("i18next");
+    const missing = FLAVOUR_SIGNALS.flatMap((signal) =>
+      [`editor.flavour.signal.${signal}`, `editor.flavour.signals.${signal}`].filter((key) => !i18n.exists(key)),
+    );
+    expect(missing).toEqual([]);
+  });
+});

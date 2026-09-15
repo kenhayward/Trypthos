@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
-import { marked } from "marked";
-import { isUnsupportedScheme } from "@trypthos/domain";
+import { Marked, type MarkedExtension } from "marked";
+import { isUnsupportedScheme, splitFrontMatter, type MarkdownFlavour } from "@trypthos/domain";
+import { beginRender, escapeHtml, flavourExtensions, footnotesHtml, propertiesHtml } from "./markdownExtensions";
 
 /// Markdown to sanitised HTML.
 ///
@@ -10,44 +11,28 @@ import { isUnsupportedScheme } from "@trypthos/domain";
 ///
 /// Sanitising is not optional here. The renderer runs inside the app's own origin, so an unsanitised
 /// `<script>` in somebody's notes would execute with whatever the page can reach.
-
-marked.setOptions({
-  // No syntax highlighting yet: highlighting the preview would be a second, divergent definition of
-  // what a token is, and the editor already has one.
-  gfm: true,
-  breaks: false,
-});
-
-/// Escapes text for an HTML attribute value.
 ///
-/// The href and title below are written into markup by hand, so they are escaped by hand. DOMPurify
-/// runs afterwards and would catch an injected tag, but relying on that would make this function
-/// correct only for as long as the sanitiser's configuration stays as it is.
-function escapeAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+/// **Two flavours, one pipeline.** GFM - with what GitHub renders beyond the spec: footnotes, alerts,
+/// front matter - and Obsidian's on top of it. See `markdownExtensions`. Which one a document is in is
+/// decided by `detectFlavour` and the reader, never here; a caller that says nothing gets GFM.
 
-marked.use({
+/// Every link is marked and carries its target.
+///
+/// `data-md-link` is what the click handler matches on. Matching instead on the class of the
+/// element the HTML was injected into would mean naming each surface that renders markdown, and
+/// the surface added next would quietly navigate the window rather than open the target - which
+/// is the bug this exists to prevent, reappearing somewhere else.
+///
+/// `title` is the hover readout: a link says where it goes before it is clicked, which is how a
+/// file in the open folder can be told from a web address. An author's own title wins, because
+/// they wrote it to say something the target does not.
+const links: MarkedExtension = {
   renderer: {
-    /// Every link is marked and carries its target.
-    ///
-    /// `data-md-link` is what the click handler matches on. Matching instead on the class of the
-    /// element the HTML was injected into would mean naming each surface that renders markdown, and
-    /// the surface added next would quietly navigate the window rather than open the target - which
-    /// is the bug this exists to prevent, reappearing somewhere else.
-    ///
-    /// `title` is the hover readout: a link says where it goes before it is clicked, which is how a
-    /// file in the open folder can be told from a web address. An author's own title wins, because
-    /// they wrote it to say something the target does not.
     link({ href, title, tokens }) {
       const label = this.parser.parseInline(tokens);
       // The mark goes on EVERY link, including the ones nothing will happen for. It is what makes
       // the click handler run, and a link the handler never sees is a link the window navigates to.
-      const attributes = [`href="${escapeAttribute(href)}"`];
+      const attributes = [`href="${escapeHtml(href)}"`];
 
       // A scheme the app refuses is not shown on hover. `javascript:` is the case that matters: the
       // sanitiser removes it from the href, and repeating it in a title would put it back into the
@@ -59,16 +44,48 @@ marked.use({
       // box. Asking `isUnsupportedScheme` rather than `linkAction` is what keeps it out of that.
       const refused = isUnsupportedScheme(href);
       const hover = title ?? (refused ? null : href);
-      if (hover !== null) attributes.push(`title="${escapeAttribute(hover)}"`);
+      if (hover !== null) attributes.push(`title="${escapeHtml(hover)}"`);
 
       return `<a ${attributes.join(" ")} data-md-link="">${label}</a>`;
     },
   },
-});
+};
 
-export function renderMarkdown(source: string): string {
+function renderer(flavour: MarkdownFlavour): Marked {
+  return new Marked(
+    {
+      // No syntax highlighting here: highlighting the preview would be a second, divergent definition
+      // of what a token is, and the editor already has one. Code is coloured after rendering.
+      gfm: true,
+      // Obsidian shows a line break where the author made one, unless its "strict line breaks"
+      // setting is on - and it is off by default. GFM joins the lines of a paragraph.
+      breaks: flavour === "obsidian",
+    },
+    links,
+    ...flavourExtensions(flavour),
+  );
+}
+
+const RENDERERS: Record<MarkdownFlavour, Marked> = {
+  gfm: renderer("gfm"),
+  obsidian: renderer("obsidian"),
+};
+
+export function renderMarkdown(
+  source: string,
+  { flavour = "gfm" }: { flavour?: MarkdownFlavour } = {},
+): string {
   if (source.trim() === "") return "";
 
-  const html = marked.parse(source, { async: false });
+  // Front matter is taken off before marked sees it, in both flavours: GFM would render it as a rule
+  // followed by a heading made of the last property.
+  const { properties, body } = splitFrontMatter(source);
+
+  beginRender();
+  const html =
+    (properties === null ? "" : propertiesHtml(properties)) +
+    RENDERERS[flavour].parse(body, { async: false }) +
+    footnotesHtml();
+
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 }

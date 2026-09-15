@@ -14,12 +14,16 @@ export default function ContextMenu({
   x,
   y,
   onDismiss,
+  above = false,
   children,
 }: {
   /// What the menu is about, for a screen reader.
   label: string;
   x: number;
   y: number;
+  /// Opens upwards from `y` and leftwards from `x` rather than down and right - for a menu opened
+  /// from the status bar, which has no room below it and ends at the window's right edge.
+  above?: boolean;
   onDismiss: () => void;
   children: ReactNode;
 }) {
@@ -48,7 +52,11 @@ export default function ContextMenu({
       ref={menuRef}
       role="menu"
       aria-label={label}
-      style={{ left: x, top: y }}
+      style={
+        above
+          ? { right: window.innerWidth - x, bottom: window.innerHeight - y }
+          : { left: x, top: y }
+      }
       className="fixed z-50 min-w-44 rounded-md border border-rule bg-app p-1 shadow-menu"
     >
       {children}
@@ -61,10 +69,14 @@ export function ContextMenuItem({
   onClick,
   disabled = false,
   title,
+  checked,
   children,
 }: {
   onClick: () => void;
   disabled?: boolean;
+  /// For an entry that is one of several choices: whether it is the chosen one. Makes the entry a
+  /// radio item, so a screen reader says which is selected.
+  checked?: boolean;
   /// Why an entry is greyed, when it is. A disabled entry that does not say why reads as broken.
   title?: string;
   children: ReactNode;
@@ -72,11 +84,16 @@ export function ContextMenuItem({
   return (
     <button
       type="button"
-      role="menuitem"
+      role={checked === undefined ? "menuitem" : "menuitemradio"}
+      aria-checked={checked}
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className="block w-full rounded px-2 py-1 text-left text-ui text-ink hover:bg-hover disabled:text-ink-4 disabled:hover:bg-transparent"
+      className={
+        checked === true
+          ? "block w-full rounded bg-selected px-2 py-1 text-left text-ui font-semibold text-selected-ink hover:bg-hover"
+          : "block w-full rounded px-2 py-1 text-left text-ui text-ink hover:bg-hover disabled:text-ink-4 disabled:hover:bg-transparent"
+      }
     >
       {children}
     </button>

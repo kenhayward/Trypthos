@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MARKDOWN_FILE_TYPE,
   countWords,
+  detectFlavour,
   detectLineEnding,
+  effectiveFlavour,
   fileTypeFor,
+  type FlavourChoice,
 } from "@trypthos/domain";
 import EditorHeader from "./EditorHeader";
 import EditorToolbar from "./EditorToolbar";
@@ -53,6 +56,11 @@ interface Props {
   /// Reads a picture the document embeds, for Preview mode. Optional, and absent in the browser
   /// preview, where there is nothing to read from.
   readImage?: (path: string) => Promise<ImageResult>;
+  /// True when the document on screen is in an Obsidian vault, which makes its markdown Obsidian's.
+  vault?: boolean;
+  /// Finds files in a workspace by name, for Obsidian's wiki links and embeds - see
+  /// `MarkdownPreview`.
+  findByName?: (name: string, workspaceId: string) => Promise<readonly string[]>;
   onChange: (value: string) => void;
   onActivateFile?: (path: string) => void;
   onCloseFile?: (path: string) => void;
@@ -133,6 +141,8 @@ export default function EditorPanel({
   media = null,
   page = null,
   readImage,
+  vault = false,
+  findByName,
   onChange,
   onActivateFile,
   onCloseFile,
@@ -238,6 +248,21 @@ export default function EditorPanel({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [key, stepZoom]);
+
+  /// Which markdown each document is rendered as, when the reader has chosen, keyed by path.
+  ///
+  /// For as long as the app is open and no longer - the choice is a way of reading a file, like the
+  /// view and the zoom, not a fact about it. Absent means Auto: whatever `detectFlavour` finds.
+  const [flavourChoices, setFlavourChoices] = useState<Record<string, FlavourChoice>>({});
+  const markdown = fileType.id === MARKDOWN_FILE_TYPE.id && media === null && page === null;
+  // Deferred, so a long note is judged between keystrokes rather than on each one.
+  const judged = useDeferredValue(value);
+  const detected = useMemo(
+    () => (markdown ? detectFlavour(judged, { vault }) : null),
+    [markdown, judged, vault],
+  );
+  const flavourChoice = flavourChoices[key] ?? "auto";
+  const flavour = detected === null ? "gfm" : effectiveFlavour(detected, flavourChoice);
 
   const [caret, setCaret] = useState({ line: 1, column: 1 });
 
@@ -353,6 +378,8 @@ export default function EditorPanel({
             // a repository's README: nothing resolved its source against the workspace.
             readImage={readImage}
             fromPath={activePath}
+            flavour={flavour}
+            findByName={findByName}
           />
         )}
       </div>
@@ -365,6 +392,8 @@ export default function EditorPanel({
           fileTypeKey={fileType.labelKey}
           lineEnding={lineEnding}
           stats={stats}
+          flavour={detected === null ? undefined : { detected, choice: flavourChoice }}
+          onFlavourChange={(choice) => setFlavourChoices((prev) => ({ ...prev, [key]: choice }))}
         />
       )}
     </main>

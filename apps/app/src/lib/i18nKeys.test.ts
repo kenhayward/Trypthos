@@ -91,6 +91,10 @@ const DYNAMIC_PREFIXES = [
   // Built from RENAME_PROBLEMS as the rename dialog says what is wrong with a name, plus the shell's
   // own refusal chosen in `useWorkspace`. `RenameDialog.test` checks the other direction.
   "rename.problems.",
+  // Built from FLAVOUR_SIGNALS as the markdown flavour chip says what it found. `EditorPanel.test`
+  // checks the other direction: every signal has both a singular and a counted wording.
+  "editor.flavour.signal.",
+  "editor.flavour.signals.",
 ];
 
 function usedKeys(): Map<string, string[]> {

@@ -118,3 +118,52 @@ describe("useMarkdownImages", () => {
     await waitFor(() => expect(client.readImage).toHaveBeenCalledWith("Notes/logo.png"));
   });
 });
+
+/// An Obsidian embed, `![[diagram.png]]`, names a picture rather than a path - it is usually in an
+/// attachments folder somewhere else in the vault.
+describe("an embedded picture", () => {
+  it("is found by name when it is not beside the note", async () => {
+    const client = fakeClient(async (path) =>
+      path === "Notes/attachments/diagram.png"
+        ? { ok: true as const, dataUrl: "data:image/png;base64,found" }
+        : { ok: false as const, reason: "not-found" },
+    );
+    const findByName = vi.fn(async () => ["Notes/attachments/diagram.png"]);
+    const { result } = renderHook(() =>
+      useMarkdownImages(["diagram.png"], "Notes/today.md", null, client.readImage, {
+        embeds: new Set(["diagram.png"]),
+        findByName,
+      }),
+    );
+
+    await waitFor(() => expect(result.current["diagram.png"]).toBe("data:image/png;base64,found"));
+    expect(findByName).toHaveBeenCalledWith("diagram.png", "Notes");
+  });
+
+  it("is read beside the note without a search when it is there", async () => {
+    const client = fakeClient();
+    const findByName = vi.fn(async () => []);
+    const { result } = renderHook(() =>
+      useMarkdownImages(["diagram.png"], "Notes/today.md", null, client.readImage, {
+        embeds: new Set(["diagram.png"]),
+        findByName,
+      }),
+    );
+
+    await waitFor(() => expect(result.current["diagram.png"]).toBeDefined());
+    expect(findByName).not.toHaveBeenCalled();
+  });
+
+  // An ordinary markdown image names a path, and a path that is not there is not searched for.
+  it("is the only kind of picture searched for", async () => {
+    const client = fakeClient(async () => ({ ok: false as const, reason: "not-found" }));
+    const findByName = vi.fn(async () => ["Notes/elsewhere/orb.png"]);
+    renderHook(() =>
+      useMarkdownImages(["orb.png"], "Notes/today.md", null, client.readImage, { embeds: new Set(), findByName }),
+    );
+
+    await waitFor(() => expect(client.readImage).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(findByName).not.toHaveBeenCalled();
+  });
+});

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import EditorPanel from "./components/EditorPanel";
 import { useSettings } from "./hooks/useSettings";
@@ -23,6 +23,15 @@ export default function SingleDocumentWindow({ root, file }: Props) {
   const { t } = useTranslation();
   const client = useMemo(() => workspaceClient(), []);
   const bridge = useMemo(() => settingsBridge(), []);
+  /// Files in the workspace whose name contains `name`, for an Obsidian embed. Memoised: the preview's
+  /// picture loading restarts when this changes, and would drop a read in flight.
+  const findByName = useCallback(
+    async (name: string, workspaceId: string): Promise<readonly string[]> => {
+      const result = await client.filterFiles({ path: workspaceId, filter: name });
+      return result.ok ? result.paths : [];
+    },
+    [client],
+  );
   const { settings } = useSettings(bridge);
   const { state, actions } = useWorkspace(client, "", (name) => windowControls().confirmDiscard(name));
   const opened = useRef(false);
@@ -89,6 +98,10 @@ export default function SingleDocumentWindow({ root, file }: Props) {
       readOnly={state.readOnly}
       media={state.media}
       readImage={client.readImage}
+      // The one folder this window opened, so a note from a vault renders as Obsidian's here too, and
+      // an embedded picture in the vault's attachments folder is found.
+      vault={state.workspaces[0]?.vault === true}
+      findByName={findByName}
       onChange={actions.edit}
       defaultMode={settings.editor.defaultViewMode}
       fileTypes={settings.fileTypes.enabled}

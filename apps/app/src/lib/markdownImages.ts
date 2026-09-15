@@ -37,6 +37,17 @@ export function imageSourcesIn(html: string): string[] {
   return [...found];
 }
 
+/// The sources of Obsidian embeds, `![[diagram.png]]` - pictures named rather than placed, which may
+/// need finding by name. The renderer marks each one `data-embed`.
+export function embedSourcesIn(html: string): ReadonlySet<string> {
+  const found = new Set<string>();
+  for (const image of parse(html).querySelectorAll("img[data-embed]")) {
+    const source = image.getAttribute("src");
+    if (source !== null && source !== "") found.add(source);
+  }
+  return found;
+}
+
 /// The same HTML with every picture that was read pointing at its data.
 ///
 /// A source with nothing read for it is left exactly as the author wrote it: a broken image says

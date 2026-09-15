@@ -580,6 +580,17 @@ export default function App() {
     return fromDocument ?? fromSelection ?? state.workspaces[0]?.id ?? null;
   }, [state.activePath, state.selectedFolder, state.workspaces]);
 
+  /// Files in one workspace whose name contains `name`, for an Obsidian wiki link or embed - which
+  /// names a note rather than a path. Through the browser's own filter search, so the walk is the
+  /// shell's, bounded, and inside the workspace guard like every other.
+  const findByName = useCallback(
+    async (name: string, workspaceId: string): Promise<readonly string[]> => {
+      const result = await client.filterFiles({ path: workspaceId, filter: name });
+      return result.ok ? result.paths : [];
+    },
+    [client],
+  );
+
   const linkHandlers = useMemo(
     () => ({
       fromPath: state.file?.path ?? null,
@@ -587,8 +598,9 @@ export default function App() {
       workspaceId: linkWorkspaceId,
       openDocument: (path: string) => void actions.openPath(path),
       openExternal,
+      findByName,
     }),
-    [state.file?.path, settings.fileTypes.enabled, linkWorkspaceId, actions],
+    [state.file?.path, settings.fileTypes.enabled, linkWorkspaceId, actions, findByName],
   );
   const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
 
@@ -717,6 +729,11 @@ export default function App() {
           readOnly={state.readOnly}
           media={state.media}
           readImage={client.readImage}
+          vault={
+            state.workspaces.find((workspace) => workspace.id === splitQualified(state.activePath ?? "")?.workspaceId)
+              ?.vault === true
+          }
+          findByName={findByName}
           page={
             repoPageId === null ? null : (
               <RepoPage
