@@ -1,4 +1,12 @@
-import { linkAction } from "@trypthos/domain";
+import {
+  isOpenable,
+  linkAction,
+  parseWikiLink,
+  pickWikiTarget,
+  splitQualified,
+  wikiLinkFileName,
+} from "@trypthos/domain";
+import { headingSlug } from "./markdownExtensions";
 
 /// What happens when a link in rendered markdown is clicked.
 ///
@@ -26,6 +34,10 @@ export interface MarkdownLinkHandlers {
   openDocument(path: string): void;
   /// Hands a web address to the user's browser.
   openExternal(url: string): void;
+  /// The qualified paths of files in one workspace whose name contains `name`, for an Obsidian wiki
+  /// link - which names a note rather than a path. Absent where there is no workspace to search,
+  /// which leaves a wiki link resolved as a path from the note it is in.
+  findByName?(name: string, workspaceId: string): Promise<readonly string[]>;
 }
 
 /// The parts of a click this needs. Narrow on purpose, so the handler can be exercised with a plain
@@ -44,11 +56,49 @@ export function followLink(href: string, handlers: MarkdownLinkHandlers): void {
   const action = linkAction(href, handlers.fromPath, handlers.fileTypes, handlers.workspaceId ?? null);
   if (action.kind === "external") handlers.openExternal(action.url);
   else if (action.kind === "document") handlers.openDocument(action.path);
-  else if (action.kind === "anchor") {
-    // Nothing generates heading ids yet, so this usually finds nothing - and finding nothing is the
-    // correct outcome, quietly.
-    document.getElementById(action.fragment)?.scrollIntoView({ block: "start" });
+  else if (action.kind === "anchor") scrollToAnchor(action.fragment);
+}
+
+/// Scrolls to an in-page target. The renderer prefixes the ids it gives headings, footnotes and
+/// blocks - see `headingIds` - so an author's `#section` is looked for under both spellings. Finding
+/// nothing is a correct outcome, quietly.
+function scrollToAnchor(fragment: string): void {
+  const target = document.getElementById(fragment) ?? document.getElementById(`md-${fragment}`);
+  target?.scrollIntoView({ block: "start" });
+}
+
+/// Follows an Obsidian wiki link, `[[Note#Heading]]` as written without its brackets.
+///
+/// Obsidian finds a note by name anywhere in the vault, so this searches the note's workspace - through
+/// the shell's guarded name filter - and opens the nearest match. With nothing found it falls back to
+/// the path beside the note, whose failure to open is what tells the user the note is not there.
+export async function followWikiLink(written: string, handlers: MarkdownLinkHandlers): Promise<void> {
+  const link = parseWikiLink(written);
+  if (link.target === "") {
+    if (link.heading !== null) scrollToAnchor(headingSlug(link.heading));
+    else if (link.block !== null) scrollToAnchor(`^${link.block}`);
+    return;
   }
+
+  const fileName = wikiLinkFileName(link.target);
+  const name = fileName.slice(fileName.lastIndexOf("/") + 1);
+  // The same rule as any link: what the folder browser would not open, a link does not open either.
+  if (!isOpenable(name, handlers.fileTypes)) return;
+
+  const workspaceId =
+    (handlers.fromPath === null ? null : splitQualified(handlers.fromPath)?.workspaceId) ??
+    handlers.workspaceId ??
+    null;
+  if (workspaceId !== null && handlers.findByName !== undefined) {
+    const found = await handlers.findByName(name, workspaceId);
+    const target = pickWikiTarget(found, fileName, handlers.fromPath);
+    if (target !== null) {
+      handlers.openDocument(target);
+      return;
+    }
+  }
+
+  followLink(fileName, handlers);
 }
 
 export function markdownLinkHandler(handlers: MarkdownLinkHandlers) {
@@ -63,6 +113,8 @@ export function markdownLinkHandler(handlers: MarkdownLinkHandlers) {
     // the window must not navigate.
     event.preventDefault();
 
-    followLink(anchor.getAttribute("href") ?? "", handlers);
+    const wiki = anchor.getAttribute("data-wikilink");
+    if (wiki !== null) void followWikiLink(wiki, handlers);
+    else followLink(anchor.getAttribute("href") ?? "", handlers);
   };
 }

@@ -102,3 +102,43 @@ test("refuses a provider this build does not know", async () => {
     reason: "unsupported",
   });
 });
+
+/// An Obsidian vault is a folder with `.obsidian` in it. A workspace opened at or anywhere below one
+/// is in that vault, and its markdown is Obsidian's whatever a note happens to contain.
+test("says whether a local folder is in an Obsidian vault, at its root or above it", async () => {
+  const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-vault-")));
+  try {
+    await fs.mkdir(path.join(base, "vault", ".obsidian"), { recursive: true });
+    await fs.mkdir(path.join(base, "vault", "projects", "2026"), { recursive: true });
+    await fs.mkdir(path.join(base, "plain"), { recursive: true });
+    // A FILE called .obsidian is not the marker.
+    await fs.mkdir(path.join(base, "impostor"));
+    await fs.writeFile(path.join(base, "impostor", ".obsidian"), "", "utf8");
+
+    const vault = async (dir) => (await openWorkspaceFor({ kind: "local", root: path.join(base, dir) })).workspace.vault;
+    assert.equal(await vault("vault"), true);
+    assert.equal(await vault(path.join("vault", "projects", "2026")), true);
+    assert.equal(await vault("plain"), false);
+    assert.equal(await vault("impostor"), false);
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
+test("says whether a GitHub repository is an Obsidian vault", async () => {
+  const open = async (entries) =>
+    openWorkspaceFor(
+      { kind: "github", owner: "ada", repo: "notes" },
+      {
+        github: {
+          defaultBranchHead: async () => ({ ok: true, branch: "main", sha: "c0ffee" }),
+          tree: async () => ({ ok: true, entries, truncated: false }),
+        },
+      },
+    );
+
+  const marker = { path: ".obsidian", mode: "040000", type: "tree", sha: "a1" };
+  const note = { path: "Plan.md", mode: "100644", type: "blob", sha: "b2", size: 4 };
+  assert.equal((await open([marker, { ...marker, path: ".obsidian/app.json", type: "blob" }, note])).workspace.vault, true);
+  assert.equal((await open([note])).workspace.vault, false);
+});

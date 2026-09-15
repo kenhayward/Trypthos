@@ -2,7 +2,8 @@
 
 Trypthos reads and renders **GitHub Flavored Markdown** (GFM): the CommonMark
 specification, plus the GitHub extensions for tables, task lists, strikethrough
-and automatic links.
+and automatic links. It also renders **Obsidian Flavored Markdown** - see the
+section of that name below - for notes written in Obsidian.
 
 This guide is part of the app rather than a file in your folder. It opens in a
 tab like any document, and it is read-only: nothing here can be changed and
@@ -231,16 +232,91 @@ typed.
 
 ---
 
+## What GitHub renders beyond GFM
+
+GitHub shows a few things the GFM specification does not define. Preview shows
+them the same way, whichever flavour a document is in.
+
+Footnotes are numbered in the order they are referred to, and gathered at the
+end of the document:
+
+```md
+A claim that needs a source.[^1]
+
+[^1]: The source.
+```
+
+Alerts are a quote whose first line is one of five markers, alone:
+
+```md
+> [!NOTE]
+> Useful information.
+```
+
+The five are `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION`.
+
+Front matter - properties between `---` lines at the very top of a file - is
+shown as a table rather than as a rule and a heading:
+
+```md
+---
+title: The plan
+tags: [planning, 2026]
+---
+```
+
+---
+
+## Obsidian Flavored Markdown
+
+Notes written in Obsidian use marks of their own. They are plain text to GFM,
+so Trypthos decides which flavour a file is in from what it contains: the chip
+in the status bar says **GFM** or **Obsidian**, and clicking it lets you choose
+for that file until the app is closed. A file inside an Obsidian vault - a
+folder with an `.obsidian` folder in it or above it - is always Obsidian.
+
+In an Obsidian document, Preview renders:
+
+```md
+[[Another note]]              a link to a note, found by name
+[[Another note|shown text]]   the same link, with its own text
+[[Another note#A heading]]    a heading in that note
+[[#A heading]]                a heading in this note
+![[diagram.png|300]]          a picture, 300 pixels wide
+==highlighted text==          a highlight
+%%a comment%%                 hidden when rendered
+text^[an inline footnote]     a footnote written where it is used
+A paragraph. ^block-id        the id is hidden
+#tag  #nested/tag             a tag
+- [?] a task                  any mark in the box ticks it
+```
+
+A callout is a quote that starts with a type, and may have a title and fold:
+
+```md
+> [!tip]- A title
+> Folded until you open it. Use + to start it open.
+```
+
+Its types are `note`, `abstract`, `info`, `todo`, `tip`, `success`,
+`question`, `warning`, `failure`, `danger`, `bug`, `example` and `quote`, and
+the other names Obsidian accepts for them, such as `faq` or `error`.
+
+In an Obsidian document a single line break shows as a line break, as it does
+in Obsidian. An embedded note shows as a link to it for now.
+
+---
+
 ## Not supported
 
-These appear in some other markdown tools and are not part of GFM, so Trypthos
-leaves them as plain text:
+These appear in some other markdown tools, and Trypthos leaves them as plain
+text:
 
-- Footnotes
 - Definition lists
 - Mathematics between dollar signs
-- YAML front matter, which is read as a heading followed by text
-- Wiki-style `[[links]]` and callout or admonition blocks
+- Diagrams in `mermaid` code blocks, which show as code
+- The Obsidian marks in the **Live** and **Source** views, which show them as
+  the text you typed
 
 ---
 

@@ -378,3 +378,63 @@ body {
 .markdown-body table { border-collapse: collapse; margin: 0.8em 0; display: block; overflow-x: auto; }
 .markdown-body th,
 .markdown-body td { border: 1px solid var(--color-rule); padding: 0.35em 0.7em; text-align: left; }
+
+/* What GitHub renders beyond GFM, and what Obsidian adds - see `markdownExtensions.ts`.
+
+   Scoped to both rendered surfaces, for the reason the syntax colouring above is: an alert in a
+   document and the same alert quoted in a chat reply should look the same. Every colour is a token,
+   so both themes answer - a callout's tint is its accent mixed into the page's own ground. */
+:is(.markdown-body, .chat-md) .callout {
+  --callout: var(--color-accent);
+  border-left: 3px solid var(--callout);
+  background: color-mix(in srgb, var(--callout) 8%, transparent);
+  border-radius: 4px;
+  padding: 0.5em 0.9em;
+  margin: 0.8em 0;
+}
+:is(.markdown-body, .chat-md) .callout-title {
+  color: var(--callout);
+  font-weight: 600;
+  margin: 0;
+}
+:is(.markdown-body, .chat-md) summary.callout-title { cursor: pointer; }
+:is(.markdown-body, .chat-md) .callout-content > :first-child { margin-top: 0.3em; }
+:is(.markdown-body, .chat-md) .callout-content > :last-child { margin-bottom: 0; }
+:is(.markdown-body, .chat-md) .callout:is([data-callout="tip"], [data-callout="success"]) { --callout: var(--color-leaf); }
+:is(.markdown-body, .chat-md) .callout[data-callout="abstract"] { --callout: var(--color-tok-type); }
+:is(.markdown-body, .chat-md) .callout:is([data-callout="question"], [data-callout="warning"]) { --callout: var(--color-tok-number); }
+:is(.markdown-body, .chat-md) .callout:is([data-callout="failure"], [data-callout="danger"], [data-callout="bug"], [data-callout="caution"]) { --callout: var(--color-danger); }
+:is(.markdown-body, .chat-md) .callout:is([data-callout="example"], [data-callout="important"]) { --callout: var(--color-tok-keyword); }
+:is(.markdown-body, .chat-md) .callout[data-callout="quote"] { --callout: var(--color-ink-4); }
+
+:is(.markdown-body, .chat-md) mark {
+  background: var(--color-find-match);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.1em;
+}
+:is(.markdown-body, .chat-md) .md-tag {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-radius: 999px;
+  padding: 0 0.45em;
+  font-size: 0.9em;
+}
+:is(.markdown-body, .chat-md) a.md-embed {
+  display: inline-block;
+  border: 1px solid var(--color-rule);
+  border-radius: 4px;
+  padding: 0 0.4em;
+  text-decoration: none;
+}
+:is(.markdown-body, .chat-md) sup.footnote-ref a { text-decoration: none; }
+:is(.markdown-body, .chat-md) section.footnotes {
+  border-top: 1px solid var(--color-rule);
+  margin-top: 1.5em;
+  padding-top: 0.5em;
+  font-size: 0.9em;
+  color: var(--color-ink-3);
+}
+:is(.markdown-body, .chat-md) a.footnote-backref { text-decoration: none; }
+.markdown-body table.md-properties { margin-top: 0; font-size: 0.9em; }
+.markdown-body table.md-properties th { color: var(--color-ink-4); font-weight: 500; }

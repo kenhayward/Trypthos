@@ -304,6 +304,44 @@ and log files, under a setting naming which types the app takes an interest in -
 `docs/specs/file-types.md`. None of it is built; the document is the design the work will be measured
 against, not a description of this code.
 
+## Two markdown flavours
+
+Preview renders **GFM**, or **Obsidian Flavored Markdown** on top of it. Obsidian's marks are all
+plain text to GFM, so the second flavour only ever adds - which is what makes guessing safe.
+
+- **Detection is pure and in the domain.** `detectFlavour(text, { vault })` in `markdownFlavour.ts`
+  counts strong signals only (`FLAVOUR_SIGNALS`: wiki links, embeds, `%%` comments, `==` highlights,
+  inline footnotes, end-of-line block ids, callouts GitHub would not render, `aliases`/`cssclasses`
+  front matter), over the first `FLAVOUR_SCAN_LIMIT` characters with fenced and inline code and
+  escapes blanked. Tags, `$`, and a `tags:` key decide nothing - a README has them too. Each pattern's
+  shape is set by a GFM case it must not trip (`$5 and $10`, `LIKE '%%'`, `#123`, `a == b`, a setext
+  underline, GitHub's bare `> [!NOTE]`).
+- **The vault flag comes from the shell.** `providers.js` sets `vault` on an opened workspace: a local
+  folder walks up from its root looking for an `.obsidian` DIRECTORY; a repository checks its root
+  listing. `ipcHandlers.described` carries it to the renderer, so no note has to be scanned for it.
+- **The choice is session state in `EditorPanel`**, keyed by path like the view mode and the zoom,
+  never persisted. `effectiveFlavour(detected, choice)` resolves Auto. Detection runs on
+  `useDeferredValue(value)`. The chip is `EditorStatusBar`'s `FlavourChip`, and its menu is the shared
+  `ContextMenu` with `above` and `menuitemradio` entries.
+- **Rendering is two `Marked` instances**, one per flavour, in `lib/markdown.ts`, built from
+  `lib/markdownExtensions.ts`. Both get heading ids (`md-` prefixed - a bare `id="title"` is exactly
+  what DOMPurify's clobbering protection strips), `[^id]` footnotes and GitHub's five alerts; front
+  matter is split off by the domain's `splitFrontMatter` before marked sees it and drawn as a
+  properties table. Obsidian adds callouts of every type with aliases and folding (`details`),
+  `==`, `%%` inline and block, tags, block ids, inline footnotes, task marks other than `x`, wiki
+  links and embeds, and `breaks: true`. Footnote numbering and heading slugs live in one module-level
+  render state reset per render, which is safe because a render is synchronous. Every attribute these
+  write is escaped by hand, and the output still goes through DOMPurify with the html profile.
+  `followLink` looks an anchor up as written and with the `md-` prefix.
+- **Wiki links and embeds resolve by name through the existing filter search.** The renderer writes a
+  wiki link as an ordinary `data-md-link` anchor with `data-wikilink`, so it is intercepted by the same
+  delegated handler. `followWikiLink` parses it (`parseWikiLink`), refuses a name no file can have,
+  applies `isOpenable`, calls `findByName` - App's wrapper over `client.filterFiles`, i.e. the guarded
+  `workspace:filter` walk - and picks with `pickWikiTarget` (same folder, then shortest path; the
+  link's own folders must match). No new IPC channel. An embed is an `img` with `data-embed`;
+  `useMarkdownImages` reads it beside the note first and only an embed falls back to the name search,
+  so an ordinary `![](path)` never searches.
+
 ## Links
 
 **A link is never followed by navigating the window.** The window is frameless: no address bar, no

@@ -6,6 +6,18 @@ export type {
   PathResolution,
 } from "./workspacePath";
 
+export {
+  FLAVOUR_SCAN_LIMIT,
+  FLAVOUR_SIGNALS,
+  GITHUB_ALERT_TYPES,
+  detectFlavour,
+  effectiveFlavour,
+} from "./markdownFlavour";
+export type { DetectedFlavour, FlavourChoice, FlavourSignal, MarkdownFlavour } from "./markdownFlavour";
+export { splitFrontMatter } from "./frontMatter";
+export type { FrontMatterProperty, FrontMatterSplit } from "./frontMatter";
+export { parseWikiLink, pickWikiTarget, wikiLinkFileName } from "./wikiLink";
+export type { WikiLink } from "./wikiLink";
 export { imageSource, isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
 export type { ImageSource, LinkAction, LinkRejection } from "./markdownLink";
 

@@ -75,6 +75,8 @@ test("opens two folders as two workspaces with different ids", async () => {
   await withTwoWorkspaces({ "a.md": "one" }, { "a.md": "two" }, async ({ one, two }) => {
     assert.notEqual(one.id, two.id);
     assert.notEqual(one.ref.root, two.ref.root);
+    // Neither temporary folder is in an Obsidian vault, and the renderer is told so.
+    assert.equal(one.vault, false);
   });
 });
 

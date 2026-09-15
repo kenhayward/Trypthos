@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imageSourcesIn, withResolvedImages } from "./markdownImages";
+import { embedSourcesIn, imageSourcesIn, withResolvedImages } from "./markdownImages";
 import { renderMarkdown } from "./markdown";
 
 /// Finding the pictures in rendered markdown, and putting the read ones back.
@@ -104,5 +104,12 @@ describe("against real rendered markdown", () => {
     const resolved = withResolvedImages(html, { "docs/orb.png": "data:image/png;base64,AA" });
     expect(resolved).toContain('src="data:image/png;base64,AA"');
     expect(resolved).toContain('alt="An orb"');
+  });
+});
+
+describe("embedSourcesIn", () => {
+  it("finds the sources of Obsidian embeds only", () => {
+    const html = '<img src="a.png"><img src="b.png" data-embed=""><img src="b.png" data-embed="">';
+    expect([...embedSourcesIn(html)]).toEqual(["b.png"]);
   });
 });

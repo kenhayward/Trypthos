@@ -1,9 +1,10 @@
 import { useTranslation } from "react-i18next";
 import { useMemo, useRef } from "react";
+import type { MarkdownFlavour } from "@trypthos/domain";
 import { useCodeHighlighting } from "../hooks/useCodeHighlighting";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { renderMarkdown } from "../lib/markdown";
-import { imageSourcesIn, withResolvedImages } from "../lib/markdownImages";
+import { embedSourcesIn, imageSourcesIn, withResolvedImages } from "../lib/markdownImages";
 import { useMarkdownImages } from "../hooks/useMarkdownImages";
 import type { ImageResult } from "../lib/workspaceClient";
 import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
@@ -13,6 +14,8 @@ import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
 /// It is never reached: `sources` is empty without a real reader, so there is nothing to read. A
 /// stable module-level function rather than a fresh one per render, which would restart the effect.
 const notRead = async (): Promise<ImageResult> => ({ ok: false, reason: "not-desktop" });
+
+const NO_EMBEDS: ReadonlySet<string> = new Set();
 
 interface Props {
   source: string;
@@ -34,6 +37,10 @@ interface Props {
   fromPath?: string | null;
   /// Which workspace a source with no folder of its own belongs to, when the document cannot say.
   workspaceId?: string | null;
+  /// Which markdown the source is written in. GFM unless the caller knows better.
+  flavour?: MarkdownFlavour;
+  /// Finds files in a workspace by name, for an Obsidian embed that is not beside its note.
+  findByName?: (name: string, workspaceId: string) => Promise<readonly string[]>;
 }
 
 /// Preview mode: read-only rendered prose.
@@ -52,9 +59,11 @@ export default function MarkdownPreview({
   readImage,
   fromPath = null,
   workspaceId = null,
+  flavour = "gfm",
+  findByName,
 }: Props) {
   const { t } = useTranslation();
-  const rendered = useMemo(() => renderMarkdown(source), [source]);
+  const rendered = useMemo(() => renderMarkdown(source, { flavour }), [source, flavour]);
 
   // Nothing to look for when there is no way to read one, which is every surface with no workspace
   // behind it. Memoised so the resolving effect is not handed a fresh array on each render.
@@ -62,7 +71,11 @@ export default function MarkdownPreview({
     () => (readImage === undefined ? [] : imageSourcesIn(rendered)),
     [rendered, readImage],
   );
-  const images = useMarkdownImages(sources, fromPath, workspaceId, readImage ?? notRead);
+  const embeds = useMemo(() => (readImage === undefined ? NO_EMBEDS : embedSourcesIn(rendered)), [rendered, readImage]);
+  const images = useMarkdownImages(sources, fromPath, workspaceId, readImage ?? notRead, {
+    embeds,
+    findByName,
+  });
   const html = useMemo(() => withResolvedImages(rendered, images), [rendered, images]);
   /// The scrolling surface, which is also what the zoom and pan gestures are read on.
   ///

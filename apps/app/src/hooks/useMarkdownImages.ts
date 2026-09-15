@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { imageSource } from "@trypthos/domain";
+import { imageSource, pickWikiTarget, splitQualified } from "@trypthos/domain";
 import type { ImageResult } from "../lib/workspaceClient";
 
 /// Pictures in rendered markdown, read through the provider.
@@ -19,6 +19,8 @@ import type { ImageResult } from "../lib/workspaceClient";
 /// Data URLs by the source that was written, for the sources this could resolve.
 export type ResolvedImages = Readonly<Record<string, string>>;
 
+const NO_EMBEDS: ReadonlySet<string> = new Set();
+
 export function useMarkdownImages(
   /// Every image source in the rendered document, as written.
   sources: readonly string[],
@@ -30,6 +32,14 @@ export function useMarkdownImages(
   /// seam - and it is what lets a surface that renders markdown with no shell behind it (the About
   /// box, a chat reply) simply not pass one.
   readImage: (path: string) => Promise<ImageResult>,
+  /// Obsidian embeds among the sources, and how to find one by name when it is not where the note
+  /// is. An embed names a picture rather than a path - it is usually in an attachments folder
+  /// elsewhere in the vault - so one that is not beside the note is searched for, through the same
+  /// guarded name filter a wiki link uses. Nothing else is searched for.
+  { embeds = NO_EMBEDS, findByName }: {
+    embeds?: ReadonlySet<string>;
+    findByName?: (name: string, workspaceId: string) => Promise<readonly string[]>;
+  } = {},
 ): ResolvedImages {
   const [resolved, setResolved] = useState<ResolvedImages>({});
   /// Every source already asked about, resolved or not.
@@ -52,20 +62,31 @@ export function useMarkdownImages(
         const target = imageSource(source, fromPath, workspaceId);
         if (target.kind !== "image") continue;
 
-        const read = await readImage(target.path);
+        let read = await readImage(target.path);
         if (!live) return;
+
+        const workspace = splitQualified(target.path)?.workspaceId;
+        if (!read.ok && embeds.has(source) && findByName !== undefined && workspace !== undefined) {
+          const name = source.slice(source.lastIndexOf("/") + 1);
+          const found = pickWikiTarget(await findByName(name, workspace), source, fromPath);
+          if (!live) return;
+          if (found !== null) read = await readImage(found);
+          if (!live) return;
+        }
+
         // A picture that cannot be read is left as the author wrote it. A broken image is better
         // than a wrong one, and there is nothing useful to put in its place.
         if (!read.ok) continue;
 
-        setResolved((prev) => ({ ...prev, [source]: read.dataUrl }));
+        const data = read.dataUrl;
+        setResolved((prev) => ({ ...prev, [source]: data }));
       }
     })();
 
     return () => {
       live = false;
     };
-  }, [sources, fromPath, workspaceId, readImage]);
+  }, [sources, fromPath, workspaceId, readImage, embeds, findByName]);
 
   return resolved;
 }

@@ -16,7 +16,7 @@ export const CAPABILITIES = `
 | File types | Choose which kinds of file Trypthos opens: markdown, plain text, and thirty-odd data formats and languages, all on to begin with. Shell, PowerShell and batch scripts included. A file no enabled type covers is listed in grey and cannot be opened. |
 | Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab, shown at their own size and zoomed with Shift and the wheel. Nothing to edit and nothing written back, and never sent to a chat model. |
 | Syntax colouring | Each type is coloured by role, from the same palette as the rest of the app, in both themes. Fenced code is coloured by the language on the fence, in every view and in chat replies. Grammars load only when a file needs one. |
-| Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. Pictures the document embeds are drawn in Preview, read from your folder rather than the web. |
+| Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. Pictures the document embeds are drawn in Preview, read from your folder rather than the web. Preview renders GFM with footnotes, alerts and front matter, and Obsidian notes with their wiki links, embeds, callouts, highlights and tags; a status bar chip says which, and lets you choose. |
 | Find | Ctrl+F, or Edit > Find. Find marks every match in the open document and steps through them; Find in Files searches the selected folder and everything below it, opening each hit in a tab. Plain text or a regular expression, with or without matching case. Drag the panel by its tab strip to move it out of the way. |
 | Zoom and pan | Hold Shift and turn the wheel to zoom, Shift and drag to move around, or press Ctrl with plus, minus and 0. Text grows in size, a picture is scaled for real. Each document keeps its own level, in every view. |
 | Formatting toolbar | In Source view, a button for every markdown construct. Headings act on the current line, character formatting wraps your selection, and a second press removes what the first added. |
@@ -33,7 +33,7 @@ export const CAPABILITIES = `
 | Recent files | Open Recent on the File menu lists the last ten files you opened, each with the folder it was in. Choosing one opens both, asking about unsaved work first. |
 | Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. Settings, About and the release notes are reached from the menus - on macOS, from the Trypthos menu. |
 | Release notes | Help > Release Notes: what changed in each release, in full. Earlier releases are grouped into chapters; open one and every release in it is listed as it was written. |
-| Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct Trypthos renders, with examples, and the flavour of markdown named. |
+| Markdown guide | A syntax guide on the Help menu, opening in a read-only tab: every construct Trypthos renders, with examples, in GitHub and Obsidian flavours. |
 | Updates | Checks for a newer version on startup, or on demand from the Help menu or the tray icon. |
 | Local by default | No server and no account. Your files stay on your machine; chats are stored locally. |
 `.trim();

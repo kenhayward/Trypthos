@@ -491,8 +491,50 @@ dragging, by double-click, and with Shift and the arrow keys all work as they di
 ## The markdown Trypthos speaks
 
 Trypthos reads and renders **GitHub Flavored Markdown**: the CommonMark specification, plus the
-GitHub extensions for tables, task lists, strikethrough and automatic links. Footnotes, definition
-lists, mathematics and YAML front matter are not part of that and are left as plain text.
+GitHub extensions for tables, task lists, strikethrough and automatic links. Preview also shows
+what GitHub itself renders beyond the specification, in every document: **footnotes**, numbered in
+the order they are referred to and gathered at the end; GitHub's five **alerts** (`> [!NOTE]`,
+`[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`); and **front matter**, the properties between
+`---` lines at the top of a file, shown as a table rather than as a rule and a heading. Headings carry
+ids, so a link to `#a-heading` lands on it.
+
+**Obsidian Flavored Markdown.** Notes written in Obsidian use marks of their own, and Preview renders
+those too. Both kinds of file are `.md`, so which one a file is in is decided from what it contains:
+
+- **A chip in the status bar** says **GFM** or **Obsidian** for a markdown document. Hover it for what
+  decided it - "detected from 2 wiki links, 1 callout", or the vault the file is in. Click it to
+  choose Auto, GFM or Obsidian for that file; the choice lasts until the app is closed, and changing
+  it never changes the file.
+- **What means Obsidian:** a wiki link or embed, a `%%comment%%`, a `==highlight==`, an inline
+  footnote `^[...]`, a block id at the end of a line, a callout GitHub would not render (another type,
+  a title, or a fold marker), or `aliases` / `cssclasses` in the front matter. Code is ignored, so a
+  note about the syntax is not taken for a note written in it. Tags and dollar signs decide nothing on
+  their own, because a GitHub README has those too.
+- **A file in an Obsidian vault is always Obsidian.** A vault is a folder with an `.obsidian` folder
+  in it, and a workspace opened at a vault or anywhere inside one counts - a GitHub repository counts
+  when `.obsidian` is at its root.
+
+In an Obsidian document Preview shows:
+
+- **Wiki links** - `[[Note]]`, `[[Note|shown text]]`, `[[Note#Heading]]` (shown as "Note > Heading")
+  and `[[#Heading]]` in the same note. Clicking one finds the note by name anywhere in the workspace,
+  preferring the one in the same folder and otherwise the shortest path, exactly as Obsidian does; a
+  link naming folders is matched on those folders too. When no note has that name it is tried as a
+  path beside the note, which is what says it is not there.
+- **Embedded pictures** - `![[diagram.png]]`, at a size with `|300` or `|300x200` - found by name the
+  same way, so a picture in an attachments folder elsewhere in the vault is drawn. An embedded note
+  shows as a link to it for now.
+- **Callouts** of every Obsidian type - note, abstract, info, todo, tip, success, question, warning,
+  failure, danger, bug, example and quote, with Obsidian's other names for them such as `faq` or
+  `error` - each in its own colour, with a title after the type, folded closed with `-` or open with
+  `+`, and nested. A type Obsidian would not know is shown as a note, under its own name.
+- **Highlights**, **tags** (`#tag`, `#nested/tag`; `#1984` is not one), **inline footnotes** numbered
+  with the others, and **tasks** ticked by any mark in the box, such as `[?]` or `[-]`.
+- **Comments** and **block ids** are hidden, and a block id is a place a link can land.
+- **A single line break shows as a line break**, as it does in Obsidian with its default settings.
+
+Definition lists, mathematics between dollar signs and Mermaid diagrams are still left as text.
+Live and Source show the Obsidian marks as the text you typed.
 
 **Help > Markdown Syntax Guide** opens a guide to all of it in a tab, with each construct shown as
 markdown and as what it produces. It is part of the app rather than a file in your folder, so it is

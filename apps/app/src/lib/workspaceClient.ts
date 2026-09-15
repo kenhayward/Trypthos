@@ -44,6 +44,9 @@ export interface WorkspaceInfo {
   /// GitHub cuts a very large tree short; the browser says so on that workspace's row, because a
   /// tree quietly missing folders is a wrong answer given confidently.
   truncated: boolean;
+  /// True when the workspace is in an Obsidian vault - an `.obsidian` folder at or above it - so its
+  /// markdown is rendered as Obsidian's. Optional: a shell that predates it says nothing, which is no.
+  vault?: boolean;
 }
 
 export interface RemoteNode {

@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("node:fs/promises");
+const path = require("node:path");
 const { createPathGuard, workspaceRefName } = require("@trypthos/domain");
 const { createLocalWorkspace } = require("./localWorkspace");
 const { openGitHubWorkspace } = require("./githubWorkspace");
@@ -23,9 +24,30 @@ const { openGitHubWorkspace } = require("./githubWorkspace");
 /// | `provider` | `list` / `read` / `readBytes` / `write`, in the local backend's shapes.    |
 /// | `guard`    | The boundary check, or null when the provider applies its own internally.  |
 ///
+/// | `vault`    | True when the workspace is in an Obsidian vault, so its markdown is Obsidian's. |
+///
 /// `root` being nullable is the field that carries the whole difference. Save As opens a native
 /// dialog at a folder on disk, and a repository has none - so the handler refuses rather than
 /// inventing one, and every other caller of `root` is about recording where a local file was.
+
+/// The marker Obsidian keeps its settings in. A folder holding one IS a vault.
+const VAULT_MARKER = ".obsidian";
+
+/// Whether a folder is in an Obsidian vault: the marker at it, or at any folder above it.
+///
+/// Above as well as at, because opening one project folder inside a vault is common, and the notes
+/// in it are still written for Obsidian. Only a DIRECTORY counts. Read-only, and it reads nothing
+/// but the existence of one name per level.
+async function inObsidianVault(root) {
+  for (let dir = path.resolve(root); ; dir = path.dirname(dir)) {
+    try {
+      if ((await fs.stat(path.join(dir, VAULT_MARKER))).isDirectory()) return true;
+    } catch {
+      // Not here, or not readable - either way not a vault at this level.
+    }
+    if (path.dirname(dir) === dir) return false;
+  }
+}
 
 /// Opens a local folder, having first checked it is still one.
 ///
@@ -52,7 +74,13 @@ async function openLocal(ref) {
     // The guard is kept beside the provider rather than only inside it, because Save As has a path
     // to check BEFORE it has anything to write: the dialog answers with an absolute path, and
     // whether that is a place in this workspace is the question asked first.
-    workspace: { ref, root: ref.root, guard, provider: createLocalWorkspace({ root: ref.root, guard }) },
+    workspace: {
+      ref,
+      root: ref.root,
+      guard,
+      provider: createLocalWorkspace({ root: ref.root, guard }),
+      vault: await inObsidianVault(ref.root),
+    },
   };
 }
 
@@ -67,6 +95,11 @@ async function openGitHub(ref, { github }) {
   const opened = await openGitHubWorkspace({ ref, api: github });
   if (!opened.ok) return opened;
 
+  // A repository has no folders above it, so only its own root can hold the marker - and the tree is
+  // already in hand, so asking costs nothing.
+  const top = await opened.provider.list("");
+  const vault = top.ok && top.nodes.some((node) => node.name === VAULT_MARKER && node.kind === "directory");
+
   return {
     ok: true,
     workspace: {
@@ -77,6 +110,7 @@ async function openGitHub(ref, { github }) {
       /// What the browser needs to be honest about a repository too large to describe in one answer.
       truncated: opened.truncated,
       branch: opened.branch,
+      vault,
     },
   };
 }

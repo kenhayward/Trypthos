@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { detectFlavour } from "@trypthos/domain";
 import { renderMarkdown } from "./markdown";
 import { MARKDOWN_GUIDE } from "./markdownGuide";
 
@@ -10,6 +11,13 @@ import { MARKDOWN_GUIDE } from "./markdownGuide";
 describe("the markdown guide", () => {
   it("names the flavour of markdown the app supports", () => {
     expect(MARKDOWN_GUIDE).toContain("GitHub Flavored Markdown");
+    expect(MARKDOWN_GUIDE).toContain("Obsidian Flavored Markdown");
+  });
+
+  // The guide shows Obsidian's syntax without using it - every example is inside a code block - so
+  // the guide itself is GFM, and reads the same whichever flavour a reader expects.
+  it("is itself detected as GFM", () => {
+    expect(detectFlavour(MARKDOWN_GUIDE)).toEqual({ flavour: "gfm", signals: {}, vault: false });
   });
 
   it("opens with its title", () => {
@@ -40,7 +48,8 @@ describe("the markdown guide", () => {
   it("renders as a document rather than as an empty page", () => {
     const html = renderMarkdown(MARKDOWN_GUIDE);
 
-    expect(html).toContain("<h1>");
+    // An id on it since headings became places a link can reach.
+    expect(html).toMatch(/<h1[ >]/);
     expect(html).toContain("<table>");
     expect(html).toContain("<blockquote>");
   });

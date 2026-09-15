@@ -95,6 +95,9 @@ function described(workspace) {
     /// incomplete. False for a local folder, which is listed one folder at a time and never
     /// truncated.
     truncated: workspace.truncated === true,
+    /// True when the workspace is in an Obsidian vault - see `providers.js`. Carried so the editor
+    /// can render its markdown as Obsidian's without having to find a marker in every note.
+    vault: workspace.vault === true,
   };
 }
 

@@ -94,6 +94,39 @@
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
     "encoding": "UTF-8",
+    "flavour": {
+      "label": "Markdown flavour",
+      "chip": "Markdown flavour: {{flavour}}",
+      "auto": "Auto ({{flavour}})",
+      "nameGfm": "GFM",
+      "nameObsidian": "Obsidian",
+      "fullGfm": "GitHub Flavored Markdown",
+      "fullObsidian": "Obsidian Flavored Markdown",
+      "detected": "{{flavour}}, detected. Click to choose.",
+      "fromSignals": "{{flavour}}, detected from {{signals}}. Click to choose.",
+      "fromVault": "{{flavour}}, detected from the Obsidian vault this file is in. Click to choose.",
+      "chosen": "{{flavour}}, chosen for this file. Click to choose.",
+      "signal": {
+        "wikilink": "1 wiki link",
+        "embed": "1 embed",
+        "comment": "1 comment",
+        "highlight": "1 highlight",
+        "inlineFootnote": "1 inline footnote",
+        "blockId": "1 block id",
+        "callout": "1 callout",
+        "properties": "Obsidian properties"
+      },
+      "signals": {
+        "wikilink": "{{count}} wiki links",
+        "embed": "{{count}} embeds",
+        "comment": "{{count}} comments",
+        "highlight": "{{count}} highlights",
+        "inlineFootnote": "{{count}} inline footnotes",
+        "blockId": "{{count}} block ids",
+        "callout": "{{count}} callouts",
+        "properties": "Obsidian properties"
+      }
+    },
     "stats": "{{caret}} · {{words}} words"
   },
   "newFile": {
