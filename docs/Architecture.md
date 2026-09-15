@@ -341,6 +341,46 @@ plain text to GFM, so the second flavour only ever adds - which is what makes gu
   link's own folders must match). No new IPC channel. An embed is an `img` with `data-embed`;
   `useMarkdownImages` reads it beside the note first and only an embed falls back to the name search,
   so an ordinary `![](path)` never searches.
+- **Math and diagrams are drawn after rendering, and loaded on first use.** The renderer only marks
+  them: Obsidian's `$`/`$$` become `span.md-math`/`div.md-math[data-display]` holding the TeX as
+  escaped text (Obsidian's no-space-inside, no-digit-after rule keeps money out), and marked's own
+  `code.language-mermaid` stays as it is in both flavours. `lib/richBlocks.ts` (`useRichBlocks`)
+  then `import()`s KaTeX - with its stylesheet and fonts - and Mermaid only when a document has one.
+  KaTeX runs with `trust: false`, `throwOnError: false` and bounds on expansion and size; Mermaid with
+  `securityLevel: "strict"` and SVG text labels (a `foreignObject` label would be emptied by the SVG
+  sanitiser). Both outputs go through DOMPurify again. Done marks are flagged, so a pass is idempotent.
+  `richBlocksBundle.test.ts` asserts neither library is imported statically anywhere - the same
+  module-graph guard the language grammars have. Mermaid is pinned to 11.x: 12.0.0 pulls a
+  `chevrotain`/`lodash-es` chain with open high-severity advisories.
+- **Embedded notes are filled in after rendering too.** A note embed renders as a
+  `.md-transclusion[data-embed-note]` placeholder holding its link. `lib/transclusions.ts`
+  (`useTransclusions`) resolves it with `findWikiTarget` (the same name search as a wiki link), reads it
+  with `readDocument` (App's wrapper over `client.readFile`, cached per document on screen), extracts
+  the part named with the domain's `embeddedSection` (whole note minus front matter; a heading to the
+  next heading as high; a block by `^id`, skipping code), renders that with `renderMarkdown` - so it is
+  sanitised like any document - and nests it under the link as `.md-transclusion-body` carrying
+  `data-embed-path` and `data-embed-chain`. Nested embeds read the chain to refuse a note already in it
+  (`cycle`) or one `MAX_EMBED_DEPTH` (3) notes down (`too-deep`); the outcome is written to
+  `data-tp-embedded`. Pictures inside are read relative to the embedded note through
+  `readMarkdownImage`, shared with `useMarkdownImages`. Code colouring and `richBlocks` run again over
+  the container once embeds are in.
+- **React 19 re-sets `innerHTML` whenever the `dangerouslySetInnerHTML` OBJECT changes**, not only
+  when its markup does. Everything above - and the older code colouring - mutates that DOM after
+  React sets it, so an inline `{ __html }` wiped it on every unrelated re-render. `MarkdownPreview`
+  memoises the object on the html, and chat replies render through a memoised `ReplyMarkdown`. A
+  test on each asserts drawn DOM survives a re-render.
+- **The editor parses GFM always, and Obsidian's syntax for an Obsidian document.** The markdown
+  loader in `languageLoaders.ts` passes `extensions: [GFM]`, plus `OBSIDIAN_MARKDOWN`
+  (`lib/obsidianSyntax.ts`, imported dynamically) when `DocumentEditor` is given `flavour: "obsidian"`;
+  the language reloads when the flavour changes. The Lezer extensions mirror the marked ones rule for
+  rule: `WikiLink` (with `WikiLinkMark`, `WikiLinkTarget`, and - when aliased - `WikiLinkAliasedTarget`,
+  `WikiLinkBar`, `WikiLinkAlias`), `Embed`, `Highlight` (a delimiter, so emphasis nests inside),
+  `Comment`/`BlockComment`, `Tag`, `InlineMath`/`BlockMath`, `BlockId` and `CalloutMark`. Tags with no
+  markdown equivalent come from `lib/obsidianTags.ts`, a separate module so `editorTheme`'s role table
+  can colour them without loading the parser. Live's `ALWAYS_HIDDEN` and `FORMAT_CLASSES` cover the
+  new nodes - an aliased target is hidden because it is its own node name, and comment markers are
+  deliberately not hidden - and a `WikiLink` or `Embed` mark carries `data-wiki-target`, which
+  `followLinks` hands to `onFollowWiki` on a modified click, and App to `followWikiLink`.
 
 ## Links
 

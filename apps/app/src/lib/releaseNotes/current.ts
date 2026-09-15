@@ -5,6 +5,26 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.76.0",
+    date: "2026-09-15",
+    pr: 158,
+    headline: "Obsidian math, diagrams, embedded notes, and Obsidian's marks while you edit",
+    summary:
+      "Obsidian notes now render the rest of what Obsidian shows. Mathematics written in LaTeX between dollar signs is typeset, inline and on lines of its own, while a sentence about $5 and $10 stays as written. Mermaid diagrams in a mermaid code block are drawn in any markdown document, as they are on GitHub. An embedded note is shown in place under a link to it - the whole note, one heading with what is under it, or one block by its id - with embeds inside it followed three notes deep and never round in a circle, and pictures inside it read from beside that note. Both libraries are loaded only the first time a document needs them. The Live and Source views now understand Obsidian's marks too: Source colours wiki links, highlights, tags, math and callout types, and Live hides a wiki link's brackets, and its target when it has shown text, and the markers of highlights and math, showing tags and callout types in colour and comments dimmed. Ctrl-click (Cmd-click on a Mac) a wiki link or an embed in Live to open the note it names. The editor also now reads GFM's tables, strikethrough and task lists, which it previously saw as plain text, so Live shows strikethrough struck out. And coloured code in Preview and in chat replies no longer loses its colouring when the window redraws for some other reason, such as typing in the chat box.",
+    added: [
+      "LaTeX math in Obsidian notes, typeset with KaTeX.",
+      "Mermaid diagrams in any markdown document.",
+      "Embedded notes shown in place: a whole note, a heading, or a block.",
+      "Obsidian's marks coloured in Source and rendered in Live, with Ctrl-click to follow a wiki link or embed.",
+    ],
+    changed: [
+      "The editor reads GFM tables, strikethrough and task lists, and Live shows strikethrough struck out.",
+    ],
+    fixed: [
+      "Coloured code in Preview and in chat replies keeps its colouring when the window redraws, instead of losing it until the text changes.",
+    ],
+  },
+  {
     version: "0.75.0",
     date: "2026-09-15",
     pr: 157,

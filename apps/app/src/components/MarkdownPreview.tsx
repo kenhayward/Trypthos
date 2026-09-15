@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 import { useMemo, useRef } from "react";
 import type { MarkdownFlavour } from "@trypthos/domain";
 import { useCodeHighlighting } from "../hooks/useCodeHighlighting";
+import { useRichBlocks } from "../hooks/useRichBlocks";
+import { useTransclusions } from "../hooks/useTransclusions";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { renderMarkdown } from "../lib/markdown";
 import { embedSourcesIn, imageSourcesIn, withResolvedImages } from "../lib/markdownImages";
@@ -41,6 +43,9 @@ interface Props {
   flavour?: MarkdownFlavour;
   /// Finds files in a workspace by name, for an Obsidian embed that is not beside its note.
   findByName?: (name: string, workspaceId: string) => Promise<readonly string[]>;
+  /// Reads a note's text, for an Obsidian embed shown in place. Absent where there is no workspace
+  /// to read from, which leaves every embed as a link to its note.
+  readDocument?: (path: string) => Promise<string | null>;
 }
 
 /// Preview mode: read-only rendered prose.
@@ -61,6 +66,7 @@ export default function MarkdownPreview({
   workspaceId = null,
   flavour = "gfm",
   findByName,
+  readDocument,
 }: Props) {
   const { t } = useTranslation();
   const rendered = useMemo(() => renderMarkdown(source, { flavour }), [source, flavour]);
@@ -77,6 +83,11 @@ export default function MarkdownPreview({
     findByName,
   });
   const html = useMemo(() => withResolvedImages(rendered, images), [rendered, images]);
+  /// The markup, as the object React is handed. Memoised, and not for performance: React 19 sets
+  /// `innerHTML` again whenever this object is a different one, whatever it holds - and doing that
+  /// wipes everything drawn into the document after rendering, coloured code, typeset math, diagrams
+  /// and embedded notes alike, every time anything else re-renders the preview.
+  const markup = useMemo(() => ({ __html: html }), [html]);
   /// The scrolling surface, which is also what the zoom and pan gestures are read on.
   ///
   /// Outside the branch below, deliberately: an empty document and a rendered one now share ONE
@@ -88,6 +99,10 @@ export default function MarkdownPreview({
   // The colouring lands AFTER the markup: a grammar arrives through a dynamic import, so the prose
   // is on screen first and the colours follow, exactly as they do in the editor.
   useCodeHighlighting(surface, fileTypes, html);
+  // Math and diagrams, typeset and drawn once their libraries have loaded - and only loaded for a
+  // document that has some.
+  useRichBlocks(surface, html);
+  useTransclusions(surface, html, { fromPath, workspaceId, fileTypes, findByName, readDocument, readImage });
   useZoomPan({ host: surface, onZoom: (direction: ZoomDirection) => onZoom?.(direction) });
 
   return (
@@ -101,7 +116,7 @@ export default function MarkdownPreview({
           // `.markdown-body` sizes itself against this, and every heading, list and code span inside
           // it is sized in `em` - so one variable scales the whole rendered document in proportion.
           style={{ ["--tp-zoom" as string]: zoom }}
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={markup}
         />
       )}
     </div>

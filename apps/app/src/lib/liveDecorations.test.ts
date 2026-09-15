@@ -186,3 +186,47 @@ describe("isFollowClick", () => {
     expect(isFollowClick(meta, "win32")).toBe(false);
   });
 });
+
+/// GFM's and Obsidian's constructs in Live mode: punctuation hidden off the caret line, content
+/// given its rendered appearance.
+describe("GFM and Obsidian in Live mode", () => {
+  it.each([
+    ["StrikethroughMark", "Strikethrough"],
+    ["WikiLinkMark", "WikiLink"],
+    ["EmbedMark", "Embed"],
+    ["HighlightMark", "Highlight"],
+    ["InlineMathMark", "InlineMath"],
+    // A link with an alias reads as its alias: the target and the bar go with the brackets.
+    ["WikiLinkAliasedTarget", "WikiLink"],
+    ["WikiLinkBar", "WikiLink"],
+  ])("hides %s", (name, parent) => {
+    expect(isHiddenMarker(name, parent)).toBe(true);
+  });
+
+  // A target that is the only thing the link shows stays - it IS the link's text.
+  it("keeps a wiki link's target when it has no alias, and the alias when it has one", () => {
+    expect(isHiddenMarker("WikiLinkTarget", "WikiLink")).toBe(false);
+    expect(isHiddenMarker("WikiLinkAlias", "WikiLink")).toBe(false);
+  });
+
+  // Obsidian shows comments while editing, dimmed - hiding them would hide text somebody is editing.
+  it("never hides a comment", () => {
+    expect(isHiddenMarker("CommentMark", "Comment")).toBe(false);
+  });
+
+  it.each([
+    ["Strikethrough", "cm-live-strike"],
+    ["WikiLink", "cm-live-link"],
+    ["Embed", "cm-live-link"],
+    ["Highlight", "cm-live-highlight"],
+    ["Comment", "cm-live-comment"],
+    ["BlockComment", "cm-live-comment"],
+    ["Tag", "cm-live-tag"],
+    ["InlineMath", "cm-live-math"],
+    ["BlockMath", "cm-live-math"],
+    ["BlockId", "cm-live-block-id"],
+    ["CalloutMark", "cm-live-callout"],
+  ])("gives %s its appearance", (name, className) => {
+    expect(formatClassFor(name)).toBe(className);
+  });
+});

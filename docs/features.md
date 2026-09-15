@@ -522,8 +522,17 @@ In an Obsidian document Preview shows:
   link naming folders is matched on those folders too. When no note has that name it is tried as a
   path beside the note, which is what says it is not there.
 - **Embedded pictures** - `![[diagram.png]]`, at a size with `|300` or `|300x200` - found by name the
-  same way, so a picture in an attachments folder elsewhere in the vault is drawn. An embedded note
-  shows as a link to it for now.
+  same way, so a picture in an attachments folder elsewhere in the vault is drawn.
+- **Embedded notes** - `![[Note]]` shows the whole note in place, `![[Note#Heading]]` that heading and
+  everything under it down to the next heading as high, and `![[Note#^block-id]]` one block: a
+  paragraph, a list item with what is nested under it, or the block above an id on a line of its own.
+  Each sits under a link to the note, which stays a link when the note cannot be found. Embeds inside
+  an embedded note are shown too, three notes deep, and a note is never shown inside itself or inside
+  a note it is already in. Pictures in an embedded note are read from beside that note. An embed of a
+  PDF, a recording or a canvas is a link to it.
+- **Mathematics** in LaTeX - `$inline$`, and `$$display$$` on lines of their own - typeset with KaTeX.
+  A dollar sign with a space just inside it, or a digit straight after the closing one, is money:
+  `$5 and $10` stays as written. A mistake in the TeX is shown in place, in red.
 - **Callouts** of every Obsidian type - note, abstract, info, todo, tip, success, question, warning,
   failure, danger, bug, example and quote, with Obsidian's other names for them such as `faq` or
   `error` - each in its own colour, with a title after the type, folded closed with `-` or open with
@@ -533,8 +542,24 @@ In an Obsidian document Preview shows:
 - **Comments** and **block ids** are hidden, and a block id is a place a link can land.
 - **A single line break shows as a line break**, as it does in Obsidian with its default settings.
 
-Definition lists, mathematics between dollar signs and Mermaid diagrams are still left as text.
-Live and Source show the Obsidian marks as the text you typed.
+**Diagrams, in either flavour.** A code block whose language is `mermaid` is drawn as a diagram in
+Preview, as GitHub draws one, in the light or dark style to match the app. One Mermaid cannot read is
+left as its code. KaTeX and Mermaid are both loaded the first time a document has math or a diagram,
+and not before.
+
+**Editing an Obsidian note.** Source and Live understand the same marks. Source colours wiki links and
+embeds as links, highlights, tags, math and callout types each by role, and comments and block ids as
+comments. Live hides a wiki link's brackets - and its target too when it has shown text, so
+`[[Plan#Goals|the goals]]` reads as "the goals" - and the markers of highlights and inline math; it
+shows highlights highlighted, tags and callout types in colour, math in the code face, and comments
+and block ids dimmed rather than hidden, since a comment is still text being edited. The caret's line
+shows everything as typed. Hold Ctrl (Cmd on a Mac) and click a wiki link or an embed to open the note
+it names, found by name as it is from Preview.
+
+The editor also reads GFM itself now - tables, strikethrough, task lists and autolinks were plain
+text to it before - so Live shows strikethrough struck out in every markdown document.
+
+Definition lists are still left as text, and math in a GFM document stays as written.
 
 **Help > Markdown Syntax Guide** opens a guide to all of it in a tab, with each construct shown as
 markdown and as what it produces. It is part of the app rather than a file in your folder, so it is

@@ -303,7 +303,56 @@ Its types are `note`, `abstract`, `info`, `todo`, `tip`, `success`,
 the other names Obsidian accepts for them, such as `faq` or `error`.
 
 In an Obsidian document a single line break shows as a line break, as it does
-in Obsidian. An embedded note shows as a link to it for now.
+in Obsidian.
+
+An embedded note is shown in place, under a link to it - the whole note, one
+heading and what is under it, or one block:
+
+```md
+![[Another note]]
+![[Another note#A heading]]
+![[Another note#^block-id]]
+```
+
+Embeds inside embeds are shown too, three notes deep, and a note is never
+shown inside itself.
+
+Mathematics is set in LaTeX, between single dollar signs in a line or double
+dollar signs on lines of their own:
+
+```md
+Euler's identity is $e^{i\pi} + 1 = 0$.
+
+$$
+\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
+$$
+```
+
+A dollar sign with a space just inside it, or a digit straight after the
+closing one, is money rather than math: `$5 and $10` stays as written.
+
+In the **Live** and **Source** views an Obsidian document's marks are
+recognised too: Source colours them, and Live hides the brackets of a wiki
+link - and its target, when it has shown text - the markers of a highlight or
+math, and shows tags and callout types in colour. Hold Ctrl (Cmd on a Mac) and
+click a wiki link or an embed to open the note it names.
+
+---
+
+## Diagrams
+
+A code block whose language is `mermaid` is drawn as a diagram in Preview, in
+any markdown document:
+
+````md
+```mermaid
+graph LR
+  Draft --> Review --> Ship
+```
+````
+
+A diagram Mermaid cannot read is shown as its code, which is where the mistake
+can be found.
 
 ---
 
@@ -313,10 +362,7 @@ These appear in some other markdown tools, and Trypthos leaves them as plain
 text:
 
 - Definition lists
-- Mathematics between dollar signs
-- Diagrams in `mermaid` code blocks, which show as code
-- The Obsidian marks in the **Live** and **Source** views, which show them as
-  the text you typed
+- Mathematics in a GFM document - only an Obsidian document sets it
 
 ---
 

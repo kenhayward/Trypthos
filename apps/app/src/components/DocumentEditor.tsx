@@ -12,7 +12,7 @@ import { currentPlatform } from "../lib/windowControls";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
 import { findHighlighting, setFoundMatches } from "../lib/findExtension";
-import type { FindMatch } from "@trypthos/domain";
+import type { FindMatch, MarkdownFlavour } from "@trypthos/domain";
 
 /// Hoisted rather than defaulted inline. The highlight effect keys on this array, so a fresh `[]`
 /// on every render would dispatch into CodeMirror on every keystroke.
@@ -132,6 +132,11 @@ interface Props {
   /// What that means is decided above, where the workspace and the open document are: the editor
   /// knows what was clicked and nothing about where it leads.
   onFollowLink?: (href: string) => void;
+  /// An Obsidian wiki link was followed in Live mode, with its target as written.
+  onFollowWikiLink?: (target: string) => void;
+  /// Which markdown a markdown document is written in, so its editor parses Obsidian's marks when it
+  /// is Obsidian's. Ignored for every other type.
+  flavour?: MarkdownFlavour;
   /// Handle for applying a change from outside - a chat edit the user accepted.
   ref?: React.Ref<EditorHandle>;
   /// Labels the editing surface for assistive technology and for tests.
@@ -177,6 +182,8 @@ export default function DocumentEditor({
   onCaret,
   onSelectionChange,
   onFollowLink,
+  onFollowWikiLink,
+  flavour = "gfm",
   ref,
   ariaLabel,
   zoom = DEFAULT_ZOOM,
@@ -213,6 +220,7 @@ export default function DocumentEditor({
   const latestOnCaret = useRef(onCaret);
   const latestOnSelection = useRef(onSelectionChange);
   const latestOnFollowLink = useRef(onFollowLink);
+  const latestOnFollowWikiLink = useRef(onFollowWikiLink);
   /// The document the editor is currently showing, so a change of file can be told from a change of
   /// text. Written after the transaction that switches it, never during render.
   const shownDocument = useRef(documentId);
@@ -227,7 +235,8 @@ export default function DocumentEditor({
     latestOnCaret.current = onCaret;
     latestOnSelection.current = onSelectionChange;
     latestOnFollowLink.current = onFollowLink;
-  }, [onChange, onCaret, onSelectionChange, onFollowLink]);
+    latestOnFollowWikiLink.current = onFollowWikiLink;
+  }, [onChange, onCaret, onSelectionChange, onFollowLink, onFollowWikiLink]);
 
   useImperativeHandle(
     ref,
@@ -317,6 +326,7 @@ export default function DocumentEditor({
           followLinks({
             platform: currentPlatform(),
             onFollow: (href) => latestOnFollowLink.current?.(href),
+            onFollowWiki: (target) => latestOnFollowWikiLink.current?.(target),
           }),
           EditorView.updateListener.of((update) => {
             const external = update.transactions.some((tr) => tr.annotation(External) === true);
@@ -410,7 +420,7 @@ export default function DocumentEditor({
     if (load === null) return;
 
     let cancelled = false;
-    void load({ name: fileNameOf(documentId), fileTypes })
+    void load({ name: fileNameOf(documentId), fileTypes, flavour })
       .then((support) => {
         if (cancelled || view.current === null) return;
         view.current.dispatch({ effects: languageCompartment.current.reconfigure(support) });
@@ -423,7 +433,7 @@ export default function DocumentEditor({
     return () => {
       cancelled = true;
     };
-  }, [fileType.id, documentId, fileTypes]);
+  }, [fileType.id, documentId, fileTypes, flavour]);
 
   useEffect(() => {
     const editor = view.current;

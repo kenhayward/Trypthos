@@ -438,3 +438,17 @@ body {
 :is(.markdown-body, .chat-md) a.footnote-backref { text-decoration: none; }
 .markdown-body table.md-properties { margin-top: 0; font-size: 0.9em; }
 .markdown-body table.md-properties th { color: var(--color-ink-4); font-weight: 500; }
+
+/* Math and diagrams, drawn by `richBlocks.ts` after rendering. */
+:is(.markdown-body, .chat-md) div.md-math { margin: 0.8em 0; overflow-x: auto; }
+:is(.markdown-body, .chat-md) .md-mermaid { margin: 0.8em 0; overflow-x: auto; text-align: center; }
+:is(.markdown-body, .chat-md) .md-mermaid svg { max-width: 100%; height: auto; }
+
+/* An embedded note, shown in place by `transclusions.ts`: the link to it, and its contents beneath. */
+:is(.markdown-body, .chat-md) .md-transclusion { display: block; margin: 0.8em 0; }
+:is(.markdown-body, .chat-md) .md-transclusion[data-tp-embedded="done"] {
+  border-left: 3px solid var(--color-rule);
+  padding: 0.2em 0 0.2em 0.9em;
+}
+:is(.markdown-body, .chat-md) .md-transclusion-body > :first-child { margin-top: 0.3em; }
+:is(.markdown-body, .chat-md) .md-transclusion-body > :last-child { margin-bottom: 0; }

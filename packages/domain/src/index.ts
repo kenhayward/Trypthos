@@ -17,6 +17,7 @@ export type { DetectedFlavour, FlavourChoice, FlavourSignal, MarkdownFlavour } f
 export { splitFrontMatter } from "./frontMatter";
 export type { FrontMatterProperty, FrontMatterSplit } from "./frontMatter";
 export { parseWikiLink, pickWikiTarget, wikiLinkFileName } from "./wikiLink";
+export { embeddedSection } from "./noteEmbed";
 export type { WikiLink } from "./wikiLink";
 export { imageSource, isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
 export type { ImageSource, LinkAction, LinkRejection } from "./markdownLink";

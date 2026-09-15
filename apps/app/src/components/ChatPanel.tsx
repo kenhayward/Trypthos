@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   READ_TOOL_NAME,
@@ -85,6 +85,24 @@ interface Props {
   onOpenChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
 }
+
+/// One stretch of a reply's prose, rendered.
+///
+/// Sanitised in `renderMarkdown` (DOMPurify) before injection: a model's output is text the app did
+/// not write, and is treated as data rather than markup for the same reason a workspace file is.
+///
+/// Memoised on its text, and the markup object with it. React 19 sets `innerHTML` again whenever the
+/// object it is handed is a new one - so an inline `{ __html }` rewrote every reply on every render of
+/// the panel, which is every keystroke in the message box, and wiped the colouring drawn into its code.
+const ReplyMarkdown = memo(function ReplyMarkdown({ text }: { text: string }) {
+  const markup = useMemo(() => ({ __html: renderMarkdown(text) }), [text]);
+  return (
+    <div
+      className="chat-md break-words [&_a]:text-leaf [&_a]:underline [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_pre]:overflow-x-auto"
+      dangerouslySetInnerHTML={markup}
+    />
+  );
+});
 
 /// Right panel: AI chat.
 ///
@@ -418,14 +436,7 @@ export default function ChatPanel({
                               }}
                             />
                           ) : (
-                            <div
-                              key={at}
-                              className="chat-md break-words [&_a]:text-leaf [&_a]:underline [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_pre]:overflow-x-auto"
-                              // Sanitised in renderMarkdown (DOMPurify) before injection. This is a
-                              // model's output: text the app did not write, and treated as data
-                              // rather than markup for the same reason a workspace file is.
-                              dangerouslySetInnerHTML={{ __html: renderMarkdown(part.text) }}
-                            />
+                            <ReplyMarkdown key={at} text={part.text} />
                           ),
                         )}
                       </div>

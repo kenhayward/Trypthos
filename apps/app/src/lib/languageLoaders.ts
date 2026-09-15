@@ -1,5 +1,5 @@
 import { LanguageSupport, StreamLanguage, type StreamParser } from "@codemirror/language";
-import type { FileTypeId } from "@trypthos/domain";
+import type { FileTypeId, MarkdownFlavour } from "@trypthos/domain";
 import { fenceLanguages } from "./fenceLanguages";
 
 /// Turning a file type into a CodeMirror language, on demand.
@@ -27,6 +27,9 @@ import { fenceLanguages } from "./fenceLanguages";
 export interface LanguageRequest {
   name: string;
   fileTypes: readonly string[];
+  /// Which markdown a markdown document is written in, so its editor understands Obsidian's marks
+  /// when it is Obsidian's. Every other loader ignores it; absent is GFM.
+  flavour?: MarkdownFlavour;
 }
 
 export type LanguageLoader = (request: LanguageRequest) => Promise<LanguageSupport>;
@@ -53,9 +56,20 @@ const extensionOf = (name: string): string => {
 export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
   // The one loader that reads the rest of the catalogue: a fenced code block is coloured only if
   // its language is a type the user has turned on.
-  markdown: ({ fileTypes }) =>
-    import("@codemirror/lang-markdown").then((m) =>
-      m.markdown({ codeLanguages: fenceLanguages(fileTypes) }),
+  //
+  // GFM always - tables, strikethrough, task lists and autolinks were missing from the editor's tree
+  // until Obsidian's syntax needed a parser to extend - and Obsidian's marks on top for an Obsidian
+  // document, so Source colours them and Live hides their punctuation.
+  markdown: ({ fileTypes, flavour }) =>
+    Promise.all([
+      import("@codemirror/lang-markdown"),
+      import("@lezer/markdown"),
+      flavour === "obsidian" ? import("./obsidianSyntax") : null,
+    ]).then(([m, lezer, obsidian]) =>
+      m.markdown({
+        codeLanguages: fenceLanguages(fileTypes),
+        extensions: obsidian === null ? [lezer.GFM] : [lezer.GFM, obsidian.OBSIDIAN_MARKDOWN],
+      }),
     ),
   text: null,
   // Not a grammar's absence but a document's: an image never reaches CodeMirror at all, so there is

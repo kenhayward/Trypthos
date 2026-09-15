@@ -1086,3 +1086,81 @@ describe("Find's highlights, in a real browser", () => {
     expect(marks()).toHaveLength(0);
   });
 });
+
+/// An Obsidian note in Live mode: its punctuation hidden off the caret line, its marks drawn, and a
+/// wiki link followed on a modified click. And a GFM note left exactly as it was.
+describe("Obsidian marks in Live mode, rendered", () => {
+  const NOTE = "Intro line.\n\nSee [[Plan#Goals|the goals]] and ==this== with #tag.\n\n~~gone~~ and %%a comment%%.\n";
+
+  function ObsidianHarness({ onFollowWikiLink, value = NOTE }: { onFollowWikiLink?: (target: string) => void; value?: string }) {
+    const [text, setText] = useState(value);
+    return (
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["notes.md"]}
+        activePath="notes.md"
+        dirty={false}
+        value={text}
+        onChange={setText}
+        fileTypes={["markdown"]}
+        vault
+        onFollowWikiLink={onFollowWikiLink}
+      />
+    );
+  }
+
+  async function settled(): Promise<void> {
+    // The markdown language loads on demand; the tree has the Obsidian nodes once it arrives.
+    for (let tries = 0; tries < 100 && document.querySelector(".cm-live-highlight") === null; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  it("shows a wiki link as its alias, a highlight without its marks, and a tag", async () => {
+    render(<ObsidianHarness />);
+    await settled();
+    await putCaretOn("Intro");
+
+    expect(lineWith("goals").textContent).toBe("See the goals and this with #tag.");
+    expect(document.querySelector(".cm-live-link")?.textContent).toBe("the goals");
+    expect(document.querySelector(".cm-live-highlight")?.textContent).toBe("this");
+    expect(document.querySelector(".cm-live-tag")?.textContent).toBe("#tag");
+    expect(document.querySelector(".cm-live-strike")?.textContent).toBe("gone");
+    // A comment stays on screen while editing, dimmed, as Obsidian shows it.
+    expect(document.querySelector(".cm-live-comment")?.textContent).toBe("%%a comment%%");
+  });
+
+  it("reveals the marks on the caret line", async () => {
+    render(<ObsidianHarness />);
+    await settled();
+
+    await putCaretOn("goals");
+    expect(lineWith("goals").textContent).toBe("See [[Plan#Goals|the goals]] and ==this== with #tag.");
+  });
+
+  it("follows a wiki link on a modified click", async () => {
+    const onFollowWikiLink = vi.fn();
+    render(<ObsidianHarness onFollowWikiLink={onFollowWikiLink} />);
+    await settled();
+    await putCaretOn("Intro");
+
+    const link = document.querySelector(".cm-live-link") as HTMLElement;
+    await userEvent.click(link, { modifiers: [navigator.platform.startsWith("Mac") ? "Meta" : "Control"] });
+
+    expect(onFollowWikiLink).toHaveBeenCalledWith("Plan#Goals");
+  });
+
+  // An embed names a note the same way, and a modified click on it opens that note.
+  it("follows an embed on a modified click", async () => {
+    const onFollowWikiLink = vi.fn();
+    render(<ObsidianHarness onFollowWikiLink={onFollowWikiLink} value={"Intro line.\n\n![[Goals#This year]] and ==x==\n"} />);
+    await settled();
+    await putCaretOn("Intro");
+
+    const embed = document.querySelector(".cm-live-link") as HTMLElement;
+    expect(embed.textContent).toBe("Goals#This year");
+    await userEvent.click(embed, { modifiers: [navigator.platform.startsWith("Mac") ? "Meta" : "Control"] });
+
+    expect(onFollowWikiLink).toHaveBeenCalledWith("Goals#This year");
+  });
+});

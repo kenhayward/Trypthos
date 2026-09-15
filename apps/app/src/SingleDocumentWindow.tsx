@@ -32,6 +32,13 @@ export default function SingleDocumentWindow({ root, file }: Props) {
     },
     [client],
   );
+  const readDocument = useCallback(
+    async (path: string): Promise<string | null> => {
+      const result = await client.readFile(path);
+      return result.ok ? result.content : null;
+    },
+    [client],
+  );
   const { settings } = useSettings(bridge);
   const { state, actions } = useWorkspace(client, "", (name) => windowControls().confirmDiscard(name));
   const opened = useRef(false);
@@ -102,6 +109,7 @@ export default function SingleDocumentWindow({ root, file }: Props) {
       // an embedded picture in the vault's attachments folder is found.
       vault={state.workspaces[0]?.vault === true}
       findByName={findByName}
+      readDocument={readDocument}
       onChange={actions.edit}
       defaultMode={settings.editor.defaultViewMode}
       fileTypes={settings.fileTypes.enabled}

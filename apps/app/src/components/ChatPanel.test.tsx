@@ -1188,3 +1188,20 @@ describe("ChatPanel: links in a reply", () => {
     expect(document.querySelector("a[data-md-link]")).toBeNull();
   });
 });
+
+// A reply's rendered markup is set with `dangerouslySetInnerHTML`, and React 19 sets it again whenever
+// that object is a new one. Typing a question re-renders the panel, and used to wipe whatever had
+// been drawn into the replies above it - coloured code - on every keystroke.
+describe("ChatPanel: a reply's rendering", () => {
+  it("survives typing the next question", async () => {
+    const user = userEvent.setup();
+    panel({ turns: [{ role: "user", content: "Show me" }, { role: "assistant", content: "Here:\n\n```ts\nconst a = 1;\n```" }] });
+    const code = document.querySelector(".chat-md pre code")!;
+    code.setAttribute("data-drawn", "yes");
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "next");
+
+    expect(document.querySelector(".chat-md pre code")).toBe(code);
+    expect(code.getAttribute("data-drawn")).toBe("yes");
+  });
+});

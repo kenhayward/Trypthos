@@ -2,6 +2,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tagHighlighter, tags, type Highlighter, type Tag } from "@lezer/highlight";
 import type { Extension } from "@codemirror/state";
+import { obsidianTags } from "./obsidianTags";
 
 /// Source-mode colouring.
 ///
@@ -64,6 +65,14 @@ export const TOKEN_ROLES: readonly TokenRole[] = [
   { tag: tags.url, role: "link" },
 
   { tag: tags.quote, role: "quote" },
+
+  // Obsidian's marks, in an Obsidian document. A wiki link is a link and a comment a comment; these
+  // four have no markdown tag of their own, so each is given the role it reads as.
+  { tag: obsidianTags.highlight, role: "number" },
+  { tag: obsidianTags.tag, role: "type" },
+  { tag: obsidianTags.math, role: "code" },
+  { tag: obsidianTags.callout, role: "keyword" },
+  { tag: tags.strikethrough, role: "marker" },
   // Deliberately no rule for tags.list: it covers the whole list ITEM, not the bullet, so styling it
   // dims the text of every list entry. The bullet is already covered by processingInstruction above.
 
