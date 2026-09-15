@@ -543,7 +543,10 @@ export default function ChatPanel({
           disabled={models.length === 0}
           placeholder={t("chat.askPlaceholder")}
           aria-label={t("chat.message")}
-          className="min-h-0 flex-1 resize-none rounded border border-rule bg-app px-2 py-1 text-ui text-ink disabled:opacity-50"
+          // Sized to what is typed, from two lines up to twelve, then it scrolls. The browser does
+          // the measuring - `field-sizing` - so there is no height to recompute on every keystroke,
+          // and a long paste cannot push the conversation off the panel.
+          className="field-sizing-content min-h-[calc(2lh+0.5rem+2px)] max-h-[calc(12lh+0.5rem+2px)] flex-1 resize-none rounded border border-rule bg-app px-2 py-1 text-ui text-ink disabled:opacity-50"
         />
 
         {/* The send button BECOMES the stop button while a reply is pending, in the same place and

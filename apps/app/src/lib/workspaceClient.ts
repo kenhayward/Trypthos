@@ -133,6 +133,12 @@ export interface WorkspaceClient {
   /// Makes one new directory at this qualified path. The shell knows the workspace root; the
   /// renderer can only name a child of one it already has open.
   createDirectory(path: string): Promise<CreateDirectoryResult>;
+  /// Gives the file or folder at this qualified path a new name in the folder it is in, and answers
+  /// with its new qualified path. A name, never a destination - see `RenameRequest`.
+  renameEntry(path: string, name: string): Promise<{ ok: true; path: string } | Failure>;
+  /// Shows the entry at this qualified path in Explorer or Finder: a folder opened, a file selected
+  /// in the folder that holds it.
+  revealEntry(path: string): Promise<{ ok: true } | Failure>;
   readFile(path: string): Promise<ReadResult>;
   /// Reads an image, which does not go through `readFile` - see `ImageResult`.
   readImage(path: string): Promise<ImageResult>;
@@ -373,6 +379,8 @@ export const browserClient: WorkspaceClient = {
   openWorkspaceRef: async () => unavailable(),
   listDirectory: async () => unavailable(),
   createDirectory: async () => unavailable(),
+  renameEntry: async () => unavailable(),
+  revealEntry: async () => unavailable(),
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),

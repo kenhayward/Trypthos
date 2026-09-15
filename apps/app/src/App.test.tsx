@@ -803,6 +803,63 @@ describe("making a new file", () => {
 
     await waitFor(() => expect(directories).toEqual(["Notes/Archive"]));
   });
+
+  it("renames a file from its context menu, refusing a name its folder already has", async () => {
+    const user = userEvent.setup();
+    shell();
+    const renamed: [string, string][] = [];
+    Object.assign(window.trypthos!, {
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [
+          { id: "Notes/plan.md", name: "plan.md", kind: "file" as const },
+          { id: "Notes/ideas.md", name: "ideas.md", kind: "file" as const },
+        ],
+      }),
+      renameEntry: async (path: string, name: string) => {
+        renamed.push([path, name]);
+        return { ok: true as const, path: `Notes/${name}` };
+      },
+    });
+    render(<App />);
+
+    const root = await screen.findByRole("button", { name: "Notes" });
+    await user.click(root);
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: "plan.md" }) });
+    await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+
+    const field = screen.getByLabelText("Name");
+    await user.clear(field);
+    await user.type(field, "Ideas.md");
+    expect(screen.getByRole("alert").textContent).toBe("Something in this folder is already called that.");
+
+    await user.clear(field);
+    await user.type(field, "roadmap.md");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renamed).toEqual([["Notes/plan.md", "roadmap.md"]]));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await screen.findByRole("button", { name: "roadmap.md" })).toBeDefined();
+  });
+
+  it("shows a folder in the file manager from its context menu", async () => {
+    const user = userEvent.setup();
+    shell();
+    const revealed: string[] = [];
+    Object.assign(window.trypthos!, {
+      revealEntry: async (path: string) => {
+        revealed.push(path);
+        return { ok: true as const };
+      },
+    });
+    render(<App />);
+
+    const root = await screen.findByRole("button", { name: "Notes" });
+    await user.pointer({ keys: "[MouseRight]", target: root });
+    await user.click(screen.getByRole("menuitem", { name: "Open in Explorer" }));
+
+    await waitFor(() => expect(revealed).toEqual(["Notes"]));
+  });
 });
 
 /// Opening a GitHub repository, through the whole window.

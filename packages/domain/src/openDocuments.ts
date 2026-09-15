@@ -189,6 +189,32 @@ export function renameDocument(
   return { documents, activePath: set.activePath === from ? to : set.activePath };
 }
 
+/// Where `path` is once the entry at `from` has been renamed to `to`, or null when the rename did not
+/// touch it. `from` itself, or anything inside it when it is a folder - and never a sibling that only
+/// shares its prefix, which is the trap `docs` and `docs-old` set.
+export function movedPath(path: string, from: string, to: string): string | null {
+  if (path === from) return to;
+  return path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : null;
+}
+
+/// Follows a file or folder renamed in the tree: every open document at or inside `from` now lives
+/// under `to`.
+///
+/// Unlike `renameDocument` nothing was written - the same bytes are on disk under another name - so a
+/// document keeps its text, its revision and its unsaved work. Only its path and name change, and the
+/// selection follows the document on screen.
+export function movePaths(set: DocumentSet, from: string, to: string): DocumentSet {
+  if (!set.documents.some((document) => movedPath(document.path, from, to) !== null)) return set;
+
+  const documents = set.documents.map((document) => {
+    const path = movedPath(document.path, from, to);
+    return path === null ? document : { ...document, path, name: documentName(path) };
+  });
+  const activePath =
+    set.activePath === null ? null : (movedPath(set.activePath, from, to) ?? set.activePath);
+  return { documents, activePath };
+}
+
 /// Records an edit to one document. Dirty is measured against the text, not set by the act of
 /// typing: retyping a character back to what it was leaves the file unmodified, and an indicator
 /// that says otherwise is telling the user something untrue about their file.

@@ -41,6 +41,24 @@ list of enabled file types as the rest of the browser, and opens immediately in 
 offered for a GitHub repository: making a local directory there would be a clone disguised as a menu
 item, and saving into a repository is a commit rather than a filesystem operation.
 
+**Rename a file or folder.** Right-click a local file or folder and choose **Rename**. A small window
+opens on the current name with the part before the extension selected, and Save and Cancel. It says
+while you type when the name is already used in that folder - ignoring case, because Windows and a
+default macOS volume treat `Notes.md` and `notes.md` as one file - or is a name Windows cannot hold:
+one containing `\` / : * ? " < > |, a reserved device name such as CON, NUL or COM1 (with or without an
+extension), one ending in a dot, or one longer than 255 characters. The Windows rule applies on macOS
+too, so a folder shared with a Windows machine stays usable there. Changing only the case of a name is
+allowed. A file that is open keeps its tab, its place in the strip and any unsaved changes, and its next
+save goes to the new name; renaming a folder moves every open tab inside it, keeps what was expanded
+beneath it, and keeps it as the folder chat is using if it was. If the rename is refused on disk - the
+name was taken since the folder was listed, or another program has the file open - the window stays open
+and says why. A workspace's own folder cannot be renamed, and nothing is offered in a GitHub repository,
+where a rename would be a commit.
+
+**Find it on disk.** Right-click a local file, folder or a workspace's own row and choose **Open in
+Explorer** - **Open in Finder** on macOS. A folder opens; a file opens the folder it is in, with the
+file selected. A file Trypthos does not open still has this menu, so it can be found or renamed.
+
 **Give one file the whole window.** Right-click an openable local file and choose **Open in New
 Window**. It opens in a separate native window with only that document, no folder browser, chat panel
 or tabs. It remains editable and has the normal save shortcut and unsaved-change question, so focusing
@@ -720,6 +738,10 @@ it as data rather than as instructions.
 
 Selection is read from the editor, so Preview mode reports none and chat falls back to the whole
 file - which is the right answer for a mode you cannot edit in.
+
+**The chat box grows as you type.** It starts two lines tall and grows a line at a time with what you
+type or paste, up to twelve lines; past that it stops and scrolls, so a long paste never pushes the
+conversation off the panel. Sending clears it back to two lines.
 
 **A selection stays visible while you type the question about it.** Click into the chat box and the
 highlight is still there, drawn a shade quieter to show the caret is elsewhere. It is the only thing

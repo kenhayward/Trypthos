@@ -9,6 +9,8 @@ import {
   emptyDocumentSet,
   isOpen,
   markSaved,
+  movedPath,
+  movePaths,
   openDocument,
   openPaths,
   renameDocument,
@@ -321,6 +323,49 @@ describe("renameDocument", () => {
   it("does nothing for a path that is not open", () => {
     const set = withFiles("a.md");
     expect(renameDocument(set, "missing.md", "x.md", rev("new"))).toBe(set);
+  });
+});
+
+/// A file or folder renamed in the tree, with documents open from it.
+///
+/// Unlike Save As nothing was written: the bytes are where they were under another name. So each
+/// document keeps its text, its revision and whether it has unsaved work - only where it lives moves.
+describe("movePaths", () => {
+  it("moves a renamed file's document, keeping its unsaved text and revision", () => {
+    const edited = updateContent(withFiles("ws/a.md", "ws/b.md"), "ws/a.md", "changed");
+    const set = movePaths(edited, "ws/a.md", "ws/z.md");
+
+    expect(openPaths(set)).toEqual(["ws/z.md", "ws/b.md"]);
+    expect(set.documents[0]).toMatchObject({
+      path: "ws/z.md",
+      name: "z.md",
+      content: "changed",
+      revision: rev("r-ws/a.md"),
+      dirty: true,
+    });
+  });
+
+  it("moves every document inside a renamed folder, and follows the one on screen", () => {
+    const set = movePaths(withFiles("ws/docs/a.md", "ws/docs/deep/b.md", "ws/c.md"), "ws/docs", "ws/notes");
+
+    expect(openPaths(set)).toEqual(["ws/notes/a.md", "ws/notes/deep/b.md", "ws/c.md"]);
+    expect(set.activePath).toBe("ws/c.md");
+    expect(movePaths(withFiles("ws/docs/a.md"), "ws/docs", "ws/notes").activePath).toBe("ws/notes/a.md");
+  });
+
+  // "docs" must not take "docs-old" with it - the same prefix trap the path guard has.
+  it("leaves a sibling that merely shares the prefix alone", () => {
+    const set = withFiles("ws/docs-old/a.md");
+    expect(movePaths(set, "ws/docs", "ws/notes")).toBe(set);
+  });
+});
+
+describe("movedPath", () => {
+  it("answers where a path is after a rename, or null when the rename did not touch it", () => {
+    expect(movedPath("ws/docs", "ws/docs", "ws/notes")).toBe("ws/notes");
+    expect(movedPath("ws/docs/a.md", "ws/docs", "ws/notes")).toBe("ws/notes/a.md");
+    expect(movedPath("ws/docs-old", "ws/docs", "ws/notes")).toBeNull();
+    expect(movedPath("ws", "ws/docs", "ws/notes")).toBeNull();
   });
 });
 

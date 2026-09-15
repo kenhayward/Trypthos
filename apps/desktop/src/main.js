@@ -407,6 +407,12 @@ if (!gotLock) {
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),
+      // Open in Explorer / Finder. A folder is opened; a file is shown selected in the folder that
+      // holds it, which is what "open the containing folder" looks like in both file managers.
+      revealPath: async ({ path: target, kind }) => {
+        if (kind === "directory") await shell.openPath(target);
+        else shell.showItemInFolder(target);
+      },
       // Trypthos's entries in File Explorer's right-click menu, written only when the user asks.
       // Windows-only and packaged-only: in development `process.execPath` is Electron's own binary,
       // which cannot start Trypthos from a path alone.

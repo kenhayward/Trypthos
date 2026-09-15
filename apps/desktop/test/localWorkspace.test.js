@@ -142,6 +142,105 @@ test("does not create a directory that already exists", async () => {
   });
 });
 
+test("renames a file where it is, and answers with its new path", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    assert.deepEqual(await workspace.rename("notes/nested.md", "renamed.md"), {
+      ok: true,
+      path: "notes/renamed.md",
+    });
+    assert.equal(await fs.readFile(path.join(root, "notes", "renamed.md"), "utf8"), "nested\n");
+    await assert.rejects(fs.stat(path.join(root, "notes", "nested.md")));
+  });
+});
+
+test("renames a folder and everything in it", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    assert.deepEqual(await workspace.rename("notes", "journal"), { ok: true, path: "journal" });
+    assert.equal(await fs.readFile(path.join(root, "journal", "nested.md"), "utf8"), "nested\n");
+  });
+});
+
+test("refuses a name another entry in the folder already has, touching neither", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    await fs.writeFile(path.join(root, "other.md"), "other\n", "utf8");
+
+    assert.deepEqual(await workspace.rename("top.md", "other.md"), { ok: false, reason: "conflict" });
+    // A file may not take a folder's name either.
+    assert.deepEqual(await workspace.rename("top.md", "notes"), { ok: false, reason: "conflict" });
+    assert.equal(await fs.readFile(path.join(root, "top.md"), "utf8"), "# Top\n");
+    assert.equal(await fs.readFile(path.join(root, "other.md"), "utf8"), "other\n");
+  });
+});
+
+test("changes only the case of a name, which is the same file on Windows and macOS", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    assert.deepEqual(await workspace.rename("top.md", "Top.md"), { ok: true, path: "Top.md" });
+    assert.deepEqual(await fs.readdir(root).then((names) => names.filter((n) => /top/i.test(n))), [
+      "Top.md",
+    ]);
+  });
+});
+
+test("reports renaming something that is not there as not-found", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    assert.deepEqual(await workspace.rename("gone.md", "back.md"), { ok: false, reason: "not-found" });
+  });
+});
+
+test("will not rename the workspace folder itself", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    assert.deepEqual(await workspace.rename("", "elsewhere"), { ok: false, reason: "permission-denied" });
+    assert.deepEqual(await workspace.rename(".", "elsewhere"), { ok: false, reason: "permission-denied" });
+  });
+});
+
+test("will not rename through a link that points outside the workspace", async () => {
+  await withWorkspace(async ({ workspace, root, outside }) => {
+    await fs.symlink(outside, path.join(root, "escape"), "junction");
+
+    const result = await workspace.rename("escape/secret.md", "taken.md");
+    assert.deepEqual(result, { ok: false, reason: "permission-denied" });
+    assert.equal(await fs.readFile(path.join(outside, "secret.md"), "utf8"), "SECRET\n");
+  });
+});
+
+test("will not rename to a name that climbs out of the folder", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    assert.deepEqual(await workspace.rename("top.md", "../top.md"), {
+      ok: false,
+      reason: "permission-denied",
+    });
+    assert.equal(await fs.readFile(path.join(root, "top.md"), "utf8"), "# Top\n");
+  });
+});
+
+test("locates a file, a folder and the root on disk for the file manager", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    assert.deepEqual(await workspace.locate("notes/nested.md"), {
+      ok: true,
+      path: path.join(root, "notes", "nested.md"),
+      kind: "file",
+    });
+    assert.deepEqual(await workspace.locate("notes"), {
+      ok: true,
+      path: path.join(root, "notes"),
+      kind: "directory",
+    });
+    assert.deepEqual(await workspace.locate(""), { ok: true, path: root, kind: "directory" });
+  });
+});
+
+test("will not locate anything outside the workspace", async () => {
+  await withWorkspace(async ({ workspace, root, outside }) => {
+    await fs.symlink(outside, path.join(root, "escape"), "junction");
+    assert.deepEqual(await workspace.locate("escape/secret.md"), {
+      ok: false,
+      reason: "permission-denied",
+    });
+    assert.deepEqual(await workspace.locate("../outside"), { ok: false, reason: "permission-denied" });
+  });
+});
+
 /// Save As, where the user has already been asked.
 ///
 /// The conflict check exists to catch a change the user did not know about. A native save dialog

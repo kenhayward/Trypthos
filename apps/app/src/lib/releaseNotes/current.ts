@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.73.0",
+    date: "2026-09-15",
+    pr: 150,
+    headline: "Rename files and folders, open them in Explorer, and a chat box that grows as you type",
+    summary:
+      "Right-click a file or folder in a local workspace and two new entries are there. Rename opens a small window with the current name, the part before the extension already selected, and Save and Cancel. It says straight away when the name is already used in that folder - whatever its case - or is one Windows cannot hold: a name with \\ / : * ? \" < > |, a device name such as CON or NUL, a trailing dot, or a name that is too long. The same rule applies on macOS, so a folder you share with a Windows machine stays usable there. Changing only the case of a name works. A file that is open keeps its tab and any unsaved changes, and saves to its new name; renaming a folder keeps what you had expanded inside it. If the rename is refused - the name was taken since, or another program has the file open - the window stays open and says why. Open in Explorer (Open in Finder on a Mac) opens a folder, or the folder a file is in with the file selected; it is also on the workspace's own row. Neither is offered in a GitHub repository, where a rename would be a commit, and the workspace folder itself cannot be renamed. The chat box now starts two lines tall and grows as you type, up to twelve lines, then scrolls.",
+    added: [
+      "Rename on the right-click menu of a local file or folder, checking the name is free in its folder and valid on Windows.",
+      "Open in Explorer, or Open in Finder on macOS, on the right-click menu of a local file, folder or workspace.",
+    ],
+    changed: [
+      "The chat box grows with what you type, up to twelve lines, and then scrolls.",
+      "A file Trypthos does not open now has a right-click menu too, for renaming it or finding it on disk.",
+    ],
+  },
+  {
     version: "0.72.1",
     date: "2026-09-14",
     pr: 149,

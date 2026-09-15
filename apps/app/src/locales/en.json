@@ -27,7 +27,10 @@
     "newFile": "New File ...",
       "newFolder": "New Folder ...",
       "openInNewWindow": "Open in New Window ...",
-      "addToChat": "Add to Chat"
+      "addToChat": "Add to Chat",
+      "rename": "Rename ...",
+      "revealInExplorer": "Open in Explorer",
+      "revealInFinder": "Open in Finder"
   },
   "refreshRepo": {
     "title": "Refresh {{name}} from GitHub",
@@ -100,6 +103,21 @@
     "needsName": "Type a name for the file.",
     "cancel": "Cancel",
     "create": "Create"
+  },
+  "rename": {
+    "title": "Rename {{name}}",
+    "name": "Name",
+    "cancel": "Cancel",
+    "save": "Save",
+    "problems": {
+      "empty": "Type a name.",
+      "invalid-characters": "A name cannot contain any of \\ / : * ? \" < > |",
+      "reserved": "Windows reserves that name for a device. Choose another.",
+      "trailing-dot": "A name cannot end with a dot.",
+      "too-long": "That name is too long.",
+      "taken": "Something in this folder is already called that.",
+      "denied": "Trypthos could not rename that. It may be open in another program, or you may not have permission."
+    }
   },
   "newFolder": {
     "title": "New folder",

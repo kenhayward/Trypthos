@@ -22,6 +22,7 @@ import {
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
 import NewFolderDialog from "./components/NewFolderDialog";
+import RenameDialog from "./components/RenameDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
@@ -125,6 +126,8 @@ export default function App() {
   const [namingFile, setNamingFile] = useState<string | boolean>(false);
   /// The directory a workspace context menu chose for a new folder, or false with no prompt open.
   const [namingFolder, setNamingFolder] = useState<string | false>(false);
+  /// The qualified path of the file or folder being renamed, or false with no dialog open.
+  const [renaming, setRenaming] = useState<string | false>(false);
   /// True while the repository picker is open. Its own flag rather than a settings page: choosing a
   /// repository is an act like opening a folder, not a preference.
   const [pickingRepo, setPickingRepo] = useState(false);
@@ -647,6 +650,9 @@ export default function App() {
           onNewFile={(directory) => setNamingFile(directory)}
           onNewFolder={(directory) => setNamingFolder(directory)}
           onOpenInNewWindow={(path) => void actions.openInNewWindow(path)}
+          onRename={setRenaming}
+          onRevealEntry={(path) => void actions.revealEntry(path)}
+          platform={platform}
           // Only where there is a chat to add to, and not while a reply is arriving - the same rule
           // the chat's own Attach button follows. Absent, the menu entry and the drag both go.
           onAddToChat={
@@ -903,6 +909,23 @@ export default function App() {
             setNamingFile(false);
             if (typeof directory === "string") void actions.createEmptyFile(directory, name);
             else actions.newDocument(name);
+          }}
+        />
+      )}
+
+      {renaming && (
+        <RenameDialog
+          current={renaming.slice(renaming.lastIndexOf("/") + 1)}
+          // What the tree already knows is in the same folder, so a clash is said while typing. A folder
+          // that has not been listed offers nothing, and the shell still refuses the clash.
+          siblings={(state.folders[renaming.slice(0, renaming.lastIndexOf("/"))]?.children ?? []).map(
+            (node) => node.name,
+          )}
+          onCancel={() => setRenaming(false)}
+          onRename={async (name) => {
+            const problem = await actions.renameEntry(renaming, name);
+            if (problem === null) setRenaming(false);
+            return problem;
           }}
         />
       )}
