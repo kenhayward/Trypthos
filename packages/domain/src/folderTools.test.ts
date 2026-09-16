@@ -9,6 +9,7 @@ import {
   createArguments,
   diffArguments,
   folderTools,
+  isSkippedWhenWalking,
   listArguments,
   openArguments,
   searchArguments,
@@ -49,14 +50,14 @@ describe("folderTools", () => {
 /// this cannot be done" rather than "throw".
 describe("reading arguments", () => {
   it("reads a listing", () => {
-    expect(listArguments('{"path":"docs"}')).toEqual({ path: "docs" });
+    expect(listArguments('{"path":"docs"}')).toEqual({ path: "docs", recursive: false });
   });
 
   // No path means "where you told me to look", which only the caller can resolve - it is the one
   // that knows which folder was attached.
   it("reads a listing with no path as no path", () => {
-    expect(listArguments("{}")).toEqual({ path: null });
-    expect(listArguments('{"path":"  "}')).toEqual({ path: null });
+    expect(listArguments("{}")).toEqual({ path: null, recursive: false });
+    expect(listArguments('{"path":"  "}')).toEqual({ path: null, recursive: false });
   });
 
   it("reads a search", () => {
@@ -95,7 +96,7 @@ describe("reading arguments", () => {
   // A model adding a field nobody asked for is ordinary. Dropping it is kinder than refusing the
   // call over it.
   it("ignores an argument nobody asked for", () => {
-    expect(listArguments('{"path":"docs","recursive":true}')).toEqual({ path: "docs" });
+    expect(listArguments('{"path":"docs","depth":3}')).toEqual({ path: "docs", recursive: false });
   });
 });
 
@@ -199,5 +200,54 @@ describe("reading the acting arguments", () => {
   it("has no answer for a call that never finished", () => {
     expect(openArguments('{"path":"do')).toBeNull();
     expect(createArguments("not json")).toBeNull();
+  });
+});
+
+/// Listing a whole tree in one call.
+///
+/// A model reviewing a repository used to list one folder per call, and every call counts toward the
+/// tool calls one question may make - so it ran out before it had read anything.
+describe("recursive listing", () => {
+  const list = folderTools().find((tool) => tool.function.name === LIST_TOOL_NAME)!;
+
+  it("reads a request to list everything below a folder", () => {
+    expect(listArguments('{"path":"apps","recursive":true}')).toEqual({ path: "apps", recursive: true });
+  });
+
+  it("refuses a recursive flag that is not true or false, rather than guessing", () => {
+    expect(listArguments('{"path":"apps","recursive":"yes"}')).toBeNull();
+  });
+
+  it("offers the flag, optionally", () => {
+    const properties = list.function.parameters.properties as unknown as Record<string, { type: string }>;
+    expect(properties.recursive?.type).toBe("boolean");
+    expect(list.function.parameters.required).toEqual([]);
+  });
+
+  // The description is read by the model, so it is what steers a "where is X" question to one
+  // search rather than a folder-by-folder walk.
+  it("tells the model to search for where something is, rather than list folder by folder", () => {
+    expect(list.function.description).toMatch(/recursive/);
+    expect(list.function.description).toMatch(new RegExp(SEARCH_TOOL_NAME));
+  });
+
+  it("says which folders a walk passes over", () => {
+    expect(list.function.description).toMatch(/node_modules/);
+  });
+});
+
+/// The folders a walk from a repository root passes over: thousands of files nobody asked about,
+/// which would use up a search's file budget before it reached the code.
+describe("isSkippedWhenWalking", () => {
+  it("passes over version control and installed dependencies", () => {
+    expect(isSkippedWhenWalking(".git")).toBe(true);
+    expect(isSkippedWhenWalking("node_modules")).toBe(true);
+  });
+
+  // Not every dot-folder: `.github` holds the workflows a security review most needs to read.
+  it("walks every other folder, dot-folders included", () => {
+    expect(isSkippedWhenWalking(".github")).toBe(false);
+    expect(isSkippedWhenWalking("src")).toBe(false);
+    expect(isSkippedWhenWalking("git")).toBe(false);
   });
 });

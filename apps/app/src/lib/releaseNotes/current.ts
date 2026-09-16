@@ -5,6 +5,21 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.80.0",
+    date: "2026-09-16",
+    pr: 171,
+    headline: "Chat can find its way around a whole repository",
+    summary:
+      "Attaching a folder to chat now tells the model about the folders inside it, not only the files, so it knows there is more below - before, a model attached to a repository root saw a few top-level files and nothing to say the code was one level down, and files had to be attached by hand. A model with tool calling can now list every readable file below a folder in a single call, as paths it can read straight away, instead of listing one folder per call; each call counts toward how many one question may make, so walking a tree folder by folder could use them all up before anything was read. It is also told to search for which files mention something rather than reading them one by one. Listing everything below a folder and searching both pass over .git and node_modules, which from a repository root are most of the files and none of the ones you meant; either can still be listed or read directly, and .github is not passed over. A model without tool calling is told it may ask for a file inside one of the listed folders by its path. You can now attach a whole repository and name the folders that matter in your question.",
+    added: [
+      "The folders directly inside an attached folder are listed for the model beside its files.",
+      "list_directory can list every readable file below a folder in one call.",
+    ],
+    changed: [
+      "Listing everything below a folder and searching pass over .git and node_modules.",
+    ],
+  },
+  {
     version: "0.79.4",
     date: "2026-09-16",
     pr: 170,

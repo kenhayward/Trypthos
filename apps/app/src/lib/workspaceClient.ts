@@ -3,6 +3,7 @@ import type {
   FileHit,
   FilterRequest,
   FindRequest,
+  FolderOutline,
   RepoPin,
   RepoStats,
   RepoSummary,
@@ -133,13 +134,13 @@ export type FindResult =
 export type FilterResult = { ok: true; paths: string[]; truncated: boolean } | Failure;
 
 export interface WorkspaceClient {
-  /// The files in ONE folder of the workspace, for chat to use as a map. Paths only.
+  /// The files and folders in ONE folder of the workspace, for chat to use as a map. Paths only.
   ///
   /// The folder is the one selected in the tree, "" being the root. Validated in the main process
   /// like every other path the renderer names.
   workspaceOutline(
     path: string,
-  ): Promise<{ ok: true; outline: { path: string; paths: string[]; truncated: boolean } } | Failure>;
+  ): Promise<{ ok: true; outline: FolderOutline } | Failure>;
   openWorkspace(): Promise<OpenResult>;
   /// Opens a workspace the app already knows how to name, without asking anything.
   ///

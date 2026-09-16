@@ -8,6 +8,8 @@ const {
   LIST_ENTRY_LIMIT,
   LIST_TOOL_NAME,
   OPEN_TOOL_NAME,
+  RECURSIVE_LIST_FOLDER_LIMIT,
+  RECURSIVE_LIST_LIMIT,
   SEARCH_LINE_LIMIT,
   SEARCH_MATCH_LIMIT,
   SEARCH_TOOL_NAME,
@@ -15,6 +17,7 @@ const {
   diffArguments,
   diffLines,
   isOpenable,
+  isSkippedWhenWalking,
   listArguments,
   openArguments,
   searchArguments,
@@ -49,15 +52,19 @@ function refuse(text) {
   return { ok: true, content: text };
 }
 
-/// Lists one directory.
-async function list(provider, folder, argumentsJson) {
+/// Lists one directory, or with `recursive` every readable file below it.
+async function list(provider, folder, fileTypes, argumentsJson) {
   const args = listArguments(argumentsJson);
-  if (args === null) return refuse("That call could not be read. Send the path as a string.");
+  if (args === null) {
+    return refuse("That call could not be read. Send the path as a string, and recursive as true or false.");
+  }
 
   const path = args.path ?? folder;
   if (!withinFolder(folder, path)) {
     return refuse(`${path} is outside the folder attached to this conversation.`);
   }
+
+  if (args.recursive) return await listRecursively(provider, path, fileTypes);
 
   const result = await provider.list(path);
   if (!result.ok) return refuse(`${path} could not be listed.`);
@@ -78,6 +85,76 @@ async function list(provider, folder, argumentsJson) {
   return refuse(`${path || "."}:\n${shown.join("\n")}${cut}`);
 }
 
+/// Every readable file below a directory, as workspace-relative paths, in one answer.
+///
+/// For a model that would otherwise list a tree one folder per call - and every call counts toward
+/// what one question may make, so it ran out before reading anything. Paths from the workspace root,
+/// so each can be passed straight to get_file_contents; enabled types only, since those are the only
+/// files a read will serve. Bounded by files named and by folders opened, and both are announced.
+async function listRecursively(provider, path, fileTypes) {
+  const first = await provider.list(path);
+  if (!first.ok) return refuse(`${path} could not be listed.`);
+
+  const found = [];
+  let more = false;
+  let opened = 1;
+  let skipped = false;
+  let queue = [{ nodes: first.nodes, depth: 0 }];
+
+  while (queue.length > 0) {
+    const next = [];
+    for (const { nodes, depth } of queue) {
+      for (const node of [...nodes].sort((a, b) => a.name.localeCompare(b.name))) {
+        if (node.kind === "directory") {
+          if (isSkippedWhenWalking(node.name)) {
+            skipped = true;
+          } else if (depth + 1 <= MAX_DEPTH) {
+            next.push(node.id);
+          } else {
+            more = true;
+          }
+        } else if (isOpenable(node.name, fileTypes)) {
+          if (found.length < RECURSIVE_LIST_LIMIT) found.push(node.id);
+          else more = true;
+        }
+      }
+    }
+
+    // Breadth first, so a walk that runs out has named the folder the model pointed at before it
+    // named anything ten levels down one branch of it.
+    queue = [];
+    for (const directory of next) {
+      if (found.length >= RECURSIVE_LIST_LIMIT || opened >= RECURSIVE_LIST_FOLDER_LIMIT) {
+        more = true;
+        break;
+      }
+      const result = await provider.list(directory);
+      opened += 1;
+      // A folder that cannot be listed is passed over rather than failing the whole answer.
+      if (result.ok) queue.push({ nodes: result.nodes, depth: pathDepth(directory, path) });
+    }
+  }
+
+  if (found.length === 0 && !more) {
+    return refuse(`${path || "The attached folder"} holds no readable files${skipped ? " outside .git and node_modules" : ""}.`);
+  }
+
+  const notes = [];
+  if (more) {
+    notes.push(
+      `(More files are below ${path || "the attached folder"} than are listed here. List a narrower folder to see them.)`,
+    );
+  }
+  if (skipped) notes.push("(.git and node_modules were passed over. List either directly to see inside it.)");
+  return refuse(`${path || "."} (every readable file below it):\n${found.join("\n")}${notes.length > 0 ? `\n${notes.join("\n")}` : ""}`);
+}
+
+/// How many levels below `base` a directory is, for the depth bound.
+function pathDepth(directory, base) {
+  const rest = base === "" ? directory : directory.slice(base.length + 1);
+  return rest.split("/").length;
+}
+
 /// Every file under a directory whose type the user has turned on, breadth first.
 ///
 /// Breadth first on purpose: a search that runs out of budget should have looked at the folder the
@@ -94,6 +171,9 @@ async function filesUnder(provider, path, fileTypes) {
 
       for (const node of [...result.nodes].sort((a, b) => a.name.localeCompare(b.name))) {
         if (node.kind === "directory") {
+          // Passed over, as a recursive listing does: from a repository root these held most of the
+          // files, and the search spent its whole budget inside them before it reached the code.
+          if (isSkippedWhenWalking(node.name)) continue;
           if (depth + 1 <= MAX_DEPTH) next.push({ path: node.id, depth: depth + 1 });
         } else if (isOpenable(node.name, fileTypes) && found.length < SEARCH_FILE_LIMIT) {
           found.push(node.id);
@@ -264,7 +344,7 @@ async function create(provider, folder, fileTypes, openInTab, argumentsJson) {
 /// is a thing to report rather than to guess at.
 function createFolderToolRunner({ provider, folder, fileTypes, openInTab = null }) {
   return async (name, argumentsJson) => {
-    if (name === LIST_TOOL_NAME) return await list(provider, folder, argumentsJson);
+    if (name === LIST_TOOL_NAME) return await list(provider, folder, fileTypes, argumentsJson);
     if (name === SEARCH_TOOL_NAME) return await search(provider, folder, fileTypes, argumentsJson);
     if (name === DIFF_TOOL_NAME) return await diff(provider, folder, argumentsJson);
     if (name === OPEN_TOOL_NAME) {

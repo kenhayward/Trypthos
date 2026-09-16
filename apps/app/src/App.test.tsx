@@ -728,7 +728,7 @@ describe("saving and reopening a conversation", () => {
       }),
       workspaceOutline: async (path: string) => ({
         ok: true as const,
-        outline: { path, paths: ["plan.md"], truncated: false },
+        outline: { path, paths: ["plan.md"], folders: [], truncated: false },
       }),
       readFile: async () => ({ ok: true as const, content: "# Plan", revision: { id: "r1" } }),
       sendChat: async () => ({ ok: true as const, streamId: "s1" }),

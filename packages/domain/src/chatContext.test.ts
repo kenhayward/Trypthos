@@ -3,6 +3,7 @@ import {
   CONTEXT_CHARACTER_LIMIT,
   ChatContextSchema,
   MAX_CONTEXT_CHARACTER_LIMIT,
+  OUTLINE_PATH_LIMIT,
   attachmentsCutShort,
   contextCharacters,
   contextTurns,
@@ -348,7 +349,12 @@ describe("contextCharacters", () => {
 
 /// The folder, as a map rather than a payload.
 describe("the folder outline", () => {
-  const folder = { path: "", paths: ["notes/plan.md", "notes/risks.md"], truncated: false };
+  const folder = {
+    path: "",
+    paths: ["notes/plan.md", "notes/risks.md"],
+    folders: [],
+    truncated: false,
+  };
 
   it("lists the paths", () => {
     const [outline] = turns({ selection: "", file, folder });
@@ -456,7 +462,7 @@ describe("what the outline turn calls its list", () => {
     const context = resolveChatContext({
       selection: "",
       file: null,
-      folder: { path: "", paths: ["main.py", "notes.md"], truncated: false },
+      folder: { path: "", paths: ["main.py", "notes.md"], folders: [], truncated: false },
     });
     const [turn] = turnsFor(context);
     expect(turn?.content).toContain("main.py");
@@ -475,7 +481,7 @@ describe("how the outline says to read a file", () => {
       resolveChatContext({
         selection: "",
         file: null,
-        folder: { path: "notes", paths: ["notes/plan.md"], truncated: false },
+        folder: { path: "notes", paths: ["notes/plan.md"], folders: [], truncated: false },
       }),
       { reads },
     )[0]?.content ?? "";
@@ -500,5 +506,69 @@ describe("how the outline says to read a file", () => {
     for (const reads of ["tool", "fenced"] as const) {
       expect(folder(reads)).toMatch(/attached folder.*below|inside the attached folder/i);
     }
+  });
+});
+
+/// The subfolders of the attached folder, named in the outline beside its files.
+///
+/// Without them a model saw only the files at the top of the folder, with nothing to say more lay
+/// below - so a model pointed at a repository root found nothing to read unless files were attached
+/// by hand.
+describe("subfolders in the outline", () => {
+  const outline = (reads: "tool" | "fenced", folders = ["apps", "docs"]) =>
+    contextTurns(
+      resolveChatContext({
+        selection: "",
+        file: null,
+        folder: { path: "", paths: ["README.md"], folders, truncated: false },
+      }),
+      { reads },
+    )[0]?.content ?? "";
+
+  it("names each subfolder, marked as a folder", () => {
+    expect(outline("tool")).toContain("apps/");
+    expect(outline("tool")).toContain("docs/");
+    expect(outline("tool")).toContain("README.md");
+  });
+
+  it("tells a model with tools how to look inside one, all at once or by search", () => {
+    const text = outline("tool");
+    expect(text).toContain("list_directory");
+    expect(text).toMatch(/recursive/);
+    expect(text).toContain("search_contents");
+  });
+
+  // A model with no tool calling was never sent list_directory, so it must not be told to call it.
+  // What it can do is ask for a file inside a folder by path.
+  it("tells a model without tools it may ask for a file inside one by its path", () => {
+    const text = outline("fenced");
+    expect(text).not.toContain("list_directory");
+    expect(text).toMatch(/inside (one of )?these folders/i);
+  });
+
+  it("says nothing about folders when there are none", () => {
+    expect(outline("tool", [])).not.toMatch(/Folders:/);
+  });
+});
+
+describe("ChatContextSchema, with subfolders", () => {
+  const context = (folders: unknown) => ({
+    document: { kind: "none" },
+    attachments: [],
+    folder: { path: "", paths: ["README.md"], folders, truncated: false },
+  });
+
+  it("accepts the subfolders of the attached folder", () => {
+    expect(ChatContextSchema.safeParse(context(["apps", "docs"])).success).toBe(true);
+  });
+
+  it("requires them, since both sides of the contract are ours", () => {
+    const folder = { path: "", paths: ["README.md"], truncated: false };
+    expect(ChatContextSchema.safeParse({ ...context([]), folder }).success).toBe(false);
+  });
+
+  it("caps how many can be named", () => {
+    const many = Array.from({ length: OUTLINE_PATH_LIMIT + 1 }, (_, n) => `folder${n}`);
+    expect(ChatContextSchema.safeParse(context(many)).success).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ function fakeBridge(files: Record<string, string> = {}) {
   return {
     workspaceOutline: vi.fn(async (path: string) => ({
       ok: true as const,
-      outline: { path, paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
+      outline: { path, paths: ["notes/plan.md", "notes/risks.md"], folders: [], truncated: false },
     })),
     readFile: vi.fn(async (path: string) =>
       path in files
@@ -234,7 +234,7 @@ describe("the folder chat maps", () => {
     const bridge = {
       workspaceOutline: vi.fn(async (path: string) => ({
         ok: true as const,
-        outline: { path: "notes", workspacePath: path, paths: ["notes/risks.md"], truncated: false },
+        outline: { path: "notes", workspacePath: path, paths: ["notes/risks.md"], folders: [], truncated: false },
       })),
       readFile: vi.fn(async (path: string) =>
         path === "ws/notes/risks.md"
