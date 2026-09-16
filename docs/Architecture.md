@@ -2446,6 +2446,13 @@ to a different commit. Those are not conveniences: the release workflow runs **n
 else checks the commit before it is published, and a tag on a stale HEAD builds the previous commit's
 code while claiming the new version.
 
+After pushing, it hands over to `deploy\WatchRelease.ps1`, which follows that release run on one
+console line refreshed every 5 seconds (status, elapsed time, each job) and exits 0, 1 or 2 for
+success, failure, or could-not-follow. The run is found by `gh run list --branch <tag>` and matched on
+the tag's commit too, never taken as the newest run. It `Set-Location`s to the repo root first, because
+`gh` and `git` read the repository from the current directory and the script can be run from anywhere.
+`-RunId` follows a given run instead.
+
 **Artifact names must contain no spaces.** GitHub rewrites a space to a dot on upload, so
 electron-builder's default `Trypthos Setup x.y.z.exe` was published as `Trypthos.Setup.x.y.z.exe`
 while `latest.yml` pointed at `Trypthos-Setup-x.y.z.exe`, and the feed URL 404'd. electron-builder's

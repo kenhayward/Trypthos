@@ -19,6 +19,8 @@ rem on main, clean, level with origin/main, and green in CI. The release
 rem workflow itself runs NO tests - it installs, builds, packages and publishes
 rem - so a tag on a red commit would publish a broken app without complaint.
 rem
+rem After pushing it follows the release run until it finishes - see WatchRelease.ps1.
+rem
 rem Note: the tag message does not appear anywhere a user sees. The GitHub
 rem Release body comes from the workflow, so do not put release notes here.
 rem ==========================================================================
@@ -190,9 +192,26 @@ if errorlevel 1 (
 
 echo.
 echo Pushed %TAG%. The "Desktop release" workflow will build + publish the installers.
-echo Watch it: gh run list --workflow "Desktop release"
+
+rem Follow the run the tag started, on one line that updates every 5 seconds, until it
+rem finishes. WatchRelease.ps1 matches the run on the tag AND its commit rather than
+rem taking the newest run, and exits 0 on success, 1 on failure, 2 if it cannot follow.
+rem Ctrl+C stops watching only; the run carries on in GitHub.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0WatchRelease.ps1" -Tag "%TAG%"
+set "WATCH=!errorlevel!"
+
 echo.
-echo When it finishes, check the release actually contains both installers and that
+if "!WATCH!"=="1" (
+  echo The release did NOT succeed. Nothing may have been published, or only part of it.
+  endlocal
+  exit /b 1
+)
+if "!WATCH!"=="2" (
+  echo Watch it yourself: gh run list --workflow "Desktop release"
+  echo When it finishes, check the release actually contains both installers and that
+) else (
+  echo Now check the release actually contains both installers and that
+)
 echo the app starts - a published release is not the same as a working one.
 endlocal
 exit /b 0
