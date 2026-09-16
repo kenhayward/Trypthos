@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.79.2",
+    date: "2026-09-16",
+    pr: 165,
+    headline: "Two tests that failed on some runs and not others now give the same answer every time",
+    summary:
+      "Nothing changes in the app. Two of Trypthos's automated tests check closing a tab - one by its close button, one with Ctrl+W. Both checked straight after the click or key press, but closing a tab takes a moment even when nothing is unsaved, so they sometimes looked before the tab had gone and failed. They now wait for the tab to close and the editor to update, so they pass or fail on whether closing a tab works, on every run and every machine.",
+    fixed: [
+      "The tests for closing a tab, from the tab strip and with the keyboard, no longer fail at random.",
+    ],
+  },
+  {
     version: "0.79.1",
     date: "2026-09-16",
     pr: 163,
