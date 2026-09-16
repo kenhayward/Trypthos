@@ -1342,3 +1342,34 @@ describe("the trace of each request", () => {
     assert.deepEqual(events, [{ type: "end" }]);
   });
 });
+
+// #167. The shape a reporting server streams once asked for usage: `"usage": null` on every chunk,
+// thinking and answer in separate chunks, and the counts only on the last. Every chunk used to be
+// dropped as malformed, so the panel said the model had not answered while the statistics showed the
+// tokens it had returned.
+test("streams thinking and answer from a server that sends usage as null on every chunk", async () => {
+  const { events, onEvent } = collect();
+  const frame = (delta) =>
+    `data: ${JSON.stringify({
+      id: "chatcmpl-0000",
+      object: "chat.completion.chunk",
+      choices: [{ index: 0, finish_reason: null, delta }],
+      usage: null,
+    })}\n\n`;
+  const fetchImpl = streamingFetch([
+    frame({ role: "assistant", content: null }),
+    frame({ reasoning_content: " Keep" }),
+    frame({ content: " it" }),
+    `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 9707, completion_tokens: 1033 } })}\n\n`,
+    "data: [DONE]\n\n",
+  ]);
+
+  await provider(fetchImpl).run({ profile: PROFILE, turns: TURNS, onEvent });
+
+  assert.deepEqual(events, [
+    { type: "reasoning", text: " Keep" },
+    { type: "token", text: " it" },
+    { type: "usage", promptTokens: 9707, replyTokens: 1033 },
+    { type: "end" },
+  ]);
+});
