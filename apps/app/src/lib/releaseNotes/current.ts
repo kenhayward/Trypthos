@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.79.1",
+    date: "2026-09-16",
+    pr: 163,
+    headline: "The saved conversations list is no longer cut off",
+    summary:
+      "The list of saved conversations, opened from the clock icon at the top of the chat panel, now opens entirely inside the panel. Before, it hung from the clock button and reached past the panel's left edge, so the start of each conversation's title and file path was hidden. It now lines up with the right edge of the chat panel's toolbar, as the Chat statistics panel does.",
+    fixed: [
+      "The saved conversations list opens wholly inside the chat panel, instead of being cut off on the left.",
+    ],
+  },
+  {
     version: "0.79.0",
     date: "2026-09-16",
     pr: 161,

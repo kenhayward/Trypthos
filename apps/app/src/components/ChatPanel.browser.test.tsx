@@ -143,3 +143,29 @@ describe("the chat statistics, rendered", () => {
     expect(box.right).toBeLessThanOrEqual(aside.right);
   });
 });
+
+/// The saved-conversations list opens inside the same clipping panel, from a button further in still.
+describe("the saved conversations list, rendered", () => {
+  it("opens wholly inside the panel", async () => {
+    panel({
+      chats: [
+        {
+          id: "3f1a1a2e-0000-4000-8000-000000000001",
+          title: "Planning the garden with Ada",
+          updatedAt: "2026-09-16T10:00:00.000Z",
+          filePath: "notes/garden.md",
+        },
+      ],
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Saved conversations" }));
+
+    const aside = screen.getByRole("complementary").getBoundingClientRect();
+    const list = screen.getByText("Planning the garden with Ada").closest(".absolute");
+    expect(list).not.toBeNull();
+    const box = list!.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(200);
+    expect(box.left).toBeGreaterThanOrEqual(aside.left);
+    expect(box.right).toBeLessThanOrEqual(aside.right);
+  });
+});

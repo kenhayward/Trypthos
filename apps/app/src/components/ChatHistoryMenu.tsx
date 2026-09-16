@@ -39,7 +39,10 @@ export default function ChatHistoryMenu({ chats, openId, disabled, onOpen, onDel
   }, [open]);
 
   return (
-    <div ref={container} className="relative">
+    // Not positioned itself, like `ChatStatsMenu`: the list hangs from the toolbar's right edge rather
+    // than from this button, which sits far enough in that a list this wide would reach past the
+    // panel's left edge - and the panel clips what overflows it.
+    <div ref={container}>
       <button
         type="button"
         disabled={disabled}
@@ -64,7 +67,7 @@ export default function ChatHistoryMenu({ chats, openId, disabled, onOpen, onDel
       </button>
 
       {open && (
-        <div className="absolute right-0 z-40 mt-1 max-h-80 w-72 overflow-auto rounded-md border border-rule bg-app py-1 shadow-menu">
+        <div className="absolute top-full right-2 z-40 mt-1 max-h-80 w-72 overflow-auto rounded-md border border-rule bg-app py-1 shadow-menu">
           {chats.length === 0 ? (
             <p className="px-3 py-2 text-xs text-ink-4">{t("chat.history.empty")}</p>
           ) : (
