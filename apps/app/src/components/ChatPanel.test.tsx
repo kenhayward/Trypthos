@@ -1271,6 +1271,70 @@ describe("chat statistics", () => {
     );
   }
 
+  /// A reply that called a tool, so made two requests, and is still arriving.
+  function toolReply(): ReplyStats {
+    const steps: [number, ChatEvent][] = [
+      [1100, { type: "tool", name: "get_file_contents", detail: "a.md" }],
+      [1100, { type: "usage", promptTokens: 100, replyTokens: 20 }],
+      [1500, { type: "token", text: "Done" }],
+      [1600, { type: "usage", promptTokens: 900, replyTokens: 30 }],
+    ];
+    return steps.reduce(
+      (stats, [at, event]) => noteReplyEvent(stats, event, at),
+      startReplyStats({ profileId: "one", at: 1000 }),
+    );
+  }
+
+  // Each request resends the conversation, so the totals run far past the context used - which is
+  // right, and read as a contradiction while nothing said they were totals (#169).
+  it("says the token counts cover every request, and shows what the last one sent", async () => {
+    const user = userEvent.setup();
+    panel({ models: [windowed], replyStats: [toolReply()] });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+    const stats = within(screen.getByRole("dialog", { name: "Chat statistics" }));
+    const row = (label: string) => stats.getAllByText(label)[0]!.nextElementSibling?.textContent;
+
+    expect(row("Tokens sent")).toBe("1,000 in 2 requests");
+    expect(row("Tokens returned")).toBe("50 in 2 requests");
+    expect(row("Total tokens")).toBe("1,050 in 2 requests");
+    expect(row("Sent in the last request")).toBe("900");
+    expect(row("Context used")).toBe("930 of 8,000 (12%)");
+  });
+
+  it("shows no last-request row for a reply that made one request", async () => {
+    const user = userEvent.setup();
+    panel({ models: [windowed], replyStats: [reply()] });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+
+    expect(screen.queryByText("Sent in the last request")).toBeNull();
+  });
+
+  it("does not give a conversation still arriving a total time of 0 ms", async () => {
+    const user = userEvent.setup();
+    panel({ models: [windowed], replyStats: [toolReply()] });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+    const stats = within(screen.getByRole("dialog", { name: "Chat statistics" }));
+    // The second "Total response time" is the conversation's.
+    const conversationTime = () => stats.getAllByText("Total response time")[1]!.nextElementSibling?.textContent;
+
+    expect(conversationTime()).toBe("Not yet");
+  });
+
+  it("says a reply is still arriving beside the time the finished ones took", async () => {
+    const user = userEvent.setup();
+    panel({ models: [windowed], replyStats: [reply(), toolReply()] });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+    const stats = within(screen.getByRole("dialog", { name: "Chat statistics" }));
+
+    expect(stats.getAllByText("Total response time")[1]!.nextElementSibling?.textContent).toBe(
+      "2.50 s, plus 1 still arriving",
+    );
+  });
+
   it("opens from the toolbar", async () => {
     const user = userEvent.setup();
     panel({ models: [windowed], replyStats: [reply()] });

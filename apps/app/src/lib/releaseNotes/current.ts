@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.79.4",
+    date: "2026-09-16",
+    pr: 170,
+    headline: "Chat statistics say when token counts cover several requests",
+    summary:
+      "A reply that calls tools makes one request to the model per tool call, and each request sends the whole conversation again. Chat statistics added those requests up but did not say so, so a reply could show more than 140,000 tokens sent beside about 17,000 of context used, which looked like a contradiction. Both numbers were right. For a reply that made more than one request, Tokens sent, Tokens returned and Total tokens now say how many requests they cover, for example \"138,770 in 10 requests\", and a new row shows what the last request sent. Context used is unchanged: it is how full the model's context is now. The conversation's total response time also no longer shows 0 ms while a reply is still arriving. It says Not yet, or gives the time of the replies that have finished and how many are still arriving.",
+    fixed: [
+      "Token counts in Chat statistics say how many requests they cover, with what the last request sent shown beside them.",
+      "The conversation's total response time no longer shows 0 ms while a reply is still arriving.",
+    ],
+  },
+  {
     version: "0.79.3",
     date: "2026-09-16",
     pr: 168,

@@ -74,6 +74,8 @@ describe("replyStats", () => {
     expect(summary.contextFraction).toBeCloseTo(930 / 4000);
     expect(summary.toolCalls).toBe(1);
     expect(summary.requests).toBe(2);
+    // What the last request alone sent, beside the total across both (#169).
+    expect(summary.lastSentTokens).toBe(900);
   });
 
   // Some endpoints ignore the request for usage. What was returned can still be estimated from the
@@ -142,7 +144,25 @@ describe("replyStats", () => {
       returnedTokens: 40,
       returnedEstimated: false,
       totalMs: 1500,
+      stillArriving: 0,
     });
+  });
+
+  // A reply still arriving has no total time yet. It is counted as arriving rather than added as
+  // nothing, which read as a conversation that had taken 0 ms (#169).
+  it("counts a reply still arriving rather than adding it as no time", () => {
+    const finished = play([
+      [1100, { type: "token", text: "a" }],
+      [1500, { type: "end" }],
+    ]);
+    const arriving = play([[5200, { type: "token", text: "b" }]], 5000);
+
+    expect(conversationTotals([finished, arriving])).toMatchObject({
+      replies: 2,
+      totalMs: 500,
+      stillArriving: 1,
+    });
+    expect(conversationTotals([arriving])).toMatchObject({ totalMs: 0, stillArriving: 1 });
   });
 
   it("has nothing sent to total when no reply reported usage", () => {
@@ -157,6 +177,7 @@ describe("replyStats", () => {
       returnedTokens: 1,
       returnedEstimated: true,
       totalMs: 500,
+      stillArriving: 0,
     });
   });
 });

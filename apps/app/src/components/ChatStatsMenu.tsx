@@ -89,6 +89,27 @@ export default function ChatStatsMenu({ replyStats, models, onOpenLog }: Props) 
 
   const notReported = t("chat.stats.notReported");
   const count = (value: number | null) => (value === null ? notReported : formats.count.format(value));
+  /// A token count summed over the reply's requests, saying so when there was more than one. Each
+  /// request resends the conversation, so these totals can run far past Context used, which is the
+  /// last request alone - and unlabelled that read as a contradiction (#169).
+  const acrossRequests = (value: number | null) =>
+    value === null || summary === null || summary.requests <= 1
+      ? count(value)
+      : t("chat.stats.inRequests", {
+          value: formats.count.format(value),
+          count: formats.count.format(summary.requests),
+        });
+  /// The finished replies' time, and how many are still arriving - never a bare 0 ms for a
+  /// conversation that is under way.
+  const conversationTime =
+    totals.stillArriving === 0
+      ? duration(totals.totalMs)
+      : totals.stillArriving === totals.replies
+        ? t("chat.stats.notYet")
+        : t("chat.stats.plusArriving", {
+            value: duration(totals.totalMs),
+            count: formats.count.format(totals.stillArriving),
+          });
 
   return (
     // Not positioned itself: the popover hangs from the toolbar's right edge rather than from this
@@ -143,16 +164,19 @@ export default function ChatStatsMenu({ replyStats, models, onOpenLog }: Props) 
                       : formats.rate.format(summary.tokensPerSecond)
                   }
                 />
-                <Row label={t("chat.stats.sent")} value={count(summary.sentTokens)} />
+                <Row label={t("chat.stats.sent")} value={acrossRequests(summary.sentTokens)} />
                 <Row
                   label={t("chat.stats.returned")}
                   value={
                     summary.usageReported
-                      ? formats.count.format(summary.returnedTokens)
+                      ? acrossRequests(summary.returnedTokens)
                       : t("chat.stats.about", { value: formats.count.format(summary.returnedTokens) })
                   }
                 />
-                <Row label={t("chat.stats.total")} value={count(summary.totalTokens)} />
+                <Row label={t("chat.stats.total")} value={acrossRequests(summary.totalTokens)} />
+                {summary.requests > 1 && summary.lastSentTokens !== null && (
+                  <Row label={t("chat.stats.lastSent")} value={count(summary.lastSentTokens)} />
+                )}
                 <Row
                   label={t("chat.stats.context")}
                   value={
@@ -188,7 +212,7 @@ export default function ChatStatsMenu({ replyStats, models, onOpenLog }: Props) 
                       : formats.count.format(totals.returnedTokens)
                   }
                 />
-                <Row label={t("chat.stats.totalTime")} value={duration(totals.totalMs)} />
+                <Row label={t("chat.stats.totalTime")} value={conversationTime} />
               </dl>
               <p className="mt-1.5 text-2xs text-ink-4">{t("chat.stats.notSaved")}</p>
             </>
