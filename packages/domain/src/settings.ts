@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChatProfileListSchema, DEFAULT_TIMEOUT_MINUTES } from "./chat";
+import { ChatProfileListSchema, DEFAULT_MAX_TOOL_CALLS, DEFAULT_TIMEOUT_MINUTES } from "./chat";
 import { DEFAULT_EDITOR_MODE, EditorModeSchema } from "./editorMode";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
 import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 18;
+export const SETTINGS_VERSION = 19;
 
 export const SettingsSchema = z
   .object({
@@ -158,6 +158,26 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 19,
+    // Version 19 gives each model its own limit on tool calls per question. An existing profile gets
+    // the default hundred - every model was held to ten before, so nothing that worked stops working,
+    // and a model that ran out of calls now has room.
+    migrate: (input) => {
+      const chat = (input as { chat?: { profiles?: unknown[] } }).chat ?? {};
+      const profiles = Array.isArray(chat.profiles) ? chat.profiles : [];
+      return {
+        ...input,
+        chat: {
+          ...chat,
+          profiles: profiles.map((profile) => ({
+            maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
+            ...(profile as object),
+          })),
+        },
+      };
+    },
+  },
   {
     to: 18,
     // Version 18 lets a remembered folder say it was opened as an Obsidian vault. Optional, so every

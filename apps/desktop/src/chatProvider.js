@@ -2,6 +2,7 @@
 
 const { randomUUID } = require("node:crypto");
 const {
+  DEFAULT_MAX_TOOL_CALLS,
   DEFAULT_TIMEOUT_MINUTES,
   EDIT_TOOL_NAME,
   READ_TOOL_NAME,
@@ -19,13 +20,16 @@ const {
   toolCallDetail,
 } = require("@trypthos/domain");
 
-/// How many times the model may ask to read a file in one turn.
+/// How many tool calls one question may make: the model's own limit, or the default.
 ///
-/// A bound rather than a preference. Reading a file sends the whole conversation again, so an
-/// unbounded loop is an unbounded bill on a hosted endpoint and an unbounded wait on a local one -
-/// and a model that decides to read every file it was offered would do exactly that. Ten is more
-/// than any sensible question needs and small enough to be survivable when one is not.
-const MAX_READS_PER_TURN = 10;
+/// A bound rather than a preference. Every call sends the whole conversation again, so an unbounded
+/// loop is an unbounded bill on a hosted endpoint and an unbounded wait on a local one - and a model
+/// that decides to read every file it was offered would do exactly that. But the right number is the
+/// MODEL's, set per profile with no ceiling: it was a fixed ten, which stopped a model with a large
+/// context window before it had read what a repository review needed.
+function toolCallLimit(profile) {
+  return profile.maxToolCalls ?? DEFAULT_MAX_TOOL_CALLS;
+}
 
 /// Talking to the AI provider.
 ///
@@ -194,7 +198,7 @@ function createChatProvider({
   ///
   /// Two bounds hold that in place. `readFile` decides what may be read, and it answers only for
   /// paths the outline named - so the model's own path never reaches the filesystem unchecked. And
-  /// `MAX_READS_PER_TURN` caps how many times round: an unbounded loop is an unbounded bill.
+  /// `toolCallLimit` caps how many times round: an unbounded loop is an unbounded bill.
   ///
   /// `onTrace`, when given, receives each request as it went and came back - see `createTrace`.
   async function run({
@@ -226,7 +230,7 @@ function createChatProvider({
 
       // Told plainly rather than silently stopping: a model that thinks it is still gathering will
       // otherwise answer as though it had read everything it asked for.
-      if (round + 1 >= MAX_READS_PER_TURN) {
+      if (round + 1 >= toolCallLimit(profile)) {
         const enough = "No more files can be read for this question. Answer with what you have.";
         // Said in whichever shape the model has been speaking. A `tool` message to an endpoint
         // that never sent a tool call is a message it has no idea what to do with.
@@ -393,8 +397,8 @@ function createChatProvider({
     /// The first tool call the app CARRIES OUT, answered and appended to the conversation.
     ///
     /// One at a time. A model that asked for three things in one message has them served in order
-    /// across the next rounds, and serving them all at once would make `MAX_READS_PER_TURN`
-    /// meaningless - which is the bound on how much one question can cost.
+    /// across the next rounds, and serving them all at once would make `toolCallLimit` meaningless -
+    /// which is the bound on how much one question can cost.
     ///
     /// `propose_edit` is deliberately not here: it is structured OUTPUT, the call IS the proposal,
     /// and nothing is carried out. These are the other kind - the app does the thing and sends the

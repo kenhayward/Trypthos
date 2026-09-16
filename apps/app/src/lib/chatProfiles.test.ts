@@ -20,10 +20,47 @@ const draft: ProfileDraft = {
   supportsTools: false,
   stream: true,
   timeoutMinutes: "10",
+  maxToolCalls: "100",
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: false,
 };
+
+/// How many tool calls one question may make, a whole number from one up, with no ceiling.
+describe("the tool call limit", () => {
+  it("starts a new model at a hundred", () => {
+    expect(blankDraft().maxToolCalls).toBe("100");
+  });
+
+  it("carries a chosen limit through, however large", () => {
+    for (const [text, value] of [["5", 5], ["2500", 2500]] as const) {
+      const result = toProfile({ ...draft, maxToolCalls: text });
+      expect(result.ok, text).toBe(true);
+      if (result.ok) expect(result.profile.maxToolCalls).toBe(value);
+    }
+  });
+
+  // There is always a limit, so an emptied box goes back to the default rather than meaning none.
+  it("uses the default when the box is emptied", () => {
+    const result = toProfile({ ...draft, maxToolCalls: "  " });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.maxToolCalls).toBe(100);
+  });
+
+  it("reports no calls, part of one, or words as that field's problem", () => {
+    for (const value of ["0", "-3", "2.5", "lots"]) {
+      const result = toProfile({ ...draft, maxToolCalls: value });
+      expect(result.ok, value).toBe(false);
+      if (!result.ok) expect(result.issues).toContain("maxToolCalls");
+    }
+  });
+
+  it("shows a stored limit in the form", () => {
+    const result = toProfile({ ...draft, maxToolCalls: "300" });
+    if (!result.ok) throw new Error("expected a valid profile");
+    expect(draftFrom(result.profile).maxToolCalls).toBe("300");
+  });
+});
 
 /// How long to wait for a model that has gone quiet, in whole minutes from one to sixty.
 describe("the reply timeout", () => {
@@ -102,6 +139,7 @@ describe("the context window", () => {
       supportsTools: false,
       stream: true,
       timeoutMinutes: 10,
+      maxToolCalls: 100,
       thinking: false,
       reasoningEffort: "medium" as const,
       isDefault: false,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_MAX_TOOL_CALLS,
   DEFAULT_TIMEOUT_MINUTES,
   MAX_TIMEOUT_MINUTES,
   ChatProfileListSchema,
@@ -135,5 +136,29 @@ describe("defaultChatProfile", () => {
       { ...valid, id: "second", isDefault: false },
     ]);
     expect(defaultChatProfile(profiles)?.id).toBe("first");
+  });
+});
+
+/// How many tool calls one question may make.
+///
+/// A property of the model: a small local model with a short context should be stopped early, and a
+/// model with a million-token window reviewing a repository needs room to read what it has to.
+describe("the tool call limit on a profile", () => {
+  it("allows a hundred unless told otherwise", () => {
+    expect(ChatProfileSchema.parse(valid).maxToolCalls).toBe(DEFAULT_MAX_TOOL_CALLS);
+    expect(DEFAULT_MAX_TOOL_CALLS).toBe(100);
+  });
+
+  // Reach rather than prescription: the context window is what limits a model, and that differs by
+  // three orders of magnitude between the models people run.
+  it("has no upper bound", () => {
+    expect(ChatProfileSchema.parse({ ...valid, maxToolCalls: 1 }).maxToolCalls).toBe(1);
+    expect(ChatProfileSchema.parse({ ...valid, maxToolCalls: 1_000_000 }).maxToolCalls).toBe(1_000_000);
+  });
+
+  it("refuses no calls at all, or part of one", () => {
+    for (const maxToolCalls of [0, -5, 2.5]) {
+      expect(ChatProfileSchema.safeParse({ ...valid, maxToolCalls }).success).toBe(false);
+    }
   });
 });

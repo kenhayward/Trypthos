@@ -354,6 +354,7 @@ describe("chatPanelVisible", () => {
     supportsTools: false,
     stream: true,
     timeoutMinutes: 10,
+    maxToolCalls: 100,
     thinking: false,
     reasoningEffort: "medium" as const,
     isDefault: true,
@@ -823,7 +824,67 @@ describe("a folder remembered as an Obsidian vault", () => {
     const before = { ...DEFAULT_SETTINGS, schemaVersion: 17, workspaces: [{ kind: "local", root: "/v/Notes" }] };
 
     const loaded = loadSettings(before);
-    expect(loaded.schemaVersion).toBe(18);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
     expect(loaded.workspaces).toEqual([{ kind: "local", root: "/v/Notes" }]);
+  });
+});
+
+/// The tool call limit, added at version 19.
+///
+/// Before it every model was held to ten tool calls a question. The schema defaults it, so an old file
+/// would load either way; the version is for the OTHER direction, as with the reply timeout.
+describe("the tool call limit on a profile", () => {
+  it("gives a model configured before the setting existed the default of a hundred", () => {
+    const before = {
+      ...DEFAULT_SETTINGS,
+      schemaVersion: 18,
+      chat: {
+        ...DEFAULT_SETTINGS.chat,
+        profiles: [
+          {
+            id: "one",
+            label: "Local model",
+            endpoint: "http://localhost:11434/v1",
+            model: "qwen3.8-27b",
+            contextWindow: null,
+            supportsImages: false,
+            supportsTools: true,
+            stream: true,
+            timeoutMinutes: 25,
+            thinking: false,
+            reasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      },
+    };
+
+    const loaded = loadSettings(before);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
+    expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(19);
+    expect(loaded.chat.profiles[0]?.maxToolCalls).toBe(100);
+    // Nothing else about the model is touched.
+    expect(loaded.chat.profiles[0]?.timeoutMinutes).toBe(25);
+  });
+
+  it("keeps a limit somebody chose", () => {
+    const chosen = {
+      ...DEFAULT_SETTINGS,
+      chat: {
+        ...DEFAULT_SETTINGS.chat,
+        profiles: [
+          {
+            id: "one",
+            label: "Big model",
+            endpoint: "http://localhost:11434/v1",
+            model: "big",
+            maxToolCalls: 400,
+            isDefault: true,
+          },
+        ],
+      },
+    };
+
+    expect(loadSettings(chosen).chat.profiles[0]?.maxToolCalls).toBe(400);
   });
 });

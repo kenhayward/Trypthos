@@ -1,4 +1,9 @@
-import { ChatProfileSchema, DEFAULT_TIMEOUT_MINUTES, type ChatProfile } from "@trypthos/domain";
+import {
+  ChatProfileSchema,
+  DEFAULT_MAX_TOOL_CALLS,
+  DEFAULT_TIMEOUT_MINUTES,
+  type ChatProfile,
+} from "@trypthos/domain";
 
 /// The levels the schema allows, named here so the form and the draft agree with it.
 export type ReasoningEffort = ChatProfile["reasoningEffort"];
@@ -36,6 +41,9 @@ export interface ProfileDraft {
   /// Minutes this model may send nothing before the reply is given up on. Never "not set" - there is
   /// always a timeout - so an emptied box goes back to the default rather than meaning none.
   timeoutMinutes: string;
+  /// How many tool calls one question may make. Like the timeout there is always one, so an emptied
+  /// box goes back to the default - and unlike it there is no ceiling.
+  maxToolCalls: string;
   /// Whether to ask this model to reason before answering, and how much.
   ///
   /// Two fields, not one four-valued one, so turning thinking off and on again does not lose the
@@ -74,6 +82,7 @@ export function blankDraft(): ProfileDraft {
     stream: true,
     // Shown rather than left blank, so the form says what a new model will do.
     timeoutMinutes: String(DEFAULT_TIMEOUT_MINUTES),
+    maxToolCalls: String(DEFAULT_MAX_TOOL_CALLS),
     thinking: false,
     reasoningEffort: "medium",
     isDefault: false,
@@ -95,6 +104,7 @@ export function draftFrom(profile: ChatProfile): ProfileDraft {
     supportsTools: profile.supportsTools,
     stream: profile.stream,
     timeoutMinutes: String(profile.timeoutMinutes),
+    maxToolCalls: String(profile.maxToolCalls),
     thinking: profile.thinking,
     reasoningEffort: profile.reasoningEffort,
     isDefault: profile.isDefault,
@@ -132,6 +142,10 @@ export function toProfile(draft: ProfileDraft): DraftResult {
   const timeoutMinutes = optionalNumber(draft.timeoutMinutes);
   if (timeoutMinutes === "invalid") issues.push("timeoutMinutes");
 
+  // Zero, negative or a fraction is the schema's to say, as with the timeout.
+  const maxToolCalls = optionalNumber(draft.maxToolCalls);
+  if (maxToolCalls === "invalid") issues.push("maxToolCalls");
+
   const parsed = ChatProfileSchema.safeParse({
     id: draft.id,
     label: draft.label.trim(),
@@ -147,6 +161,7 @@ export function toProfile(draft: ProfileDraft): DraftResult {
     supportsTools: draft.supportsTools,
     stream: draft.stream,
     timeoutMinutes: typeof timeoutMinutes === "number" ? timeoutMinutes : DEFAULT_TIMEOUT_MINUTES,
+    maxToolCalls: typeof maxToolCalls === "number" ? maxToolCalls : DEFAULT_MAX_TOOL_CALLS,
     thinking: draft.thinking,
     reasoningEffort: draft.reasoningEffort,
     isDefault: draft.isDefault,

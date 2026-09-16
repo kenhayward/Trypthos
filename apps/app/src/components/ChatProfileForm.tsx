@@ -199,6 +199,18 @@ export default function ChatProfileForm({
           field's name every time it took focus. */}
       <p className="mt-1 text-xs text-ink-4">{t("settings.chat.timeoutMinutesHint")}</p>
 
+      <label className="mt-2 block text-xs text-ink-4">
+        {t("settings.chat.maxToolCalls")}
+        <input
+          value={draft.maxToolCalls}
+          aria-invalid={invalid("maxToolCalls")}
+          inputMode="numeric"
+          onChange={(event) => set("maxToolCalls", event.target.value)}
+          className={`${FIELD} max-w-24`}
+        />
+      </label>
+      <p className="mt-1 text-xs text-ink-4">{t("settings.chat.maxToolCallsHint")}</p>
+
       <label className="mt-1 flex items-center gap-2 text-ui text-ink">
         <input
           type="checkbox"
