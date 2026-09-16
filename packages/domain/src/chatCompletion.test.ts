@@ -4,6 +4,7 @@ import {
   buildChatRequest,
   completionsUrl,
   composeMessages,
+  parseCompletionPayload,
   parseStreamPayload,
 } from "./chatCompletion";
 
@@ -143,6 +144,106 @@ describe("parseStreamPayload", () => {
 
   it("ignores an empty payload", () => {
     expect(parseStreamPayload("")).toEqual({ type: "ignored" });
+  });
+});
+
+/// Servers that say "none" with an explicit null rather than by leaving a field out.
+///
+/// Once a stream is asked to report usage, several servers put `"usage": null` on EVERY chunk until
+/// the last, and send `"content": null` beside thinking and `"reasoning_content": null` beside the
+/// answer. A null is "nothing here", exactly as an absent field is - refused as a malformed chunk,
+/// every chunk of the reply was dropped and only the final usage report counted (#167).
+describe("parseStreamPayload, with nulls where a field has nothing", () => {
+  // The two shapes a reporting server sent, verbatim apart from the id.
+  const chunk = (delta: Record<string, unknown>) =>
+    JSON.stringify({
+      id: "chatcmpl-0000",
+      created: 1789568805,
+      model: "halogen-qwen3.8-flash-next",
+      object: "chat.completion.chunk",
+      choices: [{ index: 0, finish_reason: null, delta }],
+      usage: null,
+    });
+
+  it("reads thinking from a chunk whose usage is null", () => {
+    expect(parseStreamPayload(chunk({ reasoning_content: " Keep" }))).toEqual({
+      type: "reasoning",
+      text: " Keep",
+    });
+  });
+
+  it("reads the answer from a chunk whose usage is null", () => {
+    expect(parseStreamPayload(chunk({ content: " it" }))).toEqual({ type: "token", text: " it" });
+  });
+
+  it("reads thinking beside a null answer, and an answer beside null thinking", () => {
+    expect(
+      parseStreamPayload(chunk({ content: null, reasoning_content: "Hmm", reasoning: null })),
+    ).toEqual({ type: "reasoning", text: "Hmm" });
+    expect(
+      parseStreamPayload(chunk({ content: "Yes", reasoning_content: null, tool_calls: null })),
+    ).toEqual({ type: "token", text: "Yes" });
+  });
+
+  it("reads a tool call whose unused parts are null", () => {
+    const payload = chunk({
+      content: null,
+      tool_calls: [{ index: null, id: null, function: { name: null, arguments: '{"op"' } }],
+    });
+    expect(parseStreamPayload(payload)).toEqual({
+      type: "tool-call",
+      index: 0,
+      name: null,
+      argumentsDelta: '{"op"',
+    });
+  });
+
+  it("reads usage whose counts are null as zero", () => {
+    const payload = JSON.stringify({
+      choices: [],
+      usage: { prompt_tokens: 120, completion_tokens: null },
+    });
+    expect(parseStreamPayload(payload)).toEqual({ type: "usage", promptTokens: 120, replyTokens: 0 });
+  });
+
+  it("ignores a chunk that has nothing in it but nulls", () => {
+    expect(parseStreamPayload(chunk({ content: null }))).toEqual({ type: "ignored" });
+    const empty = JSON.stringify({ choices: null, usage: null, error: null });
+    expect(parseStreamPayload(empty)).toEqual({ type: "ignored" });
+  });
+
+  // An error with no message is still an error: the server has stopped answering.
+  it("reads an error whose message is null", () => {
+    expect(parseStreamPayload(JSON.stringify({ error: { message: null } }))).toEqual({
+      type: "error",
+      message: "The provider reported an error.",
+    });
+  });
+});
+
+/// The same nulls in a completed response, for a profile with streaming off.
+describe("parseCompletionPayload, with nulls where a field has nothing", () => {
+  it("reads the answer and thinking when the other fields are null", () => {
+    const payload = {
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          message: { content: "Yes", reasoning_content: "Hmm", reasoning: null, tool_calls: null },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 20 },
+    };
+    expect(parseCompletionPayload(payload)).toEqual([
+      { type: "token", text: "Yes" },
+      { type: "reasoning", text: "Hmm" },
+      { type: "usage", promptTokens: 10, replyTokens: 20 },
+    ]);
+  });
+
+  it("reads a completed response whose usage and error are null", () => {
+    const payload = { choices: [{ message: { content: "Yes" } }], usage: null, error: null };
+    expect(parseCompletionPayload(payload)).toEqual([{ type: "token", text: "Yes" }]);
   });
 });
 

@@ -179,42 +179,48 @@ export type StreamEvent =
   | { type: "ignored" };
 
 /// Loose, not strict: this describes only the fields that are read, and tolerates every other.
+///
+/// **Nullish, not optional, everywhere.** A null is a server saying "nothing here", exactly as an
+/// absent field is: several put `"usage": null` on every chunk once asked to report usage, and send
+/// `"content": null` beside thinking. With `.optional()` one such null failed the whole chunk, and a
+/// failed chunk is ignored - so every piece of the reply was dropped and only the final usage report
+/// was counted (#167).
 const ChunkSchema = z.looseObject({
   choices: z
     .array(
       z.looseObject({
         delta: z
           .looseObject({
-            content: z.string().optional(),
+            content: z.string().nullish(),
             // Two spellings, because providers disagree: `reasoning` in llama.cpp and LM Studio,
             // `reasoning_content` from DeepSeek and several proxies.
-            reasoning: z.string().optional(),
-            reasoning_content: z.string().optional(),
+            reasoning: z.string().nullish(),
+            reasoning_content: z.string().nullish(),
             tool_calls: z
               .array(
                 z.looseObject({
-                  index: z.number().optional(),
+                  index: z.number().nullish(),
                   function: z
                     .looseObject({
-                      name: z.string().optional(),
-                      arguments: z.string().optional(),
+                      name: z.string().nullish(),
+                      arguments: z.string().nullish(),
                     })
-                    .optional(),
+                    .nullish(),
                 }),
               )
-              .optional(),
+              .nullish(),
           })
-          .optional(),
+          .nullish(),
       }),
     )
-    .optional(),
+    .nullish(),
   usage: z
     .looseObject({
-      prompt_tokens: z.number().optional(),
-      completion_tokens: z.number().optional(),
+      prompt_tokens: z.number().nullish(),
+      completion_tokens: z.number().nullish(),
     })
-    .optional(),
-  error: z.looseObject({ message: z.string().optional() }).optional(),
+    .nullish(),
+  error: z.looseObject({ message: z.string().nullish() }).nullish(),
 });
 
 /// One completed OpenAI-compatible response. The names mirror `ChunkSchema`, but a completed
@@ -226,33 +232,33 @@ const CompletionSchema = z.looseObject({
       z.looseObject({
         message: z
           .looseObject({
-            content: z.string().nullable().optional(),
-            reasoning: z.string().optional(),
-            reasoning_content: z.string().optional(),
+            content: z.string().nullish(),
+            reasoning: z.string().nullish(),
+            reasoning_content: z.string().nullish(),
             tool_calls: z
               .array(
                 z.looseObject({
                   function: z
                     .looseObject({
-                      name: z.string().optional(),
-                      arguments: z.string().optional(),
+                      name: z.string().nullish(),
+                      arguments: z.string().nullish(),
                     })
-                    .optional(),
+                    .nullish(),
                 }),
               )
-              .optional(),
+              .nullish(),
           })
-          .optional(),
+          .nullish(),
       }),
     )
-    .optional(),
+    .nullish(),
   usage: z
     .looseObject({
-      prompt_tokens: z.number().optional(),
-      completion_tokens: z.number().optional(),
+      prompt_tokens: z.number().nullish(),
+      completion_tokens: z.number().nullish(),
     })
-    .optional(),
-  error: z.looseObject({ message: z.string().optional() }).optional(),
+    .nullish(),
+  error: z.looseObject({ message: z.string().nullish() }).nullish(),
 });
 
 /// Reads a complete response into the same events the streaming transport emits.
@@ -265,7 +271,7 @@ export function parseCompletionPayload(payload: unknown): StreamEvent[] {
   if (!completion.success) return [{ type: "ignored" }];
 
   const { choices, usage, error } = completion.data;
-  if (error !== undefined) {
+  if (error !== undefined && error !== null) {
     return [{ type: "error", message: error.message ?? "The provider reported an error." }];
   }
 
@@ -289,7 +295,7 @@ export function parseCompletionPayload(payload: unknown): StreamEvent[] {
     });
   });
 
-  if (usage !== undefined) {
+  if (usage !== undefined && usage !== null) {
     events.push({
       type: "usage",
       promptTokens: usage.prompt_tokens ?? 0,
@@ -324,7 +330,7 @@ export function parseStreamPayload(payload: string): StreamEvent {
 
   // Checked before content: a provider that streams an error mid-reply has stopped answering, and
   // continuing to wait for tokens would hang the panel until the connection dropped.
-  if (error !== undefined) {
+  if (error !== undefined && error !== null) {
     return { type: "error", message: error.message ?? "The provider reported an error." };
   }
 
@@ -355,7 +361,7 @@ export function parseStreamPayload(payload: string): StreamEvent {
   const thinking = delta?.reasoning ?? delta?.reasoning_content;
   if (typeof thinking === "string" && thinking !== "") return { type: "reasoning", text: thinking };
 
-  if (usage !== undefined) {
+  if (usage !== undefined && usage !== null) {
     return {
       type: "usage",
       promptTokens: usage.prompt_tokens ?? 0,

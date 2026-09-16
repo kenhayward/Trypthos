@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.79.3",
+    date: "2026-09-16",
+    pr: 168,
+    headline: "Replies no longer vanish on servers that mark empty fields as null",
+    summary:
+      "With some OpenAI-compatible servers every reply ended with \"The model finished without writing an answer\", even though the model had answered - Chat statistics showed the tokens it returned, and the Conversation Log showed its thinking and answer arriving. Since 0.78.0 Trypthos asks a streamed reply to report its token usage, and some servers answer that by marking usage as null on every piece of the reply until the last. They also mark the answer as null on pieces that carry thinking, and the other way round. Trypthos treated each of those pieces as malformed and skipped it, so nothing reached the panel but the final token count. A null is now read as \"nothing here\", the same as a missing field, so the thinking and the answer stream in as they should, with or without streaming.",
+    fixed: [
+      "Replies from servers that send null for empty fields now appear, instead of the chat saying the model finished without writing an answer.",
+    ],
+  },
+  {
     version: "0.79.2",
     date: "2026-09-16",
     pr: 165,
