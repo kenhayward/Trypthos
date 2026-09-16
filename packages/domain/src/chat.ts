@@ -8,6 +8,16 @@ import { z } from "zod";
 export const DEFAULT_TIMEOUT_MINUTES = 10;
 export const MAX_TIMEOUT_MINUTES = 60;
 
+/// How many tool calls one question may make, unless a model says otherwise.
+///
+/// A bound that is the model's to set, with no ceiling here. Every call resends the conversation, so
+/// the real limit is the model's context window - and that runs from a few thousand tokens to a
+/// million between the models people use. A fixed ten stopped a model reviewing a repository before
+/// it had read what it needed; a hundred is room for real work and still an end to a model that
+/// loops. It never reaches zero: a question with no calls at all is a model without tools, which is
+/// what `supportsTools` already says.
+export const DEFAULT_MAX_TOOL_CALLS = 100;
+
 /// A chat profile: one endpoint, one model, and the parameters to call it with.
 ///
 /// Note what is NOT here: the API key. Keys live in the OS credential store, keyed by endpoint, and
@@ -58,6 +68,10 @@ export const ChatProfileSchema = z
     /// bounds the wait for all of it. Per profile, because a small local model and a large reasoning
     /// model on the same endpoint need very different patience.
     timeoutMinutes: z.number().int().min(1).max(MAX_TIMEOUT_MINUTES).default(DEFAULT_TIMEOUT_MINUTES),
+    /// How many tool calls one question may make before the model is told to answer with what it has.
+    ///
+    /// Whole, at least one, and deliberately unbounded above - see `DEFAULT_MAX_TOOL_CALLS`.
+    maxToolCalls: z.number().int().positive().default(DEFAULT_MAX_TOOL_CALLS),
     /// Whether to ask the model to reason before answering.
     ///
     /// Off by default, for the same reason `supportsTools` is: `reasoning_effort` is a field a

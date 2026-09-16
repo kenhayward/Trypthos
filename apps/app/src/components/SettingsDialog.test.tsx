@@ -39,6 +39,7 @@ const PROFILE = {
   supportsTools: false,
   stream: true,
   timeoutMinutes: 10,
+  maxToolCalls: 100,
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: true,
@@ -838,6 +839,45 @@ describe("the reply timeout on a model", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save model" }));
 
     expect(timeout.getAttribute("aria-invalid")).toBe("true");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("the tool call limit on a model", () => {
+  async function newModel() {
+    await userEvent.click(screen.getByRole("button", { name: "Add a model" }));
+    await userEvent.type(screen.getByLabelText("Name"), "Local model");
+    await userEvent.type(screen.getByLabelText("Endpoint"), "http://localhost:11434/v1");
+    await userEvent.type(screen.getByLabelText("Model"), "qwen3.8-27b");
+  }
+
+  it("starts at a hundred and saves the limit chosen, with no ceiling", async () => {
+    const onChange = vi.fn();
+    dialog({ openOn: "chatModels", onChange });
+    await newModel();
+
+    const limit = screen.getByLabelText("Tool calls per question") as HTMLInputElement;
+    expect(limit.value).toBe("100");
+
+    await userEvent.clear(limit);
+    await userEvent.type(limit, "1000");
+    await userEvent.click(screen.getByRole("button", { name: "Save model" }));
+
+    const saved = onChange.mock.calls.at(-1)![0] as Partial<Settings>;
+    expect(saved.chat?.profiles[0]?.maxToolCalls).toBe(1000);
+  });
+
+  it("refuses no calls at all, and says which field", async () => {
+    const onChange = vi.fn();
+    dialog({ openOn: "chatModels", onChange });
+    await newModel();
+
+    const limit = screen.getByLabelText("Tool calls per question");
+    await userEvent.clear(limit);
+    await userEvent.type(limit, "0");
+    await userEvent.click(screen.getByRole("button", { name: "Save model" }));
+
+    expect(limit.getAttribute("aria-invalid")).toBe("true");
     expect(onChange).not.toHaveBeenCalled();
   });
 });

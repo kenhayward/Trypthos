@@ -17,6 +17,7 @@ const PROFILE = {
   supportsTools: false,
   stream: true,
   timeoutMinutes: 10,
+  maxToolCalls: 100,
   thinking: false,
   reasoningEffort: "medium" as const,
   isDefault: true,

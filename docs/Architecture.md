@@ -1749,8 +1749,8 @@ underneath refusing a climbing path on its own.
 **`list_directory` can list recursively** (`recursive: true`): every enabled file below the directory,
 workspace-relative so each can go straight to `get_file_contents`, breadth first, capped at
 `RECURSIVE_LIST_LIMIT` files and `RECURSIVE_LIST_FOLDER_LIMIT` folders opened, with both caps
-announced. It exists because every call counts toward `MAX_READS_PER_TURN`, and a model walking a tree
-one folder per call ran out before reading anything. A recursive listing and a search both pass over
+announced. It exists because every call counts toward the model's tool call limit (`maxToolCalls`),
+and a model walking a tree one folder per call ran out before reading anything. A recursive listing and a search both pass over
 `SKIPPED_WHEN_WALKING` (`.git`, `node_modules`) by name: from a repository root those are most of the
 tree, and breadth first a search spent its whole file budget inside them. Not every dot-folder -
 `.github` holds workflows - and a direct listing or read of either still works.
@@ -1774,8 +1774,8 @@ consequence worth knowing is in `flushToolCalls`, which now turns **only** `prop
 it used to skip the read tool by name, which would have turned every new tool call into an edit
 block.
 
-`MAX_READS_PER_TURN` bounds the whole loop rather than reads alone, which is what keeps one question
-from becoming an unbounded bill.
+The model's tool call limit bounds the whole loop rather than reads alone, which is what keeps one
+question from becoming an unbounded bill.
 
 ### The two tools that act, and the invariant one of them changes
 
@@ -1997,8 +1997,12 @@ going. Chat is a loop from here on, and the bounds are the design:
 - **A refusal is told to the model, not turned into an error.** It can pick a different file or
   answer without one, and a turn that ended on the model's first bad guess would be worse than one
   that continued.
-- **`MAX_READS_PER_TURN` caps the loop.** Each read resends the whole conversation, so an unbounded
-  loop is an unbounded bill on a hosted endpoint and an unbounded wait on a local one. At the cap
+- **The profile's `maxToolCalls` caps the loop** (`toolCallLimit` in `chatProvider`). Each call
+  resends the whole conversation, so an unbounded loop is an unbounded bill on a hosted endpoint and
+  an unbounded wait on a local one. It was a fixed ten; it is now per model, default
+  `DEFAULT_MAX_TOOL_CALLS` (100), at least one and **deliberately unbounded above** - the real limit
+  is the model's context window, which ranges from thousands of tokens to a million, so the setting
+  is reach rather than prescription. Settings version 19 gives existing profiles the default. At the cap
   the model is told plainly to answer with what it has, and the tool is withdrawn from that last
   request so it cannot ask again - being cut off mid-thought would produce an answer written as
   though the files had arrived.

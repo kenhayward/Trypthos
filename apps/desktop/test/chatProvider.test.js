@@ -972,9 +972,32 @@ test("carries on after a refusal", async () => {
 
 /// The bound that keeps a bill finite. A model that decides to read every file it was offered would
 /// otherwise send the whole conversation again for each one, without limit.
-test("stops asking after a fixed number of reads", async () => {
+test("stops asking after the number of tool calls the model is allowed", async () => {
   const calls = [];
   // A model that asks for a file every single time.
+  const fetchImpl = scriptedFetch([[readCall("plan.md"), "data: [DONE]\n\n"]], { calls });
+
+  await provider(fetchImpl).run({
+    profile: { ...TOOLS_PROFILE, maxToolCalls: 3 },
+    turns: TURNS,
+    onEvent: () => {},
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  // Three rounds of reading, plus the one final request that is told to stop.
+  assert.equal(calls.length, 4);
+
+  const last = calls.at(-1).body;
+  assert.match(last.messages.at(-1).content, /No more files can be read/);
+  // The tool is withdrawn on that last request, so the model cannot ask again.
+  assert.equal("tools" in last && last.tools.some((t) => t.function.name === "get_file_contents"), false);
+});
+
+// Each model has its own limit, and one with no limit set is held to the default - a hundred, not
+// the ten every model was once held to, which stopped a model reviewing a repository before it had
+// read what it needed.
+test("allows a hundred tool calls when the model sets no limit of its own", async () => {
+  const calls = [];
   const fetchImpl = scriptedFetch([[readCall("plan.md"), "data: [DONE]\n\n"]], { calls });
 
   await provider(fetchImpl).run({
@@ -984,13 +1007,22 @@ test("stops asking after a fixed number of reads", async () => {
     readFile: allowlist({ "plan.md": "# Plan" }),
   });
 
-  // Ten rounds of reading, plus the one final request that is told to stop.
-  assert.equal(calls.length, 11);
+  assert.equal(calls.length, 101);
+});
 
-  const last = calls.at(-1).body;
-  assert.match(last.messages.at(-1).content, /No more files can be read/);
-  // The tool is withdrawn on that last request, so the model cannot ask again.
-  assert.equal("tools" in last && last.tools.some((t) => t.function.name === "get_file_contents"), false);
+// No ceiling: a model with a very large context window may be given room for a long review.
+test("honours a limit well past the default", async () => {
+  const calls = [];
+  const fetchImpl = scriptedFetch([[readCall("plan.md"), "data: [DONE]\n\n"]], { calls });
+
+  await provider(fetchImpl).run({
+    profile: { ...TOOLS_PROFILE, maxToolCalls: 250 },
+    turns: TURNS,
+    onEvent: () => {},
+    readFile: allowlist({ "plan.md": "# Plan" }),
+  });
+
+  assert.equal(calls.length, 251);
 });
 
 // The loop's own messages are for one request. Letting them into the conversation would put tool

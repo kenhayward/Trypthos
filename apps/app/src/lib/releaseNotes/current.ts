@@ -5,6 +5,16 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.81.0",
+    date: "2026-09-16",
+    pr: 172,
+    headline: "Set how many tool calls each model may make per question",
+    summary:
+      "Each chat model now has a Tool calls per question setting, in Settings under Chat models: how many times it may read, list or search files for one question before it is asked to answer with what it has. Every model used to be held to 10, which could stop a model reviewing a repository before it had read what it needed. The limit now starts at 100, for new models and for the ones you already have, and has no upper limit - each call sends the conversation again, so what really limits a model is its context window, and a model with a very large one can be given room for a long review. A model that reaches its limit is still asked to answer from what it has read.",
+    added: ["A Tool calls per question setting on each chat model, 100 by default with no upper limit."],
+    changed: ["Chat models are no longer held to 10 tool calls per question; existing models start at 100."],
+  },
+  {
     version: "0.80.0",
     date: "2026-09-16",
     pr: 171,

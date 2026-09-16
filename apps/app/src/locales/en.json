@@ -470,6 +470,8 @@
       "streamHint": "Show replies as they arrive. Turn this off for a model or server whose streamed tool calls are incomplete.",
       "timeoutMinutes": "Reply timeout (minutes)",
       "timeoutMinutesHint": "How long to wait while this model sends nothing before giving up on the reply - from 1 to 60 minutes. The wait starts again whenever part of a reply arrives, so a long answer is never cut off. Raise it for a model that thinks for a long time before it starts to answer.",
+      "maxToolCalls": "Tool calls per question",
+      "maxToolCallsHint": "How many times this model may read, list or search files for one question before it is asked to answer with what it has. Each call sends the conversation again, so a model with a large context window can be given more. 100 unless you change it, with no upper limit.",
       "thinking": "Thinking",
       "thinkingHint": "Ask the model to reason before it answers. Only some models have a reasoning mode - gpt-oss does - and an endpoint that has never heard of the setting may refuse the request outright, so this is off unless you turn it on.",
       "reasoningEffort": "How much",

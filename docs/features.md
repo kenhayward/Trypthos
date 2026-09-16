@@ -758,6 +758,13 @@ quiet. Raise it for a large model that thinks for a long time before it starts t
 Stream replies off, the whole reply has to arrive within it. When it runs out, the chat says which
 model went quiet and for how long, and keeps whatever part of the reply had already arrived.
 
+Each model also has **Tool calls per question**: how many times it may read, list or search files for
+one question before it is told to answer with what it has. It is **100** unless you change it, and
+there is **no upper limit** - every call sends the conversation again, so what really limits a model
+is its context window, and a model with a very large one can be given room for a long review. When a
+model reaches its limit it is asked to answer from what it has read, and the tools are withdrawn for
+that last request. Models configured before this setting existed were held to 10, and now start at 100.
+
 Requests go directly from Trypthos to the endpoint you named; no Trypthos server is involved,
 because there is not one.
 

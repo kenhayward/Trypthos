@@ -103,6 +103,7 @@ export { loadPersisted } from "./persisted";
 export type { LoadFailure, LoadOptions, LoadResult, Migration } from "./persisted";
 
 export {
+  DEFAULT_MAX_TOOL_CALLS,
   DEFAULT_TIMEOUT_MINUTES,
   MAX_TIMEOUT_MINUTES,
   ChatProfileListSchema,
