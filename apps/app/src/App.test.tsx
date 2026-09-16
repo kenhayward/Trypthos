@@ -340,7 +340,10 @@ describe("App", () => {
       await user.click(row("two.md"));
       await user.keyboard("{Control>}w{/Control}");
 
-      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["one.md"]);
+      // Waited for: a close is async even with nothing unsaved - see "closes a tab from the strip".
+      await waitFor(() =>
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["one.md"]),
+      );
     });
 
     /// Save As, from the File menu down to the tab strip.
@@ -501,9 +504,15 @@ describe("App", () => {
       await user.click(row("one.md"));
       await user.click(screen.getByRole("button", { name: "Close one.md" }));
 
-      expect(screen.queryAllByRole("tab")).toHaveLength(0);
+      // Waited for, not asserted on the spot. A close is async even when nothing is unsaved - it
+      // awaits `mayDiscardOne` before removing the tab - so the tab, and then the editor's text, go a
+      // tick or more after the click returns. Asserting straight away raced that and failed on some
+      // runs and not others (#164).
+      await waitFor(() => expect(screen.queryAllByRole("tab")).toHaveLength(0));
       // Back to the buffer that was there before any file was opened, rather than an empty editor.
-      expect(screen.getByLabelText("Document source").textContent).toContain("Scratch buffer");
+      await waitFor(() =>
+        expect(screen.getByLabelText("Document source").textContent).toContain("Scratch buffer"),
+      );
     });
 
     // The button, not the state behind it. A Dismiss that does nothing looks exactly like a Dismiss
