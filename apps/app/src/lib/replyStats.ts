@@ -132,8 +132,12 @@ export interface ReplySummary {
   writingMs: number | null;
   tokensPerSecond: number | null;
   usageReported: boolean;
-  /// Null when the endpoint did not report usage - see the note at the top.
+  /// Null when the endpoint did not report usage - see the note at the top. Summed over every
+  /// request of the reply, each of which resends the conversation - so for a reply that called tools
+  /// it can run far past `contextUsed`, which is the last request alone.
   sentTokens: number | null;
+  /// What the last request alone sent, or null when usage was not reported.
+  lastSentTokens: number | null;
   /// Estimated from the text when `usageReported` is false.
   returnedTokens: number;
   totalTokens: number | null;
@@ -179,6 +183,7 @@ export function summariseReply(stats: ReplyStats, contextLimit: number | null): 
         : null,
     usageReported,
     sentTokens: usageReported ? stats.sentTokens : null,
+    lastSentTokens: usageReported ? stats.lastSentTokens : null,
     returnedTokens,
     totalTokens: usageReported ? stats.sentTokens + stats.returnedTokens : null,
     contextUsed,
@@ -199,7 +204,11 @@ export interface ConversationTotals {
   returnedTokens: number;
   /// True when any reply's returned count had to be estimated.
   returnedEstimated: boolean;
+  /// The time the FINISHED replies took. A reply still arriving has no total yet.
   totalMs: number;
+  /// How many replies are still arriving, and so not in `totalMs`. Counted rather than added as
+  /// nothing, which made a conversation whose only reply was in progress read as 0 ms (#169).
+  stillArriving: number;
 }
 
 /// Everything timed in the conversation on screen, retried answers included - they were paid for.
@@ -216,6 +225,7 @@ export function conversationTotals(replies: readonly ReplyStats[]): Conversation
     returnedTokens: summaries.reduce((total, summary) => total + summary.returnedTokens, 0),
     returnedEstimated: summaries.some((summary) => !summary.usageReported),
     totalMs: summaries.reduce((total, summary) => total + (summary.totalMs ?? 0), 0),
+    stillArriving: summaries.filter((summary) => summary.totalMs === null).length,
   };
 }
 

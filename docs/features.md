@@ -1018,6 +1018,13 @@ and their total, and the **context used** against the model's context window, wi
 the reply took and how many tool calls it made. Below that it totals the conversation so far - replies,
 tokens sent and returned, and time spent waiting - retried answers included, since they were paid for.
 
+**A reply that calls tools makes several requests**, one per call, and each sends the whole conversation
+again. Its token counts add all of them up and say so - "138,770 in 10 requests" - with **Sent in the
+last request** beside them. That is why tokens sent can be many times the context used: context used is
+the last request alone, which is how full the model's context is now. While a reply is still arriving,
+the conversation's total response time says **Not yet**, or gives the time of the replies that have
+finished and how many are still arriving.
+
 Token counts are the ones your endpoint reports, and Trypthos asks a streamed reply to report them.
 An endpoint that does not has what it returned estimated from the text, marked **About**, and what was
 sent shown as **Not reported** rather than guessed. The times are measured from pressing Send, so they
