@@ -68,6 +68,8 @@ interface Props {
   onSaveChat: () => void;
   /// How each reply in this conversation went, oldest first, for the statistics popover.
   replyStats?: readonly ReplyStats[];
+  /// Opens the conversation log in a tab of its own.
+  onOpenLog?: () => void;
   /// Puts text on the clipboard. Injected so a test can see what was copied; the browser's own
   /// clipboard otherwise, which the renderer may write to after a click.
   copyText?: (text: string) => Promise<void>;
@@ -146,6 +148,7 @@ export default function ChatPanel({
   missingFolder = null,
   onSaveChat,
   replyStats = [],
+  onOpenLog,
   copyText = (text) => navigator.clipboard.writeText(text),
   scope,
   onOpenChat,
@@ -335,7 +338,7 @@ export default function ChatPanel({
               <path d="M17 21v-8H7v8M7 3v5h8" />
             </svg>
           </button>
-          <ChatStatsMenu replyStats={replyStats} models={models} />
+          <ChatStatsMenu replyStats={replyStats} models={models} onOpenLog={onOpenLog} />
           <button
             type="button"
             onClick={() => void copyReply()}

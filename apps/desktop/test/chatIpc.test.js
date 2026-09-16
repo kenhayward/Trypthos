@@ -126,6 +126,31 @@ test("pushes the reply to the renderer, tagged with its stream", async () => {
   });
 });
 
+// The conversation log is built from these, so they travel the same channel as the reply they
+// belong to, tagged with its stream.
+test("pushes each request's trace to the renderer as a chat event", async () => {
+  const trace = { round: 0, url: "u", request: "{}", status: 200, response: "data: [DONE]", notes: [] };
+  const run = async ({ onEvent, onTrace }) => {
+    onTrace(trace);
+    onEvent({ type: "end" });
+  };
+
+  await withHandlers(
+    async ({ ipcMain, sent }) => {
+      const { streamId } = await ipcMain.invoke("chat:send", send());
+
+      assert.deepEqual(
+        sent.map((entry) => entry.message),
+        [
+          { streamId, event: { type: "trace", trace } },
+          { streamId, event: { type: "end" } },
+        ],
+      );
+    },
+    { run },
+  );
+});
+
 // The point of naming a profile rather than an endpoint. A renderer that could name its own endpoint
 // could point Trypthos at any server on the internet and have it send whatever key was stored there.
 test("resolves the profile from settings rather than trusting the renderer", async () => {

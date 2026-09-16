@@ -1317,6 +1317,19 @@ describe("chat statistics", () => {
     expect(stats.getByText(/did not report token counts/)).toBeDefined();
   });
 
+  // For a reply that looks wrong: the log shows what the endpoint actually sent.
+  it("opens the conversation log from the statistics, and closes itself", async () => {
+    const user = userEvent.setup();
+    const onOpenLog = vi.fn();
+    panel({ models: [windowed], replyStats: [reply()], onOpenLog });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+    await user.click(screen.getByRole("button", { name: "View conversation log" }));
+
+    expect(onOpenLog).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog", { name: "Chat statistics" })).toBeNull();
+  });
+
   it("says there is nothing to show before a reply has been timed", async () => {
     const user = userEvent.setup();
     panel();

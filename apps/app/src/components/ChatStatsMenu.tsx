@@ -13,13 +13,15 @@ interface Props {
   replyStats: readonly ReplyStats[];
   /// The configured models, to name the one a reply went to and find its context window.
   models: readonly ChatProfile[];
+  /// Opens the conversation log - every request and response, as they went and came back.
+  onOpenLog?: () => void;
 }
 
 /// How the most recent reply went, and the conversation so far.
 ///
 /// A popover built like the saved-conversations list beside it rather than a dialog: it is something
 /// glanced at, and a window to dismiss would be more ceremony than a handful of numbers deserve.
-export default function ChatStatsMenu({ replyStats, models }: Props) {
+export default function ChatStatsMenu({ replyStats, models, onOpenLog }: Props) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -190,6 +192,20 @@ export default function ChatStatsMenu({ replyStats, models }: Props) {
               </dl>
               <p className="mt-1.5 text-2xs text-ink-4">{t("chat.stats.notSaved")}</p>
             </>
+          )}
+          {/* Offered even before a reply: the log also shows the thread, and a conversation reopened
+              from disk has one with no replies timed. */}
+          {onOpenLog !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onOpenLog();
+              }}
+              className="mt-2 w-full rounded border border-rule px-2 py-1 text-left text-ui text-ink hover:bg-hover"
+            >
+              {t("chat.log.open")}
+            </button>
           )}
         </div>
       )}

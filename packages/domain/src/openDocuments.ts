@@ -72,6 +72,27 @@ export interface DocumentSource {
 /// no read or write is ever attempted against it.
 export const GUIDE_PATH = "trypthos:markdown-guide";
 
+/// The path of the conversation log: every request and response the chat on screen has made.
+///
+/// Reserved under the same prefix as the guide, for the same reason - nothing on disk can collide
+/// with it. Written by the app and never read or saved.
+export const CONVERSATION_LOG_PATH = "trypthos:conversation-log";
+
+/// Shows a read-only document the app writes, opening it or replacing what it says.
+///
+/// Unlike `openDocument`, which goes back to an open tab as it is: a document the app writes afresh
+/// every time it is asked for must show what it says now, and a second tab for it would be a stale
+/// copy beside a current one. Only ever replaces a READ-ONLY document - a path the user can edit is
+/// activated, never overwritten.
+export function showReadOnly(set: DocumentSet, source: DocumentSource): DocumentSet {
+  if (!isOpen(set, source.path)) return openDocument(set, { ...source, readOnly: true });
+
+  const replaced = mapDocument(set, source.path, (document) =>
+    document.readOnly ? { ...document, content: source.content } : document,
+  );
+  return activateDocument(replaced, source.path);
+}
+
 export function emptyDocumentSet(): DocumentSet {
   return { documents: [], activePath: null };
 }

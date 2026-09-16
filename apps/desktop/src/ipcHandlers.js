@@ -475,6 +475,9 @@ function registerIpcHandlers({
         callTool: exploreFolder,
         signal: controller.signal,
         onEvent: (event) => pushChatEvent(streamId, event),
+        // Each request as it went and came back, for the conversation log. The provider has already
+        // taken the key out of it.
+        onTrace: (trace) => pushChatEvent(streamId, { type: "trace", trace }),
       })
       .catch(() => {
         // `run` is documented never to reject, so this is belt and braces - but a turn that ended

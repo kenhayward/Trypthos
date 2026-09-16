@@ -1028,6 +1028,34 @@ clear the panel or open a saved chat; they are not saved with it.
 pastes into a document as the same headings, lists and code - and shows a tick when it has. It is
 unavailable while a reply is still arriving, since half an answer would paste as though it were whole.
 
+### The conversation log
+
+**View conversation log**, at the bottom of Chat statistics, opens a read-only **Conversation Log** tab.
+It is for finding out what really happened when a reply looks wrong - most often a reply the panel shows
+as empty while the statistics say the endpoint returned hundreds of tokens.
+
+It starts with the thread as the chat panel holds it: each question and reply, what the model thought,
+and the tool calls it made. Then, for each reply, every request that reply made - one, or several when
+the model read files - exactly as it went and came back:
+
+- **Where it was sent**, and the **HTTP status**, or **Not reached** when the endpoint could not be
+  contacted. A refused request shows what the endpoint said, which is usually the reason.
+- **The request body** - the model, the parameters, and every message sent, documents included.
+- **The response as the endpoint sent it** - the raw stream, or the whole reply when streaming is off.
+- **What Trypthos did with it** that the response does not show, such as a proposed edit it could not
+  read and so dropped, or a tool it carried out.
+
+Everything the endpoint sent is shown as plain text, not formatted, so what you read is what arrived.
+Each reply also says how much answer and how much thinking reached the panel, how many times the panel
+cleared the reply because it was a request to read a file, and what any error said. When the endpoint
+reported tokens returned but no answer text reached the panel, the log says so at the top of that reply.
+
+**Your API key is never in the log.** It is not recorded with the request, and Trypthos removes it from
+anything the endpoint sends back. Each request and response is shown up to a million characters.
+
+The log covers the conversation while it is open, and is not saved. It is written when you ask for it,
+so open it again after another reply to see that reply too.
+
 ### Looking beyond the open document
 
 A row above the message box shows what chat can see, and nothing is included unless you ask for it.

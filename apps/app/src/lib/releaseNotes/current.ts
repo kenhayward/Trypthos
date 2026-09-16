@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.79.0",
+    date: "2026-09-16",
+    pr: 161,
+    headline: "See everything a conversation sent and received, in a Conversation Log",
+    summary:
+      "The Chat statistics panel now has a View conversation log button. It opens a read-only Conversation Log tab with the thread as the chat panel holds it - your questions, the replies, the thinking and the tool calls - followed by every request each reply made, exactly as it went and came back: the address it was sent to, the HTTP status, the full request body, and the response as the endpoint sent it, shown as text rather than formatted. It is for finding out what really happened when a reply looks wrong. For each reply it also says how much answer and how much thinking reached the panel, how many times the panel cleared the reply because it was a request to read a file, what any error said, and what Trypthos did with the response that the response does not show, such as a proposed edit it could not read and dropped. When the endpoint reported tokens returned but no answer text reached the panel, the log says so at the top of that reply. Your API key is never included - Trypthos removes it even from text the endpoint sends back. The log covers the conversation while it is open and is not saved; open it again after another reply to see that reply too. Each request and response is shown up to a million characters.",
+    added: [
+      "A View conversation log button in Chat statistics, opening a read-only Conversation Log tab with the thread and every request and response each reply made.",
+    ],
+  },
+  {
     version: "0.78.0",
     date: "2026-09-16",
     pr: 160,

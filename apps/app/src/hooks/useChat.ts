@@ -152,7 +152,12 @@ export function useChat(
       setActivity(null);
       setTurns(beginReply(history));
       setStreaming(true);
-      setReplyStats((current) => [...current, startReplyStats({ profileId, at: clock.current() })]);
+      // The question is the history's last turn - see `send` and `retry`, which both end it on one.
+      const question = history.at(-1)?.content ?? "";
+      setReplyStats((current) => [
+        ...current,
+        startReplyStats({ profileId, at: clock.current(), question }),
+      ]);
 
       // Converted here, at the one place a conversation leaves the panel. What the panel records
       // for itself must not reach a provider - see `wireTurns`.

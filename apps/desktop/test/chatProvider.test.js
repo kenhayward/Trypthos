@@ -3,7 +3,7 @@
 const test = require("node:test");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { createChatProvider } = require("../src/chatProvider");
+const { TRACE_TEXT_LIMIT, createChatProvider } = require("../src/chatProvider");
 
 /// The provider call, which happens here and nowhere else.
 ///
@@ -1204,4 +1204,141 @@ test("stops after the read cap, and says so in a message the model understands",
   assert.equal(last.role, "user");
   assert.match(last.content, /no more files/i);
   assert.deepEqual(events.at(-1), { type: "end" });
+});
+
+/// The trace of each request, for the conversation log.
+///
+/// What a user checks when the panel shows no answer but the endpoint reported tokens - so it has to
+/// be what was actually sent and received, not what the panel made of it. And it crosses into the
+/// renderer, so the key must be as absent from it as from any error.
+describe("the trace of each request", () => {
+  /// Runs a turn, recording events and traces in the order they happened.
+  async function traced(fetchImpl, options = {}) {
+    const order = [];
+    const traces = [];
+    await provider(fetchImpl, options.provider).run({
+      profile: options.profile ?? PROFILE,
+      turns: TURNS,
+      readFile: options.readFile,
+      onEvent: (event) => order.push(event.type),
+      onTrace: (trace) => {
+        traces.push(trace);
+        order.push("trace");
+      },
+    });
+    return { traces, order };
+  }
+
+  it("records the request, the status and the stream exactly as it arrived", async () => {
+    const frames = [
+      'data: {"choices":[{"delta":{"reasoning_content":"Thinking"}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":900}}\n\n',
+      "data: [DONE]\n\n",
+    ];
+    const { traces } = await traced(streamingFetch(frames));
+
+    assert.equal(traces.length, 1);
+    const [trace] = traces;
+    assert.equal(trace.round, 0);
+    assert.equal(trace.url, "https://api.example.com/v1/chat/completions");
+    assert.equal(JSON.parse(trace.request).model, "some-model");
+    assert.equal(trace.status, 200);
+    assert.equal(trace.response, frames.join(""));
+    assert.deepEqual(trace.notes, []);
+  });
+
+  it("arrives before the turn ends, so the panel is still listening", async () => {
+    const { order } = await traced(
+      streamingFetch(['data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n', "data: [DONE]\n\n"]),
+    );
+    assert.deepEqual(order, ["token", "trace", "end"]);
+  });
+
+  it("records every request of a turn that reads a file, in order", async () => {
+    const fetchImpl = scriptedFetch([
+      [readCall("plan.md"), "data: [DONE]\n\n"],
+      [says("The plan is short."), "data: [DONE]\n\n"],
+    ]);
+    const { traces, order } = await traced(fetchImpl, {
+      profile: TOOLS_PROFILE,
+      readFile: allowlist({ "plan.md": "# Plan" }),
+    });
+
+    assert.deepEqual(traces.map((trace) => trace.round), [0, 1]);
+    // The second request carries the file the first asked for.
+    assert.match(traces[1].request, /# Plan/);
+    assert.equal(order.at(-1), "end");
+    assert.equal(order.at(-2), "trace");
+  });
+
+  it("records a completed response when streaming is off", async () => {
+    const { traces } = await traced(completionFetch([completeAnswer("Whole.")]), {
+      profile: { ...PROFILE, stream: false },
+    });
+    assert.match(traces[0].response, /Whole\./);
+  });
+
+  // The body of a refusal is what says WHY - an unsupported parameter, a missing model - and it is
+  // exactly the text a provider may echo the key back in.
+  it("records what a refusal said, without the key", async () => {
+    const { traces } = await traced(
+      streamingFetch([`{"error":{"message":"bad key ${KEY} for stream_options"}}`], { status: 400 }),
+    );
+
+    assert.equal(traces[0].status, 400);
+    assert.match(traces[0].response, /stream_options/);
+    assert.ok(!traces[0].response.includes(KEY));
+  });
+
+  it("never carries the key, wherever the endpoint puts it", async () => {
+    const { traces } = await traced(
+      streamingFetch([`data: {"choices":[{"delta":{"content":"${KEY}"}}]}\n\n`, "data: [DONE]\n\n"]),
+    );
+
+    assert.ok(!JSON.stringify(traces).includes(KEY));
+    assert.match(traces[0].response, /\[key removed\]/);
+  });
+
+  it("records a request that never reached the endpoint", async () => {
+    const { traces, order } = await traced(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+
+    assert.equal(traces[0].status, null);
+    assert.equal(traces[0].response, "");
+    assert.deepEqual(order, ["error", "trace", "end"]);
+  });
+
+  // A dropped call is invisible in the panel and in the stream alike: the fragments are there, but
+  // nothing says they were thrown away.
+  it("notes a tool call it dropped", async () => {
+    const { traces } = await traced(streamingFetch(toolFrames(['{"op":"append","cont'])), {
+      profile: TOOLS_PROFILE,
+    });
+    assert.equal(traces[0].notes.length, 1);
+    assert.match(traces[0].notes[0], /dropped/);
+  });
+
+  it("notes a reply that was a request for a file, and was cleared", async () => {
+    const fetchImpl = scriptedFetch([
+      [says("```trypthos-read\nplan.md\n```"), "data: [DONE]\n\n"],
+      [says("Read it."), "data: [DONE]\n\n"],
+    ]);
+    const { traces } = await traced(fetchImpl, { readFile: allowlist({ "plan.md": "# Plan" }) });
+    assert.match(traces[0].notes.join("\n"), /cleared/);
+  });
+
+  it("cuts a response too long to carry, and says so", async () => {
+    const huge = `data: {"choices":[{"delta":{"content":"${"a".repeat(TRACE_TEXT_LIMIT)}"}}]}\n\n`;
+    const { traces } = await traced(streamingFetch([huge, "data: [DONE]\n\n"]));
+
+    assert.ok(traces[0].response.length < TRACE_TEXT_LIMIT + 200);
+    assert.match(traces[0].response, /characters not shown/);
+  });
+
+  it("works without anybody listening for traces", async () => {
+    const { events, onEvent } = collect();
+    await provider(streamingFetch(["data: [DONE]\n\n"])).run({ profile: PROFILE, turns: TURNS, onEvent });
+    assert.deepEqual(events, [{ type: "end" }]);
+  });
 });

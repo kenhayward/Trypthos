@@ -131,6 +131,7 @@ export {
 export type { ContextUsage } from "./contextUsage";
 
 export {
+  CONVERSATION_LOG_PATH,
   GUIDE_PATH,
   activateDocument,
   activeDocument,
@@ -147,6 +148,7 @@ export {
   openPaths,
   TAB_CLOSE_ACTIONS,
   renameDocument,
+  showReadOnly,
   tabLabels,
   tabsToClose,
   updateContent,
@@ -282,6 +284,7 @@ export {
   ChatEventMessage,
   CLOSE_REQUESTED_CHANNEL,
   ChatEventSchema,
+  ChatTraceSchema,
   CloseWindowRequest,
   ConfirmDiscardRequest,
   DeleteSecretRequest,
@@ -322,6 +325,7 @@ export {
 } from "./ipc";
 export type {
   ChatEvent,
+  ChatTrace,
   DiscardChoice,
   DocumentDraft,
   IpcChannel,

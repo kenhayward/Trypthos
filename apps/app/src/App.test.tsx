@@ -795,6 +795,23 @@ describe("saving and reopening a conversation", () => {
     expect(await within(chat).findByText("Saved as Tools tour")).toBeDefined();
   });
 
+  it("opens the conversation log in a tab of its own from the chat statistics", async () => {
+    const user = userEvent.setup();
+    shell();
+    render(<App />);
+    const chat = await screen.findByRole("complementary", { name: "Chat" });
+
+    await user.type(within(chat).getByRole("textbox", { name: "Message" }), "/tools");
+    await user.click(within(chat).getByRole("button", { name: "Send" }));
+    await within(chat).findByText(/Model tools/);
+
+    await user.click(within(chat).getByRole("button", { name: "Chat statistics" }));
+    await user.click(screen.getByRole("button", { name: "View conversation log" }));
+
+    const tab = await screen.findByRole("tab", { name: /Conversation Log/ });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+  });
+
   it("opens a saved conversation with its turns and attachments back in the panel", async () => {
     const user = userEvent.setup();
     shell();
