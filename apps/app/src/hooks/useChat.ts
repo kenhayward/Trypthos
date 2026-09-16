@@ -12,6 +12,7 @@ import {
   type ToolCall,
   type Turn,
 } from "../lib/conversation";
+import { noteReplyEvent, noteStopped, startReplyStats, type ReplyStats } from "../lib/replyStats";
 
 /// One conversation, and the stream feeding it.
 ///
@@ -38,6 +39,8 @@ export function useChat(
   /// type a question, then change the selection before pressing Enter - and a retry minutes later
   /// should see the document as it is then, not as it was when the question was first asked.
   getContext: () => ChatContext = () => EMPTY_CONTEXT,
+  /// The clock replies are timed on, in milliseconds. Injected so a test can say what time it is.
+  now: () => number = () => performance.now(),
 ) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -47,6 +50,9 @@ export function useChat(
   /// A turn that pauses for several seconds while a file is read should say what it is doing rather
   /// than look stuck, and this is the only signal that anything is happening at all.
   const [activity, setActivity] = useState<ToolCall | null>(null);
+  /// How every reply asked in this conversation went, oldest first - see `replyStats`. Not part of
+  /// the turns: a timing is not something that was said, and must never reach a saved chat.
+  const [replyStats, setReplyStats] = useState<ReplyStats[]>([]);
 
   /// The stream whose events count. Everything from any other stream is dropped.
   ///
@@ -62,6 +68,19 @@ export function useChat(
     latestContext.current = getContext;
   }, [getContext]);
 
+  /// Read through a ref for the same reason: the subscription below is registered once.
+  const clock = useRef(now);
+  useEffect(() => {
+    clock.current = now;
+  }, [now]);
+
+  /// Applies a change to the reply being timed, which is always the last one.
+  const updateLastStats = useCallback((change: (stats: ReplyStats) => ReplyStats) => {
+    setReplyStats((current) =>
+      current.length === 0 ? current : [...current.slice(0, -1), change(current.at(-1)!)],
+    );
+  }, []);
+
   useEffect(() => {
     if (bridge === null) return;
 
@@ -76,6 +95,10 @@ export function useChat(
       if (parsed.data.streamId !== activeStream.current) return;
 
       const event = parsed.data.event;
+      // Taken as the event arrives, before anything renders, so the time is when it came.
+      const at = clock.current();
+      updateLastStats((stats) => noteReplyEvent(stats, event, at));
+
       if (event.type === "token") {
         setTurns((current) => appendToken(current, event.text));
         return;
@@ -116,10 +139,9 @@ export function useChat(
         setActivity(null);
         setStreaming(false);
       }
-      // `usage` is accepted and ignored for now - the context dial that will show it comes with the
-      // context layer.
+      // `usage` is only statistics, recorded above.
     });
-  }, [bridge]);
+  }, [bridge, updateLastStats]);
 
   /// Sends one turn for a history that must already end in a question.
   const run = useCallback(
@@ -127,9 +149,10 @@ export function useChat(
       if (bridge === null || profileId === null) return;
 
       setError(null);
-        setActivity(null);
+      setActivity(null);
       setTurns(beginReply(history));
       setStreaming(true);
+      setReplyStats((current) => [...current, startReplyStats({ profileId, at: clock.current() })]);
 
       // Converted here, at the one place a conversation leaves the panel. What the panel records
       // for itself must not reach a provider - see `wireTurns`.
@@ -139,6 +162,11 @@ export function useChat(
         // request. Nothing will stream, so the turn has to be ended here.
         activeStream.current = null;
         setStreaming(false);
+        // Ended here too, or the statistics would show it as still arriving for ever.
+        const at = clock.current();
+        updateLastStats((stats) =>
+          noteReplyEvent(noteReplyEvent(stats, { type: "error", message: "" }, at), { type: "end" }, at),
+        );
         setError(
           result.reason === "no-such-profile"
             ? "That model is no longer configured. Choose another in Settings."
@@ -149,7 +177,7 @@ export function useChat(
 
       activeStream.current = result.streamId;
     },
-    [bridge, profileId],
+    [bridge, profileId, updateLastStats],
   );
 
   const send = useCallback(
@@ -178,10 +206,11 @@ export function useChat(
     const streamId = activeStream.current;
     if (streamId === null || bridge === null) return;
 
+    updateLastStats(noteStopped);
     await bridge.cancelChat(streamId);
     // Not ended here: the shell answers a cancellation with a final `end`, and ending it twice would
     // make the panel's state depend on which arrived first.
-  }, [bridge]);
+  }, [bridge, updateLastStats]);
 
   /// Replaces the thread with a conversation loaded from disk.
   ///
@@ -193,6 +222,7 @@ export function useChat(
     setError(null);
     setActivity(null);
     setStreaming(false);
+    setReplyStats([]);
   }, []);
 
   const clear = useCallback(() => {
@@ -202,6 +232,7 @@ export function useChat(
     setError(null);
     setActivity(null);
     setStreaming(false);
+    setReplyStats([]);
   }, []);
 
   /// Puts a question and the app's own answer to it in the thread, sending nothing.
@@ -222,6 +253,7 @@ export function useChat(
     streaming,
     error,
     activity,
+    replyStats,
     send,
     answerLocally,
     retry,

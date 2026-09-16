@@ -1279,7 +1279,8 @@ The path, end to end:
    key out of reach, since keys are stored per endpoint.
 3. `composeMessages` assembles the request: the system prompt from settings, then the
    conversation, then the document immediately before the question it belongs to.
-4. `chatProvider.js` POSTs to `{endpoint}/chat/completions` with `stream: true`, adding the key as a
+4. `chatProvider.js` POSTs to `{endpoint}/chat/completions` with `stream: true` and
+   `stream_options: { include_usage: true }` (without which a stream reports no token counts), adding the key as a
    bearer token if one is stored. **No key is not an error**: a local model served by Ollama or
    llama.cpp needs none, and refusing would make the most private way to use Trypthos the one way
    that does not work.
@@ -1864,6 +1865,33 @@ an outline. The migration writes `[]` and `null` into a version 5 file. Opening 
 `useChatScope.restore`, which sets the attachments without reading anything, and turns the folder on
 and selects it in the tree only when its workspace is open - otherwise `ChatPanel` shows
 `missingFolder`.
+
+### Reply statistics
+
+Measured in the **renderer**, not the shell: the times worth showing are the ones the user waited
+through, from `useChat.run` to the first `token` or `reasoning` event and on to `end`, and IPC adds
+nothing measurable to them. `useChat` takes an injectable clock (`performance.now` by default) and
+keeps a `ReplyStats` per question in `replyStats`; `lib/replyStats.ts` folds each `ChatEvent` in and
+`summariseReply` derives what `ChatStatsMenu` shows. **No IPC contract changed** - the `usage` event
+already crossed the boundary and was being dropped.
+
+- Token counts come from the endpoint's `usage` reports, summed across the requests of a read loop;
+  **context used** is the last request's prompt plus completion. Streamed requests carry
+  `stream_options.include_usage` so there is a report to read. With none, returned tokens are estimated
+  at `CHARACTERS_PER_TOKEN` and flagged; sent tokens are never estimated, because the request is
+  assembled in the main process and the renderer cannot see all of it.
+- Tokens per second is over the writing span (first token to end), so a long prompt does not read as a
+  slow model. In a read loop that span includes the tool round trips.
+- **Never persisted.** Stats live beside the turns, not on them - `SessionTurnSchema` is strict, and a
+  timing is not something that was said. `clear` and `replace` empty the list.
+
+`ChatStatsMenu`'s popover hangs from the toolbar's right edge (the `h2` is `relative`), not from its
+button: the panel is `overflow-hidden`, and a 288px box right-aligned to a button that far in reached
+past the panel's left edge. `ChatPanel.browser.test` measures it.
+
+Copy response writes the last non-empty assistant turn's `content` through `navigator.clipboard` -
+the raw markdown, which is what makes a paste into a document round-trip. `ChatPanel` takes the
+writer as a `copyText` prop so the jsdom suite can see what was copied.
 
 ### Beyond the open document
 

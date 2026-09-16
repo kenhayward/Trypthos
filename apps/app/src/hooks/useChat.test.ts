@@ -449,3 +449,117 @@ describe("answering locally", () => {
     expect(harness.sent[0]?.turns).toEqual([{ role: "user", content: "And now a real question" }]);
   });
 });
+
+/// How each reply went, for the chat statistics.
+///
+/// Timed on an injected clock, so a test states what the time was rather than waiting for it.
+describe("reply statistics", () => {
+  function timed() {
+    const harness = fakeBridge();
+    let time = 0;
+    const clock = { set: (at: number) => (time = at) };
+    const rendered = renderHook(() => useChat(harness.bridge, "one", undefined, () => time));
+    return { ...harness, clock, result: rendered.result };
+  }
+
+  it("has none before anything is asked", () => {
+    const { result } = timed();
+    expect(result.current.replyStats).toEqual([]);
+  });
+
+  it("times a reply from sending to its end, with the usage it reported", async () => {
+    const { result, push, clock } = timed();
+
+    clock.set(1000);
+    await act(async () => {
+      await result.current.send("Hello");
+    });
+    clock.set(1250);
+    act(() => push({ type: "token", text: "Hi" }));
+    clock.set(2000);
+    act(() => push({ type: "usage", promptTokens: 80, replyTokens: 12 }));
+    act(() => push({ type: "end" }));
+
+    const [stats] = result.current.replyStats;
+    expect(stats).toMatchObject({
+      profileId: "one",
+      startedAt: 1000,
+      firstTokenAt: 1250,
+      endedAt: 2000,
+      sentTokens: 80,
+      returnedTokens: 12,
+    });
+  });
+
+  it("keeps a reply for every question, retries included", async () => {
+    const { result, push } = timed();
+
+    await act(async () => {
+      await result.current.send("Hello");
+    });
+    act(() => push({ type: "end" }));
+    await act(async () => {
+      await result.current.retry();
+    });
+    act(() => push({ type: "end" }));
+
+    expect(result.current.replyStats).toHaveLength(2);
+  });
+
+  it("records that the user stopped a reply", async () => {
+    const { result, push } = timed();
+
+    await act(async () => {
+      await result.current.send("Hello");
+    });
+    await act(async () => {
+      await result.current.stop();
+    });
+    act(() => push({ type: "end" }));
+
+    expect(result.current.replyStats[0]?.stopped).toBe(true);
+  });
+
+  it("ignores events from a stream that is no longer listened to", async () => {
+    const { result, push } = timed();
+
+    await act(async () => {
+      await result.current.send("Hello");
+    });
+    act(() => push({ type: "usage", promptTokens: 5, replyTokens: 5 }, "stream-old"));
+
+    expect(result.current.replyStats[0]?.requests).toBe(0);
+  });
+
+  it("ends a reply the shell refused to send, as a failure", async () => {
+    const harness = fakeBridge({ ok: false });
+    let time = 500;
+    const { result } = renderHook(() => useChat(harness.bridge, "one", undefined, () => time));
+
+    await act(async () => {
+      const sending = result.current.send("Hello");
+      time = 600;
+      await sending;
+    });
+
+    expect(result.current.replyStats[0]).toMatchObject({ failed: true, endedAt: 600 });
+  });
+
+  it("starts again when the conversation is cleared or replaced", async () => {
+    const { result, push } = timed();
+
+    await act(async () => {
+      await result.current.send("Hello");
+    });
+    act(() => push({ type: "end" }));
+    act(() => result.current.clear());
+    expect(result.current.replyStats).toEqual([]);
+
+    await act(async () => {
+      await result.current.send("Again");
+    });
+    act(() => push({ type: "end" }));
+    act(() => result.current.replace([{ role: "user", content: "Saved" }]));
+    expect(result.current.replyStats).toEqual([]);
+  });
+});

@@ -41,6 +41,17 @@ describe("buildChatRequest", () => {
     expect(buildChatRequest(profile, turns).stream).toBe(true);
   });
 
+  // A streamed reply reports no token counts unless asked for them, and the chat statistics are
+  // built from those counts.
+  it("asks a streamed reply to report its token usage", () => {
+    expect(buildChatRequest(profile, turns).stream_options).toEqual({ include_usage: true });
+  });
+
+  it("does not send stream options when the reply is not streamed", () => {
+    const whole = ChatProfileSchema.parse({ ...profile, stream: false });
+    expect("stream_options" in buildChatRequest(whole, turns)).toBe(false);
+  });
+
   it("sends the turns in order", () => {
     const body = buildChatRequest(profile, [
       { role: "user", content: "First" },

@@ -3,6 +3,7 @@ import { userEvent } from "@vitest/browser/context";
 import { describe, expect, it, vi } from "vitest";
 import { ChatProfileSchema, type ChatSessionSummary } from "@trypthos/domain";
 import ChatPanel from "./ChatPanel";
+import { noteReplyEvent, startReplyStats } from "../lib/replyStats";
 
 /// The tool-call block under a reply, in a real browser.
 ///
@@ -18,7 +19,7 @@ const model = ChatProfileSchema.parse({
   isDefault: true,
 });
 
-function panel() {
+function panel(extra: Partial<React.ComponentProps<typeof ChatPanel>> = {}) {
   render(
     <ChatPanel
       width={348}
@@ -65,6 +66,7 @@ function panel() {
       }}
       onOpenChat={vi.fn()}
       onDeleteChat={vi.fn()}
+      {...extra}
     />,
   );
 }
@@ -118,5 +120,26 @@ describe("the tool calls a reply made, rendered", () => {
 
     await userEvent.click(summary);
     expect(shown(call)).toBe(true);
+  });
+});
+
+/// The statistics popover opens inside a panel that clips what overflows it, so where it lands is a
+/// question only layout can answer - a box drawn half outside the panel is half a box.
+describe("the chat statistics, rendered", () => {
+  it("opens wholly inside the panel", async () => {
+    const stats = noteReplyEvent(
+      noteReplyEvent(startReplyStats({ profileId: "one", at: 0 }), { type: "token", text: "Hi" }, 300),
+      { type: "end" },
+      900,
+    );
+    panel({ replyStats: [stats] });
+
+    await userEvent.click(screen.getByRole("button", { name: "Chat statistics" }));
+
+    const aside = screen.getByRole("complementary").getBoundingClientRect();
+    const box = screen.getByRole("dialog", { name: "Chat statistics" }).getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(200);
+    expect(box.left).toBeGreaterThanOrEqual(aside.left);
+    expect(box.right).toBeLessThanOrEqual(aside.right);
   });
 });

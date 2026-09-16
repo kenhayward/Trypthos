@@ -86,6 +86,10 @@ export interface ChatRequestBody {
   model: string;
   messages: RequestMessage[];
   stream: boolean;
+  /// Asks a streamed reply to end with a chunk reporting its token usage. Without it an
+  /// OpenAI-compatible stream carries no counts at all, and the chat statistics would have nothing
+  /// but estimates. Absent when the reply is not streamed: a completed response reports usage anyway.
+  stream_options?: { include_usage: true };
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
@@ -132,6 +136,7 @@ export function buildChatRequest(
     model: profile.model,
     messages: [...turns],
     stream: profile.stream !== false,
+    ...(profile.stream !== false ? { stream_options: { include_usage: true as const } } : {}),
     ...(profile.temperature === undefined ? {} : { temperature: profile.temperature }),
     ...(profile.maxTokens === undefined ? {} : { max_tokens: profile.maxTokens }),
     ...(profile.topP === undefined ? {} : { top_p: profile.topP }),
