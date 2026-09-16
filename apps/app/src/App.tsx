@@ -51,6 +51,7 @@ import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind } from "./hooks/useFind";
 import { builtInTitleKey } from "./lib/builtInDocuments";
+import { conversationLog } from "./lib/conversationLog";
 import { answerFor } from "./lib/commandAnswers";
 import { openExternal } from "./lib/externalLinks";
 import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
@@ -115,7 +116,7 @@ const NO_MATCHES: readonly FindMatch[] = [];
 
 /// The three-panel shell: workspace browser, editor, chat.
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   /// The settings page on screen, or null when the dialog is closed.
   ///
   /// One piece of state rather than a boolean per surface: About is a page of the same dialog now,
@@ -848,6 +849,19 @@ export default function App() {
                 error={chat.error}
                 activity={chat.activity}
                 replyStats={chat.replyStats}
+                onOpenLog={() =>
+                  // Written now, from the conversation as it stands. Asked for again later, it is
+                  // written again - see `showReadOnly`.
+                  actions.openConversationLog(
+                    conversationLog({
+                      turns: chat.turns,
+                      replyStats: chat.replyStats,
+                      models: chatModels,
+                      t,
+                      language: i18n.language,
+                    }),
+                  )
+                }
                 context={{ tokens: carried, limit: activeModel?.contextWindow ?? null }}
                 onSend={(text) => {
                   // A slash command is answered here rather than sent. The check is deliberately

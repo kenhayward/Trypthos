@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { GUIDE_PATH } from "@trypthos/domain";
+import { CONVERSATION_LOG_PATH, GUIDE_PATH } from "@trypthos/domain";
 import EditorTabs from "./EditorTabs";
 
 /// The tab strip: which files are open, which one you are in, and which have unsaved work.
@@ -151,6 +151,22 @@ describe("a built-in document", () => {
     expect(tab.textContent).toContain("Markdown Syntax Guide");
     // And not qualified with the open folder, which it is not in.
     expect(tab.getAttribute("title")).toBe("Markdown Syntax Guide");
+  });
+
+  it("names the conversation log from the catalogue too", () => {
+    render(
+      <EditorTabs
+        workspaceName="Notes"
+        paths={[CONVERSATION_LOG_PATH]}
+        activePath={CONVERSATION_LOG_PATH}
+        dirtyPaths={[]}
+        onActivate={vi.fn()}
+        onClose={vi.fn()}
+        onCloseMany={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("tab").getAttribute("title")).toBe("Conversation Log");
   });
 });
 

@@ -1,4 +1,4 @@
-import { CHARACTERS_PER_TOKEN, type ChatEvent } from "@trypthos/domain";
+import { CHARACTERS_PER_TOKEN, type ChatEvent, type ChatTrace } from "@trypthos/domain";
 
 /// How one reply went: how long it took and how many tokens it cost.
 ///
@@ -17,6 +17,8 @@ import { CHARACTERS_PER_TOKEN, type ChatEvent } from "@trypthos/domain";
 export interface ReplyStats {
   /// The model the question went to, so the panel can name it even after another is picked.
   profileId: string;
+  /// The question this reply answers, for the conversation log.
+  question: string;
   startedAt: number;
   /// When the first token or piece of thinking arrived, or null while none has.
   firstTokenAt: number | null;
@@ -32,14 +34,32 @@ export interface ReplyStats {
   requests: number;
   /// Characters of answer and thinking, for an estimate when no usage is reported.
   characters: number;
+  /// How many of `characters` were thinking. A reply the panel shows as empty while the endpoint
+  /// reported tokens is often all thinking, and this is how the log can say so.
+  reasoningCharacters: number;
+  /// How many times the reply streamed so far was cleared - see the `reset` event.
+  resets: number;
+  /// What each error said, in order.
+  errors: string[];
+  /// Each request the reply made, as it went and came back. For the conversation log.
+  traces: ChatTrace[];
   toolCalls: number;
   failed: boolean;
   stopped: boolean;
 }
 
-export function startReplyStats({ profileId, at }: { profileId: string; at: number }): ReplyStats {
+export function startReplyStats({
+  profileId,
+  at,
+  question = "",
+}: {
+  profileId: string;
+  at: number;
+  question?: string;
+}): ReplyStats {
   return {
     profileId,
+    question,
     startedAt: at,
     firstTokenAt: null,
     endedAt: null,
@@ -49,6 +69,10 @@ export function startReplyStats({ profileId, at }: { profileId: string; at: numb
     lastReturnedTokens: null,
     requests: 0,
     characters: 0,
+    reasoningCharacters: 0,
+    resets: 0,
+    errors: [],
+    traces: [],
     toolCalls: 0,
     failed: false,
     stopped: false,
@@ -66,6 +90,8 @@ export function noteReplyEvent(stats: ReplyStats, event: ChatEvent, at: number):
         ...stats,
         firstTokenAt: stats.firstTokenAt ?? at,
         characters: stats.characters + event.text.length,
+        reasoningCharacters:
+          stats.reasoningCharacters + (event.type === "reasoning" ? event.text.length : 0),
       };
     case "usage":
       return {
@@ -78,8 +104,12 @@ export function noteReplyEvent(stats: ReplyStats, event: ChatEvent, at: number):
       };
     case "tool":
       return { ...stats, toolCalls: stats.toolCalls + 1 };
+    case "reset":
+      return { ...stats, resets: stats.resets + 1 };
+    case "trace":
+      return { ...stats, traces: [...stats.traces, event.trace] };
     case "error":
-      return { ...stats, failed: true };
+      return { ...stats, failed: true, errors: [...stats.errors, event.message] };
     case "end":
       return { ...stats, endedAt: stats.endedAt ?? at };
     default:

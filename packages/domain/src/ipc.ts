@@ -450,6 +450,29 @@ export const SaveChatRequest = z
 
 export const ChatIdRequest = z.object({ id: z.string().min(1) }).strict();
 
+/// One request a reply made, recorded in the main process for the conversation log.
+///
+/// **What is deliberately absent is the headers**, which carry the key. The shell also removes the
+/// key from every string here before sending, since an endpoint can echo it back in a response - and
+/// `.strict()` means a trace that grew a field nobody decided to send is refused rather than shown.
+export const ChatTraceSchema = z
+  .object({
+    /// Which request of the turn, from 0. A turn that reads files makes several.
+    round: z.number().int().nonnegative(),
+    url: z.string(),
+    /// The request body, as JSON.
+    request: z.string(),
+    /// The HTTP status, or null when the endpoint could not be reached.
+    status: z.number().int().nullable(),
+    /// The response as it arrived: the raw event stream, or the completed JSON.
+    response: z.string(),
+    /// What the app did with the response that the response itself does not show.
+    notes: z.array(z.string()),
+  })
+  .strict();
+
+export type ChatTrace = z.infer<typeof ChatTraceSchema>;
+
 /// What the main process pushes back while a reply streams.
 ///
 /// Strict, and a closed union. This is our own contract rather than a provider's response, so an
@@ -487,6 +510,10 @@ export const ChatEventSchema = z.discriminatedUnion("type", [
       replyTokens: z.number(),
     })
     .strict(),
+  /// One request of the reply, as it went and as it came back - for the conversation log, where a
+  /// reply that looks empty in the panel can be checked against what the endpoint actually sent.
+  /// Arrives when that request is finished, and before `end`.
+  z.object({ type: z.literal("trace"), trace: ChatTraceSchema }).strict(),
   z.object({ type: z.literal("error"), message: z.string() }).strict(),
   z.object({ type: z.literal("end") }).strict(),
 ]);

@@ -491,6 +491,23 @@ describe("reply statistics", () => {
     });
   });
 
+  it("records the question each reply answers, retries included", async () => {
+    const { result, push } = timed();
+
+    await act(async () => {
+      await result.current.send("Why is it empty?");
+    });
+    act(() => push({ type: "end" }));
+    await act(async () => {
+      await result.current.retry();
+    });
+
+    expect(result.current.replyStats.map((stats) => stats.question)).toEqual([
+      "Why is it empty?",
+      "Why is it empty?",
+    ]);
+  });
+
   it("keeps a reply for every question, retries included", async () => {
     const { result, push } = timed();
 

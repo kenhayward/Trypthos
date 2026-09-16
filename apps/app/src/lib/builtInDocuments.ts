@@ -1,4 +1,4 @@
-import { GUIDE_PATH } from "@trypthos/domain";
+import { CONVERSATION_LOG_PATH, GUIDE_PATH } from "@trypthos/domain";
 
 /// Documents the app carries rather than reads from a folder, and what they are called.
 ///
@@ -12,6 +12,7 @@ import { GUIDE_PATH } from "@trypthos/domain";
 /// at the edge where they already have `t`.
 const TITLE_KEYS: Record<string, string> = {
   [GUIDE_PATH]: "editor.guide",
+  [CONVERSATION_LOG_PATH]: "chat.log.title",
 };
 
 /// The translation key naming this document, or null for an ordinary file - whose name is its own.

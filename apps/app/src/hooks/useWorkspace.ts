@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiscardChoice, DocumentDraft } from "@trypthos/domain";
 import type { DocumentSet, OpenDocument, Revision, WorkspaceRef } from "@trypthos/domain";
 import {
+  CONVERSATION_LOG_PATH,
   GUIDE_PATH,
   MAX_TEXT_FILE_BYTES,
   activateDocument,
@@ -22,6 +23,7 @@ import {
   qualifyPath,
   repoPagePath,
   renameDocument,
+  showReadOnly,
   splitQualified,
   updateContent,
 } from "@trypthos/domain";
@@ -145,6 +147,8 @@ export interface WorkspaceActions {
   /// workspace, and nothing here should have to know how to find it. Read-only and never written,
   /// which is what keeps it out of the save path and out of the prompt about unsaved work.
   openGuide(content: string): void;
+  /// Shows the conversation log, opening its tab or replacing what an open one says.
+  openConversationLog(content: string): void;
   /// Opens a repository's own page, or goes to it if it is already open.
   ///
   /// A document like the markdown guide: a reserved path, read-only, and nothing behind it on disk.
@@ -1312,6 +1316,16 @@ export function useWorkspace(
           // written back, so this exists only because every document carries one.
           revision: { id: "built-in" },
           readOnly: true,
+        }),
+      })),
+    openConversationLog: (content: string) =>
+      setInternal((prev) => ({
+        ...prev,
+        documents: showReadOnly(prev.documents, {
+          path: CONVERSATION_LOG_PATH,
+          content,
+          // Like the guide's: never read from disk and never written back.
+          revision: { id: "built-in" },
         }),
       })),
     closeFile,

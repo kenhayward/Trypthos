@@ -108,6 +108,35 @@ describe("ChatEventSchema", () => {
       expect(ChatEventSchema.safeParse(event).success).toBe(false);
     }
   });
+
+  // One request of a reply, exactly as it went and came back, for the conversation log.
+  it("accepts the trace of one request", () => {
+    const trace = {
+      round: 0,
+      url: "https://api.example.com/v1/chat/completions",
+      request: '{"model":"m"}',
+      status: 200,
+      response: 'data: {"choices":[]}\n\n',
+      notes: ["A tool call could not be read as an edit, and was dropped."],
+    };
+    expect(ChatEventSchema.parse({ type: "trace", trace })).toEqual({ type: "trace", trace });
+  });
+
+  it("accepts a trace of a request that never reached the endpoint", () => {
+    const trace = { round: 1, url: "u", request: "{}", status: null, response: "", notes: [] };
+    expect(ChatEventSchema.safeParse({ type: "trace", trace }).success).toBe(true);
+  });
+
+  it("refuses a trace carrying anything it does not describe", () => {
+    const trace = { round: 0, url: "u", request: "{}", status: 200, response: "", notes: [] };
+    for (const event of [
+      { type: "trace", trace: { ...trace, headers: { Authorization: "Bearer x" } } },
+      { type: "trace", trace: { ...trace, round: -1 } },
+      { type: "trace", trace: { ...trace, notes: "dropped" } },
+    ]) {
+      expect(ChatEventSchema.safeParse(event).success).toBe(false);
+    }
+  });
 });
 
 describe("OpenExternalRequest", () => {

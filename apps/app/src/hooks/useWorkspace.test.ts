@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
+import { CONVERSATION_LOG_PATH, GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
 import {
   canOpenInNewWindow,
   failureKey,
@@ -2917,5 +2917,50 @@ describe("opening an Obsidian vault", () => {
     expect(result.current.state.errorKey).toBe("errors.notFound");
     expect(result.current.state.workspaces).toEqual([]);
     expect(result.current.state.selectedFolder).toBe("");
+  });
+});
+
+/// The conversation log: written by the app from the chat on screen, and written again every time it
+/// is asked for.
+describe("the conversation log", () => {
+  it("opens in a tab of its own, read-only, without reading anything from disk", () => {
+    const { client, reads } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openConversationLog("# Conversation Log\n"));
+
+    expect(result.current.state.activePath).toBe(CONVERSATION_LOG_PATH);
+    expect(result.current.state.content).toBe("# Conversation Log\n");
+    expect(result.current.state.readOnly).toBe(true);
+    expect(reads).toEqual([]);
+  });
+
+  // Asked for again after another reply, it must show that reply - not the log as it was the first
+  // time, which is what going back to an open tab would show.
+  it("shows what it says now when it is opened again", () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openConversationLog("# First\n"));
+    act(() => result.current.actions.openConversationLog("# Second\n"));
+
+    expect(result.current.state.documents.map((document) => document.path)).toEqual([
+      CONVERSATION_LOG_PATH,
+    ]);
+    expect(result.current.state.content).toBe("# Second\n");
+  });
+
+  it("is never written, even when a save is asked for", async () => {
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openConversationLog("# Log\n"));
+    let saved = true;
+    await act(async () => {
+      saved = await result.current.actions.save();
+    });
+
+    expect(saved).toBe(false);
+    expect(writes).toEqual([]);
   });
 });

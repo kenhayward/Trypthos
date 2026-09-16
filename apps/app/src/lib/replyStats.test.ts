@@ -160,3 +160,50 @@ describe("replyStats", () => {
     });
   });
 });
+
+/// What the conversation log needs of a reply beyond its numbers.
+describe("replyStats, for the conversation log", () => {
+  const trace = {
+    round: 0,
+    url: "https://api.example.com/v1/chat/completions",
+    request: "{}",
+    status: 200,
+    response: "data: [DONE]",
+    notes: [],
+  };
+
+  it("remembers the question it answers", () => {
+    expect(startReplyStats({ profileId: "one", at: 0, question: "Why?" }).question).toBe("Why?");
+  });
+
+  it("keeps each request's trace, in order", () => {
+    const stats = play([
+      [1100, { type: "trace", trace }],
+      [1200, { type: "trace", trace: { ...trace, round: 1 } }],
+      [1200, { type: "end" }],
+    ]);
+    expect(stats.traces.map((each) => each.round)).toEqual([0, 1]);
+  });
+
+  // A reply that looks empty in the panel and still reported tokens is usually one of these: all
+  // thinking and no answer, or an answer the panel was told to clear.
+  it("counts thinking apart from the answer, and every time the reply was cleared", () => {
+    const stats = play([
+      [1100, { type: "reasoning", text: "abcdef" }],
+      [1200, { type: "token", text: "abc" }],
+      [1300, { type: "reset" }],
+      [1400, { type: "end" }],
+    ]);
+    expect(stats.characters).toBe(9);
+    expect(stats.reasoningCharacters).toBe(6);
+    expect(stats.resets).toBe(1);
+  });
+
+  it("keeps what each error said", () => {
+    const stats = play([
+      [1100, { type: "error", message: "Rate limited." }],
+      [1100, { type: "end" }],
+    ]);
+    expect(stats.errors).toEqual(["Rate limited."]);
+  });
+});

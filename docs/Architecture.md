@@ -1872,8 +1872,8 @@ Measured in the **renderer**, not the shell: the times worth showing are the one
 through, from `useChat.run` to the first `token` or `reasoning` event and on to `end`, and IPC adds
 nothing measurable to them. `useChat` takes an injectable clock (`performance.now` by default) and
 keeps a `ReplyStats` per question in `replyStats`; `lib/replyStats.ts` folds each `ChatEvent` in and
-`summariseReply` derives what `ChatStatsMenu` shows. **No IPC contract changed** - the `usage` event
-already crossed the boundary and was being dropped.
+`summariseReply` derives what `ChatStatsMenu` shows. The numbers needed no new IPC - the `usage` event
+already crossed the boundary and was being dropped; the conversation log below added a `trace` event.
 
 - Token counts come from the endpoint's `usage` reports, summed across the requests of a read loop;
   **context used** is the last request's prompt plus completion. Streamed requests carry
@@ -1892,6 +1892,37 @@ past the panel's left edge. `ChatPanel.browser.test` measures it.
 Copy response writes the last non-empty assistant turn's `content` through `navigator.clipboard` -
 the raw markdown, which is what makes a paste into a document round-trip. `ChatPanel` takes the
 writer as a `copyText` prop so the jsdom suite can see what was copied.
+
+### The conversation log
+
+**The trace is recorded in the main process**, because only there is the response visible as it
+arrived - the renderer only ever sees what `parseStreamPayload` made of it, and a reply that looks
+empty in the panel is precisely a case where that is in question. `chatProvider.run` takes an optional
+`onTrace`; each request round builds one with `createTrace` (the pretty-printed request body, the
+status, the raw decoded SSE text or the completed JSON, and `notes` for what the loop did that the
+response does not show - a dropped `propose_edit`, a tool carried out, a fenced read cleared) and sends
+it once. `ipcHandlers` forwards it as a **`trace` chat event** (`ChatTraceSchema`, strict), on the same
+stream as the reply.
+
+- **Before `end`, always.** `useChat` stops listening to a stream once it ends, so `runOnce` wraps
+  `onEvent` to send the trace ahead of `end`, and sends it in `finally` for a round that continues
+  into another request instead.
+- **The key never crosses.** Headers are never recorded, and every string in a trace has the key
+  replaced with `[key removed]` before sending - a refusal's body is now read into the trace, and it is
+  exactly where a provider echoes a rejected key. Error events still never carry a body.
+- **Capped at `TRACE_TEXT_LIMIT`** (a million characters) per request and per response, with the
+  count of what was not shown. The response keeps a small margin past the cap until the key is
+  removed, so a key straddling the cut is still whole when it is replaced.
+
+The renderer appends each trace to its reply's `ReplyStats.traces`, which also now carries the
+`question`, `reasoningCharacters`, `resets` and `errors`. None of it is persisted. `conversationLog`
+(pure, `lib/`) turns the turns and stats into markdown, with every piece of endpoint text in a fence one
+backtick longer than any run inside it, so a response carrying its own fence cannot close the block.
+
+The tab is a built-in document at `CONVERSATION_LOG_PATH` (`trypthos:conversation-log`), named from
+`chat.log.title` through `builtInDocuments`. It is opened with the domain's `showReadOnly`, not
+`openDocument`: the log is written afresh each time it is asked for, so an open tab has its content
+replaced rather than merely activated - and only ever a read-only one.
 
 ### Beyond the open document
 
@@ -2140,7 +2171,7 @@ The list is asserted exactly in a test, so adding one is deliberate rather than 
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
 conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and
 links (`shell:openExternal`). Three channels flow the other way, all validated on arrival like
-everything else: `window:state`, `chat:event` for streamed reply tokens, and `menu:action`.
+everything else: `window:state`, `chat:event` for streamed reply tokens and each request's trace, and `menu:action`.
 
 Three properties do the work:
 

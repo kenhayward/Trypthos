@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONVERSATION_LOG_PATH,
   GUIDE_PATH,
   activateDocument,
   activeDocument,
@@ -14,6 +15,7 @@ import {
   openDocument,
   openPaths,
   renameDocument,
+  showReadOnly,
   tabLabels,
   tabsToClose,
   updateContent,
@@ -485,5 +487,35 @@ describe("a document with media", () => {
 
   it("is not media, for an ordinary document", () => {
     expect(activeDocument(withFiles("a.md"))?.media).toBeNull();
+  });
+});
+
+/// A read-only document the app writes, like the conversation log, which is written again every
+/// time it is asked for - so asking must show what it says NOW, not what it said the first time.
+describe("showReadOnly", () => {
+  const log = (content: string) => ({ path: CONVERSATION_LOG_PATH, content, revision: rev("built-in") });
+
+  it("opens it read-only and active when it is not open", () => {
+    const set = showReadOnly(withFiles("a.md"), log("# First"));
+
+    expect(set.activePath).toBe(CONVERSATION_LOG_PATH);
+    expect(activeDocument(set)).toMatchObject({ content: "# First", readOnly: true, dirty: false });
+  });
+
+  it("replaces what it says when it is already open, in the same place", () => {
+    const opened = showReadOnly(withFiles("a.md"), log("# First"));
+    const elsewhere = activateDocument(showReadOnly(opened, log("# First")), "a.md");
+
+    const set = showReadOnly(elsewhere, log("# Second"));
+
+    expect(openPaths(set)).toEqual(["a.md", CONVERSATION_LOG_PATH]);
+    expect(set.activePath).toBe(CONVERSATION_LOG_PATH);
+    expect(activeDocument(set)?.content).toBe("# Second");
+  });
+
+  it("never replaces a document the user can edit", () => {
+    const set = showReadOnly(withFiles("a.md"), { path: "a.md", content: "gone", revision: rev("x") });
+
+    expect(activeDocument(set)?.content).toBe("# a.md\n");
   });
 });

@@ -107,6 +107,73 @@ function createSilenceWatch({ ms, signal, timers }) {
   return { signal: controller.signal, touch, stop, timedOut: () => timedOut };
 }
 
+/// How much of a request or a response a trace carries, in characters.
+///
+/// A trace crosses IPC and is held by the renderer for as long as the conversation is open, and a
+/// request carries whole attached documents. A million characters is far more than a reply that went
+/// wrong needs to be read, and small enough to carry without a second thought.
+const TRACE_TEXT_LIMIT = 1_000_000;
+
+/// What replaces the API key wherever it appears in a trace.
+const KEY_REMOVED = "[key removed]";
+
+/// Everything one request sent and received, for the conversation log.
+///
+/// Sent at most once, through `onTrace`. **The key is removed from every string before it goes**:
+/// the headers are never recorded, but an endpoint can echo the key anywhere in what it sends back,
+/// and a trace is shown in a tab a user can copy from.
+function createTrace({ round, url, onTrace }) {
+  const record = { round, url, request: "", status: null, response: "", notes: [] };
+  let key = null;
+  let sent = false;
+  /// Characters that arrived after the response reached the limit, counted rather than kept.
+  let dropped = 0;
+  /// Kept past the limit by this much, so a key straddling the cut is still whole when it is removed.
+  const MARGIN = 1024;
+
+  const clean = (text) => (key === null || key === "" ? text : text.split(key).join(KEY_REMOVED));
+  const capped = (text, extra = 0) => {
+    const over = Math.max(0, text.length - TRACE_TEXT_LIMIT) + extra;
+    return over === 0 ? text : `${text.slice(0, TRACE_TEXT_LIMIT)}\n\n[${over} characters not shown]`;
+  };
+
+  return {
+    record,
+    redact(value) {
+      key = value;
+    },
+    append(text) {
+      const room = Math.max(0, TRACE_TEXT_LIMIT + MARGIN - record.response.length);
+      record.response += text.slice(0, room);
+      dropped += Math.max(0, text.length - room);
+    },
+    note(text) {
+      record.notes.push(text);
+    },
+    send() {
+      if (sent || onTrace === null) return;
+      sent = true;
+      onTrace({
+        round: record.round,
+        url: clean(record.url),
+        request: capped(clean(record.request)),
+        status: record.status,
+        response: capped(clean(record.response), dropped),
+        notes: record.notes.map(clean),
+      });
+    },
+  };
+}
+
+/// The body of a refused response, or nothing if it cannot be read.
+async function bodyText(response) {
+  try {
+    return typeof response.text === "function" ? await response.text() : "";
+  } catch {
+    return "";
+  }
+}
+
 function createChatProvider({
   fetchImpl = globalThis.fetch,
   secrets,
@@ -128,14 +195,33 @@ function createChatProvider({
   /// Two bounds hold that in place. `readFile` decides what may be read, and it answers only for
   /// paths the outline named - so the model's own path never reaches the filesystem unchecked. And
   /// `MAX_READS_PER_TURN` caps how many times round: an unbounded loop is an unbounded bill.
-  async function run({ profile, turns, onEvent, signal, readFile = null, callTool = null }) {
+  ///
+  /// `onTrace`, when given, receives each request as it went and came back - see `createTrace`.
+  async function run({
+    profile,
+    turns,
+    onEvent,
+    signal,
+    readFile = null,
+    callTool = null,
+    onTrace = null,
+  }) {
     /// The conversation as the provider sees it, which grows as the loop runs. Never returned: the
     /// tool-call and tool-result messages exist for this turn only and are never stored, resent as
     /// history, or shown in the panel.
     const messages = [...turns];
 
     for (let round = 0; ; round += 1) {
-      const reads = await runOnce({ profile, messages, onEvent, signal, readFile, callTool });
+      const reads = await runOnce({
+        profile,
+        messages,
+        onEvent,
+        signal,
+        readFile,
+        callTool,
+        onTrace,
+        index: round,
+      });
       if (reads === null) return; // the turn ended, one way or another
 
       // Told plainly rather than silently stopping: a model that thinks it is still gathering will
@@ -149,7 +235,16 @@ function createChatProvider({
             ? { role: "tool", tool_call_id: reads.id, content: enough }
             : { role: "user", content: enough },
         );
-        await runOnce({ profile, messages, onEvent, signal, readFile: null, callTool: null });
+        await runOnce({
+          profile,
+          messages,
+          onEvent,
+          signal,
+          readFile: null,
+          callTool: null,
+          onTrace,
+          index: round + 1,
+        });
         return;
       }
     }
@@ -160,17 +255,36 @@ function createChatProvider({
   /// Returns null when the turn is over, or the tool call that has already been answered and needs
   /// another round. The watch is stopped however this ends: a timer left running would fire an error
   /// into a conversation that finished long ago.
-  async function runOnce(round) {
+  async function runOnce({ onTrace, index, ...round }) {
     const minutes = round.profile.timeoutMinutes ?? DEFAULT_TIMEOUT_MINUTES;
     const watch = createSilenceWatch({ ms: minutes * 60_000, signal: round.signal, timers });
+    const trace = createTrace({ round: index, url: completionsUrl(round.profile.endpoint), onTrace });
+    // The trace goes out BEFORE `end`: the panel stops listening to a stream once it has ended, so a
+    // trace sent after it would be dropped.
+    const onEvent = (event) => {
+      if (event.type === "end") trace.send();
+      round.onEvent(event);
+    };
     try {
-      return await runWatched({ ...round, watch, minutes });
+      return await runWatched({ ...round, onEvent, watch, minutes, trace });
     } finally {
       watch.stop();
+      // A round that continues into another request never sends `end`; this is where its trace goes.
+      trace.send();
     }
   }
 
-  async function runWatched({ profile, messages, onEvent, signal, readFile, callTool, watch, minutes }) {
+  async function runWatched({
+    profile,
+    messages,
+    onEvent,
+    signal,
+    readFile,
+    callTool,
+    watch,
+    minutes,
+    trace,
+  }) {
     /// How a request that ended early is reported: quietly when the user stopped it, as a timeout
     /// when the model went silent, and otherwise as whatever went wrong.
     const failure = (fallback) => {
@@ -185,6 +299,8 @@ function createChatProvider({
     // Read here, used here, and never returned. The renderer asked for a profile by id; it has no
     // idea whether a key exists beyond the boolean the settings UI shows.
     const key = await secrets.getKey(profile.endpoint);
+    // So the trace can take the key out of anything the endpoint sends back, before it is sent.
+    trace.redact(key);
 
     const headers = { "Content-Type": "application/json", Accept: "text/event-stream" };
     // Absent rather than empty when there is no key: a local model served by Ollama or llama.cpp
@@ -194,16 +310,17 @@ function createChatProvider({
 
     let response;
     try {
+      const body = buildChatRequest(profile, messages, {
+        canReadFiles: readFile !== null,
+        canExploreFolder: callTool !== null,
+        canActOnFolder: callTool !== null,
+      });
+      // The body, never the headers: the headers carry the key.
+      trace.record.request = JSON.stringify(body, null, 2);
       response = await fetchImpl(completionsUrl(profile.endpoint), {
         method: "POST",
         headers,
-        body: JSON.stringify(
-          buildChatRequest(profile, messages, {
-            canReadFiles: readFile !== null,
-            canExploreFolder: callTool !== null,
-            canActOnFolder: callTool !== null,
-          }),
-        ),
+        body: JSON.stringify(body),
         signal: watch.signal,
       });
     } catch {
@@ -219,9 +336,13 @@ function createChatProvider({
     }
     // The answer has begun: the clock restarts rather than counting the wait for it as silence.
     watch.touch();
+    trace.record.status = response.status;
 
     if (!response.ok || (profile.stream !== false && !response.body)) {
-      // The body is NOT read into the message. Some providers echo the rejected key back in it.
+      // The body is NOT read into the message. Some providers echo the rejected key back in it. It
+      // IS read into the trace, which removes the key, because it is what says why the request was
+      // refused - and a refusal nobody can see the reason for is the one that cannot be fixed.
+      if (!response.ok) trace.append(await bodyText(response));
       logger.error(`The chat endpoint answered ${response.status}.`);
       onEvent({ type: "error", message: statusMessage(response.status, profile) });
       onEvent({ type: "end" });
@@ -258,6 +379,7 @@ function createChatProvider({
         const edit = editFromToolArguments(json);
         if (edit === null) {
           logger.error("A tool call could not be read as an edit, and was dropped.");
+          trace.note(`A ${EDIT_TOOL_NAME} call could not be read as an edit, and was dropped.`);
           continue;
         }
         onEvent({ type: "token", text: `\n\n${formatEditBlock(edit)}` });
@@ -285,7 +407,11 @@ function createChatProvider({
         const result = await carryOut(name, json);
         // A name nothing carries out. Told to the model rather than ignored: a tool call that
         // vanishes leaves it waiting for an answer that is never coming.
-        if (result === null) continue;
+        if (result === null) {
+          trace.note(`A call to ${name} was not carried out: nothing here answers to that name.`);
+          continue;
+        }
+        trace.note(`${name} was carried out, and its result sent back in the next request.`);
 
         const id = `call_${randomUUID()}`;
         messages.push({
@@ -375,6 +501,9 @@ function createChatProvider({
 
       // What streamed was a request, not an answer. The panel drops it and the next round writes the
       // real reply in its place - otherwise the user reads the model's bookkeeping.
+      trace.note(
+        `The reply asked to read ${wanted} in a fenced block, so it was cleared from the panel and the file was sent back.`,
+      );
       onEvent({ type: "reset" });
       return { kind: "fenced" };
     }
@@ -382,7 +511,9 @@ function createChatProvider({
     if (profile.stream === false) {
       let events;
       try {
-        events = parseCompletionPayload(await response.json());
+        const payload = await response.json();
+        trace.append(JSON.stringify(payload, null, 2));
+        events = parseCompletionPayload(payload);
       } catch {
         const message = failure("The reply could not be read.");
         if (message !== null) {
@@ -441,7 +572,11 @@ function createChatProvider({
         // `stream: true` matters: a multi-byte character split across two network reads would
         // otherwise decode as two replacement characters, which is how accented text arrives
         // mangled from a provider that is behaving perfectly.
-        for (const payload of decoder.push(utf8.decode(value, { stream: true }))) {
+        const text = utf8.decode(value, { stream: true });
+        // As it arrived, before anything is made of it: the trace exists to check what the panel
+        // made of it.
+        trace.append(text);
+        for (const payload of decoder.push(text)) {
           const event = parseStreamPayload(payload);
 
           if (event.type === "ignored") continue;
@@ -508,4 +643,4 @@ function createChatProvider({
   return { run };
 }
 
-module.exports = { createChatProvider };
+module.exports = { TRACE_TEXT_LIMIT, createChatProvider };
