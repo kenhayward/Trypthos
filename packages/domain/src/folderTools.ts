@@ -4,9 +4,9 @@ import { z } from "zod";
 /// was given.
 ///
 /// **What they widen, said plainly.** Until now the model could read the files named in the folder
-/// outline and nothing else - ten files, chosen by walking one level. These let it list a subfolder,
-/// search for text, and compare two files, which means it can reach files that were never on that
-/// list.
+/// outline and nothing else - ten files, chosen by walking one level. These let it list a subfolder
+/// or the whole tree below one, search for text, and compare two files, which means it can reach
+/// files that were never on that list.
 ///
 /// **What bounds them.** The folder the user selected, and everything under it. Not the workspace:
 /// attaching a folder is the consent gesture this app already has, and honouring it is the
@@ -24,6 +24,26 @@ export const DIFF_TOOL_NAME = "diff_files";
 /// How many entries one listing names. A directory of ten thousand files is not a menu, and the
 /// whole reply has to fit in a context window beside everything else.
 export const LIST_ENTRY_LIMIT = 200;
+
+/// How many files one RECURSIVE listing names, and how many folders it may open to find them.
+///
+/// Larger than a one-folder listing, because the whole point is to replace a dozen of those calls
+/// with one - every call counts toward what one question may make. Bounded by effort as well as by
+/// output, like a search, so a walk of an enormous tree cannot hold a turn open for minutes.
+export const RECURSIVE_LIST_LIMIT = 500;
+export const RECURSIVE_LIST_FOLDER_LIMIT = 2_000;
+
+/// Folders a walk passes over: version control internals and installed dependencies.
+///
+/// From a repository root these are most of the files on disk and none of the ones anybody asked
+/// about, and a breadth-first walk reaches them before the code - so a search spent its whole file
+/// budget inside `node_modules`. NOT every dot-folder: `.github` holds the workflows a security
+/// review most needs to read. Passed over by a walk only; either can still be listed or read directly.
+export const SKIPPED_WHEN_WALKING: ReadonlySet<string> = new Set([".git", "node_modules"]);
+
+export function isSkippedWhenWalking(name: string): boolean {
+  return SKIPPED_WHEN_WALKING.has(name);
+}
 
 /// How many matching lines one search answers with, and how much of each line.
 ///
@@ -45,9 +65,14 @@ export function folderTools() {
       function: {
         name: LIST_TOOL_NAME,
         description:
-          "List the files and folders in one directory of the attached folder. Use it to find a " +
-          "file whose name you do not know. Only the attached folder and directories under it can " +
-          "be listed; anything else is refused.",
+          "List the files and folders in one directory of the attached folder. Set recursive to " +
+          "true to list every readable file below that directory in one call, as paths you can pass " +
+          "straight to get_file_contents - prefer that to listing folders one at a time, since every " +
+          "call counts toward how many you may make. To find which file mentions something, use " +
+          SEARCH_TOOL_NAME +
+          " instead. A recursive listing passes over .git and node_modules; list either directly if " +
+          "you need it. Only the attached folder and directories under it can be listed; anything " +
+          "else is refused.",
         parameters: {
           type: "object" as const,
           properties: {
@@ -56,6 +81,12 @@ export function folderTools() {
               description:
                 "The directory to list, relative to the workspace, as the folder outline writes " +
                 "paths. Omit it to list the attached folder itself.",
+            },
+            recursive: {
+              type: "boolean" as const,
+              description:
+                "True to list every readable file below the directory, at any depth. False or " +
+                "omitted to list only what is directly inside it.",
             },
           },
           required: [],
@@ -128,11 +159,13 @@ function parse<T extends z.ZodTypeAny>(json: string, schema: T): z.infer<T> | nu
 /// caller resolves, because only it knows which folder was attached.
 const optionalPath = z.string().optional();
 
-export function listArguments(json: string): { path: string | null } | null {
-  const args = parse(json, z.looseObject({ path: optionalPath }));
+export function listArguments(json: string): { path: string | null; recursive: boolean } | null {
+  // A recursive flag that is not a boolean is refused rather than read as one: "yes" might mean
+  // true, and a walk of a whole tree is not something to start on a guess.
+  const args = parse(json, z.looseObject({ path: optionalPath, recursive: z.boolean().optional() }));
   if (args === null) return null;
   const path = (args.path ?? "").trim();
-  return { path: path === "" ? null : path };
+  return { path: path === "" ? null : path, recursive: args.recursive ?? false };
 }
 
 export function searchArguments(

@@ -87,7 +87,13 @@ export interface FolderOutline {
   workspacePath?: string;
   /// Paths from the workspace ROOT, so a file can be read back by the path it is named by.
   paths: string[];
-  /// True when the folder holds more than the outline may name.
+  /// The folders directly inside, from the workspace ROOT like `paths`, without a trailing slash.
+  ///
+  /// Named so a model knows there is more below the files it was shown. Without them a model pointed
+  /// at a repository root saw a handful of top-level files and nothing to say the code was one level
+  /// down, and found nothing unless files were attached by hand.
+  folders: string[];
+  /// True when the folder holds more files or folders than the outline may name.
   truncated: boolean;
 }
 
@@ -141,6 +147,7 @@ export const ChatContextSchema = z
         path: z.string(),
         workspacePath: z.string().min(1).optional(),
         paths: z.array(z.string()).max(OUTLINE_PATH_LIMIT),
+        folders: z.array(z.string()).max(OUTLINE_PATH_LIMIT),
         truncated: z.boolean(),
       })
       .strict()
@@ -295,6 +302,24 @@ function howToRead(reads: ReadTransport, example: string): string {
   ].join("\n");
 }
 
+/// How to find what is inside the folders the outline names, in the terms the model actually has.
+///
+/// Only a model sent tools can list a folder, so only that model is told to. One without them is told
+/// the one thing it can do - ask for a file by path - rather than an instruction it cannot follow.
+function howToLookInside(reads: ReadTransport): string {
+  if (reads === "tool") {
+    return (
+      " The folders listed are not expanded. To see inside one, call list_directory with its path; " +
+      "pass recursive: true to list every readable file below it in one call. To find which files " +
+      "mention something, call search_contents rather than reading them one by one."
+    );
+  }
+  return (
+    " The folders listed are not expanded, but you may ask for a file inside one of these folders " +
+    "by its path if you know it."
+  );
+}
+
 /// The messages carrying the context, in the order they should be sent.
 ///
 /// Each is a **user** turn, not a system one. System messages are where instructions live, and a
@@ -310,16 +335,24 @@ export function contextTurns(
 
   // The outline first: it is the map, and the things it names come after it.
   if (context.folder !== null) {
+    const { folders } = context.folder;
     const note = context.folder.truncated
       ? "\n\nThe folder holds more files than are listed here."
       : "";
+    // The folders after the files, each marked with a slash, so a folder cannot be mistaken for a
+    // file of the same name.
+    const listing =
+      folders.length === 0
+        ? context.folder.paths.join("\n")
+        : [...context.folder.paths, "", "Folders:", ...folders.map((folder) => `${folder}/`)].join("\n");
     turns.push(
       fenced(
-        `Here are the files in ${context.folder.path === "" ? "the folder the user is working in" : context.folder.path}. This ` +
+        `Here are the files${folders.length === 0 ? "" : " and folders"} in ${context.folder.path === "" ? "the folder the user is working in" : context.folder.path}. This ` +
           "is a one-level list of paths only - you have not been shown their contents. " +
           howToRead(reads, context.folder.paths[0] ?? "path/to/file") +
-          " You may read an enabled file inside the attached folder or below it.",
-        context.folder.paths.join("\n"),
+          " You may read an enabled file inside the attached folder or below it." +
+          (folders.length === 0 ? "" : howToLookInside(reads)),
+        listing,
         note,
       ),
     );

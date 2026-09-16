@@ -541,7 +541,7 @@ test("sends the folder outline before the document", async () => {
         "chat:send",
         send({
           context: withDocument({
-            folder: { path: "", paths: ["notes/plan.md", "notes/risks.md"], truncated: false },
+            folder: { path: "", paths: ["notes/plan.md", "notes/risks.md"], folders: [], truncated: false },
           }),
         }),
       );
@@ -622,6 +622,7 @@ test("refuses a model read from a sibling of the attached folder", async () => {
                 path: "docs",
                 workspacePath: `${opened.workspace.id}/docs`,
                 paths: ["docs/README.md"],
+                folders: [],
                 truncated: false,
               },
             }),

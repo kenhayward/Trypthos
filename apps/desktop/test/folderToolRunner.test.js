@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { CREATE_CHARACTER_LIMIT, createPathGuard } = require("@trypthos/domain");
+const { CREATE_CHARACTER_LIMIT, RECURSIVE_LIST_LIMIT, createPathGuard } = require("@trypthos/domain");
 const { createLocalWorkspace } = require("../src/localWorkspace");
 const { createFolderToolRunner } = require("../src/folderToolRunner");
 
@@ -319,4 +319,97 @@ test("refuses a file longer than a person would read through", async () => {
     assert.match(result.content, /longer than/);
     await assert.rejects(() => fs.stat(path.join(root, "docs", "huge.md")));
   });
+});
+
+/// Listing a whole tree in one call, so reaching the file that matters does not use up the tool calls
+/// one question may make.
+test("lists every readable file below a folder in one recursive call, as readable paths", async () => {
+  await withFolder(TREE, async ({ run }) => {
+    const result = await run("docs", "list_directory", { recursive: true });
+    const lines = result.content.split("\n");
+
+    // Workspace-relative, so each can be passed straight to get_file_contents.
+    assert.ok(lines.includes("docs/plan.md"));
+    assert.ok(lines.includes("docs/notes.txt"));
+    assert.ok(lines.includes("docs/specs/api.md"));
+    // Breadth first: the folder's own files before the ones a level down.
+    assert.ok(lines.indexOf("docs/plan.md") < lines.indexOf("docs/specs/api.md"));
+    assert.doesNotMatch(result.content, /other\/secret/);
+  });
+});
+
+test("lists only the file types that are turned on, when recursive", async () => {
+  await withFolder({ "src/a.md": "x", "src/deep/b.md": "x", "src/logo.png": "x" }, async ({ run }) => {
+    const result = await run("src", "list_directory", { recursive: true });
+    assert.match(result.content, /src\/deep\/b\.md/);
+    assert.doesNotMatch(result.content, /logo\.png/);
+  });
+});
+
+test("refuses to list recursively outside the attached folder", async () => {
+  await withFolder(TREE, async ({ run }) => {
+    const result = await run("docs", "list_directory", { path: "other", recursive: true });
+    assert.match(result.content, /outside the folder/);
+    assert.doesNotMatch(result.content, /secret/);
+  });
+});
+
+// From a repository root, `.git` and `node_modules` are most of the tree. A recursive listing passes
+// over them - and says so - while a direct listing of either still works.
+test("passes over .git and node_modules when recursive, but not when listed directly", async () => {
+  await withFolder(
+    {
+      "repo/src/app.md": "x",
+      "repo/.github/ci.md": "x",
+      "repo/node_modules/dep/readme.md": "x",
+      "repo/.git/notes.md": "x",
+    },
+    async ({ run }) => {
+      const walked = await run("repo", "list_directory", { recursive: true });
+      assert.match(walked.content, /repo\/src\/app\.md/);
+      assert.match(walked.content, /repo\/\.github\/ci\.md/);
+      assert.doesNotMatch(walked.content, /node_modules\/dep/);
+      assert.doesNotMatch(walked.content, /\.git\/notes/);
+      assert.match(walked.content, /node_modules/);
+
+      const direct = await run("repo", "list_directory", { path: "repo/node_modules/dep", recursive: true });
+      assert.match(direct.content, /repo\/node_modules\/dep\/readme\.md/);
+    },
+  );
+});
+
+test("says when a recursive listing had to stop", async () => {
+  const many = {};
+  for (let i = 0; i <= RECURSIVE_LIST_LIMIT; i += 1) many[`big/f${String(i).padStart(4, "0")}.md`] = "x";
+
+  await withFolder(many, async ({ run }) => {
+    const result = await run("big", "list_directory", { recursive: true });
+    const paths = result.content.split("\n").filter((line) => line.startsWith("big/"));
+    assert.equal(paths.length, RECURSIVE_LIST_LIMIT);
+    assert.match(result.content, /more/i);
+  });
+});
+
+test("says when a recursive listing found nothing readable", async () => {
+  await withFolder({ "art/logo.png": "x" }, async ({ run }) => {
+    assert.match((await run("art", "list_directory", { recursive: true })).content, /no readable files/i);
+  });
+});
+
+// A search from a repository root used to spend its whole file budget inside node_modules before it
+// reached the code.
+test("searches past node_modules and .git rather than into them", async () => {
+  await withFolder(
+    {
+      "repo/src/app.md": "needle here\n",
+      "repo/node_modules/dep/readme.md": "needle in a dependency\n",
+      "repo/.git/notes.md": "needle in git\n",
+    },
+    async ({ run }) => {
+      const result = await run("repo", "search_contents", { pattern: "needle" });
+      assert.match(result.content, /repo\/src\/app\.md:1/);
+      assert.doesNotMatch(result.content, /node_modules/);
+      assert.doesNotMatch(result.content, /\.git/);
+    },
+  );
 });

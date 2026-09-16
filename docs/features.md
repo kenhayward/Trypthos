@@ -920,7 +920,7 @@ Attaching a folder gives the model more than a list of names. It can:
 | Tool | What it does |
 | --- | --- |
 | `get_file_contents` | Read an enabled file in the attached folder, including one that a directory listing found below it. |
-| `list_directory` | List what is in a directory of that folder, or one below it. |
+| `list_directory` | List what is in a directory of that folder, or one below it - or every readable file below it in one go. |
 | `search_contents` | Search the text of those files for a word or a pattern, and say which file and line each match is on. |
 | `diff_files` | Compare two of those files line by line. |
 | `open_file` | Open one of those files in a tab, so you can see it. |
@@ -938,6 +938,20 @@ folder is the moment you decide this, which is why the tools are not offered unt
 
 Only the file types you have turned on are searched, so a search never mentions a file the browser
 would not show you.
+
+**The model sees the folders as well as the files.** The list it starts with names the files directly
+inside the folder you attached - as many as the Folder files setting allows - and every folder directly
+inside it, so it knows there is more below. A model with tool calling is told how to look inside: list
+a folder, list **every readable file below it in one call**, or search for which files mention
+something. That matters because each call counts toward how many one question may make, so a model
+walking a tree one folder at a time could run out before reading anything. A model without tool
+calling cannot list folders, but is told it may ask for a file inside one by its path.
+
+So you can attach a whole repository and name the folders that matter in your question, rather than
+attaching each file by hand. Listing everything below a folder and searching both **pass over `.git`
+and `node_modules`**, which from a repository root are most of the files and none of the ones you
+meant, and the list of folders a model starts with leaves them out too. Either can still be listed or
+read directly if you ask for it. `.github` is not passed over.
 
 **One of these writes to your disk, and it is worth being clear about which.** Everything a model
 suggests about a file you already have arrives as a card you press Apply on - that has not changed.

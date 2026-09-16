@@ -1746,6 +1746,15 @@ workspace provider, which applies the lexical guard and the realpath check. Ther
 takes the folder bound out of the picture (by attaching the workspace root) and shows the guard
 underneath refusing a climbing path on its own.
 
+**`list_directory` can list recursively** (`recursive: true`): every enabled file below the directory,
+workspace-relative so each can go straight to `get_file_contents`, breadth first, capped at
+`RECURSIVE_LIST_LIMIT` files and `RECURSIVE_LIST_FOLDER_LIMIT` folders opened, with both caps
+announced. It exists because every call counts toward `MAX_READS_PER_TURN`, and a model walking a tree
+one folder per call ran out before reading anything. A recursive listing and a search both pass over
+`SKIPPED_WHEN_WALKING` (`.git`, `node_modules`) by name: from a repository root those are most of the
+tree, and breadth first a search spent its whole file budget inside them. Not every dot-folder -
+`.github` holds workflows - and a direct listing or read of either still works.
+
 Three more properties, each with a test:
 
 - **Only the enabled file types are searched.** A search that returned files the browser will not
@@ -2004,8 +2013,21 @@ would invite calls that could only be refused.
 **The outline is one level.** Not a recursive walk - measured at 39 seconds across 113,553 folders on
 a home directory, and the result was far too long to be a menu. It is sorted, so the same folder
 produces the same menu twice running: without that, which files the model could read would drift
-between turns with nothing having changed. `settings.chat.folderFileLimit` sets how many it names,
-defaulting to ten, because this is an initial map rather than a recursive walk.
+between turns with nothing having changed. `settings.chat.folderFileLimit` sets how many files it
+names, defaulting to ten, because this is an initial map rather than a recursive walk.
+
+**It names the folders directly inside too** (`FolderOutline.folders`, workspace-relative, capped at
+`OUTLINE_PATH_LIMIT`, `.git` and `node_modules` left out). Without them a model attached to a repository
+root saw a README and a lock file and nothing to say the code was one level down. `folders` is a
+**required** field of `ChatContextSchema`: the shell's `workspace:outline` returns it, the renderer
+passes the outline through untouched, and `chat:send` validates it strictly, so the two sides change
+together. `contextTurns` lists folders after the files with a trailing `/` and, per transport, says how
+to look inside: `list_directory` (recursive or not) and `search_contents` with tools; "ask for a file
+by its path" without, since that model was never sent a listing tool.
+
+**The outline is not the read allowlist**, although it once was. `readForModel` in `ipcHandlers`
+decides what may be read - any enabled file inside the attached folder, over the guarded provider -
+and the outline only decides what the model is told up front.
 
 **What chat does not do yet:** it cannot CHANGE a file without the user pressing Apply. Reading files
 in subfolders arrived with the folder tools above, and `create_file` is the one exception to the
