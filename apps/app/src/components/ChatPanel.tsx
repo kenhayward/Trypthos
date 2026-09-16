@@ -16,6 +16,8 @@ import type { ToolCall, Turn } from "../lib/conversation";
 import ChatEditCard from "./ChatEditCard";
 import ChatHistoryMenu from "./ChatHistoryMenu";
 import ChatModelPicker from "./ChatModelPicker";
+import ChatStatsMenu from "./ChatStatsMenu";
+import type { ReplyStats } from "../lib/replyStats";
 import ChatScope from "./ChatScope";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 
@@ -64,6 +66,11 @@ interface Props {
   /// The folder a reopened conversation was mapping, when that folder is not open. Null otherwise.
   missingFolder?: string | null;
   onSaveChat: () => void;
+  /// How each reply in this conversation went, oldest first, for the statistics popover.
+  replyStats?: readonly ReplyStats[];
+  /// Puts text on the clipboard. Injected so a test can see what was copied; the browser's own
+  /// clipboard otherwise, which the renderer may write to after a click.
+  copyText?: (text: string) => Promise<void>;
   /// What chat can see beyond the open document.
   scope: {
     attachments: readonly string[];
@@ -138,6 +145,8 @@ export default function ChatPanel({
   missingFile,
   missingFolder = null,
   onSaveChat,
+  replyStats = [],
+  copyText = (text) => navigator.clipboard.writeText(text),
   scope,
   onOpenChat,
   onDeleteChat,
@@ -157,6 +166,29 @@ export default function ChatPanel({
   /// True while a file from the folder browser is held over the panel, so it can say it will take
   /// it - a drop target that gives no sign until the drop is one people do not try.
   const [dropping, setDropping] = useState(false);
+  /// How the last press of Copy response went, shown briefly, or null.
+  const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
+
+  /// The most recent reply with something in it - what Copy response copies. Its markdown as the
+  /// model wrote it, not the text the panel rendered from it, so pasting it into a document gives
+  /// the same document.
+  const lastReply = [...turns].reverse().find((turn) => turn.role === "assistant" && turn.content !== "");
+
+  useEffect(() => {
+    if (copied === null) return;
+    const timer = setTimeout(() => setCopied(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copyReply = async () => {
+    if (lastReply === undefined) return;
+    try {
+      await copyText(lastReply.content);
+      setCopied("copied");
+    } catch {
+      setCopied("failed");
+    }
+  };
 
   /// Whether a drag is something this panel takes: a file from the tree, and only when a question
   /// could be asked with it. The same conditions the Attach button has.
@@ -262,7 +294,7 @@ export default function ChatPanel({
           {t("chat.scope.dropHere")}
         </div>
       )}
-      <h2 className="flex items-center gap-1 border-b border-rule px-3 py-2 text-xs font-semibold tracking-wide text-ink-4 uppercase">
+      <h2 className="relative flex items-center gap-1 border-b border-rule px-3 py-2 text-xs font-semibold tracking-wide text-ink-4 uppercase">
         {t("chat.title")}
         <span className="ml-auto flex items-center gap-1">
           <ChatModelPicker
@@ -303,6 +335,48 @@ export default function ChatPanel({
               <path d="M17 21v-8H7v8M7 3v5h8" />
             </svg>
           </button>
+          <ChatStatsMenu replyStats={replyStats} models={models} />
+          <button
+            type="button"
+            onClick={() => void copyReply()}
+            // Not while a reply is arriving: half an answer on the clipboard looks like the whole one.
+            disabled={lastReply === undefined || streaming}
+            aria-label={t("chat.copy.label")}
+            title={t("chat.copy.label")}
+            className={
+              copied === "failed"
+                ? "rounded p-1 text-danger hover:bg-hover disabled:opacity-40"
+                : "rounded p-1 text-ink-4 hover:bg-hover hover:text-ink disabled:opacity-40"
+            }
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className="size-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {copied === "copied" ? (
+                <path d="M5 12l5 5L20 7" />
+              ) : (
+                <>
+                  <rect x="9" y="9" width="12" height="12" rx="2" />
+                  <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+                </>
+              )}
+            </svg>
+          </button>
+          {/* Said as well as shown, since a changed icon is not something a screen reader reads. */}
+          <span role="status" className="sr-only">
+            {copied === "copied"
+              ? t("chat.copy.done")
+              : copied === "failed"
+                ? t("chat.copy.failed")
+                : ""}
+          </span>
           <button
             type="button"
             onClick={() => {

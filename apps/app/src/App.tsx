@@ -847,6 +847,7 @@ export default function App() {
                 streaming={chat.streaming}
                 error={chat.error}
                 activity={chat.activity}
+                replyStats={chat.replyStats}
                 context={{ tokens: carried, limit: activeModel?.contextWindow ?? null }}
                 onSend={(text) => {
                   // A slash command is answered here rather than sent. The check is deliberately

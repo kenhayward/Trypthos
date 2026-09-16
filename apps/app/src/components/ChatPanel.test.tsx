@@ -2,7 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { ChatProfileSchema, type ChatSessionSummary } from "@trypthos/domain";
+import { ChatProfileSchema, type ChatEvent, type ChatSessionSummary } from "@trypthos/domain";
+import { noteReplyEvent, startReplyStats, type ReplyStats } from "../lib/replyStats";
 import ChatPanel from "./ChatPanel";
 
 /// The panel is presentation. The conversation and the stream live in `useChat`, so what is asserted
@@ -1203,5 +1204,125 @@ describe("ChatPanel: a reply's rendering", () => {
 
     expect(document.querySelector(".chat-md pre code")).toBe(code);
     expect(code.getAttribute("data-drawn")).toBe("yes");
+  });
+});
+
+describe("copying a response", () => {
+  const conversation = [
+    { role: "user" as const, content: "First question" },
+    { role: "assistant" as const, content: "An **older** answer" },
+    { role: "user" as const, content: "Second question" },
+    { role: "assistant" as const, content: "# Newest\n\n- one\n- `two`" },
+  ];
+
+  // The markdown the model wrote, not the text the panel rendered from it: pasted into a document it
+  // should be the same document.
+  it("copies only the most recent reply, as markdown", async () => {
+    const user = userEvent.setup();
+    const copyText = vi.fn(async () => {});
+    panel({ turns: conversation, copyText });
+
+    await user.click(screen.getByRole("button", { name: "Copy response" }));
+
+    expect(copyText).toHaveBeenCalledWith("# Newest\n\n- one\n- `two`");
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Response copied");
+  });
+
+  it("says so when the clipboard refuses", async () => {
+    const user = userEvent.setup();
+    const copyText = vi.fn(async () => {
+      throw new Error("denied");
+    });
+    panel({ turns: conversation, copyText });
+
+    await user.click(screen.getByRole("button", { name: "Copy response" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty(
+      "textContent",
+      "The response could not be copied",
+    );
+  });
+
+  it("has nothing to copy before a reply", () => {
+    panel({ turns: [{ role: "user", content: "Hello" }] });
+    expect(screen.getByRole("button", { name: "Copy response" })).toHaveProperty("disabled", true);
+  });
+
+  // Half an answer is not the response, and copying it would put a truncated reply on the clipboard
+  // that looks complete.
+  it("cannot copy while the reply is still arriving", () => {
+    panel({ turns: conversation, streaming: true });
+    expect(screen.getByRole("button", { name: "Copy response" })).toHaveProperty("disabled", true);
+  });
+});
+
+describe("chat statistics", () => {
+  const windowed = ChatProfileSchema.parse({ ...model, contextWindow: 8000 });
+
+  function reply(): ReplyStats {
+    const steps: [number, ChatEvent][] = [
+      [1400, { type: "token", text: "Hello" }],
+      [3400, { type: "usage", promptTokens: 1200, replyTokens: 50 }],
+      [3500, { type: "end" }],
+    ];
+    return steps.reduce(
+      (stats, [at, event]) => noteReplyEvent(stats, event, at),
+      startReplyStats({ profileId: "one", at: 1000 }),
+    );
+  }
+
+  it("opens from the toolbar", async () => {
+    const user = userEvent.setup();
+    panel({ models: [windowed], replyStats: [reply()] });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+
+    expect(screen.getByRole("dialog", { name: "Chat statistics" })).toBeDefined();
+  });
+
+  it("shows how the most recent reply went", async () => {
+    const user = userEvent.setup();
+    panel({ models: [windowed], replyStats: [reply()] });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+    const stats = within(screen.getByRole("dialog", { name: "Chat statistics" }));
+    const row = (label: string) => stats.getAllByText(label)[0]!.nextElementSibling?.textContent;
+
+    expect(row("Model")).toBe("Local model");
+    expect(row("Time to first token")).toBe("400 ms");
+    expect(row("Total response time")).toBe("2.50 s");
+    expect(row("Tokens per second")).toBe("23.8");
+    expect(row("Tokens sent")).toBe("1,200");
+    expect(row("Tokens returned")).toBe("50");
+    expect(row("Total tokens")).toBe("1,250");
+    expect(row("Context used")).toBe("1,250 of 8,000 (16%)");
+  });
+
+  it("says what was estimated when the endpoint reports no usage", async () => {
+    const user = userEvent.setup();
+    const unreported = [
+      noteReplyEvent(
+        noteReplyEvent(startReplyStats({ profileId: "one", at: 0 }), { type: "token", text: "a".repeat(40) }, 100),
+        { type: "end" },
+        1100,
+      ),
+    ];
+    panel({ replyStats: unreported });
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+    const stats = within(screen.getByRole("dialog", { name: "Chat statistics" }));
+
+    expect(stats.getAllByText("Tokens sent")[0]!.nextElementSibling?.textContent).toBe("Not reported");
+    expect(stats.getAllByText("Tokens returned")[0]!.nextElementSibling?.textContent).toBe("About 10");
+    expect(stats.getByText(/did not report token counts/)).toBeDefined();
+  });
+
+  it("says there is nothing to show before a reply has been timed", async () => {
+    const user = userEvent.setup();
+    panel();
+
+    await user.click(screen.getByRole("button", { name: "Chat statistics" }));
+
+    expect(screen.getByText(/No reply has been timed/)).toBeDefined();
   });
 });

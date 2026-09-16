@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.78.0",
+    date: "2026-09-16",
+    pr: 160,
+    headline: "Chat statistics, and copy a reply as markdown",
+    summary:
+      "The chat panel's toolbar has two new buttons beside Save. Chat statistics, the i button, shows how the most recent reply went: which model answered and whether it completed, was stopped or failed; the time to first token, the total response time and the writing time between them; tokens per second; the tokens sent, returned and in total; the context used against the model's context window; and how many requests and tool calls the reply took. Below that are totals for the conversation so far. Token counts are the ones your endpoint reports, and Trypthos now asks streamed replies to report them. An endpoint that still does not has the tokens it returned estimated from the text, marked About, and the tokens sent shown as Not reported. Statistics are kept while a conversation is open and are not saved with it. Copy response puts the most recent reply on the clipboard as the markdown the model wrote, so it pastes into a document with its headings, lists and code intact, and shows a tick when it is done. It is unavailable while a reply is still arriving.",
+    added: [
+      "A Chat statistics button on the chat toolbar, with timings, token counts and context used for the latest reply and totals for the conversation.",
+      "A Copy response button on the chat toolbar that copies the latest reply as markdown.",
+    ],
+    changed: ["Streamed chat requests ask the endpoint to report token usage."],
+  },
+  {
     version: "0.77.0",
     date: "2026-09-15",
     pr: 159,

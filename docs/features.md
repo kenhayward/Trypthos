@@ -1007,6 +1007,27 @@ delete that file, or open the chat against a different folder, and the conversat
 is your own words and still worth reading - with a line saying which file it was about. Conversations
 also do not travel when a folder does: they live with Trypthos, not with your notes.
 
+### Statistics, and copying a reply
+
+Two buttons beside Save sit at the top of the panel.
+
+**Chat statistics** (the **i**) shows how the most recent reply went: which model answered, whether it
+completed, was stopped or failed, the **time to first token**, the **total response time** and the
+writing time between them, **tokens per second** over the writing, the **tokens sent and returned**
+and their total, and the **context used** against the model's context window, with how many requests
+the reply took and how many tool calls it made. Below that it totals the conversation so far - replies,
+tokens sent and returned, and time spent waiting - retried answers included, since they were paid for.
+
+Token counts are the ones your endpoint reports, and Trypthos asks a streamed reply to report them.
+An endpoint that does not has what it returned estimated from the text, marked **About**, and what was
+sent shown as **Not reported** rather than guessed. The times are measured from pressing Send, so they
+are what you waited through. Statistics are kept while a conversation is open, and start again when you
+clear the panel or open a saved chat; they are not saved with it.
+
+**Copy response** puts the most recent reply on the clipboard as the markdown the model wrote - so it
+pastes into a document as the same headings, lists and code - and shows a tick when it has. It is
+unavailable while a reply is still arriving, since half an answer would paste as though it were whole.
+
 ### Looking beyond the open document
 
 A row above the message box shows what chat can see, and nothing is included unless you ask for it.
