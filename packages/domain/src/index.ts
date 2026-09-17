@@ -441,3 +441,7 @@ export {
 
 export { applyIndexChange, buildGraph, EMPTY_INDEX, isNotePath, neighbourhood } from "./vaultGraph";
 export type { GraphEdge, GraphNode, GraphNodeKind, IndexChange, VaultGraph, VaultIndexInput } from "./vaultGraph";
+
+export { GRAPH_PAGE_PREFIX, graphPagePath, graphPageWorkspaceId, isGraphPagePath } from "./graphPage";
+export { newNoteDirectory, newNoteLocationFrom, OBSIDIAN_APP_CONFIG } from "./obsidianAppConfig";
+export type { NewNoteLocation } from "./obsidianAppConfig";
