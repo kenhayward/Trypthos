@@ -42,7 +42,9 @@ export function FakeCanvas(props: GraphCanvasProps) {
       data-hidden={[...props.hidden].sort().join(",")}
       data-highlighted={props.highlighted === null ? "" : [...props.highlighted].join(",")}
       data-active={props.activeId ?? ""}
-      data-focus={props.focusId ?? ""}
+      data-focus={props.focus?.id ?? ""}
+      // The nonce, so a test can tell a fresh request to centre on a node from the one before it.
+      data-focus-nonce={props.focus === null ? "" : String(props.focus.nonce)}
       data-compact={props.compact ? "true" : "false"}
       aria-label={props.label}
     >

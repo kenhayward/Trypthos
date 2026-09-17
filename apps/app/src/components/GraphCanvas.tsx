@@ -31,13 +31,24 @@ import Glyph from "./Glyph";
 /// throw away the camera the user panned and every node they dragged, which is a strange thing for
 /// switching to dark mode to do.
 
+/// A request to centre on a node, rather than the name of the node that is centred.
+///
+/// The `nonce` is what makes it a request. Asking for the same node twice is a real thing a user
+/// does - search, Enter, pan away, Enter again - and with a bare id the second ask is a state write
+/// React bails out of, so the effect below never runs and nothing moves. A new object every time
+/// means every ask is heard. The value itself is never read; only its identity matters.
+export interface GraphFocus {
+  id: string;
+  nonce: number;
+}
+
 export interface GraphCanvasProps {
   graph: VaultGraph;
   positions: Positions;
   hidden: ReadonlySet<string>;
   highlighted: ReadonlySet<string> | null;
   activeId: string | null;
-  focusId: string | null;
+  focus: GraphFocus | null;
   compact?: boolean;
   label: string;
   onOpen(node: GraphNode): void;
@@ -94,7 +105,7 @@ export default function GraphCanvas({
   hidden,
   highlighted,
   activeId,
-  focusId,
+  focus,
   compact = false,
   label,
   onOpen,
@@ -291,11 +302,13 @@ export default function GraphCanvas({
     renderer.current?.refresh({ skipIndexation: true });
   }, [hidden, highlighted, activeId]);
 
+  /// Every focus REQUEST, not every change of focused node - the dependency is the whole object, so
+  /// asking twice for the same id runs this twice.
   useEffect(() => {
-    if (focusId === null) return;
-    select(focusId);
-    centreOn(focusId);
-  }, [focusId]);
+    if (focus === null) return;
+    select(focus.id);
+    centreOn(focus.id);
+  }, [focus]);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key] as 1 | -1 | undefined;

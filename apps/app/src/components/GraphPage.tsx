@@ -11,7 +11,7 @@ import { indexAge, linkCount, noteCount, percentRead } from "../lib/graphStatus"
 import type { IndexAge } from "../lib/graphStatus";
 import { useLayoutRunner } from "../lib/layoutClient";
 import type { GraphClient } from "../lib/workspaceClient";
-import type { GraphCanvasProps } from "./GraphCanvas";
+import type { GraphCanvasProps, GraphFocus } from "./GraphCanvas";
 import Glyph from "./Glyph";
 
 /// The vault graph tab. Lazy only - see `graphBundle.test.ts`.
@@ -73,13 +73,19 @@ export default function GraphPage({
   const graph = useVaultGraph(client, workspaceId);
   const run = useLayoutRunner(layout);
   const [query, setQuery] = useState("");
-  const [focusId, setFocusId] = useState<string | null>(null);
+  const [focus, setFocus] = useState<GraphFocus | null>(null);
 
   const { snapshot, building, progress, error } = graph;
   const input = useMemo(() => (snapshot === null ? null : { nodes: snapshot.nodes, edges: snapshot.edges }), [snapshot]);
   const positions = useGraphLayout(input, run ?? never);
   const hidden = useMemo(() => (snapshot === null ? new Set<string>() : hiddenNodes(snapshot, filter)), [snapshot, filter]);
-  const matches = useMemo(() => (snapshot === null ? [] : searchMatches(snapshot, query)), [snapshot, query]);
+  /// Matches the user can actually see. A hidden node is not a search result: highlighting one dims
+  /// every visible node around something nobody can point at, and centring on one moves the camera
+  /// to empty space.
+  const matches = useMemo(
+    () => (snapshot === null ? [] : searchMatches(snapshot, query).filter((id) => !hidden.has(id))),
+    [snapshot, query, hidden],
+  );
   const highlighted = useMemo(() => (query.trim() === "" ? null : new Set(matches)), [matches, query]);
   const activeId = snapshot?.nodes.some((node) => node.id === activePath) ? activePath : null;
 
@@ -132,7 +138,7 @@ export default function GraphPage({
           hidden={hidden}
           highlighted={highlighted}
           activeId={activeId}
-          focusId={focusId}
+          focus={focus}
           label={t("graph.canvas", { name: vaultName })}
           onOpen={(node) => {
             const action = graphNodeAction(node, snapshot);
@@ -184,7 +190,10 @@ export default function GraphPage({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && matches[0] !== undefined) setFocusId(matches[0]);
+            const best = matches[0];
+            // A fresh request each time, so pressing Enter again on the same match centres again
+            // rather than being swallowed as a write of the value already there.
+            if (event.key === "Enter" && best !== undefined) setFocus((asked) => ({ id: best, nonce: (asked?.nonce ?? 0) + 1 }));
           }}
           className="w-full rounded border border-rule bg-panel px-2 py-1 text-sm text-ink placeholder:text-ink-4"
         />

@@ -92,6 +92,31 @@ describe("GraphPage", () => {
     expect(screen.getByTestId("fake-canvas").dataset.focus).toBe("V/B.md");
   });
 
+  it("asks again when Enter is pressed a second time on the same match", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    const search = screen.getByRole("searchbox", { name: "Search notes" });
+    fireEvent.change(search, { target: { value: "be" } });
+    fireEvent.keyDown(search, { key: "Enter" });
+    const first = screen.getByTestId("fake-canvas").dataset.focusNonce;
+    fireEvent.keyDown(search, { key: "Enter" });
+    const canvas = screen.getByTestId("fake-canvas");
+    expect(canvas.dataset.focus).toBe("V/B.md");
+    expect(canvas.dataset.focusNonce).not.toBe(first);
+  });
+
+  it("neither highlights nor focuses a match the filters have hidden", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    const search = screen.getByRole("searchbox", { name: "Search notes" });
+    fireEvent.change(search, { target: { value: "pic" } });
+    expect(screen.getByTestId("fake-canvas").dataset.highlighted).toBe("");
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(screen.getByTestId("fake-canvas").dataset.focus).toBe("");
+  });
+
   it("opens a note and offers to create a ghost's note on double-click", async () => {
     const fake = fakeGraphClient({ snapshot, building: null, error: null });
     const props = page(fake);

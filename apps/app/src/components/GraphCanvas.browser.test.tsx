@@ -41,7 +41,7 @@ async function mount(overrides: Partial<Parameters<typeof GraphCanvas>[0]> = {},
         hidden={new Set()}
         highlighted={null}
         activeId={null}
-        focusId={null}
+        focus={null}
         label="Link graph of V"
         onOpen={onOpen}
         onRenderer={(value) => (held.renderer = value)}
