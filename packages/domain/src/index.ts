@@ -438,3 +438,6 @@ export {
   repoPagePath,
   repoPageWorkspaceId,
 } from "./repoPage";
+
+export { applyIndexChange, buildGraph, EMPTY_INDEX, isNotePath, neighbourhood } from "./vaultGraph";
+export type { GraphEdge, GraphNode, GraphNodeKind, IndexChange, VaultGraph, VaultIndexInput } from "./vaultGraph";
