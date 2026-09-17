@@ -78,6 +78,10 @@ describe("the links a note makes", () => {
   it("does not take a nested list item for indented code across a loose list's blank line", () => {
     expect(extractReferences("- item\n\n    - [[Nested]]").links).toEqual([wiki("Nested")]);
   });
+
+  it("still masks genuine indented code after a list, a fenced block and a blank line", () => {
+    expect(extractReferences("- item\n```\nx\n```\n\n    [[ShouldBeMasked]]").links).toEqual([]);
+  });
 });
 
 describe("the tags a note carries", () => {

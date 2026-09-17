@@ -51,6 +51,7 @@ export function maskIgnored(body: string): string {
     if (fence !== null) {
       const closing = FENCE.exec(line);
       if (closing !== null && closing[1]![0] === fence[0] && closing[1]!.length >= fence.length) fence = null;
+      inList = false;
       return blank(line);
     }
     const opening = FENCE.exec(line);
@@ -58,6 +59,7 @@ export function maskIgnored(body: string): string {
       fence = opening[1]!;
       previousBlank = false;
       inIndented = false;
+      inList = false;
       return blank(line);
     }
 
