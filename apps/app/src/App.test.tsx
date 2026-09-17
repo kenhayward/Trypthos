@@ -1232,6 +1232,26 @@ describe("opening a GitHub repository", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByText("Trypthos is not allowed to open that.")).toBeTruthy();
   });
+
+  // A repository whose tree contains an `.obsidian` folder is marked as a vault by the shell, and
+  // there is still no folder on disk to index. The local graph pane would sit under the trees saying
+  // "open a note in a vault" about a vault that can never answer.
+  it("shows no local graph for a repository the shell happens to call a vault", async () => {
+    shellWithGitHub({
+      openWorkspaceRef: async (ref: unknown) => ({
+        ok: true as const,
+        workspace: { id: "notes", name: "notes", ref, truncated: false, vault: true },
+      }),
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open GitHub repository" }));
+    await user.click(await screen.findByRole("button", { name: /ada\/notes/ }));
+
+    expect(await screen.findByRole("button", { name: "notes" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Local graph" })).toBeNull();
+  });
 });
 
 /// Obsidian's vaults, through the whole window.

@@ -672,13 +672,20 @@ export default function App() {
   /// the same reason the repository's page is.
   const graphPageId = graphPageWorkspaceId(state.activePath ?? "");
   const graphWorkspace = state.workspaces.find((workspace) => workspace.id === graphPageId) ?? null;
-  /// The local vault the active note belongs to, for the local graph pane.
+  /// The workspace the document on screen came from. One lookup, two readers: whether the editor
+  /// renders Obsidian's markdown, and which vault the local graph pane follows.
   const activeWorkspace = state.workspaces.find(
     (workspace) => workspace.id === splitQualified(state.activePath ?? "")?.workspaceId,
   );
   const localVaultId =
     activeWorkspace?.vault === true && activeWorkspace.ref.kind === "local" ? activeWorkspace.id : null;
-  const anyVaultOpen = state.workspaces.some((workspace) => workspace.vault === true);
+  // `vault` is a fact about a TREE, and the shell sets it on a repository whose tree contains an
+  // `.obsidian` folder too. There is no folder on disk behind one of those, so there is nothing to
+  // index and nothing for the pane to draw - the same `local` test the root row and `localVaultId`
+  // make.
+  const anyVaultOpen = state.workspaces.some(
+    (workspace) => workspace.vault === true && workspace.ref.kind === "local",
+  );
   /// What both graphs draw. The stored settings minus the two that are the local pane's alone, so the
   /// tab and the pane cannot disagree about which kinds of node are shown.
   const graphFilter = {
@@ -838,10 +845,7 @@ export default function App() {
           readOnly={state.readOnly}
           media={state.media}
           readImage={client.readImage}
-          vault={
-            state.workspaces.find((workspace) => workspace.id === splitQualified(state.activePath ?? "")?.workspaceId)
-              ?.vault === true
-          }
+          vault={activeWorkspace?.vault === true}
           findByName={findByName}
           readDocument={readDocument}
           page={

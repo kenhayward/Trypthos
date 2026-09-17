@@ -962,6 +962,17 @@ const RESEARCH = {
   vault: true,
 };
 
+/// A repository whose tree happens to contain an `.obsidian` folder, which is enough for the shell to
+/// call it a vault. There is no folder on disk behind it, so there is no vault graph to open either -
+/// the row opens the repository's page, and that is all.
+const REPO = {
+  id: "Repo",
+  name: "Repo",
+  ref: { kind: "github" as const, owner: "acme", repo: "notes" },
+  truncated: false,
+  vault: true,
+};
+
 describe("a vault's root row", () => {
   it("opens the vault's graph as well as expanding", async () => {
     const props = panel({ workspaces: [RESEARCH], folders: {} });
@@ -974,6 +985,13 @@ describe("a vault's root row", () => {
     const props = panel({ workspaces: [DIARIZ] });
     fireEvent.click(screen.getByRole("button", { name: "Diariz" }));
     expect(props.onOpenGraphPage).not.toHaveBeenCalled();
+  });
+
+  it("opens no graph for a repository, whatever its tree contains", async () => {
+    const props = panel({ workspaces: [REPO], folders: {} });
+    fireEvent.click(screen.getByRole("button", { name: "Repo" }));
+    expect(props.onOpenGraphPage).not.toHaveBeenCalled();
+    expect(props.onOpenRepoPage).toHaveBeenCalledWith("Repo");
   });
 
   it("draws the pane it is given under the trees", () => {
