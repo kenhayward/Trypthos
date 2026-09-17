@@ -916,3 +916,38 @@ describe("the editor hidden behind the chat", () => {
     expect(DEFAULT_SETTINGS.panels.editorCollapsed).toBe(false);
   });
 });
+
+/// The graph's filters and local pane, added at version 21.
+///
+/// Settings are strict, so a file from before the block existed has to be given it, with the
+/// defaults the graph shipped with.
+describe("the vault graph settings", () => {
+  it("brings an older file forward with the graph defaults and nothing else changed", () => {
+    const older: Record<string, unknown> = { ...DEFAULT_SETTINGS, schemaVersion: 20, panels: { ...DEFAULT_SETTINGS.panels, chatWidth: 420 } };
+    delete older.graph;
+
+    const loaded = loadSettings(older);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
+    expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(21);
+    expect(loaded.graph).toEqual({
+      notes: true,
+      attachments: false,
+      tags: false,
+      unresolved: true,
+      orphans: true,
+      localDepth: 1,
+      localCollapsed: false,
+    });
+    expect(loaded.panels.chatWidth).toBe(420);
+  });
+
+  it("remembers the filters and the local pane", () => {
+    const chosen = { ...DEFAULT_SETTINGS, graph: { ...DEFAULT_SETTINGS.graph, tags: true, localDepth: 3, localCollapsed: true } };
+    expect(loadSettings(chosen).graph).toEqual(chosen.graph);
+  });
+
+  it("refuses a local depth outside one to three", () => {
+    const deep = { ...DEFAULT_SETTINGS, graph: { ...DEFAULT_SETTINGS.graph, localDepth: 4 } };
+    expect(SettingsSchema.safeParse(deep).success).toBe(false);
+  });
+});

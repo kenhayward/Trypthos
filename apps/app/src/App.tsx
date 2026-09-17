@@ -11,6 +11,7 @@ import {
   chatTitleFrom,
   effectiveSystemPrompt,
   fileTypeFor,
+  graphPageWorkspaceId,
   noteRecentFile,
   parseChatCommand,
   resolveEdit,
@@ -32,6 +33,7 @@ import ObsidianVaultDialog from "./components/ObsidianVaultDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
 import RepoPage from "./components/RepoPage";
 import FindDialog from "./components/FindDialog";
+import LocalGraphPane from "./components/LocalGraphPane";
 import EditorPanel from "./components/EditorPanel";
 import type { EditorHandle, EditorSelection } from "./components/DocumentEditor";
 import PanelDivider from "./components/PanelDivider";
@@ -111,6 +113,13 @@ function workspaceNameFor(
 /// entirely correct and cost every page load.
 const ReleaseNotes = lazy(() => import("./pages/ReleaseNotes"));
 
+/// The vault graph tab, fetched when a vault's graph is first opened.
+///
+/// `lazy` for the same reason: sigma, graphology and the layout worker are the heaviest thing in the
+/// app, and nobody who never opens a graph should pay for them. `graphBundle.test.ts` asserts the
+/// module graph - a static import here would look entirely correct and cost every page load.
+const GraphPage = lazy(() => import("./components/GraphPage"));
+
 /// Hoisted, not written inline: it is handed to the editor as a prop that an effect keys on, and a
 /// fresh `[]` per render would dispatch into CodeMirror on every keystroke.
 const NO_MATCHES: readonly FindMatch[] = [];
@@ -129,6 +138,10 @@ export default function App() {
   /// asking for one that must be created there. False means no dialog. Nothing is created until it
   /// answers.
   const [namingFile, setNamingFile] = useState<string | boolean>(false);
+  /// The directory and starting name for a note the graph asked to create, or null with no dialog
+  /// open. Its own state rather than `namingFile`'s: that one carries only a directory, and a ghost
+  /// in the graph already has a name - the link that named it.
+  const [namingNote, setNamingNote] = useState<{ directory: string; name: string } | null>(null);
   /// The directory a workspace context menu chose for a new folder, or false with no prompt open.
   const [namingFolder, setNamingFolder] = useState<string | false>(false);
   /// The qualified path of the file or folder being renamed, or false with no dialog open.
@@ -655,6 +668,36 @@ export default function App() {
   const repoPageId = repoPageWorkspaceId(state.activePath ?? "");
   const repoPage = useRepoPage(repoPageId, github, client);
 
+  /// The vault whose graph is on screen, and the vault it belongs to - read from the active path for
+  /// the same reason the repository's page is.
+  const graphPageId = graphPageWorkspaceId(state.activePath ?? "");
+  const graphWorkspace = state.workspaces.find((workspace) => workspace.id === graphPageId) ?? null;
+  /// The workspace the document on screen came from. One lookup, two readers: whether the editor
+  /// renders Obsidian's markdown, and which vault the local graph pane follows.
+  const activeWorkspace = state.workspaces.find(
+    (workspace) => workspace.id === splitQualified(state.activePath ?? "")?.workspaceId,
+  );
+  const localVaultId =
+    activeWorkspace?.vault === true && activeWorkspace.ref.kind === "local" ? activeWorkspace.id : null;
+  // `vault` is a fact about a TREE, and the shell sets it on a repository whose tree contains an
+  // `.obsidian` folder too. There is no folder on disk behind one of those, so there is nothing to
+  // index and nothing for the pane to draw - the same `local` test the root row and `localVaultId`
+  // make.
+  const anyVaultOpen = state.workspaces.some(
+    (workspace) => workspace.vault === true && workspace.ref.kind === "local",
+  );
+  /// What both graphs draw. The stored settings minus the two that are the local pane's alone, so the
+  /// tab and the pane cannot disagree about which kinds of node are shown.
+  const graphFilter = {
+    notes: settings.graph.notes,
+    attachments: settings.graph.attachments,
+    tags: settings.graph.tags,
+    unresolved: settings.graph.unresolved,
+    orphans: settings.graph.orphans,
+  };
+  const updateGraph = (change: Partial<typeof settings.graph>) =>
+    update((prev) => ({ graph: { ...prev.graph, ...change } }));
+
   /// The repository whose Refresh is waiting on an answer, or null.
   ///
   /// A repository asks first and a folder does not - see `RefreshRepoDialog`. Held by id, so a
@@ -751,6 +794,23 @@ export default function App() {
           onSelectFolder={actions.selectFolder}
           onCloseWorkspace={(workspaceId) => void actions.closeWorkspace(workspaceId)}
           onOpenRepoPage={actions.openRepoPage}
+          onOpenGraphPage={actions.openGraphPage}
+          bottomPane={
+            anyVaultOpen ? (
+              <LocalGraphPane
+                client={client}
+                workspaceId={localVaultId}
+                activePath={state.activePath}
+                filter={graphFilter}
+                depth={settings.graph.localDepth}
+                collapsed={settings.graph.localCollapsed}
+                onDepthChange={(localDepth) => updateGraph({ localDepth })}
+                onCollapsedChange={(localCollapsed) => updateGraph({ localCollapsed })}
+                onOpenPath={(path) => void actions.openPath(path)}
+                onCreateNote={setNamingNote}
+              />
+            ) : undefined
+          }
           onOpenFileTypes={() => setSettingsOn("fileTypes")}
         />
             <PanelDivider
@@ -785,14 +845,11 @@ export default function App() {
           readOnly={state.readOnly}
           media={state.media}
           readImage={client.readImage}
-          vault={
-            state.workspaces.find((workspace) => workspace.id === splitQualified(state.activePath ?? "")?.workspaceId)
-              ?.vault === true
-          }
+          vault={activeWorkspace?.vault === true}
           findByName={findByName}
           readDocument={readDocument}
           page={
-            repoPageId === null ? null : (
+            repoPageId !== null ? (
               <RepoPage
                 state={repoPage}
                 fileTypes={settings.fileTypes.enabled}
@@ -803,7 +860,26 @@ export default function App() {
                 onRefresh={repoPage.refresh}
                 readImage={client.readImage}
               />
-            )
+            ) : graphPageId !== null && graphWorkspace !== null ? (
+              // While the graph tab itself is active `activePath` names no node, so nothing is
+              // ringed - the highlight matters in the local pane, which sits beside a note.
+              <Suspense fallback={null}>
+                <GraphPage
+                  // One page per vault. Every vault's graph draws in this one slot, so without a
+                  // key React reuses the instance and the second vault's tab opens carrying the
+                  // first one's search, its highlights and its pending centre-on request.
+                  key={graphWorkspace.id}
+                  workspaceId={graphWorkspace.id}
+                  vaultName={graphWorkspace.name}
+                  client={client}
+                  activePath={state.activePath}
+                  filter={graphFilter}
+                  onFilterChange={updateGraph}
+                  onOpenPath={(path) => void actions.openPath(path)}
+                  onCreateNote={setNamingNote}
+                />
+              </Suspense>
+            ) : null
           }
           defaultMode={settings.editor.defaultViewMode}
           fileTypes={settings.fileTypes.enabled}
@@ -1035,6 +1111,19 @@ export default function App() {
             setNamingFile(false);
             if (typeof directory === "string") void actions.createEmptyFile(directory, name);
             else actions.newDocument(name);
+          }}
+        />
+      )}
+
+      {namingNote !== null && (
+        <NewFileDialog
+          fileTypes={settings.fileTypes.enabled}
+          initialName={namingNote.name}
+          onCancel={() => setNamingNote(null)}
+          onCreate={(name) => {
+            const { directory } = namingNote;
+            setNamingNote(null);
+            void actions.createEmptyFile(directory, name);
           }}
         />
       )}

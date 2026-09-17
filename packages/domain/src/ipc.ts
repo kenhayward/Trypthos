@@ -67,6 +67,8 @@ export const IPC_CHANNELS = [
   "workspace:reveal",
   "obsidian:vaults",
   "obsidian:openVault",
+  "graph:snapshot",
+  "graph:refresh",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -307,6 +309,64 @@ export const CloseWorkspaceRequest = z.object({ workspaceId: z.string().min(1) }
 /// the disk is always current, and re-listing is the renderer's half - but a repository is pinned to
 /// a commit, and this is what moves it to the newest one on its branch.
 export const RefreshWorkspaceRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+/// The vault graph. Only a workspace id ever crosses - never a path or a root - and nothing in a
+/// snapshot carries a note's contents: nodes are names and paths, edges are pairs of ids.
+export const GraphRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+export const GraphNodeSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(["note", "attachment", "ghost", "tag"]),
+    label: z.string(),
+    path: z.string().nullable(),
+    degree: z.number().int().min(0),
+  })
+  .strict();
+
+export const GraphEdgeSchema = z
+  .object({ source: z.string().min(1), target: z.string().min(1), both: z.boolean() })
+  .strict();
+
+export const NewNoteLocationSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("root") }).strict(),
+  z.object({ mode: z.literal("folder"), folder: z.string().min(1) }).strict(),
+  z.object({ mode: z.literal("current") }).strict(),
+]);
+
+export const GraphSnapshotSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    builtAt: z.string().min(1),
+    unreadable: z.number().int().min(0),
+    newNotes: NewNoteLocationSchema,
+    nodes: z.array(GraphNodeSchema),
+    edges: z.array(GraphEdgeSchema),
+  })
+  .strict();
+
+export const GraphProgressSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    read: z.number().int().min(0),
+    total: z.number().int().min(0),
+    walking: z.boolean(),
+  })
+  .strict();
+
+export const GraphStateSchema = z
+  .object({ snapshot: GraphSnapshotSchema.nullable(), building: GraphProgressSchema.nullable(), error: z.string().nullable() })
+  .strict();
+
+export const GraphChangedSchema = z.object({ workspaceId: z.string().min(1) }).strict();
+
+export type GraphSnapshot = z.infer<typeof GraphSnapshotSchema>;
+export type GraphProgress = z.infer<typeof GraphProgressSchema>;
+export type GraphState = z.infer<typeof GraphStateSchema>;
+
+/// Pushed from main while a vault is indexed, and when its graph is rebuilt or updated.
+export const GRAPH_PROGRESS_CHANNEL = "graph:progress";
+export const GRAPH_CHANGED_CHANNEL = "graph:changed";
 
 /// Reading an image, which does not go through `file:read`.
 ///

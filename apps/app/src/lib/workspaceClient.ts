@@ -4,6 +4,7 @@ import type {
   FilterRequest,
   FindRequest,
   FolderOutline,
+  GraphState,
   RepoPin,
   RepoStats,
   RepoSummary,
@@ -133,6 +134,9 @@ export type FindResult =
 /// `capped` is part of a find: a walk that stopped at its budget has to say so.
 export type FilterResult = { ok: true; paths: string[]; truncated: boolean } | Failure;
 
+export type GraphStateResult = { ok: true; state: GraphState } | Failure;
+export type RefreshGraphResult = { ok: true } | Failure;
+
 export interface WorkspaceClient {
   /// The files and folders in ONE folder of the workspace, for chat to use as a map. Paths only.
   ///
@@ -165,6 +169,14 @@ export interface WorkspaceClient {
   /// Opens one vault by Obsidian's id for it. The shell finds the folder, so the renderer never names
   /// one; a vault already open answers the workspace it is open as.
   openObsidianVault(id: string): Promise<OpenResult>;
+  /// The vault graph by workspace id: the last finished snapshot, the build running, the last error.
+  graphState(workspaceId: string): Promise<GraphStateResult>;
+  /// Rebuilds a vault's graph. Refused while a build is running.
+  refreshGraph(workspaceId: string): Promise<RefreshGraphResult>;
+  /// Indexing progress, pushed to every window. Unparsed: `useVaultGraph` validates on arrival.
+  onGraphProgress(listener: (message: unknown) => void): () => void;
+  /// A vault's graph was rebuilt or updated; fetch it again.
+  onGraphChanged(listener: (message: unknown) => void): () => void;
   readFile(path: string): Promise<ReadResult>;
   /// Reads an image, which does not go through `readFile` - see `ImageResult`.
   readImage(path: string): Promise<ImageResult>;
@@ -232,6 +244,8 @@ export interface WorkspaceClient {
   /// boundary guard.
   filterFiles(request: FilterRequest): Promise<FilterResult>;
 }
+
+export type GraphClient = Pick<WorkspaceClient, "graphState" | "refreshGraph" | "onGraphProgress" | "onGraphChanged">;
 
 /// What the shell knows about the connected GitHub account.
 ///
@@ -409,6 +423,10 @@ export const browserClient: WorkspaceClient = {
   revealEntry: async () => unavailable(),
   obsidianVaults: async () => unavailable(),
   openObsidianVault: async () => unavailable(),
+  graphState: async () => unavailable(),
+  refreshGraph: async () => unavailable(),
+  onGraphProgress: () => () => {},
+  onGraphChanged: () => () => {},
   readFile: async () => unavailable(),
   readImage: async () => unavailable(),
   writeFile: async () => unavailable(),

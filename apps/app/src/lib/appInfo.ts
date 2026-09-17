@@ -17,6 +17,7 @@ export const CAPABILITIES = `
 | Images | PNG, JPEG, GIF, WebP, BMP, AVIF and ICO open in a tab, shown at their own size and zoomed with Shift and the wheel. Nothing to edit and nothing written back, and never sent to a chat model. |
 | Syntax colouring | Each type is coloured by role, from the same palette as the rest of the app, in both themes. Fenced code is coloured by the language on the fence, in every view and in chat replies. Grammars load only when a file needs one. |
 | Markdown editor | Live, Source and Preview views over one document, opening in the view you choose. Switching view never changes your file. Pictures the document embeds are drawn in Preview, read from your folder rather than the web. Preview renders GFM with footnotes, alerts and front matter, and Obsidian notes with their wiki links, embedded notes and pictures, callouts, highlights, tags and math; a status bar chip says which, and lets you choose. Mermaid diagrams are drawn, and Live and Source understand Obsidian's marks. |
+| Vault graph | Click an Obsidian vault's row to see its notes, links, attachments and tags as a graph. Search it, filter it, double-click a note to open it or a missing note to create it. A local graph under the folder browser follows the note you are editing. Built when the vault opens and kept current as you save in Trypthos. |
 | Find | Ctrl+F, or Edit > Find. Find marks every match in the open document and steps through them; Find in Files searches the selected folder and everything below it, opening each hit in a tab. Plain text or a regular expression, with or without matching case. Drag the panel by its tab strip to move it out of the way. |
 | Zoom and pan | Hold Shift and turn the wheel to zoom, Shift and drag to move around, or press Ctrl with plus, minus and 0. Text grows in size, a picture is scaled for real. Each document keeps its own level, in every view. |
 | Formatting toolbar | In Source view, a button for every markdown construct. Headings act on the current line, character formatting wraps your selection, and a second press removes what the first added. |
@@ -47,4 +48,5 @@ export const DISCLAIMERS: readonly string[] = [
   "Updates are checked against this project's public GitHub releases. Nothing else is sent.",
   "Chat requests go directly from this app to the endpoint you configure. No Trypthos server is involved.",
   "GitHub requests go directly from this app to api.github.com, using the token you provide. Your token is encrypted by your operating system and never leaves this machine.",
+  "The vault graph is drawn with Sigma.js and laid out with graphology's ForceAtlas2, loaded only when a graph is shown.",
 ];

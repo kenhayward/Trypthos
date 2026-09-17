@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CONVERSATION_LOG_PATH, GUIDE_PATH, MAX_TEXT_FILE_BYTES } from "@trypthos/domain";
+import { CONVERSATION_LOG_PATH, GUIDE_PATH, MAX_TEXT_FILE_BYTES, graphPagePath } from "@trypthos/domain";
 import {
   canOpenInNewWindow,
   failureKey,
@@ -97,6 +97,11 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       ok: true as const,
       workspace: { id: "Garden", name: "Garden", ref: { kind: "local" as const, root: "/Garden", origin: "obsidian" as const }, truncated: false },
     }),
+    // The vault graph. Nothing in this hook reads it; it is here because the client is one interface.
+    graphState: async () => ({ ok: false, reason: "not-found" }),
+    refreshGraph: async () => ({ ok: true }),
+    onGraphProgress: () => () => {},
+    onGraphChanged: () => () => {},
     ...overrides,
   };
 
@@ -1428,6 +1433,36 @@ describe("the built-in guide", () => {
 
     expect(result.current.state.documents).toEqual([]);
     expect(ask.asked).toEqual([]);
+  });
+});
+
+/// A vault's graph, in a tab of its own.
+///
+/// The same shape as the markdown guide and a repository's page: a reserved path, read-only, and
+/// nothing behind it on disk. What it draws is fetched by the page when it opens.
+describe("the vault graph tab", () => {
+  it("opens read-only in a tab of its own, without reading anything from disk", async () => {
+    const { client, reads } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openGraphPage("Research"));
+
+    expect(result.current.state.activePath).toBe(graphPagePath("Research"));
+    expect(result.current.state.readOnly).toBe(true);
+    expect(result.current.state.content).toBe("");
+    expect(reads).toEqual([]);
+  });
+
+  it("switches to the tab it already has rather than opening a second", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    act(() => result.current.actions.openGraphPage("Research"));
+    act(() => result.current.actions.openGraphPage("Research"));
+
+    expect(
+      result.current.state.documents.filter((document) => document.path === graphPagePath("Research")),
+    ).toHaveLength(1);
   });
 });
 

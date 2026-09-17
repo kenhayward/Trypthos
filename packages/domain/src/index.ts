@@ -19,6 +19,8 @@ export type { FrontMatterProperty, FrontMatterSplit } from "./frontMatter";
 export { parseWikiLink, pickWikiTarget, wikiLinkFileName } from "./wikiLink";
 export { embeddedSection } from "./noteEmbed";
 export type { WikiLink } from "./wikiLink";
+export { extractReferences } from "./vaultLinks";
+export type { NoteReference, NoteReferences } from "./vaultLinks";
 export { imageSource, isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
 export type { ImageSource, LinkAction, LinkRejection } from "./markdownLink";
 
@@ -327,6 +329,16 @@ export {
   RepoInfoRequest,
   RefreshWorkspaceRequest,
   SetBranchRequest,
+  GRAPH_CHANGED_CHANNEL,
+  GRAPH_PROGRESS_CHANNEL,
+  GraphChangedSchema,
+  GraphEdgeSchema,
+  GraphNodeSchema,
+  GraphProgressSchema,
+  GraphRequest,
+  GraphSnapshotSchema,
+  GraphStateSchema,
+  NewNoteLocationSchema,
 } from "./ipc";
 export type {
   ChatEvent,
@@ -336,6 +348,9 @@ export type {
   IpcChannel,
   OpenTarget,
   WindowState,
+  GraphProgress,
+  GraphSnapshot,
+  GraphState,
 } from "./ipc";
 
 export type {
@@ -436,3 +451,10 @@ export {
   repoPagePath,
   repoPageWorkspaceId,
 } from "./repoPage";
+
+export { applyIndexChange, buildGraph, EMPTY_INDEX, isNotePath, neighbourhood } from "./vaultGraph";
+export type { GraphEdge, GraphNode, GraphNodeKind, IndexChange, VaultGraph, VaultIndexInput } from "./vaultGraph";
+
+export { GRAPH_PAGE_PREFIX, graphPagePath, graphPageWorkspaceId, isGraphPagePath } from "./graphPage";
+export { newNoteDirectory, newNoteLocationFrom, OBSIDIAN_APP_CONFIG } from "./obsidianAppConfig";
+export type { NewNoteLocation } from "./obsidianAppConfig";

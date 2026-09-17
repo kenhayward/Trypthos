@@ -93,6 +93,23 @@ test("the vault calls reach their handlers with what the renderer passed", async
   ]);
 });
 
+test("the graph calls reach their handlers by workspace id", async () => {
+  const { bridge, ipcMain } = loadBridge();
+  const calls = [];
+  ipcMain.handle("graph:snapshot", (_event, payload) => calls.push(["graph:snapshot", payload]));
+  ipcMain.handle("graph:refresh", (_event, payload) => calls.push(["graph:refresh", payload]));
+
+  await bridge.graphState("Notes");
+  await bridge.refreshGraph("Notes");
+
+  assert.deepEqual(calls, [
+    ["graph:snapshot", { workspaceId: "Notes" }],
+    ["graph:refresh", { workspaceId: "Notes" }],
+  ]);
+  assert.equal(typeof bridge.onGraphProgress(() => {}), "function");
+  assert.equal(typeof bridge.onGraphChanged(() => {}), "function");
+});
+
 test("an unforced close from the title bar still asks about unsaved work", async () => {
   const { bridge, ipcMain } = loadBridge();
   const guard = createCloseGuard({ dialog: {}, send: () => {} });

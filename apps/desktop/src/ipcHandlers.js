@@ -48,6 +48,7 @@ const {
   WriteRequest,
   OpenInNewWindowRequest,
   WriteSettingsRequest,
+  GraphRequest,
 } = require("@trypthos/domain");
 const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
 const { openWorkspaceFor } = require("./providers");
@@ -57,6 +58,7 @@ const { outlineWorkspace } = require("./workspaceOutline");
 const { createFolderToolRunner } = require("./folderToolRunner");
 const { searchFiles } = require("./fileSearch");
 const { searchNames } = require("./nameSearch");
+const { createVaultIndexes } = require("./vaultIndex");
 
 /// The main-process side of the IPC surface.
 ///
@@ -239,7 +241,24 @@ function registerIpcHandlers({
   /// because the app-data directory belongs to `main.js` - and so a test can point it at a file of
   /// its own rather than at whatever the machine running it has installed.
   obsidianConfigPath = null,
+  /// Sends to every window. The graph index is shared by all of them, and `getWindow` reaches
+  /// only the main one.
+  broadcast = () => {},
 }) {
+  /// The vault graph's indexes. One per open local vault, started when a vault opens and dropped when
+  /// it closes - see `vaultIndex.js`.
+  const indexes = createVaultIndexes({ emit: broadcast });
+
+  /// Starts indexing whatever an open just produced, when it is a local vault. Returns the result
+  /// untouched, so each open handler stays one expression.
+  function indexing(result) {
+    if (result?.ok) {
+      const workspace = open.get(result.workspace.id);
+      if (workspace !== undefined) indexes.start(workspace);
+    }
+    return result;
+  }
+
   // The registry is the only record of whether the entries are there: the user can remove them
   // without telling us, so a copy in settings would be a second answer that could disagree with what
   // Explorer actually shows.
@@ -759,7 +778,7 @@ function registerIpcHandlers({
       return { ok: false, reason: "cancelled" };
     }
 
-    return await openWorkspaceRef({ kind: "local", root: result.filePaths[0] }, providerDeps);
+    return indexing(await openWorkspaceRef({ kind: "local", root: result.filePaths[0] }, providerDeps));
   });
 
   /// Obsidian's vaults, for the picker - and whether Obsidian is installed at all, which is whether
@@ -780,7 +799,9 @@ function registerIpcHandlers({
     const vault = vaults.find((candidate) => candidate.id === parsed.data.id);
     if (vault === undefined) return { ok: false, reason: "not-found" };
 
-    return await openWorkspaceRef({ kind: "local", root: vault.path, origin: "obsidian" }, providerDeps);
+    return indexing(
+      await openWorkspaceRef({ kind: "local", root: vault.path, origin: "obsidian" }, providerDeps),
+    );
   });
 
   /// Closing one workspace. The tabs that belonged to it are the renderer's business; what happens
@@ -791,6 +812,7 @@ function registerIpcHandlers({
 
     // Answered the same whether or not it was open. Closing a workspace that has already gone is
     // the state the caller wanted, not a failure to report.
+    indexes.close(parsed.data.workspaceId);
     open.delete(parsed.data.workspaceId);
     return { ok: true };
   });
@@ -824,6 +846,27 @@ function registerIpcHandlers({
     return { ok: true, workspace: described(refreshed) };
   });
 
+  /// The graph of one open vault: the last finished snapshot, the build in progress, and why the
+  /// last build failed. By id only - the renderer never names a path or a root here.
+  ipcMain.handle(
+    "graph:snapshot",
+    guarded(locateById, GraphRequest, (request, workspace) => ({
+      ok: true,
+      state: indexes.state(workspace.id) ?? {
+        snapshot: null,
+        building: null,
+        error: indexes.isIndexable(workspace) ? null : "unsupported",
+      },
+    })),
+  );
+
+  /// Rebuilds one vault's graph. Refused while a build is running, which the renderer also shows by
+  /// disabling the button - this is the check that holds.
+  ipcMain.handle(
+    "graph:refresh",
+    guarded(locateById, GraphRequest, (_request, workspace) => indexes.refresh(workspace)),
+  );
+
   /// Opening a workspace the app already knows how to name.
   ///
   /// One channel for three acts that were always the same act: reopening a folder remembered from
@@ -838,7 +881,7 @@ function registerIpcHandlers({
       return { ok: false, reason: "bad-request" };
     }
 
-    return await openWorkspaceRef(parsed.data.ref, providerDeps);
+    return indexing(await openWorkspaceRef(parsed.data.ref, providerDeps));
   });
 
   ipcMain.handle(
@@ -878,6 +921,7 @@ function registerIpcHandlers({
         return { ok: false, reason: "unsupported" };
       }
       const result = await workspace.provider.rename(request.path, request.name);
+      if (result.ok) indexes.renamed(workspace, request.path, result.path);
       return result.ok ? { ok: true, path: qualifyPath(workspace.id, result.path) } : result;
     }),
   );
@@ -982,6 +1026,7 @@ function registerIpcHandlers({
       const written = await workspace.provider.write(relative, request.content, null, {
         overwrite: true,
       });
+      if (written.ok) indexes.written(workspace, relative, request.content);
       // Qualified on the way back, like a listing: the renderer receives a path it can hand
       // straight to any other channel and never has to work out which workspace it names.
       return written.ok
@@ -1014,13 +1059,16 @@ function registerIpcHandlers({
 
   ipcMain.handle(
     "file:write",
-    guarded(locateQualified, WriteRequest, (request, workspace) =>
+    guarded(locateQualified, WriteRequest, async (request, workspace) => {
       // The message is carried through and ignored by every backend with no history to write it
       // into. A provider whose write IS a commit is the one that needs it.
-      workspace.provider.write(request.path, request.content, request.expectedRevision, {
+      const written = await workspace.provider.write(request.path, request.content, request.expectedRevision, {
         message: request.message ?? undefined,
-      }),
-    ),
+      });
+      // Only a write that landed changes the graph. A conflict wrote nothing.
+      if (written.ok) indexes.written(workspace, request.path, request.content);
+      return written;
+    }),
   );
 
   /// A separate Electron window can only start from a filesystem workspace: a GitHub repository

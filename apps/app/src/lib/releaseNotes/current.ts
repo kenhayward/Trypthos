@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.84.0",
+    date: "2026-09-17",
+    pr: 176,
+    headline: "See an Obsidian vault as a graph of its notes, links and tags",
+    summary:
+      "Clicking an Obsidian vault's row in the folder browser now opens a graph of the vault in a tab: every note as a node, every link between notes as a line, with pictures and other attachments, tags and links to notes that do not exist yet available from chips above the graph. Search highlights matching notes and Enter centres on the best one. Click a node to see what it links to, double-click a note to open it, and double-click a link to a missing note to create that note where Obsidian would put it. A Local graph pane under the folder browser follows the note you are editing and shows its neighbours, one to three links away, and folds away to its header. The graph is built when a vault opens and when you press refresh, keeps itself up to date as you save, create and rename notes in Trypthos, and shows its progress while a large vault is read. Changes made in Obsidian while Trypthos is open appear after a refresh. Vaults opened from GitHub do not have a graph yet.",
+    added: [
+      "A graph of an Obsidian vault, opened by clicking the vault's row, with chips for notes, attachments, tags, unresolved links and orphans, and a search box.",
+      "A Local graph pane under the folder browser, following the open note, with a depth of one to three links.",
+      "Double-click a link to a missing note in either graph to create it in Obsidian's default location for new notes.",
+      "Indexing progress for large vaults, and a refresh button to rebuild the graph.",
+    ],
+  },
+  {
     version: "0.83.0",
     date: "2026-09-17",
     pr: 175,

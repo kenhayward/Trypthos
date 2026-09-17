@@ -17,7 +17,7 @@ interface Props {
   ///
   /// The reference is what says which provider it came from, which is what draws its icon - a folder
   /// and a repository look alike in a tree and are very different things to save into.
-  workspaces: readonly { id: string; name: string; ref: WorkspaceRef; truncated: boolean }[];
+  workspaces: readonly { id: string; name: string; ref: WorkspaceRef; truncated: boolean; vault?: boolean }[];
   folders: Record<string, FolderState>;
   filter: string;
   /// What the search behind the filter box is doing, and what it found.
@@ -78,6 +78,11 @@ interface Props {
   /// Opens a repository's own page. Only ever called for a GitHub workspace - a local folder has no
   /// repository behind it and nothing to show.
   onOpenRepoPage: (workspaceId: string) => void;
+  /// Opens a local vault's graph tab. Called from the vault's root row, as a repository's row opens
+  /// its page.
+  onOpenGraphPage: (workspaceId: string) => void;
+  /// Drawn under the trees and above the footer - the local graph pane, when a vault is open.
+  bottomPane?: React.ReactNode;
   /// Opens the File types page of Settings.
   ///
   /// The footer is the only place the setting is discoverable at all: every type but markdown is
@@ -120,6 +125,8 @@ export default function WorkspacePanel({
   onSelectFolder,
   onCloseWorkspace,
   onOpenRepoPage,
+  onOpenGraphPage,
+  bottomPane,
   onOpenFileTypes,
 }: Props) {
   const { t } = useTranslation();
@@ -364,6 +371,8 @@ export default function WorkspacePanel({
                     // expanding it. Opening a tab that is already open only switches to it, so a
                     // second click costs nothing.
                     if (workspace.ref.kind === "github") onOpenRepoPage(workspace.id);
+                    // A vault's row is its home too: clicking it opens the vault's graph.
+                    if (workspace.ref.kind === "local" && workspace.vault === true) onOpenGraphPage(workspace.id);
                     // There is nothing to collapse while filtering: what is under this row came from
                     // the search, not from the map of folders that have been listed.
                     if (!filtering) void onToggleFolder(workspace.id);
@@ -418,6 +427,8 @@ export default function WorkspacePanel({
               </div>
             ))}
           </div>
+
+          {bottomPane}
 
           {menuWorkspace !== undefined && menu !== null && (
             <ContextMenu label={menuWorkspace.name} x={menu.x} y={menu.y} onDismiss={closeMenu}>
@@ -562,7 +573,7 @@ function WorkspaceRow({
   onToggle,
   onRetry,
 }: {
-  workspace: { id: string; name: string; ref: WorkspaceRef; truncated: boolean };
+  workspace: { id: string; name: string; ref: WorkspaceRef; truncated: boolean; vault?: boolean };
   /// What is known about the root's own listing, or null when it has never been asked for.
   status: FolderState["status"] | null;
   expanded: boolean;

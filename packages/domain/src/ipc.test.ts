@@ -7,6 +7,10 @@ import {
   SetIntegrationRequest,
   DiscardChoiceSchema,
   DocumentDirtyRequest,
+  GraphProgressSchema,
+  GraphRequest,
+  GraphSnapshotSchema,
+  GraphStateSchema,
   IPC_CHANNELS,
   OpenExternalRequest,
   OpenInNewWindowRequest,
@@ -73,6 +77,8 @@ describe("IPC_CHANNELS", () => {
       "workspace:reveal",
       "obsidian:vaults",
       "obsidian:openVault",
+      "graph:snapshot",
+      "graph:refresh",
     ]);
   });
 
@@ -539,5 +545,35 @@ describe("SaveChatRequest", () => {
   it("refuses an attachment without its text, and a folder that is not a path", () => {
     expect(SaveChatRequest.safeParse({ ...request, attachments: [{ path: "a.md" }] }).success).toBe(false);
     expect(SaveChatRequest.safeParse({ ...request, folder: 3 }).success).toBe(false);
+  });
+});
+
+describe("the vault graph contract", () => {
+  const snapshot = {
+    workspaceId: "V",
+    builtAt: "2026-09-17T10:00:00.000Z",
+    unreadable: 0,
+    newNotes: { mode: "folder", folder: "Inbox" },
+    nodes: [{ id: "V/A.md", kind: "note", label: "A", path: "V/A.md", degree: 1 }],
+    edges: [{ source: "V/A.md", target: "ghost:b", both: false }],
+  };
+
+  it("accepts a snapshot and a state carrying one", () => {
+    expect(GraphSnapshotSchema.safeParse(snapshot).success).toBe(true);
+    expect(
+      GraphStateSchema.safeParse({ snapshot, building: { workspaceId: "V", read: 1, total: 2, walking: false }, error: null })
+        .success,
+    ).toBe(true);
+  });
+
+  it("refuses stray fields, so the two sides cannot drift", () => {
+    expect(GraphSnapshotSchema.safeParse({ ...snapshot, content: "secret" }).success).toBe(false);
+    expect(GraphSnapshotSchema.safeParse({ ...snapshot, nodes: [{ ...snapshot.nodes[0], text: "x" }] }).success).toBe(false);
+    expect(GraphRequest.safeParse({ workspaceId: "V", path: "/" }).success).toBe(false);
+  });
+
+  it("refuses a node kind it does not know and negative progress", () => {
+    expect(GraphSnapshotSchema.safeParse({ ...snapshot, nodes: [{ ...snapshot.nodes[0], kind: "folder" }] }).success).toBe(false);
+    expect(GraphProgressSchema.safeParse({ workspaceId: "V", read: -1, total: 0, walking: true }).success).toBe(false);
   });
 });
