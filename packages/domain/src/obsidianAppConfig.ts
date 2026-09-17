@@ -21,8 +21,11 @@ export function newNoteLocationFrom(raw: unknown): NewNoteLocation {
   const { newFileLocation, newFileFolderPath } = parsed.data;
   if (newFileLocation === "current") return { mode: "current" };
   if (newFileLocation !== "folder" || newFileFolderPath === undefined) return { mode: "root" };
-  const segments = newFileFolderPath.split("/").filter((segment) => segment !== "" && segment !== ".");
+  if (newFileFolderPath.startsWith("//") || newFileFolderPath.startsWith("\\\\")) return { mode: "root" };
+  const segments = newFileFolderPath.split(/[\\/]/).filter((segment) => segment !== "" && segment !== ".");
   if (segments.length === 0 || segments.includes("..")) return { mode: "root" };
+  const first = segments[0]!;
+  if (/^[A-Za-z]:$/.test(first) || first.includes(":")) return { mode: "root" };
   return { mode: "folder", folder: segments.join("/") };
 }
 

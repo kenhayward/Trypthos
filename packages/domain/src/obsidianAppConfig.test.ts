@@ -27,11 +27,31 @@ describe("where Obsidian puts a new note", () => {
     });
   });
 
+  it("rejects a folder that escapes the vault through a drive, a backslash traversal or a UNC path", () => {
+    expect(newNoteLocationFrom({ newFileLocation: "folder", newFileFolderPath: "C:/Users/evil" })).toEqual({
+      mode: "root",
+    });
+    expect(newNoteLocationFrom({ newFileLocation: "folder", newFileFolderPath: "..\\outside" })).toEqual({
+      mode: "root",
+    });
+    expect(newNoteLocationFrom({ newFileLocation: "folder", newFileFolderPath: "a\\..\\..\\b" })).toEqual({
+      mode: "root",
+    });
+    expect(newNoteLocationFrom({ newFileLocation: "folder", newFileFolderPath: "\\\\server\\share" })).toEqual({
+      mode: "root",
+    });
+    expect(newNoteLocationFrom({ newFileLocation: "folder", newFileFolderPath: "Inbox\\New" })).toEqual({
+      mode: "folder",
+      folder: "Inbox/New",
+    });
+  });
+
   it("turns a location into the directory a new note is created in", () => {
     expect(newNoteDirectory({ mode: "root" }, "V", "V/a/From.md")).toBe("V");
     expect(newNoteDirectory({ mode: "folder", folder: "Inbox" }, "V", null)).toBe("V/Inbox");
     expect(newNoteDirectory({ mode: "current" }, "V", "V/a/b/From.md")).toBe("V/a/b");
     expect(newNoteDirectory({ mode: "current" }, "V", "V/From.md")).toBe("V");
     expect(newNoteDirectory({ mode: "current" }, "V", null)).toBe("V");
+    expect(newNoteDirectory({ mode: "current" }, "V", "Other/a/From.md")).toBe("V");
   });
 });
