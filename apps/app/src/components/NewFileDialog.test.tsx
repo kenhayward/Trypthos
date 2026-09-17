@@ -106,4 +106,10 @@ describe("NewFileDialog", () => {
     setup();
     expect(screen.queryByLabelText(/folder/i)).toBeNull();
   });
+
+  // A ghost in the vault graph arrives already named: the link that named it is the name.
+  it("starts with a name it is given", () => {
+    render(<NewFileDialog fileTypes={["markdown"]} initialName="Risks" onCancel={vi.fn()} onCreate={vi.fn()} />);
+    expect((nameField() as HTMLInputElement).value).toBe("Risks");
+  });
 });

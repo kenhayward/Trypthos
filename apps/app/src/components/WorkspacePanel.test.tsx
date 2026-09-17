@@ -35,6 +35,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
       name: string;
       ref: WorkspaceRef;
       truncated: boolean;
+      vault?: boolean;
     }[],
     folders: FOLDERS,
     filter: "",
@@ -45,6 +46,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
     onOpenRepoPage: vi.fn(),
+    onOpenGraphPage: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),
@@ -948,5 +950,34 @@ describe("the menu for the empty panel", () => {
     expect(screen.getByRole("menu", { name: "Diariz" })).toBeDefined();
     expect(screen.queryByRole("menu", { name: "Workspace" })).toBeNull();
     expect(items()).not.toContain("Open folder");
+  });
+});
+
+/// A vault's root row is its home, the way a repository's row is.
+const RESEARCH = {
+  id: "Research",
+  name: "Research",
+  ref: { kind: "local" as const, root: "D:/Research" },
+  truncated: false,
+  vault: true,
+};
+
+describe("a vault's root row", () => {
+  it("opens the vault's graph as well as expanding", async () => {
+    const props = panel({ workspaces: [RESEARCH], folders: {} });
+    fireEvent.click(screen.getByRole("button", { name: "Research" }));
+    expect(props.onOpenGraphPage).toHaveBeenCalledWith("Research");
+    expect(props.onToggleFolder).toHaveBeenCalledWith("Research");
+  });
+
+  it("opens no graph for a folder that is not a vault", async () => {
+    const props = panel({ workspaces: [DIARIZ] });
+    fireEvent.click(screen.getByRole("button", { name: "Diariz" }));
+    expect(props.onOpenGraphPage).not.toHaveBeenCalled();
+  });
+
+  it("draws the pane it is given under the trees", () => {
+    panel({ bottomPane: <section aria-label="Pane below" /> });
+    expect(screen.getByRole("region", { name: "Pane below" })).toBeTruthy();
   });
 });

@@ -13,6 +13,7 @@ import {
   dirtyPaths as dirtyDocumentPaths,
   emptyDocumentSet,
   formatBytes,
+  graphPagePath,
   isImageName,
   isOpen,
   markSaved,
@@ -155,6 +156,8 @@ export interface WorkspaceActions {
   /// What it shows is fetched by the page itself when it opens - a repository's star count is not
   /// the sort of thing a document's `content` holds.
   openRepoPage(workspaceId: string): void;
+  /// Opens a local vault's graph in a tab of its own, like a repository's page.
+  openGraphPage(workspaceId: string): void;
   /// Opens a document that has never been saved - File > New.
   ///
   /// It has a name and nowhere to be. Where it goes is answered by the save dialog the first time it
@@ -1303,6 +1306,18 @@ export function useWorkspace(
           // A revision nothing will ever present: this page is never read from disk and never
           // written back, so it exists only because every document carries one.
           revision: { id: "repository" },
+          readOnly: true,
+        }),
+      })),
+    openGraphPage: (workspaceId: string) =>
+      setInternal((prev) => ({
+        ...prev,
+        documents: openDocument(prev.documents, {
+          path: graphPagePath(workspaceId),
+          // Nothing, deliberately: the page fetches its graph, and `content` is what the editor holds
+          // and what chat sends.
+          content: "",
+          revision: { id: "graph" },
           readOnly: true,
         }),
       })),

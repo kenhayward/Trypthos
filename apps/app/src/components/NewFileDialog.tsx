@@ -6,6 +6,8 @@ interface Props {
   /// The file types the user has turned on, by id. The dropdown offers these and nothing else, so a
   /// new file cannot be one the folder browser would then refuse to show.
   fileTypes: readonly string[];
+  /// A name to start from - a ghost in the vault graph arrives already named.
+  initialName?: string;
   onCancel: () => void;
   /// The file name, extension and all. Where it goes is not decided here.
   onCreate: (name: string) => void;
@@ -20,10 +22,10 @@ interface Props {
 /// **It does not ask where the file goes.** That is the save dialog's question, asked the first time
 /// the document is saved. Two dialogs asking it would be two answers that can disagree, and the one
 /// that decided first would be the one with the least information.
-export default function NewFileDialog({ fileTypes, onCancel, onCreate }: Props) {
+export default function NewFileDialog({ fileTypes, initialName, onCancel, onCreate }: Props) {
   const { t } = useTranslation();
   const types = newFileTypes(fileTypes);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [extension, setExtension] = useState(types[0]?.extension ?? "md");
   const field = useRef<HTMLInputElement>(null);
 
