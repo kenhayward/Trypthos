@@ -15,9 +15,8 @@ export type GraphFailureKind = "tooLarge" | "drawFailed";
 const LIMIT_REACHED = /webgl|gl context|context lost|out of memory|allocation failed|array buffer|typed array/i;
 
 export function graphFailureKind(error: unknown): GraphFailureKind {
-  // A RangeError out of a renderer is an allocation that did not fit - v8 reports an over-sized
-  // typed array exactly that way.
-  if (error instanceof RangeError) return "tooLarge";
+  // Not every RangeError is an allocation that did not fit - a stack overflow inside Sigma is a
+  // RangeError too, and says nothing about the vault's size. Go by the message alone.
   const message = error instanceof Error ? error.message : String(error);
   return LIMIT_REACHED.test(message) ? "tooLarge" : "drawFailed";
 }

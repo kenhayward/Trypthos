@@ -95,6 +95,20 @@ describe("building the graph", () => {
     expect(node(graph, "ghost:plans/risks")!.degree).toBe(2);
   });
 
+  // A markdown link's ghost is keyed off the RESOLVED path, not the written one - otherwise
+  // "./Risks.md", "Risks.md" and "/Risks.md" from the same folder each mint their own ghost.
+  it("gives every spelling of a markdown link to the same missing note one ghost", () => {
+    const graph = buildGraph(
+      input(["V/A.md", "V/B.md", "V/C.md"], {
+        "V/A.md": refs([path("./Risks.md")]),
+        "V/B.md": refs([path("Risks.md")]),
+        "V/C.md": refs([path("/Risks.md")]),
+      }),
+    );
+    const ghosts = graph.nodes.filter((n) => n.kind === "ghost");
+    expect(ghosts).toEqual([{ id: "ghost:risks", kind: "ghost", label: "Risks", path: null, degree: 3 }]);
+  });
+
   it("draws two notes linking to each other as one edge marked both", () => {
     const graph = buildGraph(
       input(["V/A.md", "V/B.md"], { "V/A.md": refs([wiki("B")]), "V/B.md": refs([wiki("A")]) }),

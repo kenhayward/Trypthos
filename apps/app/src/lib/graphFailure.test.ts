@@ -16,6 +16,12 @@ describe("graphFailureKind", () => {
     expect(graphFailureKind(new Error("Graph.areNeighbors: could not find the node"))).toBe("drawFailed");
   });
 
+  // A stack overflow is a RangeError too, but it says nothing about the vault's size - blaming it
+  // on "too large" sends the user looking for a problem that is not there.
+  it("does not blame the vault's size for a stack overflow", () => {
+    expect(graphFailureKind(new RangeError("Maximum call stack size exceeded"))).toBe("drawFailed");
+  });
+
   it("says the same for something that is not an error at all", () => {
     expect(graphFailureKind("nope")).toBe("drawFailed");
     expect(graphFailureKind(undefined)).toBe("drawFailed");

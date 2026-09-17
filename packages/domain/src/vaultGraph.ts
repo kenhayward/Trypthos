@@ -94,10 +94,12 @@ export function buildGraph(input: VaultIndexInput): VaultGraph {
     });
   }
 
-  /// A ghost is keyed by the target AS WRITTEN, minus any markdown extension - the same rule for
-  /// both kinds of link. Keying a markdown link by its file name alone would give `[[Plans/Risks]]`
-  /// and `[Risks](Plans/Risks.md)` two nodes for one missing note, and creating the note from one
-  /// of them would leave the other still hanging.
+  /// A ghost is keyed off a target minus any markdown extension. A wiki link keys off the target AS
+  /// WRITTEN - `[[Plans/Risks]]` and `[[risks]]` still share a ghost by lowercasing, but the label
+  /// keeps the writer's spelling. A markdown link instead keys off its RESOLVED vault-relative path
+  /// (see below), because the written form is not canonical the way a wiki target is: `./Risks.md`,
+  /// `Risks.md` and `/Risks.md` from the same folder are the same missing note, and keying on what
+  /// was typed would mint one ghost per spelling instead of one per note.
   const ghost = (written: string): string => {
     const label = withoutMarkdownExtension(written);
     const id = `ghost:${label.toLowerCase()}`;
@@ -114,7 +116,9 @@ export function buildGraph(input: VaultIndexInput): VaultGraph {
     const resolved = resolveRelative(from, reference.path);
     if (resolved === null) return null;
     const found = byLowerPath.get(resolved.toLowerCase()) ?? byLowerPath.get(`${resolved.toLowerCase()}.md`);
-    return found ?? ghost(reference.path);
+    if (found !== undefined) return found;
+    const split = splitQualified(resolved);
+    return ghost(split === null ? resolved : split.path);
   };
 
   const directed = new Set<string>();
