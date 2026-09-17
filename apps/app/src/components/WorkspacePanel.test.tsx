@@ -884,3 +884,69 @@ describe("a workspace the provider could not list in full", () => {
     expect(screen.queryByText(/Too large to list in full/)).toBeNull();
   });
 });
+
+/// Right-clicking the panel where there is nothing to be about - no row under the pointer - offers
+/// what the header's buttons do, in the same order, since that is the one thing the space is for.
+describe("the menu for the empty panel", () => {
+  async function rightClick(target: HTMLElement) {
+    const user = userEvent.setup();
+    await user.pointer({ keys: "[MouseRight]", target });
+    return user;
+  }
+  const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
+
+  it("offers every source the header does, in the header's order", async () => {
+    panel({ workspaces: [], onOpenVault: vi.fn() });
+    await rightClick(screen.getByTestId("workspace-body"));
+
+    expect(screen.getByRole("menu", { name: "Workspace" })).toBeDefined();
+    expect(items()).toEqual(["Open Obsidian vault", "Open GitHub repository", "Open folder"]);
+  });
+
+  // Obsidian's entry is there only when its button is.
+  it("leaves Obsidian out when Obsidian is not installed", async () => {
+    panel({ workspaces: [] });
+    await rightClick(screen.getByTestId("workspace-body"));
+
+    expect(items()).toEqual(["Open GitHub repository", "Open folder"]);
+  });
+
+  it("does what the chosen entry says, and closes", async () => {
+    const onOpenVault = vi.fn();
+    const props = panel({ workspaces: [], onOpenVault });
+    const body = screen.getByTestId("workspace-body");
+
+    let user = await rightClick(body);
+    await user.click(screen.getByRole("menuitem", { name: "Open Obsidian vault" }));
+    expect(onOpenVault).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    user = await rightClick(body);
+    await user.click(screen.getByRole("menuitem", { name: "Open GitHub repository" }));
+    expect(props.onOpenRepo).toHaveBeenCalledTimes(1);
+
+    user = await rightClick(body);
+    await user.click(screen.getByRole("menuitem", { name: "Open folder" }));
+    expect(props.onOpenWorkspace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  // With folders open, the space beneath them is still empty space.
+  it("opens below the open folders too", async () => {
+    panel();
+    await rightClick(screen.getByTestId("workspace-body"));
+
+    expect(screen.getByRole("menu", { name: "Workspace" })).toBeDefined();
+    expect(items()).toEqual(["Open GitHub repository", "Open folder"]);
+  });
+
+  // A row is something to be about, so its own menu wins.
+  it("gives way to a row's own menu", async () => {
+    panel();
+    await rightClick(screen.getByRole("button", { name: /^Diariz$/ }));
+
+    expect(screen.getByRole("menu", { name: "Diariz" })).toBeDefined();
+    expect(screen.queryByRole("menu", { name: "Workspace" })).toBeNull();
+    expect(items()).not.toContain("Open folder");
+  });
+});

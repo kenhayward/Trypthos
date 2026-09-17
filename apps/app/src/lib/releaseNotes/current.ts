@@ -5,6 +5,16 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.83.0",
+    date: "2026-09-17",
+    pr: 175,
+    headline: "Right-click the empty folder browser to open a folder, repository or vault",
+    summary:
+      "Right-clicking an empty part of the folder browser - below the open folders, or anywhere in it before anything is open - now shows a menu with the same choices as the buttons at the top of the panel, in the same order: Open Obsidian vault when Obsidian is installed, Open GitHub repository, and Open folder. Right-clicking a folder or file still shows that row's own menu. Right-click menus opened near the bottom or right edge of the window now open upwards or leftwards instead of running off it, so every entry can be reached.",
+    added: ["A right-click menu on the folder browser's empty space, with Open Obsidian vault, Open GitHub repository and Open folder."],
+    fixed: ["A right-click menu opened near the edge of the window no longer runs off it."],
+  },
+  {
     version: "0.82.0",
     date: "2026-09-17",
     pr: 173,
