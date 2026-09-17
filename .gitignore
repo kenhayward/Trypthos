@@ -20,3 +20,6 @@ apps/desktop/build/
 # A personal list of what to build next. Deliberately not in the repo: it is one person's working
 # notes rather than a plan the project has agreed, and `docs/` is otherwise all published material.
 docs/Roadmap Features.md
+
+# Brainstorming companion mockups - scratch output of a design session, not project material.
+.superpowers/
