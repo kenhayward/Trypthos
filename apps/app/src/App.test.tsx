@@ -1602,3 +1602,108 @@ describe("committing to a repository", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+/// Hiding the editor, so a long conversation can be read across the window rather than down a third
+/// of it.
+describe("hiding the editor behind the chat", () => {
+  function shell(panels: Partial<Settings["panels"]> = {}): { writes: Settings[] } {
+    const writes: Settings[] = [];
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          panels: { ...DEFAULT_SETTINGS.panels, ...panels },
+          chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] },
+          workspaces: [{ kind: "local" as const, root: "D:/Notes" }],
+        },
+      }),
+      writeSettings: async (settings: Settings) => {
+        writes.push(settings);
+      },
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
+        ok: true as const,
+        workspace: { id: "Notes", name: "Notes", ref },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [{ id: "Notes/plan.md", name: "plan.md", kind: "file" as const }],
+      }),
+      readFile: async () => ({ ok: true as const, content: "# Plan", revision: { id: "r1" } }),
+      sendChat: async () => ({ ok: true as const, streamId: "s1" }),
+      cancelChat: async () => {},
+      onChatEvent: () => () => {},
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+    return { writes };
+  }
+
+  // With no chat there is nothing to take the room, and a hidden editor would be an empty window.
+  it("is only offered where there is a chat to take the room", async () => {
+    render(<App />);
+    expect(await screen.findByRole("main", { name: "Editor" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Hide the editor" })).toBeNull();
+  });
+
+  it("hides the editor, and leaves a rail to bring it back", async () => {
+    const { writes } = shell();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("complementary", { name: "Chat" });
+    await user.click(screen.getByRole("button", { name: "Hide the editor" }));
+
+    expect(screen.queryByRole("main", { name: "Editor" })).toBeNull();
+    // No divider either: the chat is as wide as the room, so there is nothing to drag.
+    expect(screen.queryByRole("separator", { name: "Chat panel width" })).toBeNull();
+    await waitFor(() => expect(writes.at(-1)?.panels.editorCollapsed).toBe(true));
+
+    await user.click(screen.getByRole("button", { name: "Show the editor" }));
+    expect(screen.getByRole("main", { name: "Editor" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Show the editor" })).toBeNull();
+    await waitFor(() => expect(writes.at(-1)?.panels.editorCollapsed).toBe(false));
+  });
+
+  // Hidden, not closed: the open documents, their unsaved edits and their undo history are all
+  // still there when it comes back.
+  it("keeps the editor in the window while it is hidden", async () => {
+    shell({ editorCollapsed: true });
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Show the editor" });
+    const editor = document.querySelector("main[aria-label='Editor']");
+    expect(editor).not.toBeNull();
+    expect(editor?.hasAttribute("hidden")).toBe(true);
+  });
+
+  // Something has to fill the window.
+  it("brings the editor back when the chat is hidden", async () => {
+    const { writes } = shell({ editorCollapsed: true });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Hide the chat panel" }));
+
+    expect(screen.getByRole("main", { name: "Editor" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Show the editor" })).toBeNull();
+    // And not hidden again the moment the chat comes back.
+    await waitFor(() => expect(writes.at(-1)?.panels.editorCollapsed).toBe(false));
+  });
+
+  // Opening a file into a hidden editor would look like a click that did nothing.
+  it("brings the editor back when a file is opened", async () => {
+    shell({ editorCollapsed: true });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    await user.click(await screen.findByRole("button", { name: /plan\.md/ }));
+
+    expect(await screen.findByRole("main", { name: "Editor" })).toBeDefined();
+  });
+});

@@ -6,7 +6,14 @@
 
 export const PANEL_BOUNDS = {
   workspace: { min: 180, max: 480 },
-  chat: { min: 260, max: 560 },
+  /// The chat can be most of the window: a long conversation is read, not glanced at. `max` is only
+  /// a sanity bound on what a settings file can ask for - the real limit is the editor's floor, which
+  /// `chatWidthLimit` answers for the window as it is.
+  ///
+  /// `shares` is the width up to which the chat and the workspace give way together in a narrow
+  /// window. What the chat asks for beyond it is given back first, so widening the chat never costs
+  /// the file list its width.
+  chat: { min: 260, max: 4000, shares: 560 },
   /// The editor is the point of the app, so it has a floor and the side panels do not defend theirs
   /// against it.
   editorMin: 320,
@@ -19,6 +26,9 @@ export interface PanelRequest {
   chat: number;
   workspaceCollapsed: boolean;
   chatCollapsed: boolean;
+  /// The editor hidden, so the chat can take the room it leaves. Ignored while the chat is hidden,
+  /// since something has to fill the window and the editor is the point of the app.
+  editorCollapsed?: boolean;
 }
 
 export interface PanelWidths {
@@ -43,6 +53,10 @@ function clamp(value: number, min: number, max: number): number {
 export function resolvePanelWidths(request: PanelRequest): PanelWidths {
   const available = Math.max(0, Math.round(request.available));
 
+  if (request.editorCollapsed === true && !request.chatCollapsed) {
+    return withoutEditor(request, available);
+  }
+
   const wanted = {
     workspace: request.workspaceCollapsed
       ? 0
@@ -51,6 +65,13 @@ export function resolvePanelWidths(request: PanelRequest): PanelWidths {
       ? 0
       : clamp(request.chat, PANEL_BOUNDS.chat.min, PANEL_BOUNDS.chat.max),
   };
+
+  // Width beyond what the chat shares with the workspace comes out of the editor's spare room, and
+  // is the first thing to go when there is none.
+  if (wanted.chat > PANEL_BOUNDS.chat.shares) {
+    const room = available - wanted.workspace - PANEL_BOUNDS.editorMin;
+    wanted.chat = Math.max(PANEL_BOUNDS.chat.shares, Math.min(wanted.chat, room));
+  }
 
   const spare = available - wanted.workspace - wanted.chat;
   if (spare >= PANEL_BOUNDS.editorMin) {
@@ -77,4 +98,29 @@ export function resolvePanelWidths(request: PanelRequest): PanelWidths {
   }
 
   return { workspace: 0, chat: 0, editor: available };
+}
+
+/// The chat with the editor hidden: it takes everything the workspace does not.
+///
+/// The workspace keeps its width while the chat still gets its minimum, then narrows, then goes -
+/// the reverse of the usual order, because with the editor hidden the chat is the thing being read.
+function withoutEditor(request: PanelRequest, available: number): PanelWidths {
+  let workspace = request.workspaceCollapsed
+    ? 0
+    : clamp(request.workspace, PANEL_BOUNDS.workspace.min, PANEL_BOUNDS.workspace.max);
+
+  if (available - workspace < PANEL_BOUNDS.chat.min) {
+    const squeezed = available - PANEL_BOUNDS.chat.min;
+    workspace = workspace > 0 && squeezed >= PANEL_BOUNDS.workspace.min ? squeezed : 0;
+  }
+
+  return { workspace, chat: available - workspace, editor: 0 };
+}
+
+/// The widest the chat's divider will drag to in this window: up to the editor's floor.
+///
+/// Never below the chat's minimum, which would make a divider that can only be dragged the wrong way.
+export function chatWidthLimit({ available, workspace }: { available: number; workspace: number }): number {
+  const room = Math.round(available - workspace - PANEL_BOUNDS.editorMin);
+  return Math.min(PANEL_BOUNDS.chat.max, Math.max(PANEL_BOUNDS.chat.min, room));
 }

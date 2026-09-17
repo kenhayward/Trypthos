@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
+  chatWidthLimit,
   chatPanelVisible,
   attachmentsCutShort,
   contextTokens,
@@ -212,7 +213,13 @@ export default function App() {
     // The editor takes the whole width when there is no chat panel, which is what collapsing it
     // already means to the layout. One answer rather than two ways of saying nothing is there.
     chatCollapsed: panels.chatCollapsed || !showChat,
+    editorCollapsed: panels.editorCollapsed,
   });
+  /// Whether the editor is hidden behind the chat. Only ever while the chat is there to take the
+  /// room: a hidden editor with no chat would be an empty window, whatever the settings remember.
+  const editorHidden = panels.editorCollapsed && showChat && !panels.chatCollapsed;
+  /// How far the chat's divider drags: to the editor's floor in this window, however wide that is.
+  const chatLimit = chatWidthLimit({ available, workspace: widths.workspace });
   /// The prompt every path shares, or null in the browser preview - where there is nowhere to save
   /// to, so a question about saving would have only one honest answer and no way to act on it.
   /// The name is passed through, not dropped: the prompt is about ONE document among however many
@@ -262,6 +269,15 @@ export default function App() {
     noteRecent,
     askCommit,
   );
+
+  /// Opening a file into a hidden editor would look like a click that did nothing - from the tree, a
+  /// link in the chat, or the recent files alike - so a different document on screen brings it back.
+  const shownPath = useRef(state.activePath);
+  useEffect(() => {
+    if (state.activePath === shownPath.current) return;
+    shownPath.current = state.activePath;
+    if (state.activePath !== null && editorHidden) updatePanels({ editorCollapsed: false });
+  }, [state.activePath, editorHidden, updatePanels]);
 
   /// The browser's filter box, which searches every open folder by name.
   ///
@@ -748,7 +764,18 @@ export default function App() {
           </>
         )}
 
+        {editorHidden && (
+          <PanelRail
+            side="left"
+            label={t("panels.expandEditor")}
+            onExpand={() => updatePanels({ editorCollapsed: false })}
+          />
+        )}
         <EditorPanel
+          hidden={editorHidden}
+          onCollapse={
+            showChat && !panels.chatCollapsed ? () => updatePanels({ editorCollapsed: true }) : undefined
+          }
           workspaceName={workspaceNameFor(state.workspaces, state.activePath)}
           paths={openPaths}
           activePath={state.activePath}
@@ -828,17 +855,24 @@ export default function App() {
             />
           ) : (
             <>
-              <PanelDivider
-                grows="left"
-                width={widths.chat}
-                min={PANEL_BOUNDS.chat.min}
-                max={PANEL_BOUNDS.chat.max}
-                label={t("panels.chatDivider")}
-                onResize={(chatWidth) => updatePanels({ chatWidth })}
-              />
+              {/* No divider while the editor is hidden: the chat is as wide as the room, and a
+                  drag would change a width that is not being used. */}
+              {!editorHidden && (
+                <PanelDivider
+                  grows="left"
+                  width={widths.chat}
+                  min={PANEL_BOUNDS.chat.min}
+                  max={chatLimit}
+                  label={t("panels.chatDivider")}
+                  onResize={(chatWidth) => updatePanels({ chatWidth })}
+                />
+              )}
               <ChatPanel
                 width={widths.chat}
-                onCollapse={() => updatePanels({ chatCollapsed: true })}
+                fill={editorHidden}
+                // The editor comes back with it. Something has to fill the window, and a chat that
+                // reopened onto a hidden editor would be hiding something nobody asked to hide.
+                onCollapse={() => updatePanels({ chatCollapsed: true, editorCollapsed: false })}
                 models={chatModels}
                 selectedId={activeModel?.id ?? null}
                 onSelectModel={setChosenModel}

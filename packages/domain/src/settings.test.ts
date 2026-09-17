@@ -888,3 +888,31 @@ describe("the tool call limit on a profile", () => {
     expect(loadSettings(chosen).chat.profiles[0]?.maxToolCalls).toBe(400);
   });
 });
+
+/// Hiding the editor, added at version 20.
+///
+/// The panels object is strict, so a file written before the field existed has to be given it - and a
+/// file written after it, read by the build before, would fail to parse and lose every width with it.
+describe("the editor hidden behind the chat", () => {
+  it("brings an older file back with the editor showing", () => {
+    const panels: Partial<typeof DEFAULT_SETTINGS.panels> = { ...DEFAULT_SETTINGS.panels };
+    delete panels.editorCollapsed;
+    const before = { ...DEFAULT_SETTINGS, schemaVersion: 19, panels: { ...panels, chatWidth: 420 } };
+
+    const loaded = loadSettings(before);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
+    expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(20);
+    expect(loaded.panels.editorCollapsed).toBe(false);
+    // Nothing else about the layout is touched.
+    expect(loaded.panels.chatWidth).toBe(420);
+  });
+
+  it("remembers the editor hidden", () => {
+    const hidden = { ...DEFAULT_SETTINGS, panels: { ...DEFAULT_SETTINGS.panels, editorCollapsed: true } };
+    expect(loadSettings(hidden).panels.editorCollapsed).toBe(true);
+  });
+
+  it("ships with the editor showing", () => {
+    expect(DEFAULT_SETTINGS.panels.editorCollapsed).toBe(false);
+  });
+});

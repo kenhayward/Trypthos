@@ -1237,6 +1237,15 @@ usual red, amber and green buttons stay where macOS puts them.
 Drag the seam beside either side panel to resize it, or focus the seam and use the arrow keys. Hide a
 panel entirely and a strip stays at the edge to bring it back.
 
+**Read a long conversation across the window.** The chat's seam drags out until the editor is down to
+its narrowest, so in a wide window the chat can take most of it. To give the chat all of it, use the
+double arrow at the left end of the editor's tab strip: the editor folds away to the left and the chat
+fills the room it leaves. The strip left behind brings the editor back, and so does opening a file -
+from the folder browser, a link in the chat or the recent files - since a file opened into a hidden
+editor would look like a click that did nothing. Hiding the editor closes nothing: your open files and
+unsaved changes are all there when it comes back. Hiding the chat brings the editor back too, because
+something has to fill the window.
+
 Panel sizes, which panels are hidden, and the folder you had open are remembered between launches -
 the folder reopens automatically, and is quietly ignored if it has since been moved or deleted.
 

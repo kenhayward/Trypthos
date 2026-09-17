@@ -5,6 +5,16 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.82.0",
+    date: "2026-09-17",
+    pr: 173,
+    headline: "Give the chat more of the window, or all of it",
+    summary:
+      "A long conversation is hard to read down a third of the window, and the chat used to stop there. Its seam now drags out until the editor is down to its narrowest, so in a wide window the chat can take most of the room. To give it all of the room, use the new double arrow at the left end of the editor's tab strip: the editor folds away to the left and the chat fills the space. A strip at the edge brings the editor back, and so does opening a file, whether from the folder browser, a link in the chat or the recent files. Hiding the editor closes nothing - open files and unsaved changes are there when it comes back - and hiding the chat brings the editor back too. The window remembers whether the editor was hidden.",
+    added: ["A button at the left of the editor's tab strip hides the editor so the chat can fill the window."],
+    changed: ["The chat panel can be dragged much wider, up to where the editor reaches its narrowest."],
+  },
+  {
     version: "0.81.0",
     date: "2026-09-16",
     pr: 172,

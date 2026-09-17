@@ -1214,6 +1214,22 @@ every close hides the window, including the one during shutdown.
 person can work with a cramped file list and cannot work in a cramped document. Below the point where
 even the minimums fit, the panels collapse entirely rather than squeezing the editor out of existence.
 
+**The chat can be most of the window.** Its only real ceiling is the editor's floor, which
+`chatWidthLimit` computes for the window as it is and the divider uses as its maximum;
+`PANEL_BOUNDS.chat.max` is just a sanity bound on what a settings file can ask for. Up to
+`PANEL_BOUNDS.chat.shares` the chat and workspace give way together in a narrow window, as before;
+width the chat asks for beyond that is given back first, so widening the chat never costs the file
+list its width.
+
+**The editor can be hidden behind the chat** (`panels.editorCollapsed`, settings version 20, whose
+migration writes `false` because the panels object is strict). It only takes effect while the chat is
+shown and open - a hidden editor with nothing to fill the room would be an empty window - so
+`resolvePanelWidths` ignores it otherwise, and hiding the chat clears it. Hidden means the `hidden`
+attribute on the editor's `<main>`, **not unmounting**: the CodeMirror views, their undo history and
+the find overlay all survive. The chat then flexes to fill the row rather than taking its resolved
+width, because the rail and the workspace divider have width the layout does not count. `App` brings
+the editor back whenever `activePath` changes to a document, whichever way it was opened.
+
 The available width is measured **before the first paint** and observed afterwards. ResizeObserver
 fires after paint, so relying on it alone gave a first frame with nothing to divide up: every panel
 resolved to zero and the layout visibly snapped into place a moment later.
