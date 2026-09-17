@@ -74,6 +74,10 @@ describe("the links a note makes", () => {
   it("does not take a nested list item for indented code", () => {
     expect(extractReferences("- item\n    - [[Nested]]").links).toEqual([wiki("Nested")]);
   });
+
+  it("does not take a nested list item for indented code across a loose list's blank line", () => {
+    expect(extractReferences("- item\n\n    - [[Nested]]").links).toEqual([wiki("Nested")]);
+  });
 });
 
 describe("the tags a note carries", () => {
@@ -101,6 +105,18 @@ describe("the tags a note carries", () => {
 
   it("ignores tags in code and comments", () => {
     expect(extractReferences("`#code`\n```\n#fence\n```\n%% #comment %%").tags).toEqual([]);
+  });
+
+  it("does not read a markdown link's URL fragment as a tag", () => {
+    expect(extractReferences("[Section One](#section-one) [h](Note.md#top)").tags).toEqual([]);
+  });
+
+  it("still reads a tag written in plain parentheses, not a link destination", () => {
+    expect(extractReferences("(#project/atlas)").tags).toEqual(["project/atlas"]);
+  });
+
+  it("reads a tag in a loose list item's continuation text", () => {
+    expect(extractReferences("- item\n\n    More text about #tag here").tags).toEqual(["tag"]);
   });
 });
 
