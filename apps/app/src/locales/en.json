@@ -562,6 +562,12 @@
     "missing": "Folder not found",
     "cancel": "Cancel"
   },
+  "graph": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit graph",
+    "tooLarge": "This graph is too large to draw on this computer."
+  },
   "github": {
     "title": "Open a GitHub repository",
     "connectBlurb": "Trypthos needs a personal access token to read your repositories. Create one at github.com/settings/tokens with read access to your repositories, then paste it here. The token is encrypted by your operating system and never leaves this machine.",
