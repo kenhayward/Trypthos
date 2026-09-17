@@ -865,6 +865,10 @@ export default function App() {
               // ringed - the highlight matters in the local pane, which sits beside a note.
               <Suspense fallback={null}>
                 <GraphPage
+                  // One page per vault. Every vault's graph draws in this one slot, so without a
+                  // key React reuses the instance and the second vault's tab opens carrying the
+                  // first one's search, its highlights and its pending centre-on request.
+                  key={graphWorkspace.id}
                   workspaceId={graphWorkspace.id}
                   vaultName={graphWorkspace.name}
                   client={client}

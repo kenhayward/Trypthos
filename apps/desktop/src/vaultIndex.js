@@ -268,4 +268,4 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
   };
 }
 
-module.exports = { createVaultIndexes, READ_BATCH };
+module.exports = { createVaultIndexes };

@@ -21,5 +21,6 @@ apps/desktop/build/
 # notes rather than a plan the project has agreed, and `docs/` is otherwise all published material.
 docs/Roadmap Features.md
 
-# Brainstorming companion mockups - scratch output of a design session, not project material.
+# The spec-driven-development working area: the plan ledger, task briefs, review diffs and the
+# reports implementers write back. Scratch for building the thing, not part of the thing.
 .superpowers/

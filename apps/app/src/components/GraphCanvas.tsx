@@ -11,6 +11,8 @@ import {
   createNodeCompoundProgram,
 } from "sigma/rendering";
 import type { GraphNode, GraphNodeKind, VaultGraph } from "@trypthos/domain";
+import { graphFailureKind } from "../lib/graphFailure";
+import type { GraphFailureKind } from "../lib/graphFailure";
 import { stepSelection } from "../lib/graphFilters";
 import type { Positions } from "../lib/graphLayoutTypes";
 import { observeTheme, PICTOGRAMS, readGraphPalette } from "../lib/graphTheme";
@@ -87,16 +89,24 @@ function nodeSize(degree: number, compact: boolean): number {
 /// test on a `console.error`, and a component that can re-run this effect on every prop change is
 /// the wrong place to write to a shared log. It rides on the message element's `title` instead,
 /// where whoever is looking at the failure can read it.
-function buildRenderer(make: () => Sigma, report: (failure: string | null) => void): Sigma | null {
+///
+/// What the user is told is decided from the error, by `graphFailureKind` - "too large" is a claim
+/// about their vault, and only a failure that names a limit earns it.
+function buildRenderer(make: () => Sigma, report: (failure: Failure | null) => void): Sigma | null {
   let sigma: Sigma;
   try {
     sigma = make();
   } catch (error) {
-    report(error instanceof Error ? error.message : String(error));
+    report({ kind: graphFailureKind(error), detail: error instanceof Error ? error.message : String(error) });
     return null;
   }
   report(null);
   return sigma;
+}
+
+interface Failure {
+  kind: GraphFailureKind;
+  detail: string;
 }
 
 export default function GraphCanvas({
@@ -119,7 +129,7 @@ export default function GraphCanvas({
   const [palette, setPalette] = useState(currentPalette);
   /// The palette the model and the reducers are currently painted with.
   const paint = useRef(palette);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
 
   useEffect(() => {
     callbacks.current = { onOpen, onRenderer };
@@ -172,6 +182,15 @@ export default function GraphCanvas({
         pictoColor: colours.pictogram,
       });
     }
+    // Hover and selection outlive the graph they were made in - they are refs, and a new `graph`
+    // prop is exactly what creating a note from a selected ghost, renaming a selected note, or
+    // switching vault produces. A selection naming a node that is no longer here is not a stale
+    // highlight but a crash: Sigma runs the reducers inside its own constructor, so
+    // `areNeighbors` would throw before the renderer existed and the pane would keep its failure
+    // message for good.
+    if (view.current.selected !== null && !model.hasNode(view.current.selected)) view.current.selected = null;
+    if (view.current.hovered !== null && !model.hasNode(view.current.hovered)) view.current.hovered = null;
+
     for (const edge of graph.edges) {
       if (!model.hasNode(edge.source) || !model.hasNode(edge.target) || model.hasEdge(edge.source, edge.target)) continue;
       model.addEdge(edge.source, edge.target, {
@@ -201,7 +220,9 @@ export default function GraphCanvas({
             const colours = paint.current;
             if (state.hidden.has(node)) return { ...data, hidden: true };
             const focus = state.hovered ?? state.selected;
-            const near = focus === null || node === focus || model.areNeighbors(focus, node);
+            // `hasNode` before `areNeighbors`: graphology throws for a node it does not hold, and a
+            // reducer that throws takes the whole renderer down with it.
+            const near = focus === null || node === focus || (model.hasNode(focus) && model.areNeighbors(focus, node));
             const found = state.highlighted === null || state.highlighted.has(node);
             const shown = { ...data };
             if (!near || !found) {
@@ -339,8 +360,8 @@ export default function GraphCanvas({
         className="h-full w-full outline-none focus-visible:ring-2 focus-visible:ring-accent"
       />
       {failure !== null && (
-        <p title={failure} className="absolute inset-0 flex items-center justify-center bg-app p-4 text-center text-sm text-danger">
-          {t("graph.tooLarge")}
+        <p title={failure.detail} className="absolute inset-0 flex items-center justify-center bg-app p-4 text-center text-sm text-danger">
+          {failure.kind === "tooLarge" ? t("graph.tooLarge") : t("graph.drawFailed")}
         </p>
       )}
       {!compact && failure === null && (

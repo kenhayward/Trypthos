@@ -33,11 +33,11 @@ async function mount(overrides: Partial<Parameters<typeof GraphCanvas>[0]> = {},
   document.body.append(host);
   const held: { renderer: Sigma | null } = { renderer: null };
   const onOpen = vi.fn();
-  const view = render(
+  const tree = (drawn: VaultGraph) => (
     <div style={{ width: box.width, height: box.height }}>
       <GraphCanvas
-        graph={graph}
-        positions={computeLayout(graph)}
+        graph={drawn}
+        positions={computeLayout(drawn)}
         hidden={new Set()}
         highlighted={null}
         activeId={null}
@@ -47,16 +47,24 @@ async function mount(overrides: Partial<Parameters<typeof GraphCanvas>[0]> = {},
         onRenderer={(value) => (held.renderer = value)}
         {...overrides}
       />
-    </div>,
-    { container: host },
+    </div>
   );
+  const view = render(tree(graph), { container: host });
   await waitFor(() => expect(held.renderer).not.toBe(null));
   const canvas = view.getByTestId("graph-canvas");
   const pointAt = (id: string) => {
     const attributes = held.renderer!.getGraph().getNodeAttributes(id);
     return held.renderer!.graphToViewport({ x: attributes.x as number, y: attributes.y as number });
   };
-  return { view, canvas, onOpen, pointAt, renderer: () => held.renderer! };
+  return {
+    view,
+    canvas,
+    onOpen,
+    pointAt,
+    renderer: () => held.renderer!,
+    held,
+    redraw: (next: VaultGraph) => view.rerender(tree(next)),
+  };
 }
 
 describe("GraphCanvas", () => {
@@ -120,6 +128,30 @@ describe("GraphCanvas", () => {
     const { renderer, view } = await mount({}, { width: 0, height: 0 });
     expect(renderer()).not.toBe(null);
     expect(view.queryByText("This graph is too large to draw on this computer.")).toBe(null);
+  });
+
+  // The selection is a ref, so it survives a new `graph` prop - and the node it names may not.
+  // Creating a note from the ghost that was selected, renaming a selected note, or switching
+  // between two vaults' tabs all arrive here as "the graph changed under the selection". Sigma runs
+  // the node reducer inside its own constructor, so a selection naming an absent node threw before
+  // the renderer existed, and the pane stayed on its failure message for good.
+  it("keeps drawing when the selected node leaves the graph", async () => {
+    const { canvas, pointAt, redraw, view, held } = await mount();
+    const beta = pointAt("V/Beta.md");
+    await userEvent.click(canvas, { position: { x: beta.x, y: beta.y } });
+    await waitFor(() => expect(canvas.dataset.selected).toBe("V/Beta.md"));
+
+    const without: VaultGraph = {
+      nodes: graph.nodes.filter((node) => node.id !== "V/Beta.md"),
+      edges: graph.edges.filter((edge) => edge.source !== "V/Beta.md" && edge.target !== "V/Beta.md"),
+    };
+    redraw(without);
+
+    await waitFor(() => expect(held.renderer).not.toBe(null));
+    expect(held.renderer!.getGraph().hasNode("V/Beta.md")).toBe(false);
+    expect(view.queryByText("This graph is too large to draw on this computer.")).toBe(null);
+    expect(view.queryByText("The graph could not be drawn.")).toBe(null);
+    expect(canvas.dataset.selected).toBe("");
   });
 
   it("lays out the same positions in the worker as on the main thread", async () => {

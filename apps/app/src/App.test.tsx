@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import { repoPath } from "./testing/repoRoot";
 import type { RepoStats, WorkspaceRef } from "@trypthos/domain";
 import { DEFAULT_SETTINGS, type Settings } from "@trypthos/domain";
 import App from "./App";
@@ -1725,5 +1727,23 @@ describe("hiding the editor behind the chat", () => {
     await user.click(await screen.findByRole("button", { name: /plan\.md/ }));
 
     expect(await screen.findByRole("main", { name: "Editor" })).toBeDefined();
+  });
+});
+
+/// One vault's graph tab must never inherit another's.
+///
+/// `GraphPage` keeps the search query and the centre-on request in its own state, and App draws
+/// every vault's graph in the same slot - so with no key React reuses one instance and the second
+/// vault's tab opens showing the first vault's search, highlights and focus request.
+///
+/// A source check rather than a rendered one, in the spirit of `graphBundle.test.ts`: the page
+/// builds its layout in a Worker, which jsdom does not have, so this suite cannot mount one at all.
+describe("the vault graph tab", () => {
+  it("is keyed by workspace, so no vault inherits another's page", () => {
+    const source = readFileSync(repoPath("apps", "app", "src", "App.tsx"), "utf8");
+    const opens = source.indexOf("<GraphPage");
+    expect(opens).toBeGreaterThan(-1);
+    const element = source.slice(opens, source.indexOf("/>", opens));
+    expect(element).toContain("key={graphWorkspace.id}");
   });
 });

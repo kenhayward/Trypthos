@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GraphSnapshot } from "@trypthos/domain";
+import { expectsConsoleError } from "../test-setup";
 import { FakeCanvas, fakeGraphClient, instantLayout } from "../testing/fakeGraphClient";
 import GraphPage from "./GraphPage";
 
@@ -142,6 +143,18 @@ describe("GraphPage", () => {
     expect(screen.getByText("Refreshing - 2 of 4 files - showing index from just now")).toBeTruthy();
   });
 
+  // Inside the group it is announced as one of the filters, which it is not - it rebuilds the index
+  // and changes nothing about what is shown.
+  it("keeps refresh out of the group of filters", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    const filters = screen.getByRole("group", { name: "Graph filters" });
+    expect(within(filters).queryByRole("button", { name: "Refresh graph" })).toBeNull();
+    expect(within(filters).getByRole("button", { name: "Notes" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh graph" })).toBeTruthy();
+  });
+
   it("says when a build failed", async () => {
     const fake = fakeGraphClient({ snapshot: null, building: null, error: "not-found" });
     page(fake);
@@ -161,5 +174,23 @@ describe("GraphPage", () => {
     page(fake);
     await flush();
     expect(screen.getByText((text) => text.includes("Files that could not be read: 3"))).toBeTruthy();
+  });
+
+  // The canvas is a chunk fetched when the tab first draws, and a fetch can fail. Without a floor
+  // under it that throw unmounts the tab itself, so a graph nobody could draw takes the filters,
+  // the search and the status line with it.
+  it("keeps the tab when the canvas cannot be drawn at all", async () => {
+    expectsConsoleError(/no canvas here/);
+    expectsConsoleError(/error occurred in the/i);
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake, {
+      Canvas: () => {
+        throw new Error("no canvas here");
+      },
+    });
+    await flush();
+    expect(screen.getByText("The graph could not be drawn.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh graph" })).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: "Search notes" })).toBeTruthy();
   });
 });

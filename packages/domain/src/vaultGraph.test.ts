@@ -81,6 +81,20 @@ describe("building the graph", () => {
     expect(node(graph, "ghost:risks")).toEqual({ id: "ghost:risks", kind: "ghost", label: "Risks", path: null, degree: 2 });
   });
 
+  // One missing note, one ghost - however it was linked to. Keyed differently, a vault that links
+  // to the same absent note both ways grows two nodes for it, and creating the note from one leaves
+  // the other still hanging.
+  it("gives a wiki link and a markdown link to the same missing note one ghost", () => {
+    const graph = buildGraph(
+      input(["V/A.md", "V/B.md"], {
+        "V/A.md": refs([wiki("Plans/Risks")]),
+        "V/B.md": refs([path("Plans/Risks.md")]),
+      }),
+    );
+    expect(graph.nodes.filter((n) => n.kind === "ghost").map((n) => n.id)).toEqual(["ghost:plans/risks"]);
+    expect(node(graph, "ghost:plans/risks")!.degree).toBe(2);
+  });
+
   it("draws two notes linking to each other as one edge marked both", () => {
     const graph = buildGraph(
       input(["V/A.md", "V/B.md"], { "V/A.md": refs([wiki("B")]), "V/B.md": refs([wiki("A")]) }),

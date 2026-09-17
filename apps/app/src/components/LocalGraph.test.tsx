@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { GraphSnapshot } from "@trypthos/domain";
+import { expectsConsoleError } from "../test-setup";
 import { FakeCanvas, instantLayout } from "../testing/fakeGraphClient";
 import LocalGraph from "./LocalGraph";
 
@@ -64,5 +65,19 @@ describe("LocalGraph", () => {
     await act(async () => {});
     fireEvent.doubleClick(screen.getByRole("button", { name: "Beta" }));
     expect(props.onOpenPath).toHaveBeenCalledWith("V/B.md");
+  });
+
+  // The pane sits under the folder trees, so a canvas chunk that would not load takes the whole
+  // left panel with it unless something catches the throw here.
+  it("says so rather than throwing when the canvas cannot be drawn at all", async () => {
+    expectsConsoleError(/no canvas here/);
+    expectsConsoleError(/error occurred in the/i);
+    show({
+      Canvas: () => {
+        throw new Error("no canvas here");
+      },
+    });
+    await act(async () => {});
+    expect(screen.getByText("The graph could not be drawn.")).toBeTruthy();
   });
 });

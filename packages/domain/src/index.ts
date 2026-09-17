@@ -19,7 +19,7 @@ export type { FrontMatterProperty, FrontMatterSplit } from "./frontMatter";
 export { parseWikiLink, pickWikiTarget, wikiLinkFileName } from "./wikiLink";
 export { embeddedSection } from "./noteEmbed";
 export type { WikiLink } from "./wikiLink";
-export { extractReferences, maskIgnored } from "./vaultLinks";
+export { extractReferences } from "./vaultLinks";
 export type { NoteReference, NoteReferences } from "./vaultLinks";
 export { imageSource, isExternalUrl, isUnsupportedScheme, linkAction } from "./markdownLink";
 export type { ImageSource, LinkAction, LinkRejection } from "./markdownLink";

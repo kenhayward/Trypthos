@@ -94,6 +94,10 @@ export function buildGraph(input: VaultIndexInput): VaultGraph {
     });
   }
 
+  /// A ghost is keyed by the target AS WRITTEN, minus any markdown extension - the same rule for
+  /// both kinds of link. Keying a markdown link by its file name alone would give `[[Plans/Risks]]`
+  /// and `[Risks](Plans/Risks.md)` two nodes for one missing note, and creating the note from one
+  /// of them would leave the other still hanging.
   const ghost = (written: string): string => {
     const label = withoutMarkdownExtension(written);
     const id = `ghost:${label.toLowerCase()}`;
@@ -110,7 +114,7 @@ export function buildGraph(input: VaultIndexInput): VaultGraph {
     const resolved = resolveRelative(from, reference.path);
     if (resolved === null) return null;
     const found = byLowerPath.get(resolved.toLowerCase()) ?? byLowerPath.get(`${resolved.toLowerCase()}.md`);
-    return found ?? ghost(nameOf(reference.path));
+    return found ?? ghost(reference.path);
   };
 
   const directed = new Set<string>();

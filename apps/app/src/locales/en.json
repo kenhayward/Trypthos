@@ -567,6 +567,7 @@
     "zoomOut": "Zoom out",
     "fit": "Fit graph",
     "tooLarge": "This graph is too large to draw on this computer.",
+    "drawFailed": "The graph could not be drawn.",
     "refresh": "Refresh graph",
     "filters": "Graph filters",
     "chipNotes": "Notes",

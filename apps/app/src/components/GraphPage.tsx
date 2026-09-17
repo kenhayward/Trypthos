@@ -11,6 +11,7 @@ import { indexAge, linkCount, noteCount, percentRead } from "../lib/graphStatus"
 import type { IndexAge } from "../lib/graphStatus";
 import { useLayoutRunner } from "../lib/layoutClient";
 import type { GraphClient } from "../lib/workspaceClient";
+import CanvasBoundary from "./CanvasBoundary";
 import type { GraphCanvasProps, GraphFocus } from "./GraphCanvas";
 import Glyph from "./Glyph";
 
@@ -129,31 +130,37 @@ export default function GraphPage({
     body = <p className="flex h-full items-center justify-center text-sm text-ink-4">{t("graph.empty")}</p>;
   } else if (snapshot !== null && positions !== null) {
     body = (
-      // Nothing while the canvas chunk arrives: the graph appears when it can be drawn, and a
-      // spinner for one local chunk is a flash of something nobody reads.
-      <Suspense fallback={null}>
-        <Canvas
-          graph={snapshot}
-          positions={positions}
-          hidden={hidden}
-          highlighted={highlighted}
-          activeId={activeId}
-          focus={focus}
-          label={t("graph.canvas", { name: vaultName })}
-          onOpen={(node) => {
-            const action = graphNodeAction(node, snapshot);
-            if (action?.kind === "open") onOpenPath(action.path);
-            else if (action?.kind === "create") onCreateNote({ directory: action.directory, name: action.name });
-          }}
-        />
-      </Suspense>
+      // The boundary is outside the Suspense, so it catches the chunk that would not arrive as well
+      // as anything the canvas throws while rendering. Nothing while the chunk is on its way: the
+      // graph appears when it can be drawn, and a spinner for one local chunk is a flash of
+      // something nobody reads.
+      <CanvasBoundary message={t("graph.drawFailed")}>
+        <Suspense fallback={null}>
+          <Canvas
+            graph={snapshot}
+            positions={positions}
+            hidden={hidden}
+            highlighted={highlighted}
+            activeId={activeId}
+            focus={focus}
+            label={t("graph.canvas", { name: vaultName })}
+            onOpen={(node) => {
+              const action = graphNodeAction(node, snapshot);
+              if (action?.kind === "open") onOpenPath(action.path);
+              else if (action?.kind === "create") onCreateNote({ directory: action.directory, name: action.name });
+            }}
+          />
+        </Suspense>
+      </CanvasBoundary>
     );
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-app">
       <div className="relative flex flex-col gap-1.5 border-b border-rule px-3 py-2">
-        <div role="group" aria-label={t("graph.filters")} className="flex flex-wrap items-center gap-1.5">
+        {/* Refresh sits beside the chips, not among them: it rebuilds the index and changes nothing
+            about what is shown, so inside the group a screen reader announces it as a filter. */}
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             aria-label={t("graph.refresh")}
@@ -167,21 +174,23 @@ export default function GraphPage({
               <path d="M20 4v5h-5" />
             </Glyph>
           </button>
-          {chips.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              aria-pressed={filter[chip.key]}
-              onClick={() => onFilterChange({ [chip.key]: !filter[chip.key] })}
-              className={
-                filter[chip.key]
-                  ? "rounded-full border border-obsidian bg-selected px-2.5 text-xs text-ink"
-                  : "rounded-full border border-rule px-2.5 text-xs text-ink-4 hover:bg-hover"
-              }
-            >
-              {chip.label}
-            </button>
-          ))}
+          <div role="group" aria-label={t("graph.filters")} className="flex flex-wrap items-center gap-1.5">
+            {chips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                aria-pressed={filter[chip.key]}
+                onClick={() => onFilterChange({ [chip.key]: !filter[chip.key] })}
+                className={
+                  filter[chip.key]
+                    ? "rounded-full border border-obsidian bg-selected px-2.5 text-xs text-ink"
+                    : "rounded-full border border-rule px-2.5 text-xs text-ink-4 hover:bg-hover"
+                }
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
         <input
           type="search"

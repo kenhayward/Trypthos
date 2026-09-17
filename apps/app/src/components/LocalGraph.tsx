@@ -9,6 +9,7 @@ import { hiddenNodes } from "../lib/graphFilters";
 import type { GraphFilter } from "../lib/graphFilters";
 import type { LayoutRunner } from "../lib/graphLayoutTypes";
 import { useLayoutRunner } from "../lib/layoutClient";
+import CanvasBoundary from "./CanvasBoundary";
 import type { GraphCanvasProps } from "./GraphCanvas";
 
 /// The local graph's body: the active note and what it links to, to the chosen depth. Lazy only.
@@ -59,24 +60,29 @@ export default function LocalGraph({
 
   if (positions === null) return null;
   return (
-    // Nothing while the canvas chunk arrives: the graph appears when it can be drawn, and a spinner
-    // for one local chunk is a flash of something nobody reads.
-    <Suspense fallback={null}>
-      <Canvas
-        graph={local}
-        positions={positions}
-        hidden={hidden}
-        highlighted={null}
-        activeId={centre}
-        focus={null}
-        compact
-        label={t("graph.localTitle")}
-        onOpen={(node) => {
-          const action = graphNodeAction(node, snapshot);
-          if (action?.kind === "open") onOpenPath(action.path);
-          else if (action?.kind === "create") onCreateNote({ directory: action.directory, name: action.name });
-        }}
-      />
-    </Suspense>
+    // The boundary is outside the Suspense, so it catches the chunk that would not arrive as well
+    // as anything the canvas throws while rendering - this pane sits under the folder trees, and an
+    // uncaught throw here would take the whole left panel. Nothing while the chunk is on its way:
+    // the graph appears when it can be drawn, and a spinner for one local chunk is a flash of
+    // something nobody reads.
+    <CanvasBoundary message={t("graph.drawFailed")}>
+      <Suspense fallback={null}>
+        <Canvas
+          graph={local}
+          positions={positions}
+          hidden={hidden}
+          highlighted={null}
+          activeId={centre}
+          focus={null}
+          compact
+          label={t("graph.localTitle")}
+          onOpen={(node) => {
+            const action = graphNodeAction(node, snapshot);
+            if (action?.kind === "open") onOpenPath(action.path);
+            else if (action?.kind === "create") onCreateNote({ directory: action.directory, name: action.name });
+          }}
+        />
+      </Suspense>
+    </CanvasBoundary>
   );
 }
