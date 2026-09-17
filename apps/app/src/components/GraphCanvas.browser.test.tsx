@@ -26,15 +26,15 @@ const graph: VaultGraph = {
   ],
 };
 
-async function mount(overrides: Partial<Parameters<typeof GraphCanvas>[0]> = {}) {
+async function mount(overrides: Partial<Parameters<typeof GraphCanvas>[0]> = {}, box = { width: 600, height: 400 }) {
   await page.viewport(900, 700);
   const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:0;top:0;width:600px;height:400px";
+  host.style.cssText = `position:fixed;left:0;top:0;width:${box.width}px;height:${box.height}px`;
   document.body.append(host);
   const held: { renderer: Sigma | null } = { renderer: null };
   const onOpen = vi.fn();
   const view = render(
-    <div style={{ width: 600, height: 400 }}>
+    <div style={{ width: box.width, height: box.height }}>
       <GraphCanvas
         graph={graph}
         positions={computeLayout(graph)}
@@ -96,13 +96,30 @@ describe("GraphCanvas", () => {
     expect(light.note).not.toBe(dark.note);
   });
 
-  it("repaints node colours when the theme changes", async () => {
+  // The repaint has to happen on the instance that is already there. Rebuilding it would throw away
+  // the camera the user panned and every node they dragged, which is a strange thing for switching
+  // to dark mode to do.
+  it("repaints node colours in place when the theme changes, without rebuilding the renderer", async () => {
     document.documentElement.setAttribute("data-theme", "light");
     const { renderer } = await mount();
+    const instance = renderer();
     const before = renderer().getGraph().getNodeAttribute("V/Alpha.md", "color");
     document.documentElement.setAttribute("data-theme", "dark");
     await waitFor(() => expect(renderer().getGraph().getNodeAttribute("V/Alpha.md", "color")).not.toBe(before));
+    expect(renderer().getGraph().getEdgeAttribute("V/Alpha.md", "V/Beta.md", "color")).toBe(
+      readGraphPalette(getComputedStyle(document.documentElement), "x").edge,
+    );
+    expect(renderer()).toBe(instance);
     document.documentElement.removeAttribute("data-theme");
+  });
+
+  // A pane that is laid out after its first paint - a collapsed sidebar opening, a tab becoming
+  // visible - hands Sigma a container of no size. Sigma throws on that unless it is told not to,
+  // and the throw would land the user on the "too large to draw" message for good.
+  it("comes up in a container that has no size yet", async () => {
+    const { renderer, view } = await mount({}, { width: 0, height: 0 });
+    expect(renderer()).not.toBe(null);
+    expect(view.queryByText("This graph is too large to draw on this computer.")).toBe(null);
   });
 
   it("lays out the same positions in the worker as on the main thread", async () => {

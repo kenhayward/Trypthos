@@ -22,10 +22,23 @@ const GRAPH_ONLY = new Set([
   "lib/layoutClient.ts",
 ]);
 
-const LIBRARY_IMPORT =
-  /^\s*import\s+(?!type\b)[^;]*?from\s+["'](?:sigma|graphology|graphology-[\w-]+|@sigma\/[\w-]+)(?:\/[^"']*)?["']/m;
-const GRAPH_MODULE_IMPORT =
-  /^\s*import\s+(?!type\b)[^;]*?from\s+["']\.{1,2}\/(?:[\w.]+\/)*(?:GraphPage|LocalGraph|GraphCanvas|graphLayout|graphLayout\.worker|layoutClient)(?:\?[^"']*)?["']/m;
+/// Every way a module can be pulled in at load time, and no way it cannot.
+///
+/// Three branches, because a static import wears three faces: `import x from "y"`, the side-effect
+/// `import "y"`, and the re-export `export * from "y"` - which loads the module just as eagerly
+/// while looking nothing like an import. `import type` and `export type` are excluded: they vanish
+/// at compile time and cost the bundle nothing. `import("y")` has no leading `import` keyword at the
+/// start of a line and so cannot match, which is the whole point.
+const STATIC_LOAD = String.raw`(?:import\s+(?!type\b)[^;]*?from\s+|import\s+|export\s+(?!type\b)[^;]*?from\s+)`;
+
+const LIBRARY_IMPORT = new RegExp(
+  `^\\s*${STATIC_LOAD}["'](?:sigma|graphology|graphology-[\\w-]+|@sigma\\/[\\w-]+)(?:\\/[^"']*)?["']`,
+  "m",
+);
+const GRAPH_MODULE_IMPORT = new RegExp(
+  `^\\s*${STATIC_LOAD}["']\\.{1,2}\\/(?:[\\w.]+\\/)*(?:GraphPage|LocalGraph|GraphCanvas|graphLayout|graphLayout\\.worker|layoutClient)(?:\\.tsx?)?(?:\\?[^"']*)?["']`,
+  "m",
+);
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -57,9 +70,14 @@ describe("the graph stays out of the initial bundle", () => {
     expect(LIBRARY_IMPORT.test('import { EdgeArrowProgram } from "sigma/rendering";')).toBe(true);
     expect(LIBRARY_IMPORT.test('import forceAtlas2 from "graphology-layout-forceatlas2";')).toBe(true);
     expect(LIBRARY_IMPORT.test('import { createNodeImageProgram } from "@sigma/node-image";')).toBe(true);
+    expect(LIBRARY_IMPORT.test('import "sigma";')).toBe(true);
+    expect(LIBRARY_IMPORT.test('export { default } from "sigma";')).toBe(true);
     expect(LIBRARY_IMPORT.test('import type Sigma from "sigma";')).toBe(false);
+    expect(LIBRARY_IMPORT.test('export type { NodeDisplayData } from "sigma";')).toBe(false);
     expect(GRAPH_MODULE_IMPORT.test('import GraphPage from "./components/GraphPage";')).toBe(true);
     expect(GRAPH_MODULE_IMPORT.test('import Worker from "./graphLayout.worker?worker&inline";')).toBe(true);
+    expect(GRAPH_MODULE_IMPORT.test('export * from "./components/GraphCanvas";')).toBe(true);
+    expect(GRAPH_MODULE_IMPORT.test('import GraphCanvas from "./GraphCanvas.tsx";')).toBe(true);
     expect(GRAPH_MODULE_IMPORT.test('import type { Positions } from "../lib/graphLayoutTypes";')).toBe(false);
     expect(GRAPH_MODULE_IMPORT.test('const GraphPage = lazy(() => import("./components/GraphPage"));')).toBe(false);
   });

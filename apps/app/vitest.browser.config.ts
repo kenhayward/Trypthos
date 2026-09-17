@@ -28,6 +28,14 @@ export default defineConfig({
     },
   },
   plugins: [react(), tailwindcss()],
+  // The graph canvas reaches sigma through `lazy(() => import(...))`, so Vite's dependency scan -
+  // which follows static imports - does not see it up front. It discovers it mid-run instead,
+  // re-optimises, and reloads the test, printing "Vite unexpectedly reloaded a test". The run still
+  // passes, but only on a warm cache is the output clean, and `npm ci` gives CI a cold one every
+  // time. Naming the packages here makes the scan find them before the browser starts.
+  optimizeDeps: {
+    include: ["sigma", "sigma/rendering", "@sigma/node-image"],
+  },
   define: {
     __APP_VERSION__: JSON.stringify(version.version),
   },
