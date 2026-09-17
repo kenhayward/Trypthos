@@ -588,7 +588,14 @@
     "ageHours": "{{count}} h ago",
     "ageDays": "{{count}} days ago",
     "buildFailed": "The graph could not be built. Refresh to try again.",
-    "empty": "No notes in this vault yet"
+    "empty": "No notes in this vault yet",
+    "localTitle": "Local graph",
+    "depth": "Depth",
+    "depthValue": "Depth {{count}}",
+    "collapse": "Collapse local graph",
+    "expand": "Expand local graph",
+    "localEmpty": "Open a note in a vault to see its links",
+    "localIndexing": "Indexing - {{percent}}%"
   },
   "github": {
     "title": "Open a GitHub repository",
