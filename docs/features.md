@@ -255,6 +255,38 @@ Local and cloud look like one tree to you, but they behave differently underneat
 paged, slow, and can fail part-way through. Trypthos shows that on the node it affects rather than
 blanking the whole panel, so a directory that is still loading, or that failed, says so in place.
 
+## Vault graph
+
+**An Obsidian vault is a graph as well as a tree.** Click a vault's row in the folder browser and a
+Graph tab opens beside your documents. Every note is a node, sized by how many links it has, and
+every link between two notes is a line with an arrow for its direction - both ends when the notes
+link to each other.
+
+**Chips choose what is drawn.** Notes, Attachments (pictures, PDFs and other files a note links or
+embeds), Tags (a node per tag, joined to every note carrying it), Unresolved (links to notes that do
+not exist yet) and Orphans (notes that link to nothing and that nothing links to). Attachments and
+Tags start off. The choices are remembered.
+
+**Find a note by name.** The search box under the chips highlights every matching node and dims the
+rest; Enter centres the graph on the best match.
+
+**Click to look, double-click to go.** Hovering or clicking a node highlights it and its neighbours.
+Double-click a note or an attachment to open it. Double-click an unresolved link to create the note
+it names: the New File dialog opens with the name filled in, in the folder Obsidian's own "Default
+location for new notes" setting chooses. Drag a node to move it; the arrangement settles the same
+way each time the graph opens. Arrow keys move between neighbours and Enter opens.
+
+**The Local graph follows your note.** A pane under the folder browser, shown while a vault is open,
+draws the note you are editing and the notes linked to it, one, two or three links away. It folds
+down to its header when you want the room back.
+
+**Built when the vault opens, kept current as you work.** Trypthos reads the vault when it opens and
+when you press the graph's refresh button, showing progress for a large vault, and updates the graph
+when you save, create or rename notes in Trypthos. Changes made in Obsidian while Trypthos is open
+appear after a refresh. The status line says how many notes and links there are and how old the
+graph is. Nothing is written to the vault and nothing is stored: note contents never leave the part
+of the app that reads them. Vaults opened from GitHub do not have a graph yet.
+
 ## File types
 
 Trypthos opens markdown, and the **File types** page of Settings decides what else it opens. Markdown

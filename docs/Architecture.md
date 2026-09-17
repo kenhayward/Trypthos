@@ -417,6 +417,45 @@ The status bar's facts are **measured, not assumed**. `detectLineEnding` reports
 genuinely mixes them, because the strip presents these as claims about the user's document - and the
 one thing worse than not showing it is showing it wrongly.
 
+## The vault graph
+
+**Indexed in the main process, drawn in the renderer.** `apps/desktop/src/vaultIndex.js` keeps one
+index per open local Obsidian vault. It starts after a successful `workspace:open`,
+`workspace:openRef` or `obsidian:openVault` whose workspace is a local vault - which covers restoring
+at launch - and is dropped on `workspace:close`. It walks the vault breadth first through the
+workspace's **provider** (so the boundary guard applies), skips dot-folders, reads notes 32 at a time
+with a turn of the event loop between batches, and reads `.obsidian/app.json` for where new notes go.
+
+**Pure domain underneath.** `vaultLinks.ts` extracts a note's wiki links, embeds, markdown links,
+front matter links and tags, ignoring code and `%%` comments. `vaultGraph.ts` resolves them with the
+same `pickWikiTarget` the editor follows links with - through a name map, so resolution is not
+O(links x files) - and builds sorted nodes (`note`, `attachment`, `ghost`, `tag`) and edges. The
+shell keeps the index **input** (files and each note's references) and rebuilds the graph from it
+after `applyIndexChange`, rather than patching a graph in place.
+
+**Kept current by the write handlers.** `file:write`, `file:saveAs` and `workspace:rename` tell the
+index after a write that landed; a write during a build is queued, and a folder rename rebuilds.
+Nothing watches the disk, so edits made outside Trypthos appear after `graph:refresh`.
+
+**The contract.** `graph:snapshot { workspaceId }` answers `GraphState`: the last finished snapshot,
+the build in progress, and the last error. `graph:refresh` starts a rebuild and is refused while one
+runs. `graph:progress` and `graph:changed` are pushed through a `broadcast` dependency to every
+window. Only a workspace id crosses; snapshots hold names, qualified paths and id pairs, never note
+contents, and are zod-validated on both sides (`ipc.ts`).
+
+**Drawing.** `useVaultGraph` follows one vault's state and shows progress only after 300 ms.
+`graphLayout.ts` seeds a circle in node order and runs ForceAtlas2 for a fixed number of iterations,
+so the same vault gets the same shape; it runs in an inline (blob) worker, because a module worker
+from `file://` is refused in the packaged app. `GraphCanvas.tsx` wraps Sigma: icon discs from
+`@sigma/node-image` over circles, colours read from the theme tokens and re-read on a theme change,
+hover and selection in a ref read by Sigma's reducers. `GraphPage` is the `trypthos:graph/<id>` tab
+(a reserved path like the repository page); `LocalGraphPane` sits under the workspace trees and
+lazy-loads `LocalGraph`. Filters, search and settings (`settings.graph`, version 21) are shared.
+
+**Bundle boundary.** Sigma, graphology and the layout worker are imported only by `GraphPage`,
+`LocalGraph`, `GraphCanvas`, `graphLayout`, `graphLayout.worker` and `layoutClient`, which are
+reached through `lazy()`; `graphBundle.test.ts` asserts it.
+
 ## Two test suites, and which is which
 
 | Suite | Runs in | Command |
@@ -772,7 +811,7 @@ Two details that are easy to lose:
   `-webkit-app-region` silently, so a style assertion passes whether or not it was ever applied.
   Both classes are needed: a frameless window with no drag region cannot be moved at all, and a
   control inside a drag region cannot be clicked.
-- **Window state is pushed, not polled.** `window:state` is the only channel flowing main to renderer,
+- **Window state is pushed, not polled.** `window:state` flows main to renderer,
   because a window can be maximised by ways the renderer never sees - a double-click on the bar, an OS
   snap gesture, a keyboard shortcut. It is schema-validated on arrival like everything else: main is
   trusted, but the schema is what stops a shape change surfacing as a button that quietly stops
@@ -2206,14 +2245,14 @@ Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in t
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
 `workspace:filter`, `workspace:close`, `workspace:refresh`, `workspace:createDirectory`, `workspace:rename`, `workspace:reveal`), Obsidian's vaults
-(`obsidian:vaults`, `obsidian:openVault`), cloud accounts (`github:status`, `github:connect`,
+(`obsidian:vaults`, `obsidian:openVault`), the vault graph (`graph:snapshot`, `graph:refresh`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
 conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and
-links (`shell:openExternal`). Three channels flow the other way, all validated on arrival like
-everything else: `window:state`, `chat:event` for streamed reply tokens and each request's trace, and `menu:action`.
+links (`shell:openExternal`). Five channels flow the other way, all validated on arrival like
+everything else: `window:state`, `chat:event` for streamed reply tokens and each request's trace, `menu:action`, and the vault graph's `graph:progress` and `graph:changed`, which go to every window.
 
 Three properties do the work:
 
