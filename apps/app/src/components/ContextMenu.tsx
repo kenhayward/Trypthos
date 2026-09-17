@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { placeMenu } from "../lib/menuPlacement";
 
 /// A right-click menu, drawn at the pointer.
 ///
@@ -28,6 +29,23 @@ export default function ContextMenu({
   children: ReactNode;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  /// Where the menu is drawn once it has measured itself, so all of it is in the window. Null for the
+  /// first layout, which is hidden: a menu that painted at the pointer and then jumped would flicker.
+  const [placed, setPlaced] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const element = menuRef.current;
+    if (!element) return;
+    const box = element.getBoundingClientRect();
+    setPlaced(
+      placeMenu({
+        x,
+        y,
+        above,
+        size: { width: box.width, height: box.height },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      }),
+    );
+  }, [x, y, above]);
 
   // Listeners exist only while a menu is on screen - this component is not rendered otherwise - so
   // there is nothing on the document for a menu nobody opened.
@@ -52,12 +70,9 @@ export default function ContextMenu({
       ref={menuRef}
       role="menu"
       aria-label={label}
-      style={
-        above
-          ? { right: window.innerWidth - x, bottom: window.innerHeight - y }
-          : { left: x, top: y }
-      }
-      className="fixed z-50 min-w-44 rounded-md border border-rule bg-app p-1 shadow-menu"
+      style={placed ?? { left: 0, top: 0, visibility: "hidden" }}
+      // A menu taller than the window scrolls inside it rather than running off it.
+      className="fixed z-50 max-h-screen min-w-44 overflow-auto rounded-md border border-rule bg-app p-1 shadow-menu"
     >
       {children}
     </div>

@@ -69,6 +69,11 @@ saving - with Obsidian's logo on its row instead of a folder, and it comes back 
 you start. Choosing a vault that is already open, as a vault or as a plain folder, selects it rather
 than opening it twice. Without Obsidian installed the button is not there.
 
+**Right-click the empty panel to open something.** Right-click anywhere in the folder browser that is
+not a folder or file row - below the trees, or the whole panel before anything is open - for a menu
+with the header's buttons in the same order: **Open Obsidian vault** (when Obsidian is installed),
+**Open GitHub repository** and **Open folder**. A right-click on a row still gives that row's own menu.
+
 **Give one file the whole window.** Right-click an openable local file and choose **Open in New
 Window**. It opens in a separate native window with only that document, no folder browser, chat panel
 or tabs. It remains editable and has the normal save shortcut and unsaved-change question, so focusing

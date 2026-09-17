@@ -140,6 +140,19 @@ export default function WorkspacePanel({
     y: number;
   } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  /// Where the menu for the panel's empty space is drawn, or null when it is closed.
+  ///
+  /// Separate from the workspace menu because it is about no workspace: it offers what the header's
+  /// buttons do, which is all an empty stretch of the panel is for.
+  const [sourceMenu, setSourceMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeSourceMenu = useCallback(() => setSourceMenu(null), []);
+  const openSourceMenu = useCallback((event: React.MouseEvent) => {
+    // A row under the pointer has already answered with its own menu.
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    setMenu(null);
+    setSourceMenu({ x: event.clientX, y: event.clientY });
+  }, []);
   const openMenu = useCallback(
     (
       event: React.MouseEvent,
@@ -152,6 +165,7 @@ export default function WorkspacePanel({
       } = {},
     ) => {
       event.preventDefault();
+      setSourceMenu(null);
       setMenu({ workspaceId, directory, file, target, openable, x: event.clientX, y: event.clientY });
     },
     [],
@@ -286,7 +300,9 @@ export default function WorkspacePanel({
       </div>
 
       {workspaces.length === 0 ? (
-        <p className="p-3 text-sm text-ink-3">{t("workspace.noFolder")}</p>
+        <div data-testid="workspace-body" className="min-h-0 grow" onContextMenu={openSourceMenu}>
+          <p className="p-3 text-sm text-ink-3">{t("workspace.noFolder")}</p>
+        </div>
       ) : (
         <>
           <div className="px-2 pt-2">
@@ -303,7 +319,11 @@ export default function WorkspacePanel({
             />
           </div>
 
-          <div className="min-h-0 grow overflow-auto px-1 py-2">
+          <div
+            data-testid="workspace-body"
+            className="min-h-0 grow overflow-auto px-1 py-2"
+            onContextMenu={openSourceMenu}
+          >
             {/* A walk of every open folder takes as long as those folders are big, so the panel says
                 what it is doing rather than sitting silently on rows from the last filter. */}
             {filterStatus.kind === "searching" && (
@@ -487,6 +507,37 @@ export default function WorkspacePanel({
             <span>{t("workspace.footer", { count: fileCount })}</span>
           </div>
         </>
+      )}
+
+      {sourceMenu !== null && (
+        <ContextMenu label={t("workspace.title")} x={sourceMenu.x} y={sourceMenu.y} onDismiss={closeSourceMenu}>
+          {onOpenVault !== undefined && (
+            <ContextMenuItem
+              onClick={() => {
+                setSourceMenu(null);
+                onOpenVault();
+              }}
+            >
+              {t("workspace.openVault")}
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem
+            onClick={() => {
+              setSourceMenu(null);
+              onOpenRepo();
+            }}
+          >
+            {t("workspace.openRepo")}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setSourceMenu(null);
+              onOpenWorkspace();
+            }}
+          >
+            {t("workspace.openFolder")}
+          </ContextMenuItem>
+        </ContextMenu>
       )}
     </aside>
   );
