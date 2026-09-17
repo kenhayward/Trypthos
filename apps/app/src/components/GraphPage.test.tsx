@@ -1,0 +1,140 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GraphSnapshot } from "@trypthos/domain";
+import { FakeCanvas, fakeGraphClient, instantLayout } from "../testing/fakeGraphClient";
+import GraphPage from "./GraphPage";
+
+const NOW = Date.parse("2026-09-17T10:00:00.000Z");
+const snapshot: GraphSnapshot = {
+  workspaceId: "V",
+  builtAt: "2026-09-17T10:00:00.000Z",
+  unreadable: 0,
+  newNotes: { mode: "folder", folder: "Inbox" },
+  nodes: [
+    { id: "V/A.md", kind: "note", label: "Alpha", path: "V/A.md", degree: 2 },
+    { id: "V/B.md", kind: "note", label: "Beta", path: "V/B.md", degree: 1 },
+    { id: "V/pic.png", kind: "attachment", label: "pic.png", path: "V/pic.png", degree: 0 },
+    { id: "ghost:risks", kind: "ghost", label: "Risks", path: null, degree: 1 },
+  ],
+  edges: [
+    { source: "V/A.md", target: "V/B.md", both: false },
+    { source: "V/A.md", target: "ghost:risks", both: false },
+  ],
+};
+const filter = { notes: true, attachments: false, tags: false, unresolved: true, orphans: true };
+
+function page(fake: ReturnType<typeof fakeGraphClient>, overrides = {}) {
+  const props = {
+    workspaceId: "V",
+    vaultName: "Research",
+    client: fake.client,
+    activePath: "V/B.md",
+    filter,
+    onFilterChange: vi.fn(),
+    onOpenPath: vi.fn(),
+    onCreateNote: vi.fn(),
+    layout: instantLayout,
+    Canvas: FakeCanvas,
+    now: () => NOW,
+    ...overrides,
+  };
+  render(<GraphPage {...props} />);
+  return props;
+}
+
+const flush = () => act(async () => {});
+
+describe("GraphPage", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("shows the first build's progress once it has run a moment", async () => {
+    const fake = fakeGraphClient({ snapshot: null, building: { workspaceId: "V", read: 1, total: 10, walking: false }, error: null });
+    page(fake);
+    await flush();
+    expect(screen.queryByText("Indexing Research")).toBeNull();
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(screen.getByText("Indexing Research")).toBeTruthy();
+    expect(screen.getByText("1 of 10 files")).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("10");
+  });
+
+  it("draws the graph with the filter applied and says how big and how fresh it is", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    const canvas = screen.getByTestId("fake-canvas");
+    expect(canvas.dataset.hidden).toBe("V/pic.png");
+    expect(canvas.dataset.active).toBe("V/B.md");
+    expect(canvas.getAttribute("aria-label")).toBe("Link graph of Research");
+    expect(screen.getByText("2 notes - 2 links - indexed just now")).toBeTruthy();
+  });
+
+  it("toggles a chip through the settings, and shows each chip's state", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    const props = page(fake);
+    await flush();
+    const attachments = screen.getByRole("button", { name: "Attachments" });
+    expect(attachments.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Notes" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(attachments);
+    expect(props.onFilterChange).toHaveBeenCalledWith({ attachments: true });
+  });
+
+  it("highlights search matches and centres on the best one with Enter", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    const search = screen.getByRole("searchbox", { name: "Search notes" });
+    fireEvent.change(search, { target: { value: "be" } });
+    expect(screen.getByTestId("fake-canvas").dataset.highlighted).toBe("V/B.md");
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(screen.getByTestId("fake-canvas").dataset.focus).toBe("V/B.md");
+  });
+
+  it("opens a note and offers to create a ghost's note on double-click", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    const props = page(fake);
+    await flush();
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Alpha" }));
+    expect(props.onOpenPath).toHaveBeenCalledWith("V/A.md");
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Risks" }));
+    expect(props.onCreateNote).toHaveBeenCalledWith({ directory: "V/Inbox", name: "Risks" });
+  });
+
+  it("refreshes, keeps the old graph on screen, and disables refresh while building", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    const refresh = screen.getByRole("button", { name: "Refresh graph" });
+    await act(async () => fireEvent.click(refresh));
+    expect(fake.refreshed).toEqual(["V"]);
+
+    act(() => fake.pushProgress({ workspaceId: "V", read: 2, total: 4, walking: false }));
+    expect((screen.getByRole("button", { name: "Refresh graph" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(screen.getByTestId("fake-canvas")).toBeTruthy();
+    expect(screen.getByText("Refreshing - 2 of 4 files - showing index from just now")).toBeTruthy();
+  });
+
+  it("says when a build failed", async () => {
+    const fake = fakeGraphClient({ snapshot: null, building: null, error: "not-found" });
+    page(fake);
+    await flush();
+    expect(screen.getByText("The graph could not be built. Refresh to try again.")).toBeTruthy();
+  });
+
+  it("says when a vault has no notes", async () => {
+    const fake = fakeGraphClient({ snapshot: { ...snapshot, nodes: [], edges: [] }, building: null, error: null });
+    page(fake);
+    await flush();
+    expect(screen.getByText("No notes in this vault yet")).toBeTruthy();
+  });
+
+  it("counts files it could not read", async () => {
+    const fake = fakeGraphClient({ snapshot: { ...snapshot, unreadable: 3 }, building: null, error: null });
+    page(fake);
+    await flush();
+    expect(screen.getByText((text) => text.includes("Files that could not be read: 3"))).toBeTruthy();
+  });
+});
