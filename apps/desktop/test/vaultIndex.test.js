@@ -140,6 +140,38 @@ test("says why when the vault root cannot be listed, and keeps the last good gra
   assert.equal(indexes.state("V").snapshot, good);
 });
 
+test("drains queued changes on a failed refresh, rather than stranding them for the next build", async () => {
+  const failList = new Set();
+  const files = { "A.md": "" };
+  const provider = fakeProvider(files, { failList });
+  const indexes = createVaultIndexes({ emit: () => {}, now: NOW });
+  const workspace = vault(provider);
+
+  indexes.start(workspace);
+  await indexes.idle("V");
+
+  // The refresh's walk fails, but a write lands while it is still running.
+  failList.add("");
+  assert.deepEqual(indexes.refresh(workspace), { ok: true });
+  files["A.md"] = "[[X]]";
+  indexes.written(workspace, "A.md", "[[X]]");
+  await indexes.idle("V");
+  assert.equal(indexes.state("V").error, "not-found");
+
+  // A second write lands after the failed build has already settled.
+  files["A.md"] = "[[Y]]";
+  indexes.written(workspace, "A.md", "[[Y]]");
+
+  // A later refresh succeeds. The stale queued write must not outlive the one after it.
+  failList.delete("");
+  assert.deepEqual(indexes.refresh(workspace), { ok: true });
+  await indexes.idle("V");
+
+  const ids = indexes.state("V").snapshot.nodes.map((node) => node.id);
+  assert.ok(ids.includes("ghost:y"));
+  assert.ok(!ids.includes("ghost:x"));
+});
+
 test("refuses a refresh while a build is running", async () => {
   const provider = fakeProvider({ "A.md": "" });
   const release = provider.hold();
@@ -160,12 +192,36 @@ test("stops a build and forgets the vault when it is closed", async () => {
 
   indexes.start(vault(provider));
   indexes.close("V");
+  const countAtClose = events.length;
   release();
-  await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
+  // A real timer rather than a couple of microtask/setImmediate turns: the abandoned build still
+  // has a read, a progress emit, a config read and a publish ahead of it, and a test that only
+  // waits a turn or two never gives it the chance to finish - so it would pass whether or not the
+  // build actually stops.
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.equal(indexes.state("V"), null);
-  assert.ok(!events.some((event) => event.channel === GRAPH_CHANGED_CHANNEL));
+  assert.deepEqual(events.slice(countAtClose), []);
+});
+
+test("recovers when something inside a build throws, rather than leaving it building forever", async () => {
+  const provider = fakeProvider({ "A.md": "" });
+  let calls = 0;
+  const throwOnceEmit = () => {
+    calls += 1;
+    if (calls === 2) throw new Error("destroyed window");
+  };
+  const indexes = createVaultIndexes({ emit: throwOnceEmit, now: NOW });
+  const workspace = vault(provider);
+
+  indexes.start(workspace);
+  await indexes.idle("V");
+
+  assert.equal(indexes.state("V").building, null);
+  assert.equal(indexes.state("V").error, "unreadable");
+  assert.deepEqual(indexes.refresh(workspace), { ok: true });
+  await indexes.idle("V");
+  assert.equal(indexes.state("V").building, null);
 });
 
 test("applies a write made during a build once the build finishes", async () => {

@@ -61,7 +61,15 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
     };
   }
 
-  const changed = (entry) => emit(GRAPH_CHANGED_CHANNEL, { workspaceId: entry.workspace.id });
+  // Guarded: this fires after a build has already succeeded or failed, so a broken listener (a send
+  // to a destroyed window, say) must not turn a finished build into an unhandled rejection.
+  const changed = (entry) => {
+    try {
+      emit(GRAPH_CHANGED_CHANNEL, { workspaceId: entry.workspace.id });
+    } catch {
+      // Notifying is best-effort; the index itself is already consistent.
+    }
+  };
   const progress = (entry, building) => {
     entry.building = building;
     emit(GRAPH_PROGRESS_CHANNEL, building);
@@ -89,6 +97,22 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
           if (directory === "") {
             entry.building = null;
             entry.error = listed.reason ?? "not-found";
+            // A change queued while this build was running has nowhere to land now - the walk it
+            // was waiting on never finished. Apply it to the last good graph instead of leaving it
+            // queued, or the next successful build would replay it on top of whatever happened
+            // meanwhile. A queued "rebuild" is dropped rather than retried: the walk just failed.
+            const queued = entry.pending.splice(0);
+            let applied = false;
+            let input = entry.input;
+            for (const change of queued) {
+              if (change === "rebuild") continue;
+              input = applyIndexChange(input, change);
+              applied = true;
+            }
+            if (entry.snapshot !== null && applied) {
+              entry.input = input;
+              publish(entry);
+            }
             changed(entry);
             return;
           }
@@ -140,8 +164,18 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
     if (rebuild) run(entry);
   }
 
+  // `entry.running` must never reject: `idle()` awaits it directly, and a rejection there would be
+  // an unhandled one the first time nothing happens to be awaiting it. A build can throw from
+  // several places outside this module's control - a send to a destroyed window, or a domain
+  // function handed a shape it does not expect - and all of them land here the same way.
   function run(entry) {
-    entry.running = build(entry);
+    entry.running = build(entry).catch(() => {
+      if (entries.get(entry.workspace.id) !== entry) return; // Closed (or replaced) meanwhile.
+      entry.building = null;
+      entry.error = "unreadable";
+      entry.pending = [];
+      changed(entry);
+    });
   }
 
   function apply(workspace, change) {
