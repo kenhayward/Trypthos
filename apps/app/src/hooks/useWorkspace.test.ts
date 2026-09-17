@@ -97,6 +97,11 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       ok: true as const,
       workspace: { id: "Garden", name: "Garden", ref: { kind: "local" as const, root: "/Garden", origin: "obsidian" as const }, truncated: false },
     }),
+    // The vault graph. Nothing in this hook reads it; it is here because the client is one interface.
+    graphState: async () => ({ ok: false, reason: "not-found" }),
+    refreshGraph: async () => ({ ok: true }),
+    onGraphProgress: () => () => {},
+    onGraphChanged: () => () => {},
     ...overrides,
   };
 
