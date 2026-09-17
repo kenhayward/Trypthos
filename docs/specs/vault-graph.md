@@ -14,7 +14,7 @@ note it names.
 | Decision | Choice | Reason |
 |---|---|---|
 | Renderer | **Sigma.js v3 + graphology** | Vaults run to thousands of notes. React Flow's DOM nodes degrade past roughly 500-1,000; Sigma draws in WebGL and stays smooth at tens of thousands. graphology is the model and brings ForceAtlas2 and neighbourhood queries. |
-| Layout | **ForceAtlas2, fixed seed, in a web worker** | A link graph is not a hierarchy - it is cycles and clusters, so it wants a force layout, not dagre/elk. A fixed seed makes the same vault settle into roughly the same shape every time, without persisting anything. |
+| Layout | **ForceAtlas2 for a fixed number of iterations, synchronously, inside an inline web worker (Vite ?worker&inline)** - ForceAtlas2 has no internal randomness, so identical input and a deterministic circular seed give identical positions. The library's own worker supervisor runs against wall-clock time and is not reproducible. An inline (blob) worker also avoids module-worker loading over file:// in the packaged app. | A link graph is not a hierarchy - it is cycles and clusters, so it wants a force layout, not dagre/elk. |
 | Where indexing runs | **Main process** | Every write already passes through a main-process handler, so the index is updated where the write lands, whichever window made it. Note contents never cross into the renderer to build the graph. Option rejected: indexing in the renderer via `file:read` - thousands of IPC round trips and every note held in renderer memory. |
 | Providers | **Local vaults only** | Indexing reads every note. That is instant locally and one API request per file on GitHub, which meets rate limits on a real vault. |
 | Freshness | **Build on vault open (including app launch) and on refresh; incremental on the app's own writes** | The app has deliberately never watched the disk. Edits made in Obsidian meanwhile appear after a refresh. |
@@ -66,30 +66,29 @@ note it names.
   - Frontmatter `aliases` are **not** used for resolution (Obsidian uses them only for link
     suggestions).
 - `neighbourhood(graph, id, depth)` - nodes and edges within `depth` hops (1-3), ignoring direction.
-- `applyIndexChange(graph, change)` - incremental update, pure:
-  - **Save** a note: its outgoing edges and tags are re-extracted. A tag node left with no notes is
-    removed.
-  - **Create** a file: any ghost whose name now resolves becomes a real node and its incoming edges
-    move across.
-  - **Rename** a file: the node is re-keyed; links that named the old name become ghosts (Trypthos
-    does not rewrite links).
-  - **Create or rename a folder:** a full rebuild.
+- `applyIndexChange(input, change)` works on the index **input** (file list + references per note),
+  not on the built graph; the shell rebuilds the graph from the updated input, which is linear and
+  simpler to prove correct. Changes: `written` (a file saved or created, with its references when it
+  is a note) and `renamed` (a file). A folder rename triggers a full rebuild; creating an empty folder
+  changes nothing.
 
 **`ipc.ts`** - zod schemas, `.strict()` like every other request:
 
 ```
-GraphSnapshot  { workspaceId, builtAt (ISO), complete: boolean, unreadable: number,
+GraphSnapshot  { workspaceId, builtAt (ISO), unreadable: number, newNotes: NewNoteLocation,
                  nodes: GraphNode[], edges: GraphEdge[] }
 GraphNode      { id, kind: "note" | "attachment" | "ghost" | "tag", label, path: string | null, degree }
 GraphEdge      { source, target, both: boolean }
 GraphProgress  { workspaceId, read: number, total: number, walking: boolean }
+GraphState     { snapshot: GraphSnapshot | null, building: GraphProgress | null, error: string | null }
+NewNoteLocation { mode: "root" } | { mode: "folder", folder } | { mode: "current" }
 GraphChanged   { workspaceId }
 GraphRequest   { workspaceId }   // for graph:snapshot and graph:refresh
 ```
 
-- **Node ids:** a note or attachment is its workspace-relative path; a ghost is `ghost:` + the
-  lowercased target name, so every unresolved `[[Risks]]` is one node; a tag is `tag:` + the
-  lowercased tag name.
+- **Node ids:** a note or attachment is its **qualified** path (`<workspaceId>/<path>`), the form
+  `openPath`, `pickWikiTarget` and `splitQualified` use; a ghost is `ghost:` + the lowercased target
+  name; a tag is `tag:` + the lowercased tag name.
 - **Labels:** file name without `.md`; a ghost's target as written; a tag's name.
 - **Edges:** one per unordered pair; `both` when the two link to each other. Repeated links from one
   note to the same target count once. Note -> tag edges have `both: false`.
@@ -104,10 +103,17 @@ GraphRequest   { workspaceId }   // for graph:snapshot and graph:refresh
   walk, reads in **batches of 32**, yielding between batches so the main process stays responsive.
 - **Progress:** `graph:progress` after each batch. `total` grows while the walk is still finding
   folders (`walking: true`).
-- **Incremental:** after a **successful** `file:write`, `file:saveAs`, `workspace:rename` or
-  `workspace:createDirectory`, the handler applies the change and emits `graph:changed`. A failed
-  write changes nothing.
+- **Incremental:** after a **successful** `file:write` or `file:saveAs` (a `written` change) or
+  `workspace:rename` (a `renamed` change for a file, a full rebuild for a folder), the handler applies
+  the change and emits `graph:changed`. A failed write changes nothing, and `workspace:createDirectory`
+  changes nothing, since an empty folder contributes no references.
 - **Events** go to every window with that workspace open.
+- **Broadcast:** a new `broadcast(channel, payload)` dependency of `registerIpcHandlers` sends to
+  every window (`BrowserWindow.getAllWindows()` in main.js). The existing `getWindow()` reaches only
+  the main window.
+- **Start:** indexing starts after a successful `workspace:open`, `workspace:openRef` or
+  `obsidian:openVault` whose workspace is a local vault - which covers restore at launch, since the
+  renderer reopens remembered workspaces through `workspace:openRef`.
 - **Concurrency:** a refresh during a build is refused (the renderer disables the button as well); a
   write during a build is queued and applied to the finished index; closing a vault cancels its build
   and drops its index.
@@ -116,7 +122,7 @@ GraphRequest   { workspaceId }   // for graph:snapshot and graph:refresh
 
 | Channel | Direction | Payload | Answer |
 |---|---|---|---|
-| `graph:snapshot` | renderer -> main | `GraphRequest` | `{ snapshot: GraphSnapshot \| null, building: GraphProgress \| null }` - the last complete snapshot (null before the first build finishes) and the build in progress, if any |
+| `graph:snapshot` | renderer -> main | `GraphRequest` | `{ ok: true, state: GraphState }` - the last finished snapshot (null before the first build finishes), the build in progress if any, and the last error, if any |
 | `graph:refresh` | renderer -> main | `GraphRequest` | accepted / refused (already building, not a local vault) |
 | `graph:progress` | main -> renderer | `GraphProgress` | - |
 | `graph:changed` | main -> renderer | `GraphChanged` | - |
@@ -150,8 +156,8 @@ read-only and titled with the vault's name.
 
 1. A **single-line refresh button, icon only**, at the far left, then the filter chips: **Notes**
    (on), **Attachments** (off), **Tags** (off), **Unresolved** (on), **Orphans** (on). Orphans are
-   notes with no links to or from another note or attachment in either direction - tag edges do not
-   count, so turning Tags on never changes which notes are orphans.
+   notes with no edge to a note, attachment or ghost - tag edges do not count, so turning Tags on
+   never changes which notes are orphans.
 2. A **full-width search bar**. Typing highlights matching nodes and dims the rest; Enter centres on
    and selects the best match.
 
@@ -160,11 +166,11 @@ and is disabled with a spinning icon while a build runs.
 
 **Canvas:**
 
-- Icon discs sized by degree: page glyph (note), image glyph (attachment), `#` glyph (tag), dashed
-  outline with `+` (ghost).
+- Icon discs sized by degree: page glyph (note), image glyph (attachment), `#` glyph (tag), a muted
+  disc (ink-4 token) with a `+` pictogram (ghost) - WebGL circles cannot be dashed cheaply.
 - Edges carry arrowheads for direction; `both` edges carry one at each end.
 - Labels show above a zoom threshold, and always for the selected or hovered node and its neighbours.
-- The note in the active editor tab is ringed.
+- The note in the active editor tab is enlarged and highlighted, its label always shown.
 - Zoom in / zoom out / fit, bottom right.
 - **Status line**, bottom left: `412 notes - 1,208 links - indexed 2 min ago`, or progress, or an
   error.
@@ -179,6 +185,7 @@ and is disabled with a spinning icon while a build runs.
 - **Follows the active tab.** When the active tab is not a note in a local vault (a plain-folder
   file, the guide, a graph tab, a GitHub vault note) it shows "Open a note in a vault to see its
   links".
+- Filters apply as in the global tab except Orphans, and the centre note is always shown.
 - Fixed height.
 
 ### Interactions (both views)
@@ -219,9 +226,10 @@ Every label under `graph.*` in `en.json`, plain hyphens only.
 
 - **Unreadable file** (permissions, deleted mid-walk): skipped and counted; status reads
   `3,811 notes - 1 file could not be read`.
-- **Vault root vanishes or the walk fails:** the build stops, the snapshot has `complete: false`, the
-  status line shows the error in the danger colour, and the refresh icon is the retry. A previous
-  complete snapshot stays visible, labelled with its age. A partial index is never shown as complete.
+- **Vault root vanishes or the walk fails:** the build stops, `GraphState.error` is set, the
+  status line shows the error in the danger colour, and the refresh icon is the retry. The previous
+  snapshot, if any, stays visible beside the error, labelled with its age. A stored snapshot is
+  always a finished build; a partial walk never overwrites it.
 - **Graph too large for the WebGL renderer:** an inline error in the canvas, not a crash.
 - **`.obsidian/app.json` missing, unreadable or unexpected:** parsed with zod; any failure means new
   notes default to the vault root.
@@ -254,16 +262,19 @@ Test first, per the project rule.
   tags inline and in frontmatter, `#2024` and `# Heading` rejected, URL fragments rejected.
 - `vaultGraph.test.ts` - resolution (same folder, shortest path, markdown by path); ghosts collapse by
   name; `both` flag; degree; **agreement with `pickWikiTarget` over every fixture**; `neighbourhood`
-  at depths 1-3; `applyIndexChange` for save, create (ghost becomes real), rename (incoming become
-  ghosts), and a tag's last note dropping it.
+  at depths 1-3; `applyIndexChange` for `written` (a saved note re-extracts its edges and tags, a tag
+  left with no notes is removed; a created file resolves any ghost with a matching name and moves its
+  incoming edges across) and `renamed` (the node is re-keyed; links that named the old name become
+  ghosts).
 - `ipc.test.ts` - the new schemas reject stray fields.
 - Settings migration adds the `graph` defaults and nothing else.
 
 **Shell (`node --test`, hand-written fake provider):**
 
 - `vaultIndex.test.js` - batched reads; progress order; dot-folders skipped; unreadable files counted;
-  root failure gives `complete: false`; close cancels a build; refresh during a build refused; write
-  during a build queued; a symlink escape refused through the guard.
+  root failure sets `GraphState.error` and leaves the previous snapshot in place; close cancels a
+  build; refresh during a build refused; write during a build queued; a symlink escape refused
+  through the guard.
 - Handler tests - each graph channel validates its payload; a successful write updates the index and a
   failed one does not; events reach every window showing the workspace.
 - `secretsLeakGuard` stays green, and a fixture note with a unique marker proves no content reaches a
@@ -292,18 +303,20 @@ never by an eager one - the same shape as `richBlocksBundle.test.ts`.
 ## Delivery
 
 One feature PR, a **Minor** bump. New dependencies, all MIT: `sigma`, `graphology`,
-`graphology-layout-forceatlas2`, `@sigma/node-image`.
+`graphology-types`, `graphology-layout`, `graphology-layout-forceatlas2`, `@sigma/node-image`.
 
 Release checklist:
 
 1. `version.json` and every mirror.
 2. `RECENT[0]` entry.
-3. About-box row "Vault graph", and third-party disclaimers for the four libraries.
+3. About-box row "Vault graph", and third-party disclaimers for the six libraries.
 4. README Features row and `docs/features.md` bullet, in lockstep.
 5. `docs/Architecture.md` - the graph channels, the main-to-renderer events, the index lifecycle, the
    new dependencies.
-6. A help article, "Exploring a vault as a graph" (ASCII, front matter).
-7. Deployment surface in the PR body: needs a release.
+6. Deployment surface in the PR body: needs a release.
+
+The app has no help-article system yet (the Markdown guide is the only in-app document), so no
+article ships with this feature.
 
 ## Out of scope - for future reference
 
