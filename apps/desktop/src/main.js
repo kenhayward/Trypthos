@@ -425,6 +425,11 @@ if (!gotLock) {
       // under - %APPDATA% on Windows, ~/Library/Application Support on macOS - and Obsidian's is the
       // `obsidian` folder in it. A file that is not there means Obsidian is not installed.
       obsidianConfigPath: path.join(app.getPath("appData"), "obsidian", "obsidian.json"),
+      broadcast: (channel, payload) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) window.webContents.send(channel, payload);
+        }
+      },
     });
     registerWindowHandlers({
       ipcMain,

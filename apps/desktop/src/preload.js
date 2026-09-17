@@ -33,6 +33,21 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// its folder - see the note at the top of this file.
   obsidianVaults: () => ipcRenderer.invoke("obsidian:vaults"),
   openObsidianVault: (id) => ipcRenderer.invoke("obsidian:openVault", { id }),
+  /// The vault graph, by workspace id. The snapshot is names, paths and links - never a note's text.
+  graphState: (workspaceId) => ipcRenderer.invoke("graph:snapshot", { workspaceId }),
+  refreshGraph: (workspaceId) => ipcRenderer.invoke("graph:refresh", { workspaceId }),
+  /// Indexing progress and "the graph changed", pushed to every window. Wrapped like `onChatEvent`,
+  /// so the renderer never receives the IpcRendererEvent.
+  onGraphProgress: (listener) => {
+    const wrapped = (_event, message) => listener(message);
+    ipcRenderer.on("graph:progress", wrapped);
+    return () => ipcRenderer.removeListener("graph:progress", wrapped);
+  },
+  onGraphChanged: (listener) => {
+    const wrapped = (_event, message) => listener(message);
+    ipcRenderer.on("graph:changed", wrapped);
+    return () => ipcRenderer.removeListener("graph:changed", wrapped);
+  },
   readFile: (path) => ipcRenderer.invoke("file:read", { path }),
   /// An image, as a data URL. A different channel from `readFile` because that one decodes text and
   /// refuses anything binary - see the handler.
