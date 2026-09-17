@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 20;
+export const SETTINGS_VERSION = 21;
 
 export const SettingsSchema = z
   .object({
@@ -127,6 +127,19 @@ export const SettingsSchema = z
         defaultViewMode: EditorModeSchema,
       })
       .strict(),
+    /// The vault graph's filter chips and the local graph pane, added at version 21. Global rather
+    /// than per vault: they describe how somebody likes to look at a graph, not a fact about one.
+    graph: z
+      .object({
+        notes: z.boolean(),
+        attachments: z.boolean(),
+        tags: z.boolean(),
+        unresolved: z.boolean(),
+        orphans: z.boolean(),
+        localDepth: z.number().int().min(1).max(3),
+        localCollapsed: z.boolean(),
+      })
+      .strict(),
   })
   .strict();
 
@@ -153,6 +166,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   fileTypes: { enabled: [...DEFAULT_FILE_TYPES] },
   editor: { defaultViewMode: DEFAULT_EDITOR_MODE },
+  graph: { notes: true, attachments: false, tags: false, unresolved: true, orphans: true, localDepth: 1, localCollapsed: false },
 };
 
 /// Written in the PR that changes the shape, never afterwards.
@@ -161,6 +175,15 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 21,
+    // Version 21 adds the vault graph's filters and local pane. Written out rather than read from
+    // the defaults, because a migration is a record of what a version did.
+    migrate: (input) => ({
+      ...input,
+      graph: { notes: true, attachments: false, tags: false, unresolved: true, orphans: true, localDepth: 1, localCollapsed: false },
+    }),
+  },
   {
     to: 20,
     // Version 20 lets the editor be hidden behind the chat. The panels object is strict, so an older

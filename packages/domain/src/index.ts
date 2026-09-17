@@ -329,6 +329,16 @@ export {
   RepoInfoRequest,
   RefreshWorkspaceRequest,
   SetBranchRequest,
+  GRAPH_CHANGED_CHANNEL,
+  GRAPH_PROGRESS_CHANNEL,
+  GraphChangedSchema,
+  GraphEdgeSchema,
+  GraphNodeSchema,
+  GraphProgressSchema,
+  GraphRequest,
+  GraphSnapshotSchema,
+  GraphStateSchema,
+  NewNoteLocationSchema,
 } from "./ipc";
 export type {
   ChatEvent,
@@ -338,6 +348,9 @@ export type {
   IpcChannel,
   OpenTarget,
   WindowState,
+  GraphProgress,
+  GraphSnapshot,
+  GraphState,
 } from "./ipc";
 
 export type {
