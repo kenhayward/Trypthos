@@ -401,7 +401,9 @@
     "collapseWorkspace": "Hide the workspace panel",
     "expandWorkspace": "Show the workspace panel",
     "collapseChat": "Hide the chat panel",
-    "expandChat": "Show the chat panel"
+    "expandChat": "Show the chat panel",
+    "collapseEditor": "Hide the editor",
+    "expandEditor": "Show the editor"
   },
   "settings": {
     "title": "Settings",

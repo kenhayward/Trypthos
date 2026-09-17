@@ -10,6 +10,7 @@ import {
   type FlavourChoice,
 } from "@trypthos/domain";
 import EditorHeader from "./EditorHeader";
+import Glyph from "./Glyph";
 import EditorToolbar from "./EditorToolbar";
 import EditorStatusBar from "./EditorStatusBar";
 import EditorTabs from "./EditorTabs";
@@ -116,6 +117,12 @@ interface Props {
   /// A focused document window has no surrounding workspace chrome. It keeps the one editor surface
   /// and its file handling, while omitting the tab strip, mode header, authoring toolbar and status.
   singleDocument?: boolean;
+  /// Hides the editor so the chat can take its room. Absent where there is no chat to take it, and
+  /// then the button is not drawn.
+  onCollapse?: () => void;
+  /// Out of sight rather than out of the tree: the documents, their unsaved edits and their undo
+  /// history are all still here when the editor comes back.
+  hidden?: boolean;
 }
 
 /// Centre panel: the open files, the editor, and its status bar.
@@ -164,6 +171,8 @@ export default function EditorPanel({
   activeMatch = -1,
   overlay = null,
   singleDocument = false,
+  onCollapse,
+  hidden = false,
 }: Props) {
   const { t } = useTranslation();
   /// The view each document is being read in, keyed by path.
@@ -298,13 +307,31 @@ export default function EditorPanel({
   });
 
   return (
-    <main aria-label={t("editor.title")} className="relative flex min-w-0 grow flex-col bg-app">
+    <main
+      aria-label={t("editor.title")}
+      hidden={hidden}
+      className="relative flex min-w-0 grow flex-col bg-app"
+    >
       {overlay}
       {/* One row: identity on the left, state on the right. The strip takes whatever width the
           header does not need, and scrolls within it - so the list of open files is pinned between
           the two rather than inside the strip, where it would scroll away with the tabs. */}
       {!singleDocument && (
         <div className="flex items-stretch border-b border-rule">
+          {/* At the left, because that is the way it goes: the chat widens across where it was. */}
+          {onCollapse !== undefined && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label={t("panels.collapseEditor")}
+              title={t("panels.collapseEditor")}
+              className="flex shrink-0 items-center px-1.5 text-ink-4 hover:bg-hover hover:text-ink"
+            >
+              <Glyph>
+                <path d="M11 6l-6 6 6 6M18 6l-6 6 6 6" />
+              </Glyph>
+            </button>
+          )}
           <EditorTabs
             workspaceName={workspaceName}
             paths={paths}

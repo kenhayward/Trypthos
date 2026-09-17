@@ -23,6 +23,9 @@ import { TREE_FILE_TYPE } from "../lib/treeDrag";
 
 interface Props {
   width: number;
+  /// Takes whatever room the row leaves rather than `width`: with the editor hidden, the rail and the
+  /// dividers beside it have width too, and a chat sized without them would run off the window.
+  fill?: boolean;
   onCollapse: () => void;
   models: readonly ChatProfile[];
   selectedId: string | null;
@@ -125,6 +128,7 @@ const ReplyMarkdown = memo(function ReplyMarkdown({ text }: { text: string }) {
 /// rendering anything.
 export default function ChatPanel({
   width,
+  fill = false,
   onCollapse,
   models,
   selectedId,
@@ -265,8 +269,8 @@ export default function ChatPanel({
   return (
     <aside
       aria-label={t("chat.title")}
-      style={{ width }}
-      className="relative flex shrink-0 flex-col overflow-hidden bg-panel"
+      style={fill ? undefined : { width }}
+      className={`relative flex ${fill ? "min-w-0 grow" : "shrink-0"} flex-col overflow-hidden bg-panel`}
       // A file dragged from the folder browser is added to the conversation, as Attach a file does.
       // Anything else - text, a file from outside the app - is not taken: this panel reads files by
       // their path in an open folder, and only the tree's own drag type carries one.

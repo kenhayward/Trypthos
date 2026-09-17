@@ -27,7 +27,7 @@ chat talks directly to an endpoint you configure, and chats are stored locally.
 | Save As | Save the document somewhere else, from the File menu or Ctrl+Shift+S. The tab follows the new file and the original is left as it was. It is also how the scratch buffer and the markdown guide reach disk. Trypthos saves inside the folder you have open. |
 | Appearance | Light, dark, or follow your system, from Settings. The window draws its own title bar. |
 | Settings | One window with a page per subject: appearance, window behaviour, chat models, the system prompt, the editor, file types and About. |
-| Layout | Resize or hide the side panels. Panel sizes and your open folder are remembered between launches. |
+| Layout | Resize or hide the side panels. Drag the chat out as wide as the editor allows, or hide the editor and give the chat the whole room. Panel sizes and your open folder are remembered between launches. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it in Trypthos. Switched on from Settings, and off again the same way. |
 | Recent files | Open Recent on the File menu lists the last ten files you opened, each with the folder it was in. Choosing one opens the folder and the file together, asking about unsaved work first. Clear the list from the same menu. |
 | Menus and shortcuts | Native File, Edit, Tools and Help menus, and a right-click menu with editing and spelling suggestions in every text field. Settings, About and the release notes are reached from the menus rather than from buttons in the title bar - on macOS, from the Trypthos menu. |

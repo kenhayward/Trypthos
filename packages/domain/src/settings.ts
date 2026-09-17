@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 19;
+export const SETTINGS_VERSION = 20;
 
 export const SettingsSchema = z
   .object({
@@ -28,6 +28,8 @@ export const SettingsSchema = z
         chatWidth: z.number(),
         workspaceCollapsed: z.boolean(),
         chatCollapsed: z.boolean(),
+        /// The editor hidden so the chat can have its room. See `resolvePanelWidths`.
+        editorCollapsed: z.boolean(),
       })
       .strict(),
     /// The workspaces open when the app last closed, reopened on launch.
@@ -137,6 +139,7 @@ export const DEFAULT_SETTINGS: Settings = {
     chatWidth: 348,
     workspaceCollapsed: false,
     chatCollapsed: false,
+    editorCollapsed: false,
   },
   workspaces: [],
   recentFiles: [],
@@ -158,6 +161,15 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 20,
+    // Version 20 lets the editor be hidden behind the chat. The panels object is strict, so an older
+    // file is given the field - showing, which is how every window looked before it existed.
+    migrate: (input) => {
+      const panels = (input as { panels?: object }).panels ?? {};
+      return { ...input, panels: { ...panels, editorCollapsed: false } };
+    },
+  },
   {
     to: 19,
     // Version 19 gives each model its own limit on tool calls per question. An existing profile gets

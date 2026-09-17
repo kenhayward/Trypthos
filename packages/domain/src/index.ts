@@ -250,7 +250,7 @@ export type { Settings } from "./settings";
 export { downloadAssetFor, isNewerVersion, parseReleaseTag, pickUpdate } from "./updates";
 export type { AvailableUpdate, PublishedAsset, PublishedRelease } from "./updates";
 
-export { PANEL_BOUNDS, resolvePanelWidths } from "./panelLayout";
+export { PANEL_BOUNDS, chatWidthLimit, resolvePanelWidths } from "./panelLayout";
 export type { PanelRequest, PanelWidths } from "./panelLayout";
 
 export { qualifyPath, splitQualified, workspaceIdFor } from "./qualifiedPath";

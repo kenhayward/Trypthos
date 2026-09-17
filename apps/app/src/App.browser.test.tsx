@@ -35,7 +35,9 @@ const LONG = `${Array.from(
 
 type Listener = (message: { streamId: string; event: unknown }) => void;
 
-function fakeShell(): { push: (event: unknown) => void } {
+function fakeShell(
+  panels: Partial<(typeof DEFAULT_SETTINGS)["panels"]> = {},
+): { push: (event: unknown) => void } {
   const listeners: Listener[] = [];
   const streamId = "stream-1";
 
@@ -44,7 +46,11 @@ function fakeShell(): { push: (event: unknown) => void } {
     isDesktop: true,
     readSettings: async () => ({
       ok: true as const,
-      settings: { ...DEFAULT_SETTINGS, chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] } },
+      settings: {
+        ...DEFAULT_SETTINGS,
+        panels: { ...DEFAULT_SETTINGS.panels, ...panels },
+        chat: { ...DEFAULT_SETTINGS.chat, profiles: [PROFILE] },
+      },
     }),
     writeSettings: async () => {},
     sendChat: async () => ({ ok: true as const, streamId }),
@@ -78,11 +84,11 @@ const distanceFromBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop -
 /// the thread ENDED UP, so it has to be read after that has happened.
 const settled = () => new Promise((resolve) => setTimeout(resolve, 200));
 
-async function open() {
+async function open(panels: Partial<(typeof DEFAULT_SETTINGS)["panels"]> = {}) {
   // A desktop window. The suite's default viewport is 414 wide, at which `resolvePanelWidths` gives
   // the chat panel nothing at all, and every measurement here would be of a panel zero across.
   await page.viewport(1280, 860);
-  const shell = fakeShell();
+  const shell = fakeShell(panels);
 
   // A container filling the viewport, because that is what #root is in the real app. Testing
   // library's own container is an unsized div, in which every panel measures zero.
@@ -677,5 +683,30 @@ describe("the commit dialog, on screen", () => {
     expect(commit.height).toBeGreaterThan(0);
     expect(commit.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
     expect(commit.top).toBeGreaterThanOrEqual(0);
+  });
+});
+
+/// How wide the chat can be. A question about boxes, so it is asked here - see the note at the top.
+describe("the chat's width", () => {
+  const chat = () => screen.getByRole("complementary", { name: "Chat" }).getBoundingClientRect();
+
+  // Dragged out to the editor's floor, which in a 1280 window is well past the third it once stopped at.
+  it("drags out until the editor reaches its floor", async () => {
+    await open();
+    const divider = await screen.findByRole("separator", { name: "Chat panel width" });
+    const workspace = screen.getByRole("complementary", { name: "Workspace" }).getBoundingClientRect();
+
+    expect(Number(divider.getAttribute("aria-valuemax"))).toBe(1280 - workspace.width - 320);
+    expect(Number(divider.getAttribute("aria-valuemax"))).toBeGreaterThan(560);
+  });
+
+  // The rail and the dividers have width too, and a chat sized without them would run off the edge of
+  // the window by exactly that much.
+  it("fills the window up to its edge with the editor hidden", async () => {
+    await open({ editorCollapsed: true });
+    const rail = (await screen.findByRole("button", { name: "Show the editor" })).getBoundingClientRect();
+
+    await waitFor(() => expect(Math.round(chat().right)).toBe(1280));
+    expect(Math.round(chat().left)).toBe(Math.round(rail.right));
   });
 });

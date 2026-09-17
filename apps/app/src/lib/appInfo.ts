@@ -28,7 +28,7 @@ export const CAPABILITIES = `
 | Save As | Save the document somewhere else, from the File menu or Ctrl+Shift+S. The tab follows the new file, and the original is left as it was. Inside the folder you have open. |
 | Appearance | Light, dark, or follow your system. The window draws its own title bar. |
 | Settings | One window, a page per subject: appearance, window behaviour, chat models, the system prompt, the editor and file types. |
-| Layout | Resize or hide the side panels. Trypthos remembers how you left them, and reopens your folder. |
+| Layout | Resize or hide the side panels, or hide the editor to give the chat the room. Trypthos remembers how you left them, and reopens your folder. |
 | File Explorer | On Windows, right-click a folder or a markdown file to open it here. Switched on from Settings. |
 | Recent files | Open Recent on the File menu lists the last ten files you opened, each with the folder it was in. Choosing one opens both, asking about unsaved work first. |
 | Menus | File, Edit, Tools and Help, plus a right-click menu with editing and spelling corrections in every text field. Settings, About and the release notes are reached from the menus - on macOS, from the Trypthos menu. |
