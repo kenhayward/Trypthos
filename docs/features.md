@@ -157,8 +157,9 @@ as on a folder. A repository too large for GitHub to describe in one answer says
 than quietly showing fewer folders than it has. Symlinks and submodules are not listed, exactly as
 they are not followed in a local folder.
 
-**Every repository has a page of its own.** Clicking a repository's row in the browser opens it in a
-tab, the way its front page on GitHub would. The owner is at the top left - their picture, the name
+**Every repository has a home page.** Clicking a repository's name in the browser opens its home
+page in a tab, the way its front page on GitHub would - the same kind of page every workspace has, with
+the repository's details at the top and its README below. The owner is at the top left - their picture, the name
 they go by, and their login - and below it the repository's name, a badge if it is private or
 archived, and the description set in the size you read rather than the size a label is set in.
 
@@ -271,12 +272,30 @@ Local and cloud look like one tree to you, but they behave differently underneat
 paged, slow, and can fail part-way through. Trypthos shows that on the node it affects rather than
 blanking the whole panel, so a directory that is still loading, or that failed, says so in place.
 
-## Vault graph
+## Home page and graph
 
-**An Obsidian vault is a graph as well as a tree.** Click a vault's row in the folder browser and a
-Graph tab opens beside your documents. Every note is a node, sized by how many links it has, and
-every link between two notes is a line with an arrow for its direction - both ends when the notes
-link to each other.
+**Every workspace has a home page.** Click a workspace's name in the folder browser and its page
+opens in a tab of its own, named for the folder. The top of it says what the workspace is - a folder,
+an Obsidian vault or a GitHub repository - and where it lives, and counts its notes, links and
+attachments. A repository's page carries its owner, its figures and the commit you are on, exactly as
+its own page used to.
+
+**The README and the graph take turns.** Below the heading, one control moves between the
+workspace's graph and its README, and whichever is chosen gets the whole page. They do not share it,
+because a graph zooms with the wheel and a README scrolls with it, and one of the two would always be
+wrong. A workspace with only one of them shows just that one, with no control at all; a folder with
+neither says so in words rather than showing an empty page. The page opens on the graph when there is
+one.
+
+**Any folder whose notes link to each other is a graph, not only a vault.** Every note is a node,
+sized by how many links it has, and every link between two notes is a line with an arrow for its
+direction - both ends when the notes link to each other. A folder is not a vault, so it is not
+curated: a project folder holds its dependencies and its build output, and there can be a hundred
+times more markdown in those than in the project itself. So a folder's graph **leaves out build and
+dependency folders** - node_modules, dist, build, target, vendor and the like - **and anything the
+folder's own .gitignore excludes**. Both apply together: a .gitignore that does not mention
+node_modules still does not bring it back. A graph stops at 5,000 notes, and the page says so when it
+does.
 
 **Chips choose what is drawn.** Notes, Attachments (pictures, PDFs and other files a note links or
 embeds), Tags (a node per tag, joined to every note carrying it), Unresolved (links to notes that do
@@ -292,16 +311,16 @@ it names: the New File dialog opens with the name filled in, in the folder Obsid
 location for new notes" setting chooses. Drag a node to move it; the arrangement settles the same
 way each time the graph opens. Arrow keys move between neighbours and Enter opens.
 
-**The Local graph follows your note.** A pane under the folder browser, shown while a vault is open,
-draws the note you are editing and the notes linked to it, one, two or three links away. It folds
+**The Local graph follows your note.** A pane under the folder browser, shown while any folder on
+this machine is open, draws the note you are editing and the notes linked to it, one, two or three links away. It folds
 down to its header when you want the room back.
 
-**Built when the vault opens, kept current as you work.** Trypthos reads the vault when it opens and
-when you press the graph's refresh button, showing progress for a large vault, and updates the graph
-when you save, create or rename notes in Trypthos. Changes made in Obsidian while Trypthos is open
-appear after a refresh. The status line says how many notes and links there are and how old the
-graph is. Nothing is written to the vault and nothing is stored: note contents never leave the part
-of the app that reads them. Vaults opened from GitHub do not have a graph yet.
+**Built when the folder opens, kept current as you work.** Trypthos reads the folder when it opens
+and when you press the graph's refresh button, showing progress for a large one, and updates the
+graph when you save, create or rename notes in Trypthos. Changes made in Obsidian or anywhere else
+while Trypthos is open appear after a refresh. Nothing is written to the folder and nothing is
+stored: note contents never leave the part of the app that reads them. Repositories opened from
+GitHub do not have a graph yet.
 
 ## File types
 

@@ -417,14 +417,30 @@ The status bar's facts are **measured, not assumed**. `detectLineEnding` reports
 genuinely mixes them, because the strip presents these as claims about the user's document - and the
 one thing worse than not showing it is showing it wrongly.
 
-## The vault graph
+## The graph
 
 **Indexed in the main process, drawn in the renderer.** `apps/desktop/src/vaultIndex.js` keeps one
-index per open local Obsidian vault. It starts after a successful `workspace:open`,
-`workspace:openRef` or `obsidian:openVault` whose workspace is a local vault - which covers restoring
-at launch - and is dropped on `workspace:close`. It walks the vault breadth first through the
-workspace's **provider** (so the boundary guard applies), skips dot-folders, reads notes 32 at a time
-with a turn of the event loop between batches, and reads `.obsidian/app.json` for where new notes go.
+index per open **local** folder - any folder, not only an Obsidian vault; `isIndexable` tests the
+ref kind and a disk root and nothing else. A repository is still left out, because one request per
+note meets GitHub's rate limit. The index starts after a successful `workspace:open`,
+`workspace:openRef` or `obsidian:openVault` - which covers restoring at launch - and is dropped on
+`workspace:close`. It walks the folder breadth first through the workspace's **provider** (so the
+boundary guard applies), skips dot-folders, reads notes 32 at a time with a turn of the event loop
+between batches, and reads `.obsidian/app.json` for where new notes go (a folder without one gets
+the root).
+
+**What a folder's graph leaves out.** A vault is curated and an arbitrary folder is not: measured on
+this repository, 11 markdown files sit outside `node_modules` and 1,117 inside it. So the walk asks
+`apps/desktop/src/folderIgnore.js` about every entry, which applies two rules together - a floor of
+directory names that are never a person's writing (`node_modules`, `dist`, `build`, `target`,
+`vendor` and the like, matched as whole segments and without regard to case), and the folder's own
+root `.gitignore`, read through the provider and parsed with the `ignore` package (MIT, a
+main-process dependency of `apps/desktop` only, so it never reaches the renderer). The floor sits
+**beneath** the `.gitignore` rather than being an alternative to it, because a `.gitignore` in a
+nested package may never mention `node_modules`. `ignore` only matches a directory-only pattern when
+asked about a path ending in a slash, so directories are always asked about that way. The walk
+stops after **5,000 notes** (`NOTE_LIMIT`), and the snapshot's required `truncated` field says when
+it did; a note found but never read is not drawn.
 
 **Pure domain underneath.** `vaultLinks.ts` extracts a note's wiki links, embeds, markdown links,
 front matter links and tags, ignoring code and `%%` comments. `vaultGraph.ts` resolves them with the
@@ -443,14 +459,34 @@ runs. `graph:progress` and `graph:changed` are pushed through a `broadcast` depe
 window. Only a workspace id crosses; snapshots hold names, qualified paths and id pairs, never note
 contents, and are zod-validated on both sides (`ipc.ts`).
 
-**Drawing.** `useVaultGraph` follows one vault's state and shows progress only after 300 ms.
+**Drawing.** `useVaultGraph` follows one workspace's state and shows progress only after 300 ms.
 `graphLayout.ts` seeds a circle in node order and runs ForceAtlas2 for a fixed number of iterations,
 so the same vault gets the same shape; it runs in an inline (blob) worker, because a module worker
 from `file://` is refused in the packaged app. `GraphCanvas.tsx` wraps Sigma: icon discs from
 `@sigma/node-image` over circles, colours read from the theme tokens and re-read on a theme change,
-hover and selection in a ref read by Sigma's reducers. `GraphPage` is the `trypthos:graph/<id>` tab
-(a reserved path like the repository page); `LocalGraphPane` sits under the workspace trees and
-lazy-loads `LocalGraph`. Filters, search and settings (`settings.graph`, version 21) are shared.
+hover and selection in a ref read by Sigma's reducers. `GraphPage` is the Graph section of a
+workspace's home page (below) and no longer subscribes to the index itself: the home page already
+holds that subscription, to decide whether a Graph section exists, and hands it down. `LocalGraphPane`
+sits under the workspace trees whenever any local workspace is open, and lazy-loads `LocalGraph`.
+Filters, search and settings (`settings.graph`, version 21) are shared.
+
+### A workspace's home page
+
+One tab per workspace at the reserved path `trypthos:home/<workspaceId>` (`homePage.ts`), replacing
+the `trypthos:graph/` and `trypthos:repo/` pages that came before it. Open documents are not persisted
+between runs, so nothing had to migrate. `splitQualified` refuses the whole `trypthos:` prefix, which
+keeps the path away from every provider, and the tab is named for the workspace through a lookup rather
+than from the path's last segment, which is the workspace's id.
+
+`WorkspaceHome` draws a fixed heading - a repository's details through `RepoHeading`, otherwise the
+name, kind and path - and a line of counts, over one control that moves between a Graph section and a
+Readme section. **The sections take turns rather than sharing the area**: a Sigma canvas takes the
+wheel to zoom and a README scrolls, so one of the two would always be wrong. A section exists only when
+it has content (`homeSections.ts`) - no Graph without an edge, no Readme without a README - and a single
+section draws no control. The page is eager and the graph is lazy, so `App` hands the graph in as a
+render function; the page never names `GraphPage`, which `graphBundle.test.ts` holds. `App` also holds
+the README (`useReadme`) and a repository's heading (`useRepoPage`), so a repository's Refresh, or
+moving it to a newer commit, can throw both away at once.
 
 ### Icons assigned in Obsidian
 
@@ -659,17 +695,17 @@ the HTML is generated and sanitised by the app, so a regular expression would wo
 by the DOM rather than by hand. A picture that could not be read keeps what the author wrote, because
 a broken image says something should be there where a blanked source says nothing.
 
-### A repository's own page
+### A repository's heading
 
-A tab like any other, at a reserved path - `trypthos:repo/<workspaceId>`, the same mechanism the
-markdown guide uses. Nothing reads or writes that path: `splitQualified` refuses the whole `trypthos:`
-prefix, which is what keeps it out of every code path that would resolve it against a provider.
+A repository's details are the heading of its workspace's home page (above) rather than a page of
+their own - `RepoHeading`, the top half of what was the repository page.
 
 **What it draws is not the document's `content`.** A repository's star count is not what the editor
 holds or what chat sends, so the page fetches it when it opens - `github:repoInfo`, named by an OPEN
 workspace rather than by owner and repository, so a renderer cannot ask GitHub about repositories the
-user never opened. The README goes through the workspace provider like any other file, which keeps it
-inside the boundary guard rather than in a second read path of its own.
+user never opened. The README is fetched separately by `useReadme`, for any workspace, through the
+workspace provider like any other file - which keeps it inside the boundary guard rather than in a
+second read path of its own.
 
 The two halves fail independently: a page with its numbers and no README is still worth reading, and
 so is the reverse. `GitHubRepoDetailSchema` deliberately omits `watchers_count` - it is a legacy alias
@@ -2275,7 +2311,7 @@ Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in t
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
 `workspace:filter`, `workspace:close`, `workspace:refresh`, `workspace:createDirectory`, `workspace:rename`, `workspace:reveal`), Obsidian's vaults
-(`obsidian:vaults`, `obsidian:openVault`), the vault graph (`graph:snapshot`, `graph:refresh`), a vault's assigned icons (`icons:map`), cloud accounts (`github:status`, `github:connect`,
+(`obsidian:vaults`, `obsidian:openVault`), the graph (`graph:snapshot`, `graph:refresh`), a vault's assigned icons (`icons:map`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
