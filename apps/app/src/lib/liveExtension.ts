@@ -220,7 +220,19 @@ export function livePreview() {
       update(update: ViewUpdate) {
         // Selection is in the list because the caret moving between lines is precisely what reveals
         // and re-hides scaffolding - the mode does nothing visible without it.
-        if (update.docChanged || update.viewportChanged || update.selectionSet) {
+        //
+        // And the syntax tree, because the decorations are built from it and it arrives in pieces.
+        // CodeMirror parses the first 3,000 characters when a document opens and the rest in the
+        // background - and a busy machine can leave even a short document part-parsed at first. When
+        // the parse catches up, that update carries a new tree and nothing else, so without this test
+        // whatever the parser reached late stayed as raw markdown until the caret next moved. That
+        // was issue #179, seen first as a test that failed one run in five.
+        if (
+          update.docChanged ||
+          update.viewportChanged ||
+          update.selectionSet ||
+          syntaxTree(update.startState) !== syntaxTree(update.state)
+        ) {
           this.decorations = buildDecorations(update.view);
         }
       }

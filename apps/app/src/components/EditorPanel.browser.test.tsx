@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@vitest/browser/context";
+import { render, screen, waitFor } from "@testing-library/react";
+import { page, userEvent } from "@vitest/browser/context";
 import { describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
 import { resolveEdit } from "@trypthos/domain";
@@ -11,11 +11,13 @@ const DOC = "# Title\n\nSome **bold** text.\n\nA [link](https://example.com) her
 function Harness({
   onSelect,
   onFollowLink,
+  initial = DOC,
 }: {
   onSelect?: (selection: EditorSelection) => void;
   onFollowLink?: (href: string) => void;
+  initial?: string;
 } = {}) {
-  const [value, setValue] = useState(DOC);
+  const [value, setValue] = useState(initial);
   return (
     <EditorPanel
       workspaceName="Notes"
@@ -52,14 +54,57 @@ async function putCaretOn(text: string): Promise<void> {
   await userEvent.click(lineWith(text));
 }
 
+/// Renders the harness and waits until the editor has finished drawing its document.
+///
+/// CodeMirror parses in the background when it has to, and even this short document is only partly
+/// parsed at the moment the editor mounts. When the parse lands, Live mode decorates what it had not
+/// yet reached, and CodeMirror replaces those lines' elements to draw it. So a test that reads the
+/// editor the moment it appears is reading a parse that may not have finished - how #179 showed up,
+/// one failure in five, with every Live decoration missing - and a test that grabs a line to click
+/// is holding an element that is about to be swapped out, which makes the click wait on a detached
+/// node until it times out. The link on the last line is the signal: it is drawn as a link only once
+/// the parser has reached the end of the document, and after that the lines stay put.
+async function renderEditor(props: Parameters<typeof Harness>[0] = {}): Promise<void> {
+  render(<Harness {...props} />);
+  await waitFor(() => expect(document.querySelector(".cm-live-link")).not.toBeNull());
+}
+
 /// These assertions are impossible in jsdom.
 ///
 /// CodeMirror decides what to render by measuring text, and jsdom has no layout engine, so nothing
 /// below would be testing the editor - it would be testing the polyfill that stands in for geometry.
 /// Everything here is a rendering question, which is what this suite is for.
 describe("Live mode, rendered", () => {
+  /// A heading the parser only reaches after the document has opened.
+  ///
+  /// CodeMirror parses the first 3,000 characters synchronously when a document opens and the rest in
+  /// the background, and a busy machine can leave even a short document part-parsed at first. Live
+  /// mode builds its decorations from the syntax tree, and it used to rebuild them only when the
+  /// document, the viewport or the selection changed - not when the parse caught up. So whatever the
+  /// parser reached late stayed as raw markdown, with its hashes and asterisks showing, until the
+  /// caret happened to move. Issue #179 was this, seen as a flaky test.
+  it("formats a heading the parser reaches only after the document has opened", async () => {
+    // Past the 3,000 characters parsed up front, so the heading is left to the background parse. The
+    // window is tall and wide enough that the heading is rendered without scrolling to it - a scroll
+    // is a viewport change, which would rebuild the decorations and hide the very thing under test.
+    const filler = Array.from({ length: 70 }, (_, n) => `Filler line ${n + 1}, plain prose that takes up room.`).join("\n");
+    expect(filler.length).toBeGreaterThan(3000);
+    // Put back afterwards: the viewport belongs to the file, not the test, and every test after this
+    // one measures and clicks in whatever window it was left.
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(1600, 4000);
+    try {
+      render(<Harness initial={`${filler}\n\n# Late heading\n`} />);
+
+      // The caret stays on line 1 throughout, so nothing but the parse catching up can change this.
+      await waitFor(() => expect(lineWith("Late heading").textContent).toBe("Late heading"), { timeout: 4000 });
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
   it("hides the heading's hash while the caret is elsewhere", async () => {
-    render(<Harness />);
+    await renderEditor();
     // The caret starts at the top, which reveals line 1. Move it away first.
     await putCaretOn("bold");
 
@@ -68,7 +113,7 @@ describe("Live mode, rendered", () => {
   });
 
   it("still holds the hidden characters in the document", async () => {
-    render(<Harness />);
+    await renderEditor();
     await putCaretOn("bold");
 
     // Nothing was rewritten: Source shows exactly what is stored, hash and all.
@@ -77,7 +122,7 @@ describe("Live mode, rendered", () => {
   });
 
   it("reveals the caret line's own markers, and only that line's", async () => {
-    render(<Harness />);
+    await renderEditor();
 
     await putCaretOn("bold");
     expect(lineWith("bold").textContent).toContain("**");
@@ -89,7 +134,7 @@ describe("Live mode, rendered", () => {
   });
 
   it("draws a heading larger than body text, rather than colouring it", async () => {
-    render(<Harness />);
+    await renderEditor();
     await putCaretOn("bold");
 
     // The decoration is a span inside the line, not the line itself - measuring the line reports the
@@ -103,7 +148,7 @@ describe("Live mode, rendered", () => {
   });
 
   it("draws bold text bold", async () => {
-    render(<Harness />);
+    await renderEditor();
     await putCaretOn("Title");
 
     const strong = document.querySelector(".cm-live-strong") as HTMLElement;
@@ -112,7 +157,7 @@ describe("Live mode, rendered", () => {
   });
 
   it("shows a link as its text, not its target", async () => {
-    render(<Harness />);
+    await renderEditor();
     await putCaretOn("Title");
 
     const line = lineWith("link");
@@ -124,7 +169,7 @@ describe("Live mode, rendered", () => {
   /// the caret onto its line. In this suite because the decoration only exists once rendered.
   describe("following a link", () => {
     it("shows the target on hover", async () => {
-      render(<Harness />);
+      await renderEditor();
       await putCaretOn("Title");
 
       const link = lineWith("link").querySelector(".cm-live-link") as HTMLElement;
@@ -136,7 +181,7 @@ describe("Live mode, rendered", () => {
     // reader edits. The modifier is what distinguishes editing the link from following it.
     it("places the caret on a plain click without following anything", async () => {
       const followed: string[] = [];
-      render(<Harness onFollowLink={(href) => followed.push(href)} />);
+      await renderEditor({ onFollowLink: (href) => followed.push(href) });
       await putCaretOn("Title");
 
       await userEvent.click(lineWith("link").querySelector(".cm-live-link") as HTMLElement);
@@ -148,7 +193,7 @@ describe("Live mode, rendered", () => {
 
     it("follows the link on a modified click", async () => {
       const followed: string[] = [];
-      render(<Harness onFollowLink={(href) => followed.push(href)} />);
+      await renderEditor({ onFollowLink: (href) => followed.push(href) });
       await putCaretOn("Title");
 
       const link = lineWith("link").querySelector(".cm-live-link") as HTMLElement;
@@ -161,7 +206,7 @@ describe("Live mode, rendered", () => {
 
 describe("Source mode, rendered", () => {
   it("shows every character, on every line", async () => {
-    render(<Harness />);
+    await renderEditor();
     await userEvent.click(modeButton("Source"));
 
     const text = surface().textContent ?? "";
@@ -220,7 +265,7 @@ describe("Opening a different file, rendered", () => {
 describe("Reporting the selection, in a real browser", () => {
   it("reports nothing when the caret is only placed, not dragged", async () => {
     const seen: EditorSelection[] = [];
-    render(<Harness onSelect={(selection) => seen.push(selection)} />);
+    await renderEditor({ onSelect: (selection) => seen.push(selection) });
 
     await putCaretOn("Some");
 
@@ -231,7 +276,7 @@ describe("Reporting the selection, in a real browser", () => {
 
   it("reports the text once a selection is made", async () => {
     const seen: EditorSelection[] = [];
-    render(<Harness onSelect={(selection) => seen.push(selection)} />);
+    await renderEditor({ onSelect: (selection) => seen.push(selection) });
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
@@ -241,7 +286,7 @@ describe("Reporting the selection, in a real browser", () => {
 
   it("reports the selection emptying again when it is collapsed", async () => {
     const seen: EditorSelection[] = [];
-    render(<Harness onSelect={(selection) => seen.push(selection)} />);
+    await renderEditor({ onSelect: (selection) => seen.push(selection) });
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
@@ -253,7 +298,7 @@ describe("Reporting the selection, in a real browser", () => {
 
   it("reports the whole document when everything is selected", async () => {
     const seen: EditorSelection[] = [];
-    render(<Harness onSelect={(selection) => seen.push(selection)} />);
+    await renderEditor({ onSelect: (selection) => seen.push(selection) });
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Control>}a{/Control}");
@@ -265,7 +310,7 @@ describe("Reporting the selection, in a real browser", () => {
   // overwrites the wrong span of somebody's document, which no assertion on the text would catch.
   it("reports offsets that bracket exactly the selected text", async () => {
     const seen: EditorSelection[] = [];
-    render(<Harness onSelect={(selection) => seen.push(selection)} />);
+    await renderEditor({ onSelect: (selection) => seen.push(selection) });
 
     await putCaretOn("Some");
     await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}");
@@ -282,7 +327,7 @@ describe("Reporting the selection, in a real browser", () => {
 /// because every other test asserts on TEXT. Only a real browser has the computed styles to notice.
 describe("Preview mode is actually styled", () => {
   const preview = async () => {
-    render(<Harness />);
+    await renderEditor();
     await userEvent.click(modeButton("Preview"));
   };
 
@@ -639,7 +684,7 @@ describe("EditorPanel: tabs that do not fit", () => {
 /// selection empty, and the button then acts on the word under a caret that never moved.
 describe("the formatting toolbar, on a real selection", () => {
   it("wraps the selected word, and unwraps it when pressed again", async () => {
-    render(<Harness />);
+    await renderEditor();
     await userEvent.click(modeButton("Source"));
 
     // Selected with the keyboard, from a caret the pointer put on the line. A double-click would
@@ -658,7 +703,7 @@ describe("the formatting toolbar, on a real selection", () => {
   });
 
   it("puts the caret back in the document after a press", async () => {
-    render(<Harness />);
+    await renderEditor();
     await userEvent.click(modeButton("Source"));
 
     await userEvent.click(lineWith("Title"));
@@ -872,10 +917,15 @@ describe("the selection, once focus has gone elsewhere", () => {
   const drawn = () => [...document.querySelectorAll(".cm-selectionBackground")];
 
   async function selectAWord() {
-    render(<Harness />);
+    await renderEditor();
     // A real double-click, which is what puts a selection there. Synthetic events do not move
     // CodeMirror's caret at all - see the note on this suite in the architecture doc.
-    await userEvent.dblClick(lineWith("Some **bold** text.") as HTMLElement);
+    //
+    // Found by text that is there whether or not Live mode has drawn the line. This used to look for
+    // "Some **bold** text." with its markers showing, which only matched because of #179: with the
+    // caret on line 1 those markers should be hidden, and until the parse was allowed to finish they
+    // usually had not been.
+    await userEvent.dblClick(lineWith("Some") as HTMLElement);
     await vi.waitFor(() => expect(drawn().length).toBeGreaterThan(0));
   }
 
@@ -935,7 +985,7 @@ describe("Zoom, in a real browser", () => {
   const editorSurface = () => screen.getByTestId("document-editor");
 
   it("draws the document's text larger", async () => {
-    render(<Harness />);
+    await renderEditor();
     const before = sizeOf(surface());
 
     spin(editorSurface(), 2, "in");
@@ -948,7 +998,7 @@ describe("Zoom, in a real browser", () => {
   // Its font, not its width: CodeMirror gives a gutter element a `min-width` in pixels, so a short
   // document's gutter is that minimum at every zoom and the width would prove nothing either way.
   it("takes the gutter with it", async () => {
-    render(<Harness />);
+    await renderEditor();
     const gutter = () => document.querySelector(".cm-gutters") as HTMLElement;
     const before = sizeOf(gutter());
 
@@ -957,7 +1007,7 @@ describe("Zoom, in a real browser", () => {
   });
 
   it("puts it back where it started", async () => {
-    render(<Harness />);
+    await renderEditor();
     const before = sizeOf(surface());
 
     spin(editorSurface(), 3, "in");
@@ -967,7 +1017,7 @@ describe("Zoom, in a real browser", () => {
   });
 
   it("draws rendered prose larger too", async () => {
-    render(<Harness />);
+    await renderEditor();
     await userEvent.click(modeButton("Preview"));
 
     const paragraph = () => document.querySelector(".markdown-body p") as HTMLElement;
