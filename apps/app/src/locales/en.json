@@ -571,7 +571,7 @@
     "sections": "Sections",
     "sectionGraph": "Graph",
     "sectionReadme": "Readme",
-    "counts": "{{notes}} notes - {{links}} links - {{attachments}} attachments - indexed {{age}}",
+    "counts": "Notes {{notes}} - Links {{links}} - Attachments {{attachments}} - Indexed {{age}}",
     "empty": "This folder has no README, and none of its notes link to each other.",
     "readmeFailed": "The README could not be read.",
     "truncated": "Only the first {{count}} notes are in this graph. This folder has more."
@@ -596,7 +596,6 @@
     "progress": "{{read}} of {{total}} files",
     "progressWalking": "{{read}} of {{total}}+ files",
     "refreshing": "Refreshing - {{read}} of {{total}} files - showing index from {{age}}",
-    "status": "{{notes}} notes - {{links}} links - indexed {{age}}",
     "unreadable": "Files that could not be read: {{count}}",
     "ageNow": "just now",
     "ageMinutes": "{{count}} min ago",

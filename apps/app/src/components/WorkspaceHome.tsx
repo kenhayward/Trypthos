@@ -87,7 +87,12 @@ export default function WorkspaceHome({
           <h2 className="text-lg font-semibold text-ink">{workspace.name}</h2>
         )}
 
-        <p className="mt-1 text-xs text-ink-4">
+        {/* Cut short rather than wrapped - a real folder's path can be as long as the window is wide -
+            with the whole of it on hover. */}
+        <p
+          className="mt-1 truncate text-xs text-ink-4"
+          title={workspace.ref.kind === "local" ? workspace.ref.root : undefined}
+        >
           {workspace.ref.kind === "github"
             ? t("home.kindRepository")
             : `${workspace.vault === true ? t("home.kindVault") : t("home.kindFolder")} - ${workspace.ref.root}`}

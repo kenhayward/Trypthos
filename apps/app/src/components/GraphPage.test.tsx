@@ -84,7 +84,15 @@ describe("GraphPage", () => {
     expect(canvas.dataset.hidden).toBe("V/pic.png");
     expect(canvas.dataset.active).toBe("V/B.md");
     expect(canvas.getAttribute("aria-label")).toBe("Link graph of Research");
-    expect(screen.getByText("2 notes - 2 links - indexed just now")).toBeTruthy();
+  });
+
+  // The home page's heading says how many notes and links there are and when they were indexed,
+  // directly above this section. Saying it again at the foot of the graph was the same line twice.
+  it("does not repeat the counts the heading already shows", async () => {
+    const fake = fakeGraphClient({ snapshot, building: null, error: null });
+    page(fake);
+    await flush();
+    expect(screen.queryByText(/indexed just now/)).toBeNull();
   });
 
   it("toggles a chip through the settings, and shows each chip's state", async () => {
