@@ -1,68 +1,29 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { GraphSnapshot } from "@trypthos/domain";
 import type { ReadmeState } from "../hooks/useReadme";
 import type { RepoPageState } from "../hooks/useRepoPage";
+import { homeProps, LINKED, NOTES } from "../testing/workspaceHomeProps";
+import type { HomeOptions } from "../testing/workspaceHomeProps";
 import WorkspaceHome from "./WorkspaceHome";
 
 /// A workspace's home page. The heading and counts are always there; each section exists only when
 /// it has something in it, and one control moves between them.
 
-const NOTES = { id: "Notes", name: "Notes", ref: { kind: "local" as const, root: "D:/Notes" } };
 const VAULT = { ...NOTES, vault: true };
 const REPO = { id: "Repo", name: "notes", ref: { kind: "github" as const, owner: "ada", repo: "notes" } };
 
-const linked: GraphSnapshot = {
-  workspaceId: "Notes",
-  builtAt: "2026-09-18T09:00:00.000Z",
-  unreadable: 0,
-  truncated: false,
-  newNotes: { mode: "root" },
-  nodes: [
-    { id: "Notes/Home.md", kind: "note", label: "Home", path: "Notes/Home.md", degree: 1 },
-    { id: "Notes/Plan.md", kind: "note", label: "Plan", path: "Notes/Plan.md", degree: 1 },
-    { id: "Notes/map.png", kind: "attachment", label: "map.png", path: "Notes/map.png", degree: 0 },
-  ],
-  edges: [{ source: "Notes/Home.md", target: "Notes/Plan.md", both: false }],
-};
+const linked: GraphSnapshot = LINKED;
+const unlinked: GraphSnapshot = { ...LINKED, edges: [] };
 
-const unlinked: GraphSnapshot = { ...linked, edges: [] };
-
-const README: ReadmeState = { loading: false, source: "# Notes\n\nSome prose.", path: "Notes/README.md", failed: false };
 const NO_README: ReadmeState = { loading: false, source: null, path: null, failed: false };
 
 const REPO_STATE: RepoPageState = { loading: false, stats: null, errorKey: null, pin: null };
 
-function page({
-  workspace = NOTES as { id: string; name: string; ref: typeof NOTES.ref | typeof REPO.ref; vault?: boolean },
-  snapshot = linked as GraphSnapshot | null,
-  readme = README,
-  repo = null as RepoPageState | null,
-  readImage = async (_path: string) => ({ ok: false as const, reason: "not-found" }),
-} = {}) {
-  const graphClient = {
-    graphState: vi.fn(async () => ({ ok: true as const, state: { snapshot, building: null, error: null } })),
-    refreshGraph: vi.fn(async () => ({ ok: true as const })),
-    onGraphProgress: () => () => {},
-    onGraphChanged: () => () => {},
-  };
-  const graphPage = vi.fn(() => <div data-testid="graph-section" />);
-  render(
-    <WorkspaceHome
-      workspace={workspace}
-      graphClient={graphClient as never}
-      readme={readme}
-      repo={repo}
-      fileTypes={["markdown"]}
-      readImage={readImage as never}
-      onOpenExternal={vi.fn()}
-      onOpenRepo={vi.fn()}
-      onRefreshRepo={vi.fn()}
-      graphPage={graphPage}
-      now={() => Date.parse("2026-09-18T09:00:30.000Z")}
-    />,
-  );
+function page(options: HomeOptions = {}) {
+  const { props, graphClient, graphPage } = homeProps(options);
+  render(<WorkspaceHome {...props} />);
   return { graphPage, graphClient };
 }
 
