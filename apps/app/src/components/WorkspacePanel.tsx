@@ -794,15 +794,13 @@ function FolderRow({
           }
         >
           {/* A folder that failed to list keeps the danger glyph whatever Obsidian says: what is
-              wrong with a row matters more than its decoration. */}
+              wrong with a row matters more than its decoration. Otherwise the same glyph is what an
+              assigned icon falls back to, so a name Lucide does not have leaves the row as it was
+              rather than leaving a gap. */}
           {assignment === null || row.status === "error" ? (
-            <Glyph
-              className={row.status === "error" ? "size-3.5 shrink-0 text-danger" : "size-3.5 shrink-0 text-leaf"}
-            >
-              <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-            </Glyph>
+            folderGlyph(row.status)
           ) : (
-            <AssignedIcon assignment={assignment} className="size-3.5" />
+            <AssignedIcon assignment={assignment} className="size-3.5" fallback={folderGlyph(row.status)} />
           )}
           <span className="min-w-0 truncate">{row.node.name}</span>
           {row.status === "loading" && (
@@ -902,14 +900,7 @@ function FileRow({
             : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink-3 hover:bg-hover"
       }
     >
-      {assignment === null ? (
-        <Glyph className="size-3.5 shrink-0 text-faint">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6" />
-        </Glyph>
-      ) : (
-        <AssignedIcon assignment={assignment} className="size-3.5" />
-      )}
+      {assignment === null ? fileGlyph() : <AssignedIcon assignment={assignment} className="size-3.5" fallback={fileGlyph()} />}
       <span className="min-w-0 truncate">{row.node.name}</span>
       {dirty && (
         <span
@@ -919,6 +910,26 @@ function FileRow({
         />
       )}
     </button>
+  );
+}
+
+/// A folder's own mark, drawn when Obsidian has nothing to say about the row - and what an assigned
+/// icon falls back to while the icon set is on its way, or when it does not hold the name.
+function folderGlyph(status: TreeRow["status"]) {
+  return (
+    <Glyph className={status === "error" ? "size-3.5 shrink-0 text-danger" : "size-3.5 shrink-0 text-leaf"}>
+      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+    </Glyph>
+  );
+}
+
+/// A file's own mark, for the same two jobs.
+function fileGlyph() {
+  return (
+    <Glyph className="size-3.5 shrink-0 text-faint">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+    </Glyph>
   );
 }
 
