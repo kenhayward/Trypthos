@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { useGraphLayout } from "../hooks/useGraphLayout";
-import { useVaultGraph } from "../hooks/useVaultGraph";
+import type { VaultGraphView } from "../hooks/useVaultGraph";
 import { graphNodeAction } from "../lib/graphActions";
 import { hiddenNodes, searchMatches } from "../lib/graphFilters";
 import type { GraphFilter } from "../lib/graphFilters";
@@ -10,12 +10,12 @@ import type { LayoutRunner } from "../lib/graphLayoutTypes";
 import { indexAge, linkCount, noteCount, percentRead } from "../lib/graphStatus";
 import type { IndexAge } from "../lib/graphStatus";
 import { useLayoutRunner } from "../lib/layoutClient";
-import type { GraphClient } from "../lib/workspaceClient";
 import CanvasBoundary from "./CanvasBoundary";
 import type { GraphCanvasProps, GraphFocus } from "./GraphCanvas";
 import Glyph from "./Glyph";
 
-/// The vault graph tab. Lazy only - see `graphBundle.test.ts`.
+/// A workspace's graph, drawn as the Graph section of its home page. Lazy only - see
+/// `graphBundle.test.ts`.
 
 /// The canvas, fetched when the tab first draws a graph.
 ///
@@ -27,9 +27,12 @@ import Glyph from "./Glyph";
 const GraphCanvas = lazy(() => import("./GraphCanvas"));
 
 export interface GraphPageProps {
-  workspaceId: string;
-  vaultName: string;
-  client: GraphClient;
+  /// What the canvas is labelled with - any folder's name, not only a vault's.
+  workspaceName: string;
+  /// The index's answer for this workspace. Passed in rather than subscribed to here: the home page
+  /// that holds this already subscribes, to decide whether a Graph section exists at all, and two
+  /// subscriptions to one workspace were two fetches and two listeners for one answer.
+  graph: VaultGraphView;
   activePath: string | null;
   filter: GraphFilter;
   onFilterChange(change: Partial<GraphFilter>): void;
@@ -57,9 +60,8 @@ function useAgeText(): (age: IndexAge) => string {
 }
 
 export default function GraphPage({
-  workspaceId,
-  vaultName,
-  client,
+  workspaceName,
+  graph,
   activePath,
   filter,
   onFilterChange,
@@ -71,7 +73,6 @@ export default function GraphPage({
 }: GraphPageProps) {
   const { t } = useTranslation();
   const ageText = useAgeText();
-  const graph = useVaultGraph(client, workspaceId);
   const run = useLayoutRunner(layout);
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<GraphFocus | null>(null);
@@ -119,7 +120,7 @@ export default function GraphPage({
   if (snapshot === null && progress !== null) {
     body = (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-ink-3">
-        <p>{t("graph.indexing", { name: vaultName })}</p>
+        <p>{t("graph.indexing", { name: workspaceName })}</p>
         <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentRead(progress)} className="h-1 w-56 overflow-hidden rounded bg-hairline">
           <div className="h-full bg-accent" style={{ width: `${percentRead(progress)}%` }} />
         </div>
@@ -143,7 +144,7 @@ export default function GraphPage({
             highlighted={highlighted}
             activeId={activeId}
             focus={focus}
-            label={t("graph.canvas", { name: vaultName })}
+            label={t("graph.canvas", { name: workspaceName })}
             onOpen={(node) => {
               const action = graphNodeAction(node, snapshot);
               if (action?.kind === "open") onOpenPath(action.path);
