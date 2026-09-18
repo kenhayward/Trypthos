@@ -27,11 +27,29 @@ describe("an assigned icon", () => {
   });
 
   // An id the set does not hold must leave the row with the glyph it already had, rather than a gap
-  // where an icon should be.
-  it("draws nothing for an icon Lucide does not have", async () => {
-    const { container } = render(
-      <AssignedIcon assignment={{ icon: "lucide-not-a-real-icon", colour: null }} className="size-3.5" />,
+  // where an icon should be - which is what a row whose name then shifts left looks like.
+  it("falls back to the row's own glyph for an icon Lucide does not have", async () => {
+    render(
+      <AssignedIcon
+        assignment={{ icon: "lucide-not-a-real-icon", colour: null }}
+        className="size-3.5"
+        fallback={<span data-testid="own-glyph" />}
+      />,
     );
-    await waitFor(() => expect(container.querySelector('[data-testid="assigned-icon"]')).toBe(null));
+    await waitFor(() => expect(screen.getByTestId("own-glyph")).toBeTruthy());
+    expect(mark()).toBe(null);
+  });
+
+  // And while the set is on its way. Without this the row has no icon for a moment and its name
+  // jumps sideways when one arrives.
+  it("shows the fallback until the icon set has loaded", () => {
+    render(
+      <AssignedIcon
+        assignment={{ icon: "lucide-calendar-days", colour: null }}
+        className="size-3.5"
+        fallback={<span data-testid="own-glyph" />}
+      />,
+    );
+    expect(screen.getByTestId("own-glyph")).toBeTruthy();
   });
 });

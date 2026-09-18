@@ -10,10 +10,21 @@ import type { IconNode } from "../lib/lucideIcons";
 /// first-class mark here rather than a picture pasted into a row - it takes the theme's colour like
 /// everything around it, unless the user chose one in Iconic.
 ///
-/// Rendering nothing is a real answer. An id the set does not hold, or a set that failed to load,
-/// leaves the row with the glyph it already had, which is the right thing to see.
+/// Falling back is a real answer, and the row hands in what to fall back to. An id the set does not
+/// hold, a set that failed to load, and the moment before it arrives all leave the row with the
+/// glyph it already had - which is the right thing to see, and keeps the name from jumping sideways
+/// when an icon turns up late.
 
-export default function AssignedIcon({ assignment, className }: { assignment: IconAssignment; className: string }) {
+export default function AssignedIcon({
+  assignment,
+  className,
+  fallback = null,
+}: {
+  assignment: IconAssignment;
+  className: string;
+  /// Drawn instead whenever there is no icon to draw - the row's own glyph.
+  fallback?: React.ReactNode;
+}) {
   const [nodes, setNodes] = useState<IconNode[] | null>(null);
   const name = lucideName(assignment.icon);
 
@@ -37,7 +48,7 @@ export default function AssignedIcon({ assignment, className }: { assignment: Ic
   const colour = toneColour(assignment.colour);
 
   if (name === null) {
-    if (!isEmojiIcon(assignment.icon)) return null;
+    if (!isEmojiIcon(assignment.icon)) return <>{fallback}</>;
     return (
       <span
         data-testid="assigned-icon"
@@ -50,7 +61,7 @@ export default function AssignedIcon({ assignment, className }: { assignment: Ic
     );
   }
 
-  if (nodes === null || nodes.length === 0) return null;
+  if (nodes === null || nodes.length === 0) return <>{fallback}</>;
 
   return (
     <svg
