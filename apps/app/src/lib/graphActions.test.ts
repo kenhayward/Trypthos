@@ -6,6 +6,7 @@ const snapshot = (newNotes: GraphSnapshot["newNotes"]): GraphSnapshot => ({
   workspaceId: "V",
   builtAt: "2026-09-17T10:00:00.000Z",
   unreadable: 0,
+  truncated: false,
   newNotes,
   nodes: [
     { id: "V/a/From.md", kind: "note", label: "From", path: "V/a/From.md", degree: 1 },

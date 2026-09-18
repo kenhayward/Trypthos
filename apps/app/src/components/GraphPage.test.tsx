@@ -10,6 +10,7 @@ const snapshot: GraphSnapshot = {
   workspaceId: "V",
   builtAt: "2026-09-17T10:00:00.000Z",
   unreadable: 0,
+  truncated: false,
   newNotes: { mode: "folder", folder: "Inbox" },
   nodes: [
     { id: "V/A.md", kind: "note", label: "Alpha", path: "V/A.md", degree: 2 },

@@ -556,6 +556,7 @@ describe("the vault graph contract", () => {
     workspaceId: "V",
     builtAt: "2026-09-17T10:00:00.000Z",
     unreadable: 0,
+    truncated: false,
     newNotes: { mode: "folder", folder: "Inbox" },
     nodes: [{ id: "V/A.md", kind: "note", label: "A", path: "V/A.md", degree: 1 }],
     edges: [{ source: "V/A.md", target: "ghost:b", both: false }],

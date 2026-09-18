@@ -6,7 +6,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { GRAPH_CHANGED_CHANNEL, GRAPH_PROGRESS_CHANNEL } = require("@trypthos/domain");
-const { createVaultIndexes } = require("../src/vaultIndex");
+const { createVaultIndexes, NOTE_LIMIT } = require("../src/vaultIndex");
 const { openWorkspaceFor } = require("../src/providers");
 
 /// A provider over an in-memory tree of `path -> content`, with switches for the failures a disk
@@ -274,17 +274,71 @@ test("follows a renamed file, and rebuilds for a renamed folder", async () => {
   assert.ok(indexes.state("V").snapshot.nodes.some((node) => node.id === "V/g/C.md"));
 });
 
-test("does not index a folder that is not a vault, or a repository", async () => {
+/// A plain local folder that is not an Obsidian vault.
+function folder(provider, id = "F") {
+  return { ...vault(provider, id), vault: false };
+}
+
+async function built(indexes, workspace) {
+  indexes.start(workspace);
+  await indexes.idle(workspace.id);
+  return indexes.state(workspace.id).snapshot;
+}
+
+// The graph is no longer an Obsidian idea. What made widening this safe is `folderIgnore.js`.
+test("indexes a local folder that is not a vault", async () => {
   const indexes = createVaultIndexes({ emit: () => {}, now: NOW });
-  const plain = { ...vault(fakeProvider({ "A.md": "" })), vault: false };
+  const snapshot = await built(indexes, folder(fakeProvider({ "Home.md": "[[Plan]]", "Plan.md": "" })));
+  assert.equal(snapshot.edges.length, 1);
+});
+
+// One request per note meets GitHub's rate limit, and that is its own piece of work.
+test("still does not index a repository", async () => {
+  const indexes = createVaultIndexes({ emit: () => {}, now: NOW });
   const repo = { ...vault(fakeProvider({ "A.md": "" }), "R"), ref: { kind: "github" }, root: null };
 
-  indexes.start(plain);
   indexes.start(repo);
 
-  assert.equal(indexes.state("V"), null);
+  assert.equal(indexes.isIndexable(repo), false);
   assert.equal(indexes.state("R"), null);
   assert.deepEqual(indexes.refresh(repo), { ok: false, reason: "unsupported" });
+});
+
+// Measured on this repository: 11 markdown files outside node_modules, 1,117 inside it.
+test("skips node_modules with no .gitignore to say so", async () => {
+  const indexes = createVaultIndexes({ emit: () => {}, now: NOW });
+  const provider = fakeProvider({ "Home.md": "", "node_modules/pkg/README.md": "", "a/node_modules/b/README.md": "" });
+  const snapshot = await built(indexes, folder(provider));
+  assert.deepEqual(snapshot.nodes.filter((node) => node.id.includes("node_modules")), []);
+  assert.ok(!provider.reads.some((file) => file.includes("node_modules")));
+});
+
+test("applies the folder's .gitignore", async () => {
+  const indexes = createVaultIndexes({ emit: () => {}, now: NOW });
+  const provider = fakeProvider({ ".gitignore": "drafts/\n", "Home.md": "", "drafts/Idea.md": "" });
+  const snapshot = await built(indexes, folder(provider));
+  assert.deepEqual(snapshot.nodes.filter((node) => node.id.includes("drafts")), []);
+});
+
+// A folder a user picked may be a whole drive. The cap is reported, never silent.
+test("stops at the limit, and says it stopped", async () => {
+  const indexes = createVaultIndexes({ emit: () => {}, now: NOW, noteLimit: 3 });
+  const snapshot = await built(indexes, folder(fakeProvider({ "a.md": "", "b.md": "", "c.md": "", "d.md": "", "p.png": "" })));
+  assert.equal(snapshot.truncated, true);
+  assert.equal(snapshot.nodes.filter((node) => node.kind === "note").length, 3);
+  // A note the walk found but never read is not drawn, or it would be a node with no links to show.
+  assert.equal(snapshot.nodes.some((node) => node.id === "F/d.md"), false);
+  assert.equal(snapshot.nodes.some((node) => node.id === "F/p.png"), true);
+});
+
+test("does not claim to be incomplete when it is not", async () => {
+  const indexes = createVaultIndexes({ emit: () => {}, now: NOW });
+  const snapshot = await built(indexes, vault(fakeProvider({ "Home.md": "" })));
+  assert.equal(snapshot.truncated, false);
+});
+
+test("caps at five thousand notes by default", () => {
+  assert.equal(NOTE_LIMIT, 5000);
 });
 
 test("never puts a note's contents into a snapshot", async () => {

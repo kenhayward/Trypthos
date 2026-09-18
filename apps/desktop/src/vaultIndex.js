@@ -14,6 +14,7 @@ const {
   qualifyPath,
   sortNodes,
 } = require("@trypthos/domain");
+const { createIgnoreRules } = require("./folderIgnore");
 
 /// The vault graph's index: one per open local vault, held here in the main process.
 ///
@@ -27,6 +28,11 @@ const {
 /// vault of thousands of notes is read 32 at a time with a turn of the event loop between batches.
 
 const READ_BATCH = 32;
+
+/// How many notes one graph will read. A vault has never needed a limit, but a folder a user picked
+/// may be a whole drive - and a graph that stopped quietly would be a wrong answer given confidently,
+/// so the snapshot says when it stopped.
+const NOTE_LIMIT = 5000;
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 
 async function settled(call) {
@@ -45,17 +51,21 @@ function parsedJson(text) {
   }
 }
 
-function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BATCH }) {
+function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BATCH, noteLimit = NOTE_LIMIT }) {
   const entries = new Map();
 
-  const isIndexable = (workspace) =>
-    workspace.vault === true && workspace.ref?.kind === "local" && typeof workspace.root === "string";
+  /// Every local folder, not only an Obsidian vault. What made this safe to widen is
+  /// `folderIgnore.js`: a vault is curated, an arbitrary folder is not, and without those rules a
+  /// project checkout indexes its dependencies. A repository still waits - one request per note meets
+  /// GitHub's rate limit, and that is its own piece of work.
+  const isIndexable = (workspace) => workspace.ref?.kind === "local" && typeof workspace.root === "string";
 
   function publish(entry) {
     entry.snapshot = {
       workspaceId: entry.workspace.id,
       builtAt: now().toISOString(),
       unreadable: entry.unreadable,
+      truncated: entry.truncated === true,
       newNotes: entry.newNotes,
       ...buildGraph(entry.input),
     };
@@ -84,6 +94,11 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
 
     entry.error = null;
     progress(entry, { workspaceId: id, read: 0, total: 0, walking: true });
+
+    // Read through the provider like everything else here, so the boundary guard applies to it.
+    const gitignore = await settled(() => provider.read(".gitignore"));
+    if (!alive()) return;
+    const rules = createIgnoreRules(gitignore.ok ? gitignore.content : null);
 
     const files = [];
     let unreadable = 0;
@@ -121,8 +136,11 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
         }
         for (const node of sortNodes(listed.nodes)) {
           if (isHidden(node.name)) continue;
-          if (node.kind === "directory") next.push(node.id);
-          else files.push(node.id);
+          if (node.kind === "directory") {
+            if (!rules.skipsDirectory(node.id)) next.push(node.id);
+          } else if (!rules.skipsFile(node.id)) {
+            files.push(node.id);
+          }
         }
       }
       queue = next;
@@ -131,7 +149,13 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
       if (!alive()) return;
     }
 
-    const notes = files.filter(isNotePath);
+    const found = files.filter(isNotePath);
+    entry.truncated = found.length > noteLimit;
+    const notes = entry.truncated ? found.slice(0, noteLimit) : found;
+    /// A note the walk found but never read is not drawn: it would be a node whose links nobody
+    /// looked for. Everything that is not a note is kept, since attachments are never read anyway.
+    const read = new Set(notes);
+    const drawn = files.filter((file) => !isNotePath(file) || read.has(file));
     const references = new Map();
     for (let start = 0; start < notes.length; start += batchSize) {
       const batch = notes.slice(start, start + batchSize);
@@ -150,7 +174,7 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
     if (!alive()) return;
     entry.newNotes = newNoteLocationFrom(config.ok ? parsedJson(config.content) : null);
 
-    let input = { files: files.map((file) => qualifyPath(id, file)), references };
+    let input = { files: drawn.map((file) => qualifyPath(id, file)), references };
     let rebuild = false;
     for (const change of entry.pending.splice(0)) {
       if (change === "rebuild") rebuild = true;
@@ -268,4 +292,4 @@ function createVaultIndexes({ emit, now = () => new Date(), batchSize = READ_BAT
   };
 }
 
-module.exports = { createVaultIndexes };
+module.exports = { createVaultIndexes, NOTE_LIMIT };
