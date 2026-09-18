@@ -39,11 +39,22 @@ describe("a workspace's home page", () => {
     expect(screen.getByText(/^Obsidian vault/)).toBeTruthy();
   });
 
+  // Label and number rather than number and noun: "1 attachments" is wrong English, and a label
+  // reads correctly at every count without plural forms the catalogue has never needed.
   it("counts what the index found", async () => {
     page();
     await waitFor(() =>
-      expect(screen.getByText("2 notes - 1 links - 1 attachments - indexed just now")).toBeTruthy(),
+      expect(screen.getByText("Notes 2 - Links 1 - Attachments 1 - Indexed just now")).toBeTruthy(),
     );
+  });
+
+  // A real workspace's path can be as long as the window is wide. It is cut short on screen and kept
+  // whole on hover, rather than wrapping the heading down the page.
+  it("keeps the whole path on hover when it is cut short", () => {
+    page();
+    const line = screen.getByText(/^Folder/);
+    expect(line.getAttribute("title")).toBe("D:/Notes");
+    expect(line.className).toContain("truncate");
   });
 
   it("opens on the graph when something links to something", async () => {

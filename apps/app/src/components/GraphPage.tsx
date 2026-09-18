@@ -8,7 +8,7 @@ import { graphNodeAction } from "../lib/graphActions";
 import { hiddenNodes, searchMatches } from "../lib/graphFilters";
 import type { GraphFilter } from "../lib/graphFilters";
 import type { LayoutRunner } from "../lib/graphLayoutTypes";
-import { indexAge, linkCount, noteCount, percentRead } from "../lib/graphStatus";
+import { indexAge, percentRead } from "../lib/graphStatus";
 import { useLayoutRunner } from "../lib/layoutClient";
 import CanvasBoundary from "./CanvasBoundary";
 import type { GraphCanvasProps, GraphFocus } from "./GraphCanvas";
@@ -93,18 +93,25 @@ export default function GraphPage({
   const progressText = (value: NonNullable<typeof progress>) =>
     value.walking ? t("graph.progressWalking", { read: value.read, total: value.total }) : t("graph.progress", { read: value.read, total: value.total });
 
+  /// What the foot of the graph says, which is only ever what the heading above it does not.
+  ///
+  /// The home page's heading carries the counts and when the index was built, so in the steady state
+  /// this says nothing - it used to repeat that line, directly below it. It speaks for a build that
+  /// failed, a rebuild in progress, and files that could not be read, none of which the heading shows.
+  const unreadable =
+    snapshot !== null && snapshot.unreadable > 0 ? t("graph.unreadable", { count: snapshot.unreadable }) : null;
+  const withUnreadable = (text: string) => (unreadable === null ? text : `${text} - ${unreadable}`);
   let status: { text: string; danger: boolean } | null = null;
-  if (error !== null) status = { text: t("graph.buildFailed"), danger: true };
+  if (error !== null) status = { text: withUnreadable(t("graph.buildFailed")), danger: true };
   else if (progress !== null && snapshot !== null) {
     status = {
-      text: t("graph.refreshing", { read: progress.read, total: progress.total, age: ageText(indexAge(snapshot.builtAt, now())) }),
+      text: withUnreadable(
+        t("graph.refreshing", { read: progress.read, total: progress.total, age: ageText(indexAge(snapshot.builtAt, now())) }),
+      ),
       danger: false,
     };
-  } else if (snapshot !== null) {
-    status = {
-      text: t("graph.status", { notes: noteCount(snapshot), links: linkCount(snapshot), age: ageText(indexAge(snapshot.builtAt, now())) }),
-      danger: false,
-    };
+  } else if (unreadable !== null) {
+    status = { text: unreadable, danger: false };
   }
 
   let body: React.ReactNode = null;
@@ -209,7 +216,6 @@ export default function GraphPage({
         {status !== null && (
           <p className={status.danger ? "absolute bottom-2 left-3 text-xs text-danger" : "absolute bottom-2 left-3 text-xs text-ink-4"}>
             {status.text}
-            {snapshot !== null && snapshot.unreadable > 0 && ` - ${t("graph.unreadable", { count: snapshot.unreadable })}`}
           </p>
         )}
       </div>
