@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VaultGraph } from "@trypthos/domain";
-import { indexAge, linkCount, noteCount, percentRead } from "./graphStatus";
+import { attachmentCount, indexAge, linkCount, noteCount, percentRead } from "./graphStatus";
 
 const at = Date.parse("2026-09-17T10:00:00.000Z");
 
@@ -38,5 +38,21 @@ describe("progress and counts", () => {
     };
     expect(noteCount(graph)).toBe(2);
     expect(linkCount(graph)).toBe(1);
+  });
+});
+
+describe("counting attachments", () => {
+  // A ghost is a note that does not exist yet and a tag is not a file, so neither is an attachment.
+  it("counts attachments, and nothing else", () => {
+    const graph: VaultGraph = {
+      nodes: [
+        { id: "V/a.md", kind: "note", label: "a", path: "V/a.md", degree: 0 },
+        { id: "V/b.png", kind: "attachment", label: "b.png", path: "V/b.png", degree: 0 },
+        { id: "ghost:c", kind: "ghost", label: "c", path: null, degree: 0 },
+        { id: "tag:d", kind: "tag", label: "#d", path: null, degree: 0 },
+      ],
+      edges: [],
+    };
+    expect(attachmentCount(graph)).toBe(1);
   });
 });

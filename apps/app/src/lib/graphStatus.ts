@@ -28,3 +28,7 @@ export function noteCount(graph: VaultGraph): number {
 export function linkCount(graph: VaultGraph): number {
   return graph.edges.filter((edge) => !edge.target.startsWith("tag:")).length;
 }
+
+export function attachmentCount(graph: VaultGraph): number {
+  return graph.nodes.filter((node) => node.kind === "attachment").length;
+}
