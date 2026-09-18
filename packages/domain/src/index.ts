@@ -458,3 +458,5 @@ export type { GraphEdge, GraphNode, GraphNodeKind, IndexChange, VaultGraph, Vaul
 export { GRAPH_PAGE_PREFIX, graphPagePath, graphPageWorkspaceId, isGraphPagePath } from "./graphPage";
 export { newNoteDirectory, newNoteLocationFrom, OBSIDIAN_APP_CONFIG } from "./obsidianAppConfig";
 export type { NewNoteLocation } from "./obsidianAppConfig";
+export { ICON_LIMIT, iconFor, NO_ICONS, OBSIDIAN_ICONS_FILE, parseObsidianIcons } from "./obsidianIcons";
+export type { IconAssignment, IconMap } from "./obsidianIcons";
