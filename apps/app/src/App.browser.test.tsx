@@ -266,7 +266,9 @@ describe("two folders open at once", () => {
   /// folders are drawn once expanded, so they expand first - exactly as a user does.
   async function expandBoth() {
     await waitFor(() => expect(screen.getByRole("button", { name: "Close Notes" })).toBeDefined());
-    for (const name of ["Notes", "Work"]) {
+    // The band, not the row: the row beside it selects the folder for chat and deliberately leaves
+    // the tree as it was - see `DisclosureBand`.
+    for (const name of ["Expand Notes", "Expand Work"]) {
       await userEvent.click(within(panel()).getByRole("button", { name }));
     }
   }
@@ -334,19 +336,20 @@ describe("two folders open at once", () => {
       expect(within(panel()).getAllByRole("button", { name: /notes\.md/ })).toHaveLength(2),
     );
 
-    const root = (name: string) =>
-      within(panel()).getByRole("button", { name: new RegExp(`^${name}$`) });
-    expect(root("Notes").getAttribute("aria-expanded")).toBe("true");
+    // Expansion is the band's fact now, and the band's gesture.
+    const band = (name: string, open: boolean) =>
+      within(panel()).getByRole("button", { name: `${open ? "Collapse" : "Expand"} ${name}` });
+    expect(band("Notes", true).getAttribute("aria-expanded")).toBe("true");
 
-    await userEvent.click(root("Notes"));
+    await userEvent.click(band("Notes", true));
 
-    await waitFor(() => expect(root("Notes").getAttribute("aria-expanded")).toBe("false"));
+    await waitFor(() => expect(band("Notes", false).getAttribute("aria-expanded")).toBe("false"));
     // One file left on screen, in the folder that is still open - and its row is drawn, not merely
     // present.
     const left = within(panel()).getAllByRole("button", { name: /notes\.md/ });
     expect(left).toHaveLength(1);
     expect(left[0]!.getBoundingClientRect().height).toBeGreaterThan(0);
-    expect(root("Work").getAttribute("aria-expanded")).toBe("true");
+    expect(band("Work", true).getAttribute("aria-expanded")).toBe("true");
   });
 
   /// How far in each row sits, measured on screen.
