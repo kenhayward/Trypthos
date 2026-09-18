@@ -5,6 +5,8 @@
   "workspace": {
     "title": "Workspace",
     "openFolder": "Open folder",
+    "collapse": "Collapse {{name}}",
+    "expand": "Expand {{name}}",
     "closeFolder": "Close {{name}}",
     "noFolder": "No folder open yet.",
     "emptyFolder": "This folder is empty.",

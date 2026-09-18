@@ -69,6 +69,17 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
   return props;
 }
 
+/// An anchored name. Every folder row now shares its name with the disclosure band beside it,
+/// which is called "Expand docs", so a loose match finds two buttons.
+const exactly = (name: string) => new RegExp(`^${name.replaceAll(".", "\\.")}$`);
+
+/// The row itself, which selects the folder.
+const folderRow = (name: string) => screen.getByRole("button", { name: exactly(name) });
+
+/// The band, which opens and closes and does nothing else. Named for what it would do next.
+const band = (name: string, open = false) =>
+  screen.getByRole("button", { name: `${open ? "Collapse" : "Expand"} ${name}` });
+
 describe("WorkspacePanel", () => {
   it("invites you to open a folder when none is", () => {
     panel({ workspaces: [] });
@@ -77,7 +88,7 @@ describe("WorkspacePanel", () => {
 
   it("offers folders and openable files as things to click", () => {
     panel();
-    expect(screen.getByRole("button", { name: /docs/ })).toBeDefined();
+    expect(folderRow("docs")).toBeDefined();
     expect(screen.getByRole("button", { name: /README\.md/ })).toBeDefined();
     expect(screen.queryByRole("button", { name: /logo\.png/ })).toBeNull();
   });
@@ -85,7 +96,7 @@ describe("WorkspacePanel", () => {
   it("shows an expanded folder's children and marks it open", () => {
     panel();
     expect(screen.getByRole("button", { name: /plan\.md/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(band("docs", true).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("opens a file when its row is clicked", async () => {
@@ -212,11 +223,66 @@ describe("files nothing can open", () => {
 
 /// Which folder chat maps, chosen in the tree.
 describe("choosing the folder chat maps", () => {
-  it("selects a folder and expands it in one click", async () => {
+  // The reason the row was split. Choosing the folder chat reads is a deliberate, daily act, and it
+  // used to expand or collapse that folder as a side effect nobody asked for.
+  it("selects a folder and leaves it exactly as it was", async () => {
     const props = panel();
-    await userEvent.click(screen.getByRole("button", { name: /docs/ }));
+    await userEvent.click(folderRow("docs"));
 
     expect(props.onSelectFolder).toHaveBeenCalledWith("Diariz/docs");
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+  });
+
+  it("opens a folder from its band without changing what chat is mapping", async () => {
+    const props = panel();
+    await userEvent.click(band("docs", true));
+
+    expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz/docs");
+    expect(props.onSelectFolder).not.toHaveBeenCalled();
+  });
+
+  // Filter results came from a search, so there is nothing under them to collapse - and no control,
+  // rather than a control that does nothing.
+  it("offers no band on a filter result", () => {
+    panel({
+      filter: "doc",
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false } as FilterStatus,
+    });
+    expect(screen.queryByRole("button", { name: /^Expand |^Collapse / })).toBeNull();
+  });
+
+  // The band is part of its row, and a menu that appeared for two thirds of a row would be a puzzle.
+  it("opens the row's menu from the band, and selects or toggles nothing", () => {
+    const props = panel();
+    fireEvent.contextMenu(band("docs", true));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(props.onSelectFolder).not.toHaveBeenCalled();
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+  });
+
+  it("names the band for what it would do next", () => {
+    panel({ folders: { Diariz: FOLDERS.Diariz! } });
+    expect(band("docs").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  // Two buttons per row would double the Tab stops down a tree of any size, so the band is out of
+  // the Tab order and the arrows do its job instead - the standard tree gesture.
+  it("keeps the band out of the tab order", () => {
+    panel();
+    expect(band("docs", true).getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("collapses an open folder with the left arrow", async () => {
+    const props = panel();
+    folderRow("docs").focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz/docs");
+  });
+
+  it("expands a closed folder with the right arrow", async () => {
+    const props = panel({ folders: { Diariz: FOLDERS.Diariz! } });
+    folderRow("docs").focus();
+    await userEvent.keyboard("{ArrowRight}");
     expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz/docs");
   });
 
@@ -224,12 +290,12 @@ describe("choosing the folder chat maps", () => {
   // folder can be the one chat is mapping while collapsed, and expanded while another is chosen.
   it("marks the chosen folder, and only that one", () => {
     panel({ selectedFolder: "Diariz/docs" });
-    expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-current")).toBe("true");
+    expect(folderRow("docs").getAttribute("aria-current")).toBe("true");
   });
 
   it("marks nothing when the root is the one chat maps", () => {
     panel({ selectedFolder: "" });
-    expect(screen.getByRole("button", { name: /docs/ }).getAttribute("aria-current")).toBeNull();
+    expect(folderRow("docs").getAttribute("aria-current")).toBeNull();
   });
 });
 
@@ -248,24 +314,34 @@ describe("collapsing a workspace root", () => {
 
   it("draws the root as expanded while its listing is there", () => {
     panel();
-    expect(rootRow("Diariz").getAttribute("aria-expanded")).toBe("true");
+    expect(band("Diariz", true).getAttribute("aria-expanded")).toBe("true");
   });
 
   // Collapsed is simply not having been listed - the same state a folder nobody has opened is in.
   it("draws the root as collapsed when its listing is not", () => {
     panel({ folders: {} });
-    expect(rootRow("Diariz").getAttribute("aria-expanded")).toBe("false");
+    expect(band("Diariz").getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("button", { name: /README\.md/ })).toBeNull();
   });
 
-  it("toggles the root, and points chat at it, in one click", async () => {
+  it("points chat at the root from its row, and leaves it as it was", async () => {
     const user = userEvent.setup();
     const props = panel();
 
     await user.click(rootRow("Diariz"));
 
-    expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz");
     expect(props.onSelectFolder).toHaveBeenCalledWith("Diariz");
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+  });
+
+  it("collapses the root from its band, and points chat nowhere", async () => {
+    const user = userEvent.setup();
+    const props = panel();
+
+    await user.click(band("Diariz", true));
+
+    expect(props.onToggleFolder).toHaveBeenCalledWith("Diariz");
+    expect(props.onSelectFolder).not.toHaveBeenCalled();
   });
 
   // The cross is on the same row and must keep meaning what it says.
@@ -286,8 +362,8 @@ describe("collapsing a workspace root", () => {
       folders: { Work: { status: "loaded", children: [{ id: "Work/a.md", name: "a.md", kind: "file" }] } },
     });
 
-    expect(rootRow("Diariz").getAttribute("aria-expanded")).toBe("false");
-    expect(rootRow("Work").getAttribute("aria-expanded")).toBe("true");
+    expect(band("Diariz").getAttribute("aria-expanded")).toBe("false");
+    expect(band("Work", true).getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("button", { name: /a\.md/ })).toBeDefined();
   });
 
@@ -317,9 +393,9 @@ describe("collapsing a workspace root", () => {
 /// trusting: at the first level it once said the opposite of the truth, drawing a workspace's own
 /// folders level with the workspace itself.
 describe("indenting", () => {
-  const paddingOf = (name: string | RegExp) =>
+  const paddingOf = (name: string) =>
     within(screen.getByRole("complementary", { name: "Workspace" }))
-      .getByRole("button", { name })
+      .getByRole("button", { name: exactly(name) })
       .style.paddingLeft;
 
   const px = (value: string) => Number.parseFloat(value.replace("px", ""));
@@ -327,8 +403,8 @@ describe("indenting", () => {
   it("puts a workspace's own folders one level in from its root", () => {
     panel();
 
-    const root = px(paddingOf(/^Diariz$/));
-    const inside = px(paddingOf(/docs/));
+    const root = px(paddingOf("Diariz"));
+    const inside = px(paddingOf("docs"));
 
     expect(inside).toBeGreaterThan(root);
   });
@@ -339,9 +415,9 @@ describe("indenting", () => {
   it("steps files evenly, level by level", () => {
     panel();
 
-    const atRoot = px(paddingOf(/README\.md/));
-    const insideDocs = px(paddingOf(/plan\.md/));
-    const rootToFolder = px(paddingOf(/docs/)) - px(paddingOf(/^Diariz$/));
+    const atRoot = px(paddingOf("Diariz/README.md"));
+    const insideDocs = px(paddingOf("plan.md"));
+    const rootToFolder = px(paddingOf("docs")) - px(paddingOf("Diariz"));
 
     expect(insideDocs - atRoot).toBe(rootToFolder);
   });
@@ -364,7 +440,7 @@ describe("filtering the browser", () => {
     filtered(["Diariz/docs/deep/plan.md"], { folders: { Diariz: FOLDERS.Diariz! } });
 
     expect(screen.getByRole("button", { name: /plan\.md/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /docs/ })).toBeDefined();
+    expect(folderRow("docs")).toBeDefined();
     expect(screen.getByText("deep")).toBeDefined();
   });
 
@@ -407,7 +483,7 @@ describe("filtering the browser", () => {
     const user = userEvent.setup();
     const props = filtered(["Diariz/docs/plan.md"]);
 
-    await user.click(screen.getByRole("button", { name: /docs/ }));
+    await user.click(folderRow("docs"));
     expect(props.onToggleFolder).not.toHaveBeenCalled();
     // Still the way to point chat and Find at a folder, which is the other half of what the row does.
     expect(props.onSelectFolder).toHaveBeenCalledWith("Diariz/docs");
@@ -598,7 +674,7 @@ describe("the workspace menu", () => {
   it("offers a new file in the selected local folder", async () => {
     const onNewFile = vi.fn();
     panel({ selectedFolder: "Diariz/docs", onNewFile });
-    const user = await rightClick(screen.getByRole("button", { name: /docs/ }));
+    const user = await rightClick(folderRow("docs"));
 
     await user.click(screen.getByRole("menuitem", { name: "New File ..." }));
 
@@ -618,7 +694,7 @@ describe("the workspace menu", () => {
   it("offers a new folder inside the folder whose menu was opened", async () => {
     const onNewFolder = vi.fn();
     panel({ onNewFolder });
-    const user = await rightClick(screen.getByRole("button", { name: /docs/ }));
+    const user = await rightClick(folderRow("docs"));
 
     await user.click(screen.getByRole("menuitem", { name: "New Folder ..." }));
 
@@ -638,7 +714,7 @@ describe("the workspace menu", () => {
   describe("open in Explorer", () => {
     it.each([
       [/plan\.md/, "Diariz/docs/plan.md"],
-      [/docs/, "Diariz/docs"],
+      [/^docs$/, "Diariz/docs"],
       [/^Diariz$/, "Diariz"],
     ])("shows the entry right-clicked, %s", async (row, path) => {
       const onRevealEntry = vi.fn();
@@ -676,7 +752,7 @@ describe("the workspace menu", () => {
   describe("rename", () => {
     it.each([
       [/plan\.md/, "Diariz/docs/plan.md"],
-      [/docs/, "Diariz/docs"],
+      [/^docs$/, "Diariz/docs"],
     ])("renames the entry right-clicked, %s", async (row, path) => {
       const onRename = vi.fn();
       panel({ onRename });
@@ -762,7 +838,7 @@ describe("the workspace menu", () => {
 
     it("is not offered for a folder", async () => {
       panel({ onAddToChat: vi.fn() });
-      await rightClick(screen.getByRole("button", { name: /docs/ }));
+      await rightClick(folderRow("docs"));
 
       expect(screen.queryByRole("menuitem", { name: "Add to Chat" })).toBeNull();
     });
@@ -814,7 +890,7 @@ describe("the workspace menu", () => {
     await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
     expect(screen.getByRole("menu", { name: "Diariz" })).toBeDefined();
 
-    await rightClick(screen.getByRole("button", { name: /docs/ }));
+    await rightClick(folderRow("docs"));
     expect(props.onOpenFile).not.toHaveBeenCalled();
     expect(props.onToggleFolder).not.toHaveBeenCalled();
     expect(props.onSelectFolder).not.toHaveBeenCalled();
@@ -974,11 +1050,20 @@ const REPO = {
 };
 
 describe("a vault's root row", () => {
-  it("opens the vault's graph as well as expanding", async () => {
+  it("opens the vault's graph from its row, and leaves the tree alone", async () => {
     const props = panel({ workspaces: [RESEARCH], folders: {} });
-    fireEvent.click(screen.getByRole("button", { name: "Research" }));
+    fireEvent.click(screen.getByRole("button", { name: exactly("Research") }));
     expect(props.onOpenGraphPage).toHaveBeenCalledWith("Research");
+    expect(props.onSelectFolder).toHaveBeenCalledWith("Research");
+    expect(props.onToggleFolder).not.toHaveBeenCalled();
+  });
+
+  it("expands the vault from its band, and opens nothing", async () => {
+    const props = panel({ workspaces: [RESEARCH], folders: {} });
+    fireEvent.click(screen.getByRole("button", { name: "Expand Research" }));
     expect(props.onToggleFolder).toHaveBeenCalledWith("Research");
+    expect(props.onOpenGraphPage).not.toHaveBeenCalled();
+    expect(props.onSelectFolder).not.toHaveBeenCalled();
   });
 
   it("opens no graph for a folder that is not a vault", async () => {

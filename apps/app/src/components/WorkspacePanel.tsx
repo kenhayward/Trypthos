@@ -69,9 +69,13 @@ interface Props {
   /// The folder chat maps when its Folder button is on, workspace-relative. "" is the root, which
   /// is drawn as selected only when a folder row is not.
   selectedFolder: string;
-  /// Chooses that folder. Clicking a folder both selects it and expands or collapses it - one
-  /// click, because a row that needed two different gestures for two different meanings would need
-  /// two different targets, and this row is one word wide.
+  /// Chooses that folder, and nothing else.
+  ///
+  /// This once said a row one word wide could not carry two gestures, so one click both selected a
+  /// folder and expanded it. That was wrong: choosing the folder chat reads is a deliberate, daily
+  /// act, and it was the one gesture that could not be made without a side effect on the tree. The
+  /// disclosure now has a target of its own - see `DisclosureBand` - and the width that costs is
+  /// cheaper than an unavoidable side effect.
   onSelectFolder: (path: string) => void;
   /// Closes one folder, and the documents that came from it. The asking happens above.
   onCloseWorkspace: (workspaceId: string) => void;
@@ -365,14 +369,15 @@ export default function WorkspacePanel({
                   expanded={state !== undefined && state.status !== "error"}
                   filtering={filtering}
                   selected={selectedFolder === workspace.id}
-                  onToggle={() => {
+                  onOpen={() => {
                     onSelectFolder(workspace.id);
-                    // A repository's row is its home, so clicking it opens its page as well as
-                    // expanding it. Opening a tab that is already open only switches to it, so a
-                    // second click costs nothing.
+                    // A repository's row is its home, so clicking it opens its page. Opening a tab
+                    // that is already open only switches to it, so a second click costs nothing.
                     if (workspace.ref.kind === "github") onOpenRepoPage(workspace.id);
                     // A vault's row is its home too: clicking it opens the vault's graph.
                     if (workspace.ref.kind === "local" && workspace.vault === true) onOpenGraphPage(workspace.id);
+                  }}
+                  onToggle={() => {
                     // There is nothing to collapse while filtering: what is under this row came from
                     // the search, not from the map of folders that have been listed.
                     if (!filtering) void onToggleFolder(workspace.id);
@@ -395,8 +400,8 @@ export default function WorkspacePanel({
                       row={row}
                       filtering={filtering}
                       selected={selectedFolder === row.node.id}
+                      onOpen={() => onSelectFolder(row.node.id)}
                       onToggle={() => {
-                        onSelectFolder(row.node.id);
                         if (!filtering) void onToggleFolder(row.node.id);
                       }}
                       onRetry={() => onRetryFolder(row.node.id)}
@@ -554,8 +559,24 @@ export default function WorkspacePanel({
   );
 }
 
+const INDENT = 16;
+
+/// The disclosure band's width, and the same at every depth including a workspace root.
+///
+/// The triangle sits in the middle of it with 14px of empty band either side, which is what makes
+/// this a target rather than a 16px glyph. It costs 20px of name width at every depth; if that is
+/// ever felt, the cheapest recovery is a 12px indent step, not a narrower band.
+const BAND = 44;
+
 /// Rows indent by depth. The value is inline because it is computed; everything else is a class.
-const indent = (depth: number) => ({ paddingLeft: `${depth * 16 + 4}px` });
+///
+/// Everything from the icon rightwards starts after the band, so a row's content begins at its own
+/// indent plus the band's width.
+const indent = (depth: number) => ({ paddingLeft: `${depth * INDENT + BAND}px` });
+
+/// Where the band sits on a row of this depth. Absolute, so it overlays the padding `indent` left
+/// for it rather than being a flex child the name has to be measured around.
+const band = (depth: number) => ({ left: `${depth * INDENT}px`, width: `${BAND}px` });
 
 /// One open folder's own row: its name, and the only close button in the panel.
 ///
@@ -570,6 +591,7 @@ function WorkspaceRow({
   filtering,
   selected,
   onClose,
+  onOpen,
   onToggle,
   onRetry,
 }: {
@@ -584,6 +606,10 @@ function WorkspaceRow({
   filtering: boolean;
   selected: boolean;
   onClose: () => void;
+  /// Selects this workspace, and opens the page that is its home.
+  onOpen: () => void;
+  /// Expands or collapses it. A separate control, so choosing the folder chat reads no longer opens
+  /// or closes it as a side effect.
   onToggle: () => void;
   onRetry: () => void;
 }) {
@@ -594,19 +620,27 @@ function WorkspaceRow({
       <div
         className={
           selected
-            ? "flex items-center gap-1 rounded-md bg-selected pr-1"
-            : "flex items-center gap-1 rounded-md pr-1 hover:bg-hover"
+            ? "relative flex items-center gap-1 rounded-md bg-selected pr-1"
+            : "relative flex items-center gap-1 rounded-md pr-1 hover:bg-hover"
         }
       >
+        {/* Nothing under this row can be collapsed while filtering, so there is no control - rather
+            than a control that does nothing, which is worse than none at all. */}
+        {!filtering && <DisclosureBand depth={0} open={expanded} name={workspace.name} onToggle={onToggle} />}
         <button
           type="button"
-          onClick={onToggle}
-          // Undefined while filtering: nothing under this row can be collapsed, and a row that
-          // announces itself as expandable and then does nothing is worse than one that does not.
-          aria-expanded={filtering ? undefined : expanded}
-          // Selection and expansion are separate facts about a folder, so they are separate
-          // attributes - exactly as they are on a folder inside one. A root can be the folder chat
-          // is mapping while collapsed, and expanded while some other folder is chosen.
+          onClick={onOpen}
+          // The arrows do what the band does, so the keyboard needs no second stop to reach it.
+          onKeyDown={(event) => {
+            if (filtering) return;
+            if ((event.key === "ArrowRight" && !expanded) || (event.key === "ArrowLeft" && expanded)) {
+              event.preventDefault();
+              onToggle();
+            }
+          }}
+          // Selection and expansion are separate facts about a folder, so they are on separate
+          // controls now as well as separate attributes. A root can be the folder chat is mapping
+          // while collapsed, and expanded while some other folder is chosen.
           aria-current={selected ? "true" : undefined}
           // What the name does not say. Two folders can share a name and so can two repositories,
           // and the tree shows only the name - so the tooltip carries the whole path, or the owner
@@ -621,7 +655,6 @@ function WorkspaceRow({
               : "flex min-w-0 grow items-center gap-1.5 py-1 text-left text-base font-semibold text-ink"
           }
         >
-          {filtering ? <ChevronSpace /> : <Chevron open={expanded} />}
           {/* Which provider this workspace came from. A folder and a repository sit in the same
               tree and behave very differently - one can be saved into and the other cannot - so
               they do not look alike: a different mark, and a different colour behind it. At this
@@ -686,6 +719,7 @@ function FolderRow({
   row,
   filtering,
   selected,
+  onOpen,
   onToggle,
   onRetry,
   onContextMenu,
@@ -694,6 +728,9 @@ function FolderRow({
   /// True while these rows are a filter's answer rather than the tree. See `WorkspaceRow`.
   filtering: boolean;
   selected: boolean;
+  /// Selects this folder, which is what points chat and Find at it.
+  onOpen: () => void;
+  /// Expands or collapses it - the band's job, and the arrows'.
   onToggle: () => void;
   onRetry: () => void;
   onContextMenu: (event: React.MouseEvent) => void;
@@ -702,31 +739,49 @@ function FolderRow({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={onToggle}
-        onContextMenu={onContextMenu}
-        aria-expanded={filtering ? undefined : row.expanded}
-        // Selection and expansion are separate facts about a folder, so they are separate
-        // attributes: a folder can be the one chat is mapping while collapsed, and expanded while
-        // some other folder is chosen.
-        aria-current={selected ? "true" : undefined}
-        style={indent(row.depth)}
-        className={
-          selected
-            ? "flex w-full items-center gap-1.5 rounded-md bg-selected py-1 pr-2 text-left text-base font-semibold text-selected-ink"
-            : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
-        }
-      >
-        {filtering ? <ChevronSpace /> : <Chevron open={row.expanded} />}
-        <Glyph className={row.status === "error" ? "size-3.5 text-danger" : "size-3.5 text-leaf"}>
-          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-        </Glyph>
-        <span className="min-w-0 truncate">{row.node.name}</span>
-        {row.status === "loading" && (
-          <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
+      <div className="relative">
+        {/* Nothing under this row can be collapsed while filtering - see `WorkspaceRow`. */}
+        {!filtering && (
+          <DisclosureBand
+            depth={row.depth}
+            open={row.expanded}
+            name={row.node.name}
+            onToggle={onToggle}
+            onContextMenu={onContextMenu}
+          />
         )}
-      </button>
+        <button
+          type="button"
+          onClick={onOpen}
+          onContextMenu={onContextMenu}
+          // The arrows do what the band does, so the keyboard needs no second stop to reach it.
+          onKeyDown={(event) => {
+            if (filtering) return;
+            if ((event.key === "ArrowRight" && !row.expanded) || (event.key === "ArrowLeft" && row.expanded)) {
+              event.preventDefault();
+              onToggle();
+            }
+          }}
+          // Selection and expansion are separate facts about a folder, so they are on separate
+          // controls now as well as separate attributes: a folder can be the one chat is mapping
+          // while collapsed, and expanded while some other folder is chosen.
+          aria-current={selected ? "true" : undefined}
+          style={indent(row.depth)}
+          className={
+            selected
+              ? "flex w-full items-center gap-1.5 rounded-md bg-selected py-1 pr-2 text-left text-base font-semibold text-selected-ink"
+              : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
+          }
+        >
+          <Glyph className={row.status === "error" ? "size-3.5 shrink-0 text-danger" : "size-3.5 shrink-0 text-leaf"}>
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+          </Glyph>
+          <span className="min-w-0 truncate">{row.node.name}</span>
+          {row.status === "loading" && (
+            <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
+          )}
+        </button>
+      </div>
 
       {/* Inline on the row that failed, never a toast. The rest of the tree still works, and the
           retry belongs beside the thing it would retry. */}
@@ -832,19 +887,56 @@ function FileRow({
   );
 }
 
-/// The chevron's room, kept while filtering so the names still line up down the panel.
+/// The control that opens and closes a row, and the only one that does.
 ///
-/// A gap rather than a greyed-out chevron: there is nothing to expand, and a disabled-looking
-/// control invites a click that will never do anything.
-function ChevronSpace() {
-  return <span aria-hidden="true" className="size-3.5 shrink-0" />;
-}
+/// A row used to be one button that both selected a folder and expanded it. That was deliberate -
+/// the comment on these props said a row one word wide could not carry two gestures - and it was
+/// wrong once choosing the folder chat reads became a daily act, because there was then no way to
+/// choose one without expanding or collapsing it as a side effect.
+///
+/// Transparent, so it shows the row's own hover and selection behind it; the chevron brightening on
+/// hover is what says the target is there. A box drawn around every triangle would be noise down a
+/// long tree.
+///
+/// `tabIndex={-1}`, with the arrows on the row button instead. Two buttons per row would double the
+/// Tab stops down a tree of any size. It is a real button with a real name, so it is in the
+/// accessibility tree; it is simply not a second stop on the way past.
+function DisclosureBand({
+  depth,
+  open,
+  name,
+  onToggle,
+  onContextMenu,
+}: {
+  depth: number;
+  open: boolean;
+  name: string;
+  onToggle: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
+}) {
+  const { t } = useTranslation();
+  const label = open ? t("workspace.collapse", { name }) : t("workspace.expand", { name });
 
-function Chevron({ open }: { open: boolean }) {
   return (
-    <Glyph className={open ? "size-3.5 shrink-0 rotate-90 text-ink-4" : "size-3.5 shrink-0 text-ink-4"}>
-      <path d="M9 6l6 6-6 6" />
-    </Glyph>
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={onToggle}
+      onContextMenu={onContextMenu}
+      aria-expanded={open}
+      aria-label={label}
+      title={label}
+      style={band(depth)}
+      className="group absolute inset-y-0 z-10 grid place-items-center rounded-md"
+    >
+      <Glyph
+        className={
+          open ? "size-4 rotate-90 text-ink-4 group-hover:text-ink-2" : "size-4 text-ink-4 group-hover:text-ink-2"
+        }
+      >
+        <path d="M9 6l6 6-6 6" />
+      </Glyph>
+    </button>
   );
 }
 
