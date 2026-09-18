@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.86.1",
+    date: "2026-09-18",
+    pr: 183,
+    headline: "Live mode no longer leaves part of a document as raw markdown",
+    summary:
+      "Live mode could leave part of a document looking like raw markdown - hashes before headings, asterisks around bold text, the full address of every link - until you moved the caret. It happened when the editor had not finished reading a document by the time it was first drawn, which is more likely in a long document, or on a busy computer with even a short one: whatever it read afterwards was never given its formatting. It is now formatted as soon as the editor has read it, without waiting for you to click.",
+    fixed: [
+      "Live mode formats the whole document once it has been read, instead of leaving the part read last as raw markdown until the caret moves.",
+    ],
+  },
+  {
     version: "0.86.0",
     date: "2026-09-18",
     pr: 182,
