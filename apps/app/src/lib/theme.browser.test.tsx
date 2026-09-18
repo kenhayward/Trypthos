@@ -44,6 +44,8 @@ describe("design tokens", () => {
       "--tp-accent", "--tp-accent-strong", "--tp-selected", "--tp-selected-ink",
       "--tp-text-selection", "--tp-text-selection-idle",
       "--tp-leaf", "--tp-obsidian", "--tp-graph-dim", "--tp-graph-dim-edge",
+      "--tp-tone-red", "--tp-tone-orange", "--tp-tone-yellow", "--tp-tone-green", "--tp-tone-cyan",
+      "--tp-tone-blue", "--tp-tone-purple", "--tp-tone-pink", "--tp-tone-gray",
       "--tp-danger", "--tp-danger-strong",
       "--tp-gutter", "--tp-marker", "--tp-tok-head", "--tp-tok-strong",
       "--tp-tok-code", "--tp-tok-quote", "--tp-caret-line",

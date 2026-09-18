@@ -139,6 +139,19 @@
   --tp-graph-dim: #d4d4d4;
   --tp-graph-dim-edge: #ededed;
 
+  /* Iconic's nine tones. The plugin resolves these against the Obsidian theme in use, which this
+     app cannot read, so they are answered here instead - and in both themes, because an icon set in
+     Obsidian is read in whichever theme Trypthos happens to be in. */
+  --tp-tone-red: #dc2626;
+  --tp-tone-orange: #c2410c;
+  --tp-tone-yellow: #a16207;
+  --tp-tone-green: #15803d;
+  --tp-tone-cyan: #0e7490;
+  --tp-tone-blue: #2f6bed;
+  --tp-tone-purple: #7c3aed;
+  --tp-tone-pink: #be185d;
+  --tp-tone-gray: #737373;
+
   --tp-danger: #dc2626;
   --tp-danger-strong: #e5484d;
 
@@ -204,6 +217,16 @@
     --tp-graph-dim: #2b3648;
     --tp-graph-dim-edge: #1c2536;
 
+    --tp-tone-red: #f87171;
+    --tp-tone-orange: #fb923c;
+    --tp-tone-yellow: #fbbf24;
+    --tp-tone-green: #4ade80;
+    --tp-tone-cyan: #22d3ee;
+    --tp-tone-blue: #60a5fa;
+    --tp-tone-purple: #a78bfa;
+    --tp-tone-pink: #f472b6;
+    --tp-tone-gray: #9ca3af;
+
     --tp-danger: #ff8b8f;
     --tp-danger-strong: #e5484d;
 
@@ -264,6 +287,16 @@
 
   --tp-graph-dim: #2b3648;
   --tp-graph-dim-edge: #1c2536;
+
+  --tp-tone-red: #f87171;
+  --tp-tone-orange: #fb923c;
+  --tp-tone-yellow: #fbbf24;
+  --tp-tone-green: #4ade80;
+  --tp-tone-cyan: #22d3ee;
+  --tp-tone-blue: #60a5fa;
+  --tp-tone-purple: #a78bfa;
+  --tp-tone-pink: #f472b6;
+  --tp-tone-gray: #9ca3af;
 
   --tp-danger: #ff8b8f;
   --tp-danger-strong: #e5484d;
