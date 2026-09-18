@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GraphSnapshot } from "@trypthos/domain";
 import { expectsConsoleError } from "../test-setup";
 import { FakeCanvas, fakeGraphClient, instantLayout } from "../testing/fakeGraphClient";
+import { useVaultGraph } from "../hooks/useVaultGraph";
+import type { GraphClient } from "../lib/workspaceClient";
 import GraphPage from "./GraphPage";
+import type { GraphPageProps } from "./GraphPage";
 
 const NOW = Date.parse("2026-09-17T10:00:00.000Z");
 const snapshot: GraphSnapshot = {
@@ -25,10 +28,22 @@ const snapshot: GraphSnapshot = {
 };
 const filter = { notes: true, attachments: false, tags: false, unresolved: true, orphans: true };
 
+/// The page no longer subscribes to the index itself: the home page that holds it already has, to
+/// decide whether a Graph section exists at all. This harness plays that part, so every assertion
+/// below is about the page and none of them had to change.
+function Subscribed({
+  client,
+  workspaceId,
+  ...rest
+}: Omit<GraphPageProps, "graph"> & { client: GraphClient; workspaceId: string }) {
+  const graph = useVaultGraph(client, workspaceId);
+  return <GraphPage {...rest} graph={graph} />;
+}
+
 function page(fake: ReturnType<typeof fakeGraphClient>, overrides = {}) {
   const props = {
     workspaceId: "V",
-    vaultName: "Research",
+    workspaceName: "Research",
     client: fake.client,
     activePath: "V/B.md",
     filter,
@@ -40,7 +55,7 @@ function page(fake: ReturnType<typeof fakeGraphClient>, overrides = {}) {
     now: () => NOW,
     ...overrides,
   };
-  render(<GraphPage {...props} />);
+  render(<Subscribed {...props} />);
   return props;
 }
 
