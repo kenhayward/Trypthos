@@ -14,10 +14,19 @@ export interface GraphPalette {
   edge: string;
   label: string;
   dim: string;
+  dimEdge: string;
+  surface: string;
+  ink: string;
   pictogram: string;
   font: string;
 }
 
+/// Every one of these must resolve to an OPAQUE colour, which is why `dim` has tokens of its own
+/// rather than borrowing `--tp-hairline`. Sigma blends with `gl.blendFunc(gl.ONE,
+/// gl.ONE_MINUS_SRC_ALPHA)` - premultiplied alpha - and the colours handed to it are not
+/// premultiplied, so a value at 7% alpha is drawn at very nearly full strength. The symptom is not
+/// a faint mistake but an inverted one: the part of the graph a selection fades back comes out
+/// louder than the part it highlights. `graphTheme.browser.test.tsx` holds the rule.
 export const GRAPH_TOKENS: Record<Exclude<keyof GraphPalette, "font">, string> = {
   note: "--tp-obsidian",
   attachment: "--tp-leaf",
@@ -25,7 +34,12 @@ export const GRAPH_TOKENS: Record<Exclude<keyof GraphPalette, "font">, string> =
   tag: "--tp-accent",
   edge: "--tp-rule",
   label: "--tp-ink-3",
-  dim: "--tp-hairline",
+  dim: "--tp-graph-dim",
+  dimEdge: "--tp-graph-dim-edge",
+  // The label box behind a selected node: a raised surface with the app's own rule around it, and
+  // the ink that belongs on that surface written in it.
+  surface: "--tp-sunken",
+  ink: "--tp-ink",
   pictogram: "--tp-app",
 };
 
@@ -39,6 +53,9 @@ export function readGraphPalette(style: { getPropertyValue(name: string): string
     edge: read(GRAPH_TOKENS.edge),
     label: read(GRAPH_TOKENS.label),
     dim: read(GRAPH_TOKENS.dim),
+    dimEdge: read(GRAPH_TOKENS.dimEdge),
+    surface: read(GRAPH_TOKENS.surface),
+    ink: read(GRAPH_TOKENS.ink),
     pictogram: read(GRAPH_TOKENS.pictogram),
     font,
   };

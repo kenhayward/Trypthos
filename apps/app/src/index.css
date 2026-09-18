@@ -130,6 +130,15 @@
   /* Obsidian violet: the mark on a folder opened as a vault. */
   --tp-obsidian: #7c3aed;
 
+  /* What the vault graph fades to when a selection pushes the rest of the graph back. Two values
+     because a disc and a hairline recede in opposite directions: a dimmed node still has to be a
+     node against the ground, while a dimmed edge has to be quieter than `--tp-rule`, which is
+     already nearly the ground. Both are opaque, and must stay so - Sigma draws in WebGL with
+     premultiplied blending, so it paints a translucent colour at very nearly full strength, which
+     turns "faded" into the loudest thing on screen. */
+  --tp-graph-dim: #d4d4d4;
+  --tp-graph-dim-edge: #ededed;
+
   --tp-danger: #dc2626;
   --tp-danger-strong: #e5484d;
 
@@ -192,6 +201,9 @@
     --tp-leaf: #5fc3ab;
     --tp-obsidian: #a78bfa;
 
+    --tp-graph-dim: #2b3648;
+    --tp-graph-dim-edge: #1c2536;
+
     --tp-danger: #ff8b8f;
     --tp-danger-strong: #e5484d;
 
@@ -249,6 +261,9 @@
 
   --tp-leaf: #5fc3ab;
   --tp-obsidian: #a78bfa;
+
+  --tp-graph-dim: #2b3648;
+  --tp-graph-dim-edge: #1c2536;
 
   --tp-danger: #ff8b8f;
   --tp-danger-strong: #e5484d;

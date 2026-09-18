@@ -154,6 +154,52 @@ describe("GraphCanvas", () => {
     expect(canvas.dataset.selected).toBe("");
   });
 
+  // Selecting a node fades the rest of the graph back. The edge that broke this was not a fade at
+  // all: the colour it faded to was drawn louder than the edges around the selection, so the
+  // highlight appeared to point at everything except the node the user had clicked.
+  it("fades only the edges that do not touch the selection", async () => {
+    const wider: VaultGraph = {
+      nodes: [
+        ...graph.nodes,
+        { id: "V/Delta.md", kind: "note", label: "Delta", path: "V/Delta.md", degree: 1 },
+        { id: "V/Epsilon.md", kind: "note", label: "Epsilon", path: "V/Epsilon.md", degree: 1 },
+      ],
+      edges: [...graph.edges, { source: "V/Delta.md", target: "V/Epsilon.md", both: false }],
+    };
+    const { canvas, pointAt, renderer } = await mount({ graph: wider, positions: computeLayout(wider) });
+    const alpha = pointAt("V/Alpha.md");
+    await userEvent.click(canvas, { position: { x: alpha.x, y: alpha.y } });
+    await waitFor(() => expect(canvas.dataset.selected).toBe("V/Alpha.md"));
+
+    const colours = readGraphPalette(getComputedStyle(document.documentElement), "x");
+    const drawn = (source: string, target: string) =>
+      renderer().getEdgeDisplayData(renderer().getGraph().edge(source, target))?.color;
+    expect(drawn("V/Alpha.md", "V/Beta.md")).toBe(colours.edge);
+    expect(drawn("V/Delta.md", "V/Epsilon.md")).toBe(colours.dimEdge);
+  });
+
+  // Sigma's own hover renderer fills the label box with a literal `#FFF` and then writes the label
+  // in the ordinary label colour - pale grey on white once the theme is dark. Asserted on real
+  // pixels, because the question is what the box is painted, and because the wiring is the half
+  // that can silently go back to Sigma's default.
+  it("paints a selected node's label box in the theme's surface", async () => {
+    const { renderer } = await mount();
+    const surface = document.createElement("canvas");
+    surface.width = 200;
+    surface.height = 100;
+    const context = surface.getContext("2d")!;
+    renderer().getSettings().defaultDrawNodeHover!(context, { x: 60, y: 50, size: 8, label: "Alpha", color: "#000000" }, renderer().getSettings());
+
+    const [r = 0, g = 0, b = 0] = context.getImageData(60, 50, 1, 1).data;
+    const probe = document.createElement("span");
+    probe.style.color = readGraphPalette(getComputedStyle(document.documentElement), "x").surface;
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+
+    expect(`rgb(${r}, ${g}, ${b})`).toBe(expected);
+  });
+
   it("lays out the same positions in the worker as on the main thread", async () => {
     const layout = createWorkerLayout();
     try {
