@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// The vault graph, by workspace id. The snapshot is names, paths and links - never a note's text.
   graphState: (workspaceId) => ipcRenderer.invoke("graph:snapshot", { workspaceId }),
   refreshGraph: (workspaceId) => ipcRenderer.invoke("graph:refresh", { workspaceId }),
+  /// The icons an Obsidian vault has had assigned with the Iconic plugin, by workspace id. A map of
+  /// paths to icon names - never a file's contents, and never the path to the plugin's own folder.
+  workspaceIcons: (workspaceId) => ipcRenderer.invoke("icons:map", { workspaceId }),
   /// Indexing progress and "the graph changed", pushed to every window. Wrapped like `onChatEvent`,
   /// so the renderer never receives the IpcRendererEvent.
   onGraphProgress: (listener) => {
