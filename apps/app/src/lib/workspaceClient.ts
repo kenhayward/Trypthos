@@ -5,6 +5,7 @@ import type {
   FindRequest,
   FolderOutline,
   GraphState,
+  IconMap,
   RepoPin,
   RepoStats,
   RepoSummary,
@@ -136,6 +137,10 @@ export type FilterResult = { ok: true; paths: string[]; truncated: boolean } | F
 
 export type GraphStateResult = { ok: true; state: GraphState } | Failure;
 export type RefreshGraphResult = { ok: true } | Failure;
+/// The icons a vault has assigned in Obsidian. A refusal is not an error here: a folder that is
+/// not a vault, a vault with no icon plugin and a repository all answer that way, and all of them
+/// mean the tree keeps its own glyphs.
+export type IconsResult = { ok: true; icons: IconMap } | Failure;
 
 export interface WorkspaceClient {
   /// The files and folders in ONE folder of the workspace, for chat to use as a map. Paths only.
@@ -173,6 +178,9 @@ export interface WorkspaceClient {
   graphState(workspaceId: string): Promise<GraphStateResult>;
   /// Rebuilds a vault's graph. Refused while a build is running.
   refreshGraph(workspaceId: string): Promise<RefreshGraphResult>;
+  /// The icons an Obsidian vault has had assigned, by workspace id. A map of workspace-relative
+  /// paths to icon names - never a file's contents.
+  workspaceIcons(workspaceId: string): Promise<IconsResult>;
   /// Indexing progress, pushed to every window. Unparsed: `useVaultGraph` validates on arrival.
   onGraphProgress(listener: (message: unknown) => void): () => void;
   /// A vault's graph was rebuilt or updated; fetch it again.
@@ -246,6 +254,8 @@ export interface WorkspaceClient {
 }
 
 export type GraphClient = Pick<WorkspaceClient, "graphState" | "refreshGraph" | "onGraphProgress" | "onGraphChanged">;
+
+export type IconsClient = Pick<WorkspaceClient, "workspaceIcons">;
 
 /// What the shell knows about the connected GitHub account.
 ///
@@ -425,6 +435,7 @@ export const browserClient: WorkspaceClient = {
   openObsidianVault: async () => unavailable(),
   graphState: async () => unavailable(),
   refreshGraph: async () => unavailable(),
+  workspaceIcons: async () => unavailable(),
   onGraphProgress: () => () => {},
   onGraphChanged: () => () => {},
   readFile: async () => unavailable(),
