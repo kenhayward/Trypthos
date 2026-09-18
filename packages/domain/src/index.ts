@@ -338,6 +338,8 @@ export {
   GraphRequest,
   GraphSnapshotSchema,
   GraphStateSchema,
+  IconMapSchema,
+  IconsRequest,
   NewNoteLocationSchema,
 } from "./ipc";
 export type {

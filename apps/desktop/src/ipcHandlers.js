@@ -49,6 +49,10 @@ const {
   OpenInNewWindowRequest,
   WriteSettingsRequest,
   GraphRequest,
+  IconsRequest,
+  NO_ICONS,
+  OBSIDIAN_ICONS_FILE,
+  parseObsidianIcons,
 } = require("@trypthos/domain");
 const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
 const { openWorkspaceFor } = require("./providers");
@@ -865,6 +869,28 @@ function registerIpcHandlers({
   ipcMain.handle(
     "graph:refresh",
     guarded(locateById, GraphRequest, (_request, workspace) => indexes.refresh(workspace)),
+  );
+
+  /// The icons a vault has had assigned in Obsidian, by workspace id.
+  ///
+  /// Read through the provider, exactly as `.obsidian/app.json` is for the graph, so the boundary
+  /// guard applies and a repository-backed vault works through the same call. The renderer never
+  /// names the plugin's directory - it names a workspace, and this side knows where to look.
+  ///
+  /// Every failure is an empty map. Iconic's format belongs to somebody else, and a missing file, a
+  /// half-written one or a version that has moved on are all the same thing to a user: the tree
+  /// keeps the glyphs it already had. There is nothing here to report and nothing to act on.
+  ipcMain.handle(
+    "icons:map",
+    guarded(locateById, IconsRequest, async (_request, workspace) => {
+      try {
+        const file = await workspace.provider.read(OBSIDIAN_ICONS_FILE);
+        if (!file.ok) return { ok: true, icons: NO_ICONS };
+        return { ok: true, icons: parseObsidianIcons(JSON.parse(file.content)) };
+      } catch {
+        return { ok: true, icons: NO_ICONS };
+      }
+    }),
   );
 
   /// Opening a workspace the app already knows how to name.
