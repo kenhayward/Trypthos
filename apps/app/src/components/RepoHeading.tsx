@@ -1,19 +1,11 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { RepoCommit, RepoParent, RepoPin, RepoStats, WorkspaceRef } from "@trypthos/domain";
-import type { ImageResult } from "../lib/workspaceClient";
 import Glyph from "./Glyph";
-import MarkdownPreview from "./MarkdownPreview";
 import type { RepoPageState } from "../hooks/useRepoPage";
 
 interface Props {
   state: RepoPageState;
-  /// Reads a picture the README embeds. Without it every image in it is a broken icon - see
-  /// `useMarkdownImages`.
-  readImage: (path: string) => Promise<ImageResult>;
-  /// The file types the user has turned on, so fenced code in the README is coloured on the same
-  /// terms it is anywhere else.
-  fileTypes: readonly string[];
   /// Hands a web address to the user's browser. The links this component draws are its own rather
   /// than rendered markdown, so they are not covered by the delegated handler on the app root.
   onOpenExternal: (url: string) => void;
@@ -28,75 +20,38 @@ interface Props {
   onRefresh: () => void;
 }
 
-/// A repository's own page: who it belongs to, what it is, its figures, and its README.
+/// A GitHub repository's heading on its workspace's home page: who it belongs to, what it is, the
+/// commit the workspace is on, and its figures.
 ///
-/// **The cards stay, the README scrolls.** A repository's README is the long part and the statistics
-/// are the part you glance at, so the numbers do not scroll away from under the prose.
+/// This was the top half of the repository's own page. That page became the GitHub shape of a
+/// heading every workspace has, and the README beneath it became a section every workspace can have
+/// - see `WorkspaceHome`. Unchanged otherwise, down to the Refresh that asks GitHub again.
 ///
-/// Read-only throughout, like the markdown guide: this is a document that is looked at, and there is
-/// nothing here to save.
-export default function RepoPage({
-  state,
-  fileTypes,
-  onOpenExternal,
-  onOpenRepo,
-  onRefresh,
-  readImage,
-}: Props) {
+/// No frame of its own: the home page draws the border and the padding around every kind of
+/// heading, so a repository's and a folder's line up.
+export default function RepoHeading({ state, onOpenExternal, onOpenRepo, onRefresh }: Props) {
   const { t, i18n } = useTranslation();
 
+  if (state.loading) return <p className="text-sm text-ink-3">{t("repo.loading")}</p>;
+
   return (
-    // `h-full`, not `grow`: the slot this sits in is a plain block with a definite height, not a
-    // flex container, so `grow` would do nothing and the page would size to its content - which is a
-    // README that stretches the window instead of scrolling inside it. The image viewer and the
-    // editor fill the same slot the same way.
-    <div className="flex h-full flex-col overflow-hidden">
-      {state.loading ? (
-        <p className="p-4 text-sm text-ink-3">{t("repo.loading")}</p>
-      ) : (
-        <>
-          <div className="shrink-0 border-b border-rule px-4 pt-3 pb-4">
-            <Heading
-              stats={state.stats}
-              onOpenExternal={onOpenExternal}
-              onOpenRepo={onOpenRepo}
-              onRefresh={onRefresh}
-            />
+    <>
+      <Heading stats={state.stats} onOpenExternal={onOpenExternal} onOpenRepo={onOpenRepo} onRefresh={onRefresh} />
 
-            {state.pin !== null && (
-              <PinLines pin={state.pin} language={i18n.language || "en"} onOpenExternal={onOpenExternal} />
-            )}
-
-            {/* The numbers are gone but the README is not, so the page says which half failed
-                rather than showing an empty grid of dashes. */}
-            {state.stats === null && state.errorKey !== null && (
-              <p role="alert" className="mt-3 rounded border border-rule bg-panel p-2 text-xs text-ink-2">
-                {t(state.errorKey)}
-              </p>
-            )}
-
-            {state.stats !== null && <Cards stats={state.stats} language={i18n.language || "en"} />}
-          </div>
-
-          {/* The scrolling half. `min-h-0` is what lets it scroll rather than push the cards off
-              the top - a flex child's default minimum is its content. */}
-          <div className="flex min-h-0 grow flex-col">
-            {state.readme !== null ? (
-              <MarkdownPreview
-                source={state.readme}
-                fileTypes={fileTypes}
-                readImage={readImage}
-                fromPath={state.readmePath}
-              />
-            ) : (
-              <p className="p-4 text-sm text-ink-3">
-                {state.readmeFailed ? t("repo.readmeFailed") : t("repo.noReadme")}
-              </p>
-            )}
-          </div>
-        </>
+      {state.pin !== null && (
+        <PinLines pin={state.pin} language={i18n.language || "en"} onOpenExternal={onOpenExternal} />
       )}
-    </div>
+
+      {/* The numbers are gone, so the heading says so rather than showing an empty grid of dashes.
+          The README below is fetched on its own and is unaffected. */}
+      {state.stats === null && state.errorKey !== null && (
+        <p role="alert" className="mt-3 rounded border border-rule bg-panel p-2 text-xs text-ink-2">
+          {t(state.errorKey)}
+        </p>
+      )}
+
+      {state.stats !== null && <Cards stats={state.stats} language={i18n.language || "en"} />}
+    </>
   );
 }
 

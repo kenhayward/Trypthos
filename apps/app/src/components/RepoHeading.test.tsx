@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RepoCommit, RepoPin, RepoStats } from "@trypthos/domain";
-import RepoPage from "./RepoPage";
+import RepoHeading from "./RepoHeading";
 import type { RepoPageState } from "../hooks/useRepoPage";
 
 const STATS: RepoStats = {
@@ -32,28 +32,19 @@ function draw(state: Partial<RepoPageState> = {}) {
   const onOpenRepo = vi.fn();
   const onRefresh = vi.fn();
   const { container } = render(
-    <RepoPage
-      state={{
-        loading: false,
-        stats: STATS,
-        readme: "# Notes\n\nSome prose.",
-        readmeFailed: false,
-        readmePath: "notes/README.md",
-        errorKey: null,
-        pin: null,
-        ...state,
-      }}
-      fileTypes={["markdown"]}
+    <RepoHeading
+      state={{ loading: false, stats: STATS, errorKey: null, pin: null, ...state }}
       onOpenExternal={onOpenExternal}
       onOpenRepo={onOpenRepo}
       onRefresh={onRefresh}
-      readImage={async () => ({ ok: false as const, reason: "not-found" })}
     />,
   );
   return { onOpenExternal, onOpenRepo, onRefresh, container };
 }
 
-describe("RepoPage", () => {
+/// A repository's heading on its workspace's home page. What used to be tested here about its README
+/// is in `WorkspaceHome.test.tsx` now: the README is a section every workspace can have.
+describe("RepoHeading", () => {
   it("names the repository and what it is for", () => {
     draw();
     expect(screen.getByText("ada/notes")).toBeTruthy();
@@ -117,25 +108,6 @@ describe("RepoPage", () => {
     expect(screen.getByText("Issues and pull requests")).toBeTruthy();
   });
 
-  it("renders the README", () => {
-    draw();
-    expect(screen.getByRole("heading", { name: "Notes" })).toBeTruthy();
-    expect(screen.getByText("Some prose.")).toBeTruthy();
-  });
-
-  // Plenty of repositories have none, and that is not an error.
-  it("says when there is no README", () => {
-    draw({ readme: null });
-    expect(screen.getByText("This repository has no README.")).toBeTruthy();
-  });
-
-  // Different from having none, and it must not be shown as the same thing.
-  it("says when the README could not be read", () => {
-    draw({ readme: null, readmeFailed: true });
-    expect(screen.getByText("The README could not be read.")).toBeTruthy();
-    expect(screen.queryByText("This repository has no README.")).toBeNull();
-  });
-
   // Private and archived both change what you can expect of a repository, and neither is visible
   // from its contents.
   it("marks a private repository, and an archived one", () => {
@@ -184,18 +156,16 @@ describe("RepoPage", () => {
     expect(screen.queryByRole("button", { name: "Website" })).toBeNull();
   });
 
-  // The numbers are gone but the README is not, so the page says which half failed rather than
-  // showing an empty grid.
-  it("shows the README even when the statistics could not be loaded", () => {
+  // The numbers are gone, so the heading says so rather than drawing an empty grid.
+  it("says the statistics could not be loaded rather than drawing an empty grid", () => {
     draw({ stats: null, errorKey: "errors.rateLimited" });
 
     expect(screen.getByRole("alert")).toBeTruthy();
-    expect(screen.getByText("Some prose.")).toBeTruthy();
     expect(screen.queryByText("Stars")).toBeNull();
   });
 
   it("says it is working while it loads", () => {
-    draw({ loading: true, stats: null, readme: null });
+    draw({ loading: true, stats: null });
     expect(screen.getByText("Loading repository information...")).toBeTruthy();
   });
 });
@@ -295,7 +265,7 @@ describe("refreshing", () => {
   // Nothing to ask again for while the first answer is still on its way, and a second click would
   // be a second request for the same page.
   it("offers nothing to click while the page is loading", () => {
-    draw({ loading: true, stats: null, readme: null });
+    draw({ loading: true, stats: null });
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   });
 
@@ -393,43 +363,5 @@ describe("the commit the workspace is on", () => {
   it("draws nothing about commits for a page that has no pin", () => {
     draw({ pin: null });
     expect(screen.queryByText(/On commit/)).toBeNull();
-  });
-});
-
-/// Pictures in the README.
-///
-/// A source is a path in the workspace, and this page is drawn from the app's own origin - so
-/// without resolving it every picture in every README is a broken icon.
-describe("pictures in the README", () => {
-  it("draws one written relative to the README", async () => {
-    render(
-      <RepoPage
-        state={{
-          loading: false,
-          stats: STATS,
-          readme: "# Notes\n\n![An orb](docs/orb.png)",
-          readmeFailed: false,
-          readmePath: "notes/README.md",
-          errorKey: null,
-          pin: null,
-        }}
-        fileTypes={["markdown"]}
-        onOpenExternal={vi.fn()}
-        onOpenRepo={vi.fn()}
-        onRefresh={vi.fn()}
-        readImage={async (path: string) => ({
-          ok: true as const,
-          dataUrl: `data:image/png;base64,${path}`,
-        })}
-      />,
-    );
-
-    // Re-queried inside the wait, never captured before it. Putting the read picture back replaces
-    // the rendered HTML, so the element found first is a detached node whose src never changes.
-    await waitFor(() =>
-      expect(screen.getByRole("img", { name: "An orb" }).getAttribute("src")).toBe(
-        "data:image/png;base64,notes/docs/orb.png",
-      ),
-    );
   });
 });
