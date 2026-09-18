@@ -11,12 +11,11 @@ import {
   chatTitleFrom,
   effectiveSystemPrompt,
   fileTypeFor,
-  graphPageWorkspaceId,
+  homePageWorkspaceId,
   noteRecentFile,
   parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
-  repoPageWorkspaceId,
   sameWorkspaceRef,
   splitQualified,
   type FindMatch,
@@ -31,7 +30,7 @@ import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
 import ObsidianVaultDialog from "./components/ObsidianVaultDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
-import RepoPage from "./components/RepoPage";
+import WorkspaceHome from "./components/WorkspaceHome";
 import FindDialog from "./components/FindDialog";
 import LocalGraphPane from "./components/LocalGraphPane";
 import EditorPanel from "./components/EditorPanel";
@@ -51,6 +50,7 @@ import { useTheme } from "./hooks/useTheme";
 import { canOpenInNewWindow, useWorkspace } from "./hooks/useWorkspace";
 import type { CommitChoice } from "./hooks/useWorkspace";
 import { useWorkspaceIcons } from "./hooks/useWorkspaceIcons";
+import { useReadme } from "./hooks/useReadme";
 import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind } from "./hooks/useFind";
@@ -662,31 +662,28 @@ export default function App() {
   );
   const onMarkdownLink = useMemo(() => markdownLinkHandler(linkHandlers), [linkHandlers]);
 
-  /// The repository whose page is on screen, or null for every ordinary document.
+  /// The workspace whose home page is on screen, or null for every ordinary document.
   ///
   /// Read from the ACTIVE PATH rather than held as its own state: the path is the document's
   /// identity, so there is one answer to "what is on screen" rather than two that can disagree.
-  const repoPageId = repoPageWorkspaceId(state.activePath ?? "");
-  const repoPage = useRepoPage(repoPageId, github, client);
-
-  /// The vault whose graph is on screen, and the vault it belongs to - read from the active path for
-  /// the same reason the repository's page is.
-  const graphPageId = graphPageWorkspaceId(state.activePath ?? "");
-  const graphWorkspace = state.workspaces.find((workspace) => workspace.id === graphPageId) ?? null;
+  const homeId = homePageWorkspaceId(state.activePath ?? "");
+  const homeWorkspace = state.workspaces.find((workspace) => workspace.id === homeId) ?? null;
+  /// The two things a home page reads that outlive it. Held here rather than in the page so a
+  /// repository's Refresh - or moving it to a newer commit - can throw both away at once.
+  const repoPage = useRepoPage(homeWorkspace?.ref.kind === "github" ? homeWorkspace.id : null, github);
+  const readme = useReadme(homeWorkspace?.id ?? null, client);
   /// The workspace the document on screen came from. One lookup, two readers: whether the editor
   /// renders Obsidian's markdown, and which vault the local graph pane follows.
   const activeWorkspace = state.workspaces.find(
     (workspace) => workspace.id === splitQualified(state.activePath ?? "")?.workspaceId,
   );
-  const localVaultId =
-    activeWorkspace?.vault === true && activeWorkspace.ref.kind === "local" ? activeWorkspace.id : null;
-  // `vault` is a fact about a TREE, and the shell sets it on a repository whose tree contains an
-  // `.obsidian` folder too. There is no folder on disk behind one of those, so there is nothing to
-  // index and nothing for the pane to draw - the same `local` test the root row and `localVaultId`
-  // make.
-  const anyVaultOpen = state.workspaces.some(
-    (workspace) => workspace.vault === true && workspace.ref.kind === "local",
-  );
+  /// The workspace the local graph pane follows: the one the document on screen came from, when it is
+  /// a local folder. Every local folder has a graph now, not only a vault.
+  const localGraphId = activeWorkspace?.ref.kind === "local" ? activeWorkspace.id : null;
+  /// Whether the local graph pane has anything to follow. A repository is left out exactly as the
+  /// index leaves it out - one request per note meets GitHub's rate limit - so the pane appears for
+  /// any local folder and never for a repository alone.
+  const anyLocalWorkspaceOpen = state.workspaces.some((workspace) => workspace.ref.kind === "local");
   /// The icons each open vault has had assigned in Obsidian. Asked for every workspace: what answers
   /// is the shell, which knows whether there is a plugin file to read, and a folder that is not a
   /// vault simply answers with nothing.
@@ -719,7 +716,10 @@ export default function App() {
   const refreshWorkspace = async (workspaceId: string) => {
     // The page names the commit a repository is on, so it is told once that has moved - and asks
     // again rather than going on naming one the workspace has left.
-    if (await actions.refreshWorkspace(workspaceId)) repoPage.invalidate(workspaceId);
+    if (await actions.refreshWorkspace(workspaceId)) {
+      repoPage.invalidate(workspaceId);
+      readme.invalidate(workspaceId);
+    }
   };
 
   const askToRefresh = (workspaceId: string) => {
@@ -801,14 +801,13 @@ export default function App() {
           selectedFolder={state.selectedFolder}
           onSelectFolder={actions.selectFolder}
           onCloseWorkspace={(workspaceId) => void actions.closeWorkspace(workspaceId)}
-          onOpenRepoPage={actions.openRepoPage}
-          onOpenGraphPage={actions.openGraphPage}
+          onOpenHomePage={actions.openHomePage}
           icons={workspaceIcons}
           bottomPane={
-            anyVaultOpen ? (
+            anyLocalWorkspaceOpen ? (
               <LocalGraphPane
                 client={client}
-                workspaceId={localVaultId}
+                workspaceId={localGraphId}
                 activePath={state.activePath}
                 filter={graphFilter}
                 depth={settings.graph.localDepth}
@@ -846,6 +845,11 @@ export default function App() {
             showChat && !panels.chatCollapsed ? () => updatePanels({ editorCollapsed: true }) : undefined
           }
           workspaceName={workspaceNameFor(state.workspaces, state.activePath)}
+          // A home page is named for its workspace, whose name is not the last segment of its path.
+          pageName={(path) => {
+            const id = homePageWorkspaceId(path);
+            return id === null ? null : (state.workspaces.find((workspace) => workspace.id === id)?.name ?? null);
+          }}
           paths={openPaths}
           activePath={state.activePath}
           dirtyPaths={state.dirtyPaths}
@@ -858,36 +862,44 @@ export default function App() {
           findByName={findByName}
           readDocument={readDocument}
           page={
-            repoPageId !== null ? (
-              <RepoPage
-                state={repoPage}
+            homeWorkspace !== null ? (
+              <WorkspaceHome
+                // One page per workspace. Every workspace's page draws in this one slot, so without a
+                // key React reuses the instance and the second workspace's page opens carrying the
+                // first one's chosen section, its graph search and its pending centre-on request.
+                key={homeWorkspace.id}
+                workspace={homeWorkspace}
+                graphClient={client}
+                readme={readme}
+                repo={homeWorkspace.ref.kind === "github" ? repoPage : null}
                 fileTypes={settings.fileTypes.enabled}
+                readImage={client.readImage}
                 onOpenExternal={openExternal}
                 // The one repository this page can name that the picker cannot: a fork's upstream
                 // belongs to somebody else, and the picker lists only the account's own.
                 onOpenRepo={(ref) => void actions.openRef(ref)}
-                onRefresh={repoPage.refresh}
-                readImage={client.readImage}
+                onRefreshRepo={() => {
+                  repoPage.refresh();
+                  readme.invalidate(homeWorkspace.id);
+                }}
+                // A render function rather than the component: the page is eager and the graph is
+                // lazy, and `graphBundle.test.ts` holds that line.
+                graphPage={(graph) => (
+                  // While the page itself is active `activePath` names no node, so nothing is
+                  // ringed - the highlight matters in the local pane, which sits beside a note.
+                  <Suspense fallback={null}>
+                    <GraphPage
+                      workspaceName={homeWorkspace.name}
+                      graph={graph}
+                      activePath={state.activePath}
+                      filter={graphFilter}
+                      onFilterChange={updateGraph}
+                      onOpenPath={(path) => void actions.openPath(path)}
+                      onCreateNote={setNamingNote}
+                    />
+                  </Suspense>
+                )}
               />
-            ) : graphPageId !== null && graphWorkspace !== null ? (
-              // While the graph tab itself is active `activePath` names no node, so nothing is
-              // ringed - the highlight matters in the local pane, which sits beside a note.
-              <Suspense fallback={null}>
-                <GraphPage
-                  // One page per vault. Every vault's graph draws in this one slot, so without a
-                  // key React reuses the instance and the second vault's tab opens carrying the
-                  // first one's search, its highlights and its pending centre-on request.
-                  key={graphWorkspace.id}
-                  workspaceId={graphWorkspace.id}
-                  vaultName={graphWorkspace.name}
-                  client={client}
-                  activePath={state.activePath}
-                  filter={graphFilter}
-                  onFilterChange={updateGraph}
-                  onOpenPath={(path) => void actions.openPath(path)}
-                  onCreateNote={setNamingNote}
-                />
-              </Suspense>
             ) : null
           }
           defaultMode={settings.editor.defaultViewMode}

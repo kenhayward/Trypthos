@@ -80,12 +80,9 @@ interface Props {
   onSelectFolder: (path: string) => void;
   /// Closes one folder, and the documents that came from it. The asking happens above.
   onCloseWorkspace: (workspaceId: string) => void;
-  /// Opens a repository's own page. Only ever called for a GitHub workspace - a local folder has no
-  /// repository behind it and nothing to show.
-  onOpenRepoPage: (workspaceId: string) => void;
-  /// Opens a local vault's graph tab. Called from the vault's root row, as a repository's row opens
-  /// its page.
-  onOpenGraphPage: (workspaceId: string) => void;
+  /// Opens a workspace's home page - its heading, its counts, its README and its graph. Every kind of
+  /// workspace has one now, so the row that opens it no longer asks which kind it is.
+  onOpenHomePage: (workspaceId: string) => void;
   /// The icons each open vault has had assigned in Obsidian, by workspace id. Absent for every
   /// workspace that is not a vault, and for a vault with no icon plugin - which is the usual case,
   /// and means the tree keeps the glyphs it has always drawn.
@@ -133,8 +130,7 @@ export default function WorkspacePanel({
   selectedFolder,
   onSelectFolder,
   onCloseWorkspace,
-  onOpenRepoPage,
-  onOpenGraphPage,
+  onOpenHomePage,
   icons,
   bottomPane,
   onOpenFileTypes,
@@ -385,11 +381,9 @@ export default function WorkspacePanel({
                   selected={selectedFolder === workspace.id}
                   onOpen={() => {
                     onSelectFolder(workspace.id);
-                    // A repository's row is its home, so clicking it opens its page. Opening a tab
-                    // that is already open only switches to it, so a second click costs nothing.
-                    if (workspace.ref.kind === "github") onOpenRepoPage(workspace.id);
-                    // A vault's row is its home too: clicking it opens the vault's graph.
-                    if (workspace.ref.kind === "local" && workspace.vault === true) onOpenGraphPage(workspace.id);
+                    // A workspace's row is its home. Opening a tab that is already open only
+                    // switches to it, so a second click costs nothing.
+                    onOpenHomePage(workspace.id);
                   }}
                   onToggle={() => {
                     // There is nothing to collapse while filtering: what is under this row came from

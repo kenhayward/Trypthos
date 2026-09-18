@@ -22,6 +22,10 @@ interface Props {
   canOpenInNewWindow?: (path: string) => boolean;
   /// Moves a tab into its own window, unsaved text and all. Absent where nothing can open a window.
   onOpenInNewWindow?: (path: string) => void;
+  /// The name of a page that belongs to a workspace, such as its home page, or null for anything
+  /// else. A home page's path ends in the workspace's id rather than its name; the two usually
+  /// coincide, which is exactly why a tab named from the path looked right until they did not.
+  pageName?: (path: string) => string | null;
 }
 
 /// What each entry of the tab menu is called. Keys, not wording - the component translates.
@@ -52,6 +56,7 @@ export default function EditorTabs({
   onCloseMany,
   canOpenInNewWindow,
   onOpenInNewWindow,
+  pageName,
 }: Props) {
   const { t } = useTranslation();
   /// The tab the right-click menu is about, and where to draw it. Null when it is closed.
@@ -121,7 +126,10 @@ export default function EditorTabs({
         // A built-in document has no file name to show and no folder to qualify it with, so both
         // the label and the hover come from the catalogue instead of from the path.
         const titleKey = builtInTitleKey(path);
-        const name = titleKey === null ? documentName(path) : t(titleKey);
+        // A workspace's own page is named for the workspace. Not from the catalogue: a folder's name
+        // is not a string to translate.
+        const page = titleKey === null ? (pageName?.(path) ?? null) : null;
+        const name = titleKey !== null ? t(titleKey) : (page ?? documentName(path));
         const dirty = dirtyPaths.includes(path);
 
         return (
@@ -133,7 +141,7 @@ export default function EditorTabs({
             // the tree and the document.
             tabIndex={selected || (activePath === null && index === 0) ? 0 : -1}
             title={
-              titleKey !== null ? name : workspaceName === null ? path : `${workspaceName}/${path}`
+              titleKey !== null || page !== null ? name : workspaceName === null ? path : `${workspaceName}/${path}`
             }
             onClick={() => onActivate(path)}
             onKeyDown={(event) => onKeyDown(event, index)}
@@ -156,7 +164,7 @@ export default function EditorTabs({
                 : "group flex max-w-52 min-w-0 shrink-0 cursor-default items-center gap-1.5 border-r border-rule bg-sunken px-3 py-1.5 text-ui text-ink-3 hover:bg-hover hover:text-ink"
             }
           >
-            <span className="min-w-0 truncate">{titleKey === null ? labels[index] : name}</span>
+            <span className="min-w-0 truncate">{titleKey === null && page === null ? labels[index] : name}</span>
 
             {/* The dot and the close button share one slot: an X that appeared beside the dot would
                 shift every label along on hover. The dot is a background tab's only way to say it has

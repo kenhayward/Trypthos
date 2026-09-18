@@ -30,6 +30,8 @@ import { currentPlatform } from "../lib/windowControls";
 
 interface Props {
   workspaceName: string | null;
+  /// The name of a page that belongs to a workspace, such as its home page - see `EditorTabs`.
+  pageName?: (path: string) => string | null;
   /// Every open document, in tab order.
   paths: readonly string[];
   /// The document on screen, or null when it is the scratch buffer.
@@ -143,6 +145,7 @@ const NO_MATCHES: readonly FindMatch[] = [];
 
 export default function EditorPanel({
   workspaceName,
+  pageName,
   paths,
   activePath,
   dirtyPaths = [],
@@ -342,6 +345,7 @@ export default function EditorPanel({
             onCloseMany={(paths) => onCloseFiles?.(paths)}
             canOpenInNewWindow={canOpenInNewWindow}
             onOpenInNewWindow={onOpenInNewWindow}
+            pageName={pageName}
           />
           <OpenFilesMenu
             workspaceName={workspaceName}
@@ -349,6 +353,7 @@ export default function EditorPanel({
             activePath={activePath}
             dirtyPaths={dirtyPaths}
             onActivate={(path) => onActivateFile?.(path)}
+            pageName={pageName}
           />
           {/* Nothing to switch between for an image, and a header offering three views of a
               photograph would be three buttons that do nothing. */}

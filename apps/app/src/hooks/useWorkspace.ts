@@ -13,7 +13,7 @@ import {
   dirtyPaths as dirtyDocumentPaths,
   emptyDocumentSet,
   formatBytes,
-  graphPagePath,
+  homePagePath,
   isImageName,
   isOpen,
   markSaved,
@@ -22,7 +22,6 @@ import {
   draftPath,
   openDocument,
   qualifyPath,
-  repoPagePath,
   renameDocument,
   showReadOnly,
   splitQualified,
@@ -150,14 +149,12 @@ export interface WorkspaceActions {
   openGuide(content: string): void;
   /// Shows the conversation log, opening its tab or replacing what an open one says.
   openConversationLog(content: string): void;
-  /// Opens a repository's own page, or goes to it if it is already open.
+  /// Opens a workspace's home page, or goes to it if it is already open - every kind of workspace.
   ///
   /// A document like the markdown guide: a reserved path, read-only, and nothing behind it on disk.
-  /// What it shows is fetched by the page itself when it opens - a repository's star count is not
-  /// the sort of thing a document's `content` holds.
-  openRepoPage(workspaceId: string): void;
-  /// Opens a local vault's graph in a tab of its own, like a repository's page.
-  openGraphPage(workspaceId: string): void;
+  /// What it shows is fetched by the page itself when it opens - a repository's star count or a
+  /// folder's graph is not the sort of thing a document's `content` holds.
+  openHomePage(workspaceId: string): void;
   /// Opens a document that has never been saved - File > New.
   ///
   /// It has a name and nowhere to be. Where it goes is answered by the save dialog the first time it
@@ -1295,29 +1292,17 @@ export function useWorkspace(
     revealEntry,
     openInNewWindow,
     moveToNewWindow,
-    openRepoPage: (workspaceId: string) =>
+    openHomePage: (workspaceId: string) =>
       setInternal((prev) => ({
         ...prev,
         documents: openDocument(prev.documents, {
-          path: repoPagePath(workspaceId),
+          path: homePagePath(workspaceId),
           // Nothing, deliberately. The page fetches what it draws; `content` is what the editor
-          // holds and what chat sends, and neither wants a repository's statistics.
+          // holds and what chat sends, and neither wants a graph or a repository's statistics.
           content: "",
           // A revision nothing will ever present: this page is never read from disk and never
           // written back, so it exists only because every document carries one.
-          revision: { id: "repository" },
-          readOnly: true,
-        }),
-      })),
-    openGraphPage: (workspaceId: string) =>
-      setInternal((prev) => ({
-        ...prev,
-        documents: openDocument(prev.documents, {
-          path: graphPagePath(workspaceId),
-          // Nothing, deliberately: the page fetches its graph, and `content` is what the editor holds
-          // and what chat sends.
-          content: "",
-          revision: { id: "graph" },
+          revision: { id: "home" },
           readOnly: true,
         }),
       })),

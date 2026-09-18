@@ -13,6 +13,9 @@ interface Props {
   /// The open documents with unsaved work.
   dirtyPaths: readonly string[];
   onActivate: (path: string) => void;
+  /// The name of a page that belongs to a workspace, such as its home page, or null for anything
+  /// else - the same lookup the tab strip uses, so the two cannot disagree about a document's name.
+  pageName?: (path: string) => string | null;
 }
 
 /// Every open file as a list, from a kebab at the end of the tab strip.
@@ -29,6 +32,7 @@ export default function OpenFilesMenu({
   activePath,
   dirtyPaths,
   onActivate,
+  pageName,
 }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -84,10 +88,13 @@ export default function OpenFilesMenu({
           <ul>
             {paths.map((path) => {
               const titleKey = builtInTitleKey(path);
-              const name = titleKey === null ? documentName(path) : t(titleKey);
-              // A built-in document is in no folder, so the line under its name says what it is
-              // instead. A blank line there reads as a file whose folder could not be worked out.
-              const folder = titleKey === null ? folderOf(path, workspaceName) : t("editor.readOnly");
+              const page = titleKey === null ? (pageName?.(path) ?? null) : null;
+              const name = titleKey !== null ? t(titleKey) : (page ?? documentName(path));
+              // A built-in document or a workspace's page is in no folder, so the line under its
+              // name says what it is instead. A blank line there reads as a file whose folder could
+              // not be worked out.
+              const folder =
+                titleKey === null && page === null ? folderOf(path, workspaceName) : t("editor.readOnly");
               const dirty = dirtyPaths.includes(path);
 
               return (
