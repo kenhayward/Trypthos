@@ -564,6 +564,18 @@
     "missing": "Folder not found",
     "cancel": "Cancel"
   },
+  "home": {
+    "kindFolder": "Folder",
+    "kindVault": "Obsidian vault",
+    "kindRepository": "GitHub repository",
+    "sections": "Sections",
+    "sectionGraph": "Graph",
+    "sectionReadme": "Readme",
+    "counts": "{{notes}} notes - {{links}} links - {{attachments}} attachments - indexed {{age}}",
+    "empty": "This folder has no README, and none of its notes link to each other.",
+    "readmeFailed": "The README could not be read.",
+    "truncated": "Only the first {{count}} notes are in this graph. This folder has more."
+  },
   "graph": {
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
@@ -591,7 +603,7 @@
     "ageHours": "{{count}} h ago",
     "ageDays": "{{count}} days ago",
     "buildFailed": "The graph could not be built. Refresh to try again.",
-    "empty": "No notes in this vault yet",
+    "empty": "No notes in this folder yet",
     "localTitle": "Local graph",
     "depth": "Depth",
     "depthValue": "Depth {{count}}",
@@ -661,8 +673,6 @@
     "viewOnGitHub": "View on GitHub",
     "website": "Website",
     "noDescription": "No description.",
-    "noReadme": "This repository has no README.",
-    "readmeFailed": "The README could not be read.",
     "onCommit": "On commit",
     "openCommit": "Open this commit on GitHub",
     "upToDate": "Up to date",

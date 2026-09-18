@@ -1,6 +1,7 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
+import { useAgeText } from "../hooks/useAgeText";
 import { useGraphLayout } from "../hooks/useGraphLayout";
 import type { VaultGraphView } from "../hooks/useVaultGraph";
 import { graphNodeAction } from "../lib/graphActions";
@@ -8,7 +9,6 @@ import { hiddenNodes, searchMatches } from "../lib/graphFilters";
 import type { GraphFilter } from "../lib/graphFilters";
 import type { LayoutRunner } from "../lib/graphLayoutTypes";
 import { indexAge, linkCount, noteCount, percentRead } from "../lib/graphStatus";
-import type { IndexAge } from "../lib/graphStatus";
 import { useLayoutRunner } from "../lib/layoutClient";
 import CanvasBoundary from "./CanvasBoundary";
 import type { GraphCanvasProps, GraphFocus } from "./GraphCanvas";
@@ -49,15 +49,6 @@ export interface GraphPageProps {
 /// real layout was still running.
 const never: LayoutRunner = () => new Promise(() => {});
 
-function useAgeText(): (age: IndexAge) => string {
-  const { t } = useTranslation();
-  return (age) => {
-    if (age.unit === "minutes") return t("graph.ageMinutes", { count: age.count });
-    if (age.unit === "hours") return t("graph.ageHours", { count: age.count });
-    if (age.unit === "days") return t("graph.ageDays", { count: age.count });
-    return t("graph.ageNow");
-  };
-}
 
 export default function GraphPage({
   workspaceName,
