@@ -49,17 +49,18 @@ describe("LocalGraphPane", () => {
     expect(screen.getByTestId("local-body").dataset.centre).toBe("V/A.md");
   });
 
-  it("asks for a vault note when the active tab is not one", async () => {
-    pane(fakeGraphClient({ snapshot, building: null, error: null }), { workspaceId: null, activePath: "trypthos:graph/V" });
+  // Any local folder has a graph now, so the pane asks for a note - not a note in a vault.
+  it("asks for a note when the active tab is not one", async () => {
+    pane(fakeGraphClient({ snapshot, building: null, error: null }), { workspaceId: null, activePath: "trypthos:home/V" });
     await act(async () => {});
-    expect(screen.getByText("Open a note in a vault to see its links")).toBeTruthy();
+    expect(screen.getByText("Open a note to see its links")).toBeTruthy();
     expect(screen.queryByTestId("local-body")).toBeNull();
   });
 
   it("asks the same for a note the graph does not have", async () => {
     pane(fakeGraphClient({ snapshot, building: null, error: null }), { activePath: "V/Other.md" });
     await act(async () => {});
-    expect(screen.getByText("Open a note in a vault to see its links")).toBeTruthy();
+    expect(screen.getByText("Open a note to see its links")).toBeTruthy();
   });
 
   it("changes depth and collapses through its settings", async () => {

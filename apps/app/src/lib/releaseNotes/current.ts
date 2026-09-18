@@ -5,6 +5,24 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.86.0",
+    date: "2026-09-18",
+    pr: 182,
+    headline: "A home page for every folder, and a graph for any folder whose notes link",
+    summary:
+      "Clicking any workspace's name in the folder browser now opens one page for it, whatever kind it is: its name, what it is and where it lives, how many notes, links and attachments it holds, its README, and its graph. The graph and the README each get the whole page in turn, with one control to move between them, because a graph zooms with the wheel and a README scrolls with it. A page with only one of the two shows just that one, and a folder with neither says so in words. The graph is no longer only for Obsidian vaults: any folder on this machine whose markdown files link to each other has one, and the local graph under the folder browser follows notes in any folder too. Build and dependency folders such as node_modules, dist and build are left out, and so is anything the folder's own .gitignore excludes, so a project folder's graph shows its own writing rather than its dependencies. A very large folder's graph stops at 5,000 notes and says so. GitHub repositories keep their details at the top of their page, with their README below, and still have no graph. Each page's tab is named for its folder.",
+    added: [
+      "A home page for every workspace, opened by clicking its name, with its README and its graph.",
+      "A graph for any local folder whose notes link to each other, not only an Obsidian vault.",
+      "The local graph under the folder browser follows notes in any local folder.",
+    ],
+    changed: [
+      "A GitHub repository's page and a vault's graph are now the same kind of page, with the repository's details at the top.",
+      "A folder's graph leaves out build and dependency folders, and whatever its .gitignore excludes.",
+      "The counts at the foot of the graph moved to the top of the page, so they are said once.",
+    ],
+  },
+  {
     version: "0.85.0",
     date: "2026-09-18",
     pr: 181,

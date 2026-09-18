@@ -608,7 +608,7 @@
     "depthValue": "Depth {{count}}",
     "collapse": "Collapse local graph",
     "expand": "Expand local graph",
-    "localEmpty": "Open a note in a vault to see its links",
+    "localEmpty": "Open a note to see its links",
     "localIndexing": "Indexing - {{percent}}%"
   },
   "github": {
