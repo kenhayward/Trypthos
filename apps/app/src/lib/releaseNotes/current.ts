@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.84.1",
+    date: "2026-09-18",
+    pr: 180,
+    headline: "Make the vault graph readable when you click a node",
+    summary:
+      "Two things went wrong when you clicked a node in a vault graph. The name of the node you clicked was drawn on a white box whatever the theme, so in dark mode the label you had just asked for was the one thing you could not read. And selecting a node was meant to keep that note and everything it links to at full strength while the rest of the graph faded back, but the fade was drawn louder than the links around the selection, so the highlight looked as though it were pointing at every note except the one you clicked. Both are fixed, in the global graph and the Local graph pane, in light and dark.",
+    fixed: [
+      "A selected node's name is written on a panel that follows the theme instead of a white box, so it stays readable in dark mode.",
+      "Selecting a node now fades the rest of the graph back rather than bringing it forward, so the links out of the selected note are the ones that stand out.",
+    ],
+  },
+  {
     version: "0.84.0",
     date: "2026-09-17",
     pr: 176,

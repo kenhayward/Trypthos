@@ -14,6 +14,7 @@ import type { GraphNode, GraphNodeKind, VaultGraph } from "@trypthos/domain";
 import { graphFailureKind } from "../lib/graphFailure";
 import type { GraphFailureKind } from "../lib/graphFailure";
 import { stepSelection } from "../lib/graphFilters";
+import { drawNodeHover } from "../lib/graphHover";
 import type { Positions } from "../lib/graphLayoutTypes";
 import { observeTheme, PICTOGRAMS, readGraphPalette } from "../lib/graphTheme";
 import type { GraphPalette } from "../lib/graphTheme";
@@ -215,6 +216,10 @@ export default function GraphCanvas({
           labelSize: compact ? 10 : 12,
           labelRenderedSizeThreshold: compact ? 10 : 8,
           zIndex: true,
+          // Sigma's own hover renderer fills the label box with a literal `#FFF`, which puts the
+          // label's pale grey on white as soon as the theme is dark. Reads the palette ref rather
+          // than closing over a value, so a theme change repaints this too.
+          defaultDrawNodeHover: (context, data, settings) => drawNodeHover(context, data, settings, paint.current),
           nodeReducer: (node, data) => {
             const state = view.current;
             const colours = paint.current;
@@ -246,7 +251,10 @@ export default function GraphCanvas({
             const [source, target] = model.extremities(edge);
             if (state.hidden.has(source) || state.hidden.has(target)) return { ...data, hidden: true };
             const focus = state.hovered ?? state.selected;
-            if (focus !== null && source !== focus && target !== focus) return { ...data, color: paint.current.dim };
+            // `dimEdge`, not `dim`: an edge and a disc recede in opposite directions. A disc has to
+            // stay a disc against the ground, while an edge is already nearly the ground and fades
+            // the rest of the way.
+            if (focus !== null && source !== focus && target !== focus) return { ...data, color: paint.current.dimEdge };
             return data;
           },
         }),
