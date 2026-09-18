@@ -122,14 +122,15 @@ test("a renamed note moves in the graph", async () => {
   });
 });
 
-test("a folder that is not a vault has no graph to build", async () => {
-  const root = await folder({ "Home.md": "" }, { vault: false });
+// A plain folder used to answer "unsupported". Every local folder has a graph now; what keeps an
+// ordinary project checkout from indexing its dependencies is `folderIgnore.js`.
+test("a folder that is not a vault has a graph too", async () => {
+  const root = await folder({ "Home.md": "[[Plan]]", "Plan.md": "", "node_modules/pkg/README.md": "" }, { vault: false });
   await withShell(root, async ({ ipcMain, id }) => {
-    assert.deepEqual(await ipcMain.invoke("graph:snapshot", { workspaceId: id }), {
-      ok: true,
-      state: { snapshot: null, building: null, error: "unsupported" },
-    });
-    assert.deepEqual(await ipcMain.invoke("graph:refresh", { workspaceId: id }), { ok: false, reason: "unsupported" });
+    const state = await builtState(ipcMain, id);
+    assert.ok(state.snapshot.edges.some((edge) => edge.source === `${id}/Home.md` && edge.target === `${id}/Plan.md`));
+    assert.equal(state.snapshot.nodes.some((node) => node.id.includes("node_modules")), false);
+    assert.equal(state.snapshot.truncated, false);
   });
 });
 

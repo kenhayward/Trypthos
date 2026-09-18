@@ -8,6 +8,7 @@ const snapshot = {
   workspaceId: "V",
   builtAt: "2026-09-17T10:00:00.000Z",
   unreadable: 0,
+  truncated: false,
   newNotes: { mode: "root" as const },
   nodes: [{ id: "V/A.md", kind: "note" as const, label: "A", path: "V/A.md", degree: 0 }],
   edges: [],

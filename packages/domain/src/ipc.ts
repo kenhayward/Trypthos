@@ -351,6 +351,10 @@ export const GraphSnapshotSchema = z
     workspaceId: z.string().min(1),
     builtAt: z.string().min(1),
     unreadable: z.number().int().min(0),
+    /// True when the walk stopped at its limit, so the graph is not the whole folder and has to say
+    /// so. Required rather than optional: a fixture that forgets it should be a type error, not a
+    /// silent `undefined` that reads as "complete".
+    truncated: z.boolean(),
     newNotes: NewNoteLocationSchema,
     nodes: z.array(GraphNodeSchema),
     edges: z.array(GraphEdgeSchema),
