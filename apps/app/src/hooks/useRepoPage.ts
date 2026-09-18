@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { readmeNameIn, type RepoPin, type RepoStats } from "@trypthos/domain";
+import type { RepoPin, RepoStats } from "@trypthos/domain";
 import { failureKey } from "./useWorkspace";
-import type { GitHubBridge, WorkspaceClient } from "../lib/workspaceClient";
+import type { GitHubBridge } from "../lib/workspaceClient";
 
-/// What a repository's own page shows: its statistics, and its README.
+/// What a repository's heading shows on its workspace's home page: its statistics and its commit.
 ///
-/// **Two halves that fail independently.** The statistics come from GitHub; the README is read
-/// through the workspace provider like any other file, which is what keeps it inside the boundary
-/// guard rather than in a second code path of its own. One failing must not take the other away - a
-/// page with its numbers and no README is still worth reading, and so is the reverse.
+/// The README used to be fetched here too. Nothing about it was GitHub's, and every workspace's home
+/// page can show one now, so it moved to `useReadme` - which also means a repository whose statistics
+/// cannot be fetched still has its README, since the two no longer share a request.
 ///
 /// Fetched when the page opens rather than when the repository does, so a user who never opens one
 /// never asks GitHub for it.
@@ -16,17 +15,7 @@ import type { GitHubBridge, WorkspaceClient } from "../lib/workspaceClient";
 export interface RepoPageState {
   loading: boolean;
   stats: RepoStats | null;
-  /// The README's text, or null when there is none - or when it could not be read.
-  readme: string | null;
-  /// True only for the second of those. "There is no README" and "the README could not be read" are
-  /// different facts, and showing the first for the second is a wrong answer given confidently.
-  readmeFailed: boolean;
-  /// The qualified path the README was read from, or null when there is none.
-  ///
-  /// What a picture inside it is relative to: `![](docs/orb.png)` in `notes/README.md` means
-  /// `notes/docs/orb.png`, and only the README's own path can say that.
-  readmePath: string | null;
-  /// Translation key for a failure to fetch the STATISTICS. A missing README is not a failure.
+  /// Translation key for a failure to fetch the statistics.
   errorKey: string | null;
   /// Which commit the workspace is on and how that compares with its branch now, or null when the
   /// statistics did not arrive. Comes with them, so it goes stale - and is refreshed - with them.
@@ -51,9 +40,6 @@ export interface RepoPageActions {
 const IDLE: RepoPageState = {
   loading: false,
   stats: null,
-  readme: null,
-  readmeFailed: false,
-  readmePath: null,
   errorKey: null,
   pin: null,
 };
@@ -73,32 +59,9 @@ async function attempt<T extends { ok: boolean }>(
   }
 }
 
-/// The README's text, or null when the repository has none.
-///
-/// The root listing is what says whether there is one, and it is a listing the browser has usually
-/// made already - for a repository it is a read of the tree fetched at open, so this costs nothing.
-async function readReadme(
-  workspaceId: string,
-  client: WorkspaceClient,
-): Promise<{ text: string | null; failed: boolean; path: string | null }> {
-  const listed = await attempt(() => client.listDirectory(workspaceId));
-  if (!listed.ok) return { text: null, failed: true, path: null };
-
-  const name = readmeNameIn(listed.nodes);
-  // No README at all. Ordinary, and not a failure.
-  if (name === null) return { text: null, failed: false, path: null };
-
-  const path = `${workspaceId}/${name}`;
-  const read = await attempt(() => client.readFile(path));
-  return read.ok
-    ? { text: read.content, failed: false, path }
-    : { text: null, failed: true, path: null };
-}
-
 export function useRepoPage(
   workspaceId: string | null,
   github: GitHubBridge | null,
-  client: WorkspaceClient,
 ): RepoPageState & RepoPageActions {
   /// What came back, by repository.
   ///
@@ -120,12 +83,7 @@ export function useRepoPage(
     let live = true;
 
     void (async () => {
-      // Together, because they are independent and a page that waited for one before starting the
-      // other would take twice as long for no reason.
-      const [info, readme] = await Promise.all([
-        attempt(() => github.repoInfo(workspaceId)),
-        readReadme(workspaceId, client),
-      ]);
+      const info = await attempt(() => github.repoInfo(workspaceId));
 
       // Dropped if the page has moved to another repository, or closed, while this was in flight -
       // otherwise one repository's numbers land under another's name.
@@ -136,9 +94,6 @@ export function useRepoPage(
         [workspaceId]: {
           loading: false,
           stats: info.ok ? info.stats : null,
-          readme: readme.text,
-          readmeFailed: readme.failed,
-          readmePath: readme.path,
           errorKey: info.ok ? null : failureKey(info.reason),
           pin: info.ok ? (info.pin ?? null) : null,
         },
@@ -148,7 +103,7 @@ export function useRepoPage(
     return () => {
       live = false;
     };
-  }, [workspaceId, github, client, answers]);
+  }, [workspaceId, github, answers]);
 
   /// Forgetting is the whole of refreshing.
   ///
