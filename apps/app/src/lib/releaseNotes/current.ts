@@ -5,6 +5,22 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.85.0",
+    date: "2026-09-18",
+    pr: 181,
+    headline: "Pick a folder for chat without opening it, and see your Obsidian icons",
+    summary:
+      "Clicking a folder in the browser used to do two things at once: point chat at it, and open or close it. Choosing which folder chat reads is something you do often and deliberately, and it was the one thing you could not do without the tree moving under you. The triangle now has a target of its own, wide enough to hit without aiming and reaching into the space either side of it, and clicking the icon or the name selects the folder and leaves it exactly as it was. The triangle itself is larger. Left and Right arrows open and close the folder a row is on, so nothing needs the mouse. On top of that, a vault whose folders and notes have icons assigned with Obsidian's Iconic plugin now shows those icons in the browser instead of the plain folder and file marks, in the colour you chose there. Icons set in Obsidian while Trypthos is open appear after a refresh.",
+    added: [
+      "Icons assigned in Obsidian with the Iconic plugin are drawn on folders and files in the browser, in the colour chosen there.",
+      "Left and Right arrows open and close the folder a row is on.",
+    ],
+    changed: [
+      "Clicking a folder's icon or name selects it for chat without opening or closing it. The triangle, and the space around it, is what opens and closes now.",
+      "The disclosure triangle is larger, with a wider area around it to click.",
+    ],
+  },
+  {
     version: "0.84.1",
     date: "2026-09-18",
     pr: 180,

@@ -452,6 +452,36 @@ hover and selection in a ref read by Sigma's reducers. `GraphPage` is the `trypt
 (a reserved path like the repository page); `LocalGraphPane` sits under the workspace trees and
 lazy-loads `LocalGraph`. Filters, search and settings (`settings.graph`, version 21) are shared.
 
+### Icons assigned in Obsidian
+
+Obsidian has no folder icons of its own. The **Iconic** community plugin adds them, and Trypthos
+reads its assignments so the browser can draw the same marks. This is the only place the app reads
+another application's data directory, and everything about it follows from that.
+
+**It is read, never written, and always through the provider.** `icons:map { workspaceId }` answers a
+map of workspace-relative paths to `{ icon, colour }`, read from `.obsidian/plugins/iconic/data.json`
+with `provider.read` - exactly as `.obsidian/app.json` already is for the graph's new-note location.
+So the boundary guard applies, a repository-backed vault works through the same call, and the
+renderer never names the plugin's folder. The map is capped at 2,000 entries, because it crosses IPC
+whenever a workspace opens and a file claiming more icons than a vault could hold is a file the
+parser has misread.
+
+**Every failure is an empty map, and no message.** A missing file, invalid JSON, a shape the schema
+refuses, a plugin version whose format has moved on - all of them mean the tree keeps the glyphs it
+has always drawn. `packages/domain/src/obsidianIcons.ts` owns the parsing, with a loose schema so a
+field the plugin adds later does not read as every icon being deleted. There is no watcher: icons
+set in Obsidian while Trypthos is open appear after a refresh, the same contract the graph has.
+
+**The artwork is `lucide-static` (ISC), loaded lazily.** Iconic's ids name Lucide icons, which are
+24-unit stroke paths - the same thing `Glyph` already draws - so an assigned icon takes the theme's
+colour like every other mark rather than looking pasted in. The set is 1,848 icons and 417KB
+minified, so it is fetched only when a workspace actually has assignments, and `iconBundle.test.ts`
+asserts that nothing eager imports it. Seven element names and sixteen attributes are allow-listed;
+that is everything the whole set uses today, and anything else is dropped rather than rendered.
+Iconic's nine named tones resolve against the Obsidian theme, which this app cannot read, so each
+maps to a `--tp-tone-*` token answered in both themes; a colour the user chose explicitly passes
+through as given.
+
 **Bundle boundary.** Sigma, graphology and the layout worker are imported only by `GraphPage`,
 `LocalGraph`, `GraphCanvas`, `graphLayout`, `graphLayout.worker` and `layoutClient`, which are
 reached through `lazy()`; `graphBundle.test.ts` asserts it.
@@ -2245,7 +2275,7 @@ Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in t
 The list is asserted exactly in a test, so adding one is deliberate rather than incidental: workspace
 (`workspace:open`, `workspace:openRef`, `workspace:list`, `workspace:outline`, `workspace:find`,
 `workspace:filter`, `workspace:close`, `workspace:refresh`, `workspace:createDirectory`, `workspace:rename`, `workspace:reveal`), Obsidian's vaults
-(`obsidian:vaults`, `obsidian:openVault`), the vault graph (`graph:snapshot`, `graph:refresh`), cloud accounts (`github:status`, `github:connect`,
+(`obsidian:vaults`, `obsidian:openVault`), the vault graph (`graph:snapshot`, `graph:refresh`), a vault's assigned icons (`icons:map`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
 (`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys

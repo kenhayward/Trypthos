@@ -9,6 +9,22 @@ The left panel shows your open folders as trees. Open a folder from your machine
 GitHub, expand folders in place, and click a file to open it in the editor. Both kinds sit in the
 same panel and behave the same way; the icon on a workspace's row says which it is.
 
+**A row does one thing per target.** The triangle at the left of a folder's row opens and closes it,
+and so does the empty space either side of the triangle - a 44px band, the same at every depth, rather
+than a 16px glyph to aim at. Clicking the row's icon or its name picks that folder as the one chat
+reads and leaves the tree exactly as it was. That split exists because choosing a folder for chat is
+something you do often and deliberately, and it used to be impossible without expanding or collapsing
+the folder as a side effect. From the keyboard, Left and Right close and open the folder a row is on.
+A workspace's own row behaves the same way, and its icon or name opens that workspace's page: a
+repository's details, or a vault's graph.
+
+**Icons set in Obsidian are shown here.** Obsidian has no folder icons of its own, but the Iconic
+plugin adds them, and where a vault uses it the browser draws the same icons on the same folders and
+notes - in the colour chosen there, translated to a value that reads in both light and dark. A note or
+folder with no icon assigned keeps the plain mark it has always had, and so does a folder that failed
+to list, because what is wrong with a row matters more than its decoration. Icons changed in Obsidian
+while Trypthos is open appear after a refresh.
+
 **The filter box searches, rather than sieving what is on screen.** Type in it and every open folder
 is walked by name, however deep, and what comes back is drawn as a tree of its own: each match under
 the folders it lives in, whether or not you had ever expanded them, and folders containing nothing
