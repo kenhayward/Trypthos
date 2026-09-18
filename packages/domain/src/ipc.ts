@@ -69,6 +69,7 @@ export const IPC_CHANNELS = [
   "obsidian:openVault",
   "graph:snapshot",
   "graph:refresh",
+  "icons:map",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -313,6 +314,17 @@ export const RefreshWorkspaceRequest = z.object({ workspaceId: z.string().min(1)
 /// The vault graph. Only a workspace id ever crosses - never a path or a root - and nothing in a
 /// snapshot carries a note's contents: nodes are names and paths, edges are pairs of ids.
 export const GraphRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+/// The icons an open vault has assigned, by workspace id. Only an id ever crosses - never the path
+/// to another application's data directory, which the main process works out for itself.
+export const IconsRequest = z.object({ workspaceId: z.string().min(1) }).strict();
+
+/// What comes back: paths to icon names, and nothing else. Validated on both sides, so a plugin
+/// format that changes cannot put a shape the renderer has never seen into a tree row.
+export const IconMapSchema = z.record(
+  z.string().min(1),
+  z.object({ icon: z.string().min(1), colour: z.string().nullable() }).strict(),
+);
 
 export const GraphNodeSchema = z
   .object({

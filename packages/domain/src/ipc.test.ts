@@ -8,6 +8,8 @@ import {
   DiscardChoiceSchema,
   DocumentDirtyRequest,
   GraphProgressSchema,
+  IconMapSchema,
+  IconsRequest,
   GraphRequest,
   GraphSnapshotSchema,
   GraphStateSchema,
@@ -79,6 +81,7 @@ describe("IPC_CHANNELS", () => {
       "obsidian:openVault",
       "graph:snapshot",
       "graph:refresh",
+      "icons:map",
     ]);
   });
 
@@ -575,5 +578,26 @@ describe("the vault graph contract", () => {
   it("refuses a node kind it does not know and negative progress", () => {
     expect(GraphSnapshotSchema.safeParse({ ...snapshot, nodes: [{ ...snapshot.nodes[0], kind: "folder" }] }).success).toBe(false);
     expect(GraphProgressSchema.safeParse({ workspaceId: "V", read: -1, total: 0, walking: true }).success).toBe(false);
+  });
+});
+
+
+describe("the icons channel", () => {
+  it("is enumerated", () => {
+    expect(IPC_CHANNELS).toContain("icons:map");
+  });
+
+  it("takes a workspace id and nothing else", () => {
+    expect(IconsRequest.safeParse({ workspaceId: "Notes" }).success).toBe(true);
+    expect(IconsRequest.safeParse({ workspaceId: "" }).success).toBe(false);
+    expect(IconsRequest.safeParse({ workspaceId: "Notes", path: "../x" }).success).toBe(false);
+    expect(IconsRequest.safeParse({}).success).toBe(false);
+  });
+
+  it("validates the map it answers with", () => {
+    expect(IconMapSchema.safeParse({ Projects: { icon: "lucide-folder", colour: null } }).success).toBe(true);
+    expect(IconMapSchema.safeParse({ Projects: { icon: "lucide-folder", colour: "blue" } }).success).toBe(true);
+    expect(IconMapSchema.safeParse({ Projects: { icon: "", colour: null } }).success).toBe(false);
+    expect(IconMapSchema.safeParse({ Projects: { icon: "lucide-folder" } }).success).toBe(false);
   });
 });
