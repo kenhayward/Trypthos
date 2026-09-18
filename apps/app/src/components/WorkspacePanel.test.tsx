@@ -45,8 +45,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     dirtyPaths: [] as readonly string[],
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
-    onOpenRepoPage: vi.fn(),
-    onOpenGraphPage: vi.fn(),
+    onOpenHomePage: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
     onRetryFolder: vi.fn(),
@@ -1029,7 +1028,7 @@ describe("the menu for the empty panel", () => {
   });
 });
 
-/// A vault's root row is its home, the way a repository's row is.
+/// A vault's root row is its home, like every other workspace's.
 const RESEARCH = {
   id: "Research",
   name: "Research",
@@ -1039,8 +1038,8 @@ const RESEARCH = {
 };
 
 /// A repository whose tree happens to contain an `.obsidian` folder, which is enough for the shell to
-/// call it a vault. There is no folder on disk behind it, so there is no vault graph to open either -
-/// the row opens the repository's page, and that is all.
+/// call it a vault. Its row opens its home page like any other; that the page then has no graph is
+/// the page's business, not the row's.
 const REPO = {
   id: "Repo",
   name: "Repo",
@@ -1049,34 +1048,26 @@ const REPO = {
   vault: true,
 };
 
-describe("a vault's root row", () => {
-  it("opens the vault's graph from its row, and leaves the tree alone", async () => {
-    const props = panel({ workspaces: [RESEARCH], folders: {} });
-    fireEvent.click(screen.getByRole("button", { name: exactly("Research") }));
-    expect(props.onOpenGraphPage).toHaveBeenCalledWith("Research");
-    expect(props.onSelectFolder).toHaveBeenCalledWith("Research");
+describe("a workspace's root row", () => {
+  // One page for every kind now, so the row no longer asks which kind it is.
+  it.each([
+    ["a local folder", DIARIZ],
+    ["a vault", RESEARCH],
+    ["a repository", REPO],
+  ])("opens the home page of %s from its row, and leaves the tree alone", async (_kind, workspace) => {
+    const props = panel({ workspaces: [workspace], folders: {} });
+    fireEvent.click(screen.getByRole("button", { name: exactly(workspace.name) }));
+    expect(props.onOpenHomePage).toHaveBeenCalledWith(workspace.id);
+    expect(props.onSelectFolder).toHaveBeenCalledWith(workspace.id);
     expect(props.onToggleFolder).not.toHaveBeenCalled();
   });
 
-  it("expands the vault from its band, and opens nothing", async () => {
+  it("expands a root from its band, and opens nothing", async () => {
     const props = panel({ workspaces: [RESEARCH], folders: {} });
     fireEvent.click(screen.getByRole("button", { name: "Expand Research" }));
     expect(props.onToggleFolder).toHaveBeenCalledWith("Research");
-    expect(props.onOpenGraphPage).not.toHaveBeenCalled();
+    expect(props.onOpenHomePage).not.toHaveBeenCalled();
     expect(props.onSelectFolder).not.toHaveBeenCalled();
-  });
-
-  it("opens no graph for a folder that is not a vault", async () => {
-    const props = panel({ workspaces: [DIARIZ] });
-    fireEvent.click(screen.getByRole("button", { name: "Diariz" }));
-    expect(props.onOpenGraphPage).not.toHaveBeenCalled();
-  });
-
-  it("opens no graph for a repository, whatever its tree contains", async () => {
-    const props = panel({ workspaces: [REPO], folders: {} });
-    fireEvent.click(screen.getByRole("button", { name: "Repo" }));
-    expect(props.onOpenGraphPage).not.toHaveBeenCalled();
-    expect(props.onOpenRepoPage).toHaveBeenCalledWith("Repo");
   });
 
   it("draws the pane it is given under the trees", () => {

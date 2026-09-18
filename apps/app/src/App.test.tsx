@@ -943,6 +943,81 @@ describe("applying a proposed edit", () => {
   });
 });
 
+/// A plain local folder's home page - not a vault, not a repository.
+///
+/// Every workspace has one now. The workspace's id and its name differ here on purpose: a tab named
+/// from the last segment of its path read correctly only because the two usually coincide.
+describe("a plain folder's home page", () => {
+  function shell() {
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local" as const, root: "D:/Notes" }] },
+      }),
+      writeSettings: async () => {},
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
+        ok: true as const,
+        workspace: { id: "Notes-2", name: "Notes", ref },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [
+          { id: "Notes-2/README.md", name: "README.md", kind: "file" as const },
+          { id: "Notes-2/a.md", name: "a.md", kind: "file" as const },
+        ],
+      }),
+      readFile: async () => ({ ok: true as const, content: "# Notes\n\nWhat this folder is for.", revision: { id: "r" } }),
+      // Notes and no links between them, so the page opens on its README - which keeps this suite
+      // away from the graph canvas, which needs WebGL and a worker that jsdom does not have.
+      graphState: async () => ({
+        ok: true as const,
+        state: {
+          snapshot: {
+            workspaceId: "Notes-2",
+            builtAt: new Date().toISOString(),
+            unreadable: 0,
+            truncated: false,
+            newNotes: { mode: "root" as const },
+            nodes: [{ id: "Notes-2/a.md", kind: "note" as const, label: "a", path: "Notes-2/a.md", degree: 0 }],
+            edges: [],
+          },
+          building: null,
+          error: null,
+        },
+      }),
+      onGraphProgress: () => () => {},
+      onGraphChanged: () => () => {},
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: () => () => {},
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+  }
+
+  it("opens from its row, named for the folder rather than its id", async () => {
+    shell();
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+
+    expect(await screen.findByRole("heading", { name: "Notes", level: 2 })).toBeTruthy();
+    expect(await screen.findByText("What this folder is for.")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Notes/ })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /Notes-2/ })).toBeNull();
+  });
+
+  // Every local folder has a graph now, so the pane that follows the open note is there for one.
+  it("shows the local graph pane for a folder that is not a vault", async () => {
+    shell();
+    render(<App />);
+    expect(await screen.findByRole("region", { name: "Local graph" })).toBeTruthy();
+  });
+});
+
+
 /// File > New, from the menu to a tab with a name and nowhere to be.
 describe("making a new file", () => {
   function shell(): {
@@ -1736,18 +1811,20 @@ describe("hiding the editor behind the chat", () => {
 
 /// One vault's graph tab must never inherit another's.
 ///
-/// `GraphPage` keeps the search query and the centre-on request in its own state, and App draws
-/// every vault's graph in the same slot - so with no key React reuses one instance and the second
-/// vault's tab opens showing the first vault's search, highlights and focus request.
+/// `WorkspaceHome` keeps the chosen section in its own state, and the graph inside it keeps its search
+/// query and centre-on request - and App draws every workspace's page in the same slot. With no key
+/// React reuses one instance, and the second workspace's page opens showing the first one's section,
+/// search, highlights and focus request. The key on the page remounts the graph inside it too.
 ///
 /// A source check rather than a rendered one, in the spirit of `graphBundle.test.ts`: the page
 /// builds its layout in a Worker, which jsdom does not have, so this suite cannot mount one at all.
-describe("the vault graph tab", () => {
-  it("is keyed by workspace, so no vault inherits another's page", () => {
+describe("a workspace's home page", () => {
+  it("is keyed by workspace, so no workspace inherits another's page", () => {
     const source = readFileSync(repoPath("apps", "app", "src", "App.tsx"), "utf8");
-    const opens = source.indexOf("<GraphPage");
+    const opens = source.indexOf("<WorkspaceHome");
     expect(opens).toBeGreaterThan(-1);
-    const element = source.slice(opens, source.indexOf("/>", opens));
-    expect(element).toContain("key={graphWorkspace.id}");
+    // Up to the first prop after the key, which is enough to see it and short of the nested graph.
+    const element = source.slice(opens, source.indexOf("workspace={homeWorkspace}", opens));
+    expect(element).toContain("key={homeWorkspace.id}");
   });
 });

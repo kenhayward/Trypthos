@@ -309,3 +309,22 @@ describe("EditorTabs: the tab menu", () => {
     });
   });
 });
+
+/// A workspace's home page is a tab whose path ends in the workspace's id, not its name. The two are
+/// usually the same, which is exactly why a tab named from the path looked right until they were not.
+describe("a page named for its workspace", () => {
+  it("takes its name from the lookup rather than from its path", () => {
+    setup({
+      paths: ["trypthos:home/Notes-2"],
+      activePath: "trypthos:home/Notes-2",
+      pageName: (path) => (path === "trypthos:home/Notes-2" ? "Notes" : null),
+    });
+    expect(screen.getByRole("tab", { name: /Notes/ }).textContent).toContain("Notes");
+    expect(screen.queryByText("Notes-2")).toBeNull();
+  });
+
+  it("leaves every other tab named from its path", () => {
+    setup({ paths: ["Notes/plan.md"], activePath: "Notes/plan.md", pageName: () => null });
+    expect(screen.getByRole("tab", { name: /plan\.md/ })).toBeTruthy();
+  });
+});

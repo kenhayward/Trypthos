@@ -112,3 +112,18 @@ describe("OpenFilesMenu", () => {
     expect(screen.queryByRole("button", { name: "All open files" })).toBeNull();
   });
 });
+
+describe("a workspace's page in the list", () => {
+  // Named for its workspace rather than from its path, as its tab is - the two would otherwise
+  // disagree about what the same document is called.
+  it("is named for its workspace", async () => {
+    setup({
+      paths: ["trypthos:home/Notes-2"],
+      activePath: "trypthos:home/Notes-2",
+      pageName: (path) => (path === "trypthos:home/Notes-2" ? "Notes" : null),
+    });
+    await userEvent.click(opener());
+    expect(screen.getByText("Notes")).toBeTruthy();
+    expect(screen.queryByText("Notes-2")).toBeNull();
+  });
+});

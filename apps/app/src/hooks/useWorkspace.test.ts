@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CONVERSATION_LOG_PATH, GUIDE_PATH, MAX_TEXT_FILE_BYTES, graphPagePath } from "@trypthos/domain";
+import { CONVERSATION_LOG_PATH, GUIDE_PATH, MAX_TEXT_FILE_BYTES, homePagePath } from "@trypthos/domain";
 import {
   canOpenInNewWindow,
   failureKey,
@@ -1437,18 +1437,18 @@ describe("the built-in guide", () => {
   });
 });
 
-/// A vault's graph, in a tab of its own.
+/// A workspace's home page, in a tab of its own - every kind of workspace, one opener.
 ///
-/// The same shape as the markdown guide and a repository's page: a reserved path, read-only, and
-/// nothing behind it on disk. What it draws is fetched by the page when it opens.
-describe("the vault graph tab", () => {
+/// The same shape as the markdown guide: a reserved path, read-only, and nothing behind it on disk.
+/// What it draws is fetched by the page when it opens.
+describe("a workspace's home page", () => {
   it("opens read-only in a tab of its own, without reading anything from disk", async () => {
     const { client, reads } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
-    act(() => result.current.actions.openGraphPage("Research"));
+    act(() => result.current.actions.openHomePage("Research"));
 
-    expect(result.current.state.activePath).toBe(graphPagePath("Research"));
+    expect(result.current.state.activePath).toBe(homePagePath("Research"));
     expect(result.current.state.readOnly).toBe(true);
     expect(result.current.state.content).toBe("");
     expect(reads).toEqual([]);
@@ -1458,11 +1458,11 @@ describe("the vault graph tab", () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
-    act(() => result.current.actions.openGraphPage("Research"));
-    act(() => result.current.actions.openGraphPage("Research"));
+    act(() => result.current.actions.openHomePage("Research"));
+    act(() => result.current.actions.openHomePage("Research"));
 
     expect(
-      result.current.state.documents.filter((document) => document.path === graphPagePath("Research")),
+      result.current.state.documents.filter((document) => document.path === homePagePath("Research")),
     ).toHaveLength(1);
   });
 });

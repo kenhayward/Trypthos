@@ -178,11 +178,11 @@ describe("GraphPage", () => {
     expect(screen.getByText("The graph could not be built. Refresh to try again.")).toBeTruthy();
   });
 
-  it("says when a vault has no notes", async () => {
+  it("says when a folder has no notes", async () => {
     const fake = fakeGraphClient({ snapshot: { ...snapshot, nodes: [], edges: [] }, building: null, error: null });
     page(fake);
     await flush();
-    expect(screen.getByText("No notes in this vault yet")).toBeTruthy();
+    expect(screen.getByText("No notes in this folder yet")).toBeTruthy();
   });
 
   it("counts files it could not read", async () => {
