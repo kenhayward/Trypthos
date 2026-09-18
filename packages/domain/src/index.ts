@@ -446,18 +446,11 @@ export type {
   RepoSummary,
 } from "./github";
 
-export {
-  REPO_PAGE_PREFIX,
-  isRepoPagePath,
-  readmeNameIn,
-  repoPagePath,
-  repoPageWorkspaceId,
-} from "./repoPage";
+export { HOME_PAGE_PREFIX, homePagePath, homePageWorkspaceId, isHomePagePath, readmeNameIn } from "./homePage";
 
 export { applyIndexChange, buildGraph, EMPTY_INDEX, isNotePath, neighbourhood } from "./vaultGraph";
 export type { GraphEdge, GraphNode, GraphNodeKind, IndexChange, VaultGraph, VaultIndexInput } from "./vaultGraph";
 
-export { GRAPH_PAGE_PREFIX, graphPagePath, graphPageWorkspaceId, isGraphPagePath } from "./graphPage";
 export { newNoteDirectory, newNoteLocationFrom, OBSIDIAN_APP_CONFIG } from "./obsidianAppConfig";
 export type { NewNoteLocation } from "./obsidianAppConfig";
 export { ICON_LIMIT, iconFor, NO_ICONS, OBSIDIAN_ICONS_FILE, parseObsidianIcons } from "./obsidianIcons";
