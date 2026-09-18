@@ -276,7 +276,9 @@ describe("App", () => {
     /// every workspace before the reader has asked for anything. These tests are about what happens
     /// to a file once it is open, so they expand first - exactly as a user does.
     async function expandWorkspace() {
-      await userEvent.setup().click(await screen.findByRole("button", { name: "Notes" }));
+      // The band, not the row: the row selects the folder for chat and deliberately leaves the tree
+      // as it was - see `DisclosureBand`.
+      await userEvent.setup().click(await screen.findByRole("button", { name: "Expand Notes" }));
       await screen.findByRole("button", { name: /one\.md/ });
     }
 
@@ -545,8 +547,8 @@ describe("App", () => {
       render(<App />);
 
       // Expanded first: a remembered workspace comes back collapsed, so its one file is not on
-      // screen until the row is clicked.
-      await user.click(await screen.findByRole("button", { name: "Notes" }));
+      // screen until the band is clicked.
+      await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
       await screen.findByRole("button", { name: /gone\.md/ });
       await user.click(row("gone.md"));
       expect(screen.getByRole("alert").textContent).toContain("no longer there");
@@ -673,8 +675,9 @@ describe("adding a file to the chat from the folder browser", () => {
 
   async function addToChat() {
     const user = userEvent.setup();
-    // Reopened workspaces start collapsed; expanding one lists it.
-    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    // Reopened workspaces start collapsed; the band is what expands one - the row beside it selects
+    // the folder and deliberately leaves the tree alone.
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
     const row = await screen.findByRole("button", { name: /plan\.md/ });
     await user.pointer({ keys: "[MouseRight]", target: row });
     await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
@@ -778,6 +781,7 @@ describe("saving and reopening a conversation", () => {
     const chat = await screen.findByRole("complementary", { name: "Chat" });
 
     // A file attached from the tree, and the workspace folder attached as a map.
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
     await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
     await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: /plan\.md/ }) });
     await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
@@ -830,6 +834,7 @@ describe("saving and reopening a conversation", () => {
     render(<App />);
     const chat = await screen.findByRole("complementary", { name: "Chat" });
 
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
     await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
     await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: /plan\.md/ }) });
     await user.click(screen.getByRole("menuitem", { name: "Add to Chat" }));
@@ -904,7 +909,7 @@ describe("applying a proposed edit", () => {
     const { chat } = shell();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
     await user.click(await screen.findByRole("button", { name: /plan\.md/ }));
     await screen.findByRole("tab", { name: /plan\.md/ });
     await user.click(screen.getByRole("button", { name: view }));
@@ -1070,8 +1075,7 @@ describe("making a new file", () => {
     });
     render(<App />);
 
-    const root = await screen.findByRole("button", { name: "Notes" });
-    await user.click(root);
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
     await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: "plan.md" }) });
     await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
 
@@ -1349,10 +1353,10 @@ describe("the repository page", () => {
     // Opening a repository lists it, so its files are already on screen.
     expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "notes" }));
+    await user.click(screen.getByRole("button", { name: "Collapse notes" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "README.md" })).toBeNull());
 
-    await user.click(screen.getByRole("button", { name: "notes" }));
+    await user.click(screen.getByRole("button", { name: "Expand notes" }));
     expect(await screen.findByRole("button", { name: "README.md" })).toBeTruthy();
   });
 
@@ -1723,7 +1727,7 @@ describe("hiding the editor behind the chat", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole("button", { name: /^Notes$/ }));
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
     await user.click(await screen.findByRole("button", { name: /plan\.md/ }));
 
     expect(await screen.findByRole("main", { name: "Editor" })).toBeDefined();
