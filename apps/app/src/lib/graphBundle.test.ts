@@ -1,8 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoPath } from "../testing/repoRoot";
-import { stripComments } from "../testing/stripComments";
+import { offenders, STATIC_LOAD } from "../testing/moduleGraph";
 
 /// The graph libraries and the modules built on them stay out of the initial bundle.
 ///
@@ -22,15 +20,6 @@ const GRAPH_ONLY = new Set([
   "lib/layoutClient.ts",
 ]);
 
-/// Every way a module can be pulled in at load time, and no way it cannot.
-///
-/// Three branches, because a static import wears three faces: `import x from "y"`, the side-effect
-/// `import "y"`, and the re-export `export * from "y"` - which loads the module just as eagerly
-/// while looking nothing like an import. `import type` and `export type` are excluded: they vanish
-/// at compile time and cost the bundle nothing. `import("y")` has no leading `import` keyword at the
-/// start of a line and so cannot match, which is the whole point.
-const STATIC_LOAD = String.raw`(?:import\s+(?!type\b)[^;]*?from\s+|import\s+|export\s+(?!type\b)[^;]*?from\s+)`;
-
 const LIBRARY_IMPORT = new RegExp(
   `^\\s*${STATIC_LOAD}["'](?:sigma|graphology|graphology-[\\w-]+|@sigma\\/[\\w-]+)(?:\\/[^"']*)?["']`,
   "m",
@@ -40,29 +29,13 @@ const GRAPH_MODULE_IMPORT = new RegExp(
   "m",
 );
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    if (entry === "__screenshots__") return [];
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) return sourceFiles(full);
-    return /\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry) ? [full] : [];
-  });
-}
-
-function offenders(pattern: RegExp): string[] {
-  return sourceFiles(SRC)
-    .map((file) => ({ file: relative(SRC, file).split(sep).join("/"), text: stripComments(readFileSync(file, "utf8")) }))
-    .filter(({ file, text }) => pattern.test(text) && !GRAPH_ONLY.has(file))
-    .map(({ file }) => file);
-}
-
 describe("the graph stays out of the initial bundle", () => {
   it("imports sigma and graphology only from the lazy graph modules", () => {
-    expect(offenders(LIBRARY_IMPORT)).toEqual([]);
+    expect(offenders(SRC, LIBRARY_IMPORT, GRAPH_ONLY)).toEqual([]);
   });
 
   it("reaches the lazy graph modules only through a dynamic import", () => {
-    expect(offenders(GRAPH_MODULE_IMPORT)).toEqual([]);
+    expect(offenders(SRC, GRAPH_MODULE_IMPORT, GRAPH_ONLY)).toEqual([]);
   });
 
   it("would catch a static import if one appeared", () => {
