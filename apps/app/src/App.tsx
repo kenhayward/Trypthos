@@ -50,6 +50,7 @@ import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { canOpenInNewWindow, useWorkspace } from "./hooks/useWorkspace";
 import type { CommitChoice } from "./hooks/useWorkspace";
+import { useWorkspaceIcons } from "./hooks/useWorkspaceIcons";
 import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind } from "./hooks/useFind";
@@ -686,6 +687,13 @@ export default function App() {
   const anyVaultOpen = state.workspaces.some(
     (workspace) => workspace.vault === true && workspace.ref.kind === "local",
   );
+  /// The icons each open vault has had assigned in Obsidian. Asked for every workspace: what answers
+  /// is the shell, which knows whether there is a plugin file to read, and a folder that is not a
+  /// vault simply answers with nothing.
+  const workspaceIcons = useWorkspaceIcons(
+    client,
+    useMemo(() => state.workspaces.map((workspace) => workspace.id), [state.workspaces]),
+  );
   /// What both graphs draw. The stored settings minus the two that are the local pane's alone, so the
   /// tab and the pane cannot disagree about which kinds of node are shown.
   const graphFilter = {
@@ -795,6 +803,7 @@ export default function App() {
           onCloseWorkspace={(workspaceId) => void actions.closeWorkspace(workspaceId)}
           onOpenRepoPage={actions.openRepoPage}
           onOpenGraphPage={actions.openGraphPage}
+          icons={workspaceIcons}
           bottomPane={
             anyVaultOpen ? (
               <LocalGraphPane
