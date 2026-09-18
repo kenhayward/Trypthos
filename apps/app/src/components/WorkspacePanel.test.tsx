@@ -1084,3 +1084,47 @@ describe("a vault's root row", () => {
     expect(screen.getByRole("region", { name: "Pane below" })).toBeTruthy();
   });
 });
+
+/// Icons a vault has had assigned in Obsidian with the Iconic plugin.
+///
+/// Emoji throughout, because a Lucide id would send the component off to fetch the icon set and what
+/// is being asserted here is the lookup and the placement, not the drawing.
+describe("icons assigned in Obsidian", () => {
+  const ICONS = {
+    Diariz: {
+      docs: { icon: "📘", colour: null },
+      "docs/plan.md": { icon: "🚀", colour: "red" },
+    },
+  };
+
+  const iconIn = (row: HTMLElement) => row.querySelector('[data-testid="assigned-icon"]');
+
+  it("draws a folder's assigned icon in place of the folder glyph", () => {
+    panel({ icons: ICONS });
+    expect(iconIn(folderRow("docs"))?.textContent).toBe("📘");
+  });
+
+  it("draws a file's assigned icon in place of the file glyph", () => {
+    panel({ icons: ICONS });
+    expect(iconIn(screen.getByRole("button", { name: /plan\.md/ }))?.textContent).toBe("🚀");
+  });
+
+  it("leaves a row with no assignment exactly as it was", () => {
+    panel({ icons: ICONS });
+    expect(iconIn(screen.getByRole("button", { name: /README\.md/ }))).toBeNull();
+  });
+
+  it("leaves every row alone when the vault has no assignments", () => {
+    panel();
+    expect(iconIn(folderRow("docs"))).toBeNull();
+  });
+
+  // A workspace root keeps the mark that says where it came from. Which provider a workspace is from
+  // matters more on that row than any icon, and Iconic has no entry for a vault's own root anyway.
+  it("leaves a workspace root's provider mark alone", () => {
+    panel({ icons: { Diariz: { "": { icon: "📘", colour: null } } } });
+    const root = screen.getByRole("button", { name: exactly("Diariz") });
+    expect(root.querySelector("[data-mark]")).toBeTruthy();
+    expect(iconIn(root)).toBeNull();
+  });
+});

@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { enabledFileTypes, isImageName, workspaceRefLabel, workspaceRefMark } from "@trypthos/domain";
-import type { Platform, WorkspaceMark, WorkspaceRef } from "@trypthos/domain";
+import { enabledFileTypes, iconFor, isImageName, splitQualified, workspaceRefLabel, workspaceRefMark } from "@trypthos/domain";
+import type { IconAssignment, IconMap, Platform, WorkspaceMark, WorkspaceRef } from "@trypthos/domain";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
 import type { RemoteNode } from "../lib/workspaceClient";
+import AssignedIcon from "./AssignedIcon";
 import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 import Glyph from "./Glyph";
 
@@ -85,6 +86,10 @@ interface Props {
   /// Opens a local vault's graph tab. Called from the vault's root row, as a repository's row opens
   /// its page.
   onOpenGraphPage: (workspaceId: string) => void;
+  /// The icons each open vault has had assigned in Obsidian, by workspace id. Absent for every
+  /// workspace that is not a vault, and for a vault with no icon plugin - which is the usual case,
+  /// and means the tree keeps the glyphs it has always drawn.
+  icons?: Readonly<Record<string, IconMap>>;
   /// Drawn under the trees and above the footer - the local graph pane, when a vault is open.
   bottomPane?: React.ReactNode;
   /// Opens the File types page of Settings.
@@ -130,6 +135,7 @@ export default function WorkspacePanel({
   onCloseWorkspace,
   onOpenRepoPage,
   onOpenGraphPage,
+  icons,
   bottomPane,
   onOpenFileTypes,
 }: Props) {
@@ -350,7 +356,15 @@ export default function WorkspacePanel({
               <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.matchesCapped")}</p>
             )}
 
-            {shown.map(({ workspace, state, rows: tree }) => (
+            {shown.map(({ workspace, state, rows: tree }) => {
+              /// What Obsidian draws on this row, or null. The map is keyed by the path inside the
+              /// vault, so the workspace id comes off the front first.
+              const assigned = (id: string): IconAssignment | null => {
+                const map = icons?.[workspace.id];
+                const split = splitQualified(id);
+                return map === undefined || split === null ? null : iconFor(map, split.path);
+              };
+              return (
               <div
                 key={workspace.id}
                 // A file has no directory of its own, so its menu belongs to the workspace root.
@@ -404,6 +418,7 @@ export default function WorkspacePanel({
                       onToggle={() => {
                         if (!filtering) void onToggleFolder(row.node.id);
                       }}
+                      assignment={assigned(row.node.id)}
                       onRetry={() => onRetryFolder(row.node.id)}
                       onContextMenu={(event) => {
                         event.stopPropagation();
@@ -418,6 +433,7 @@ export default function WorkspacePanel({
                       open={openPaths.includes(row.node.id)}
                       dirty={dirtyPaths.includes(row.node.id)}
                       onOpen={() => onOpenFile(row.node)}
+                      assignment={assigned(row.node.id)}
                       draggable={onAddToChat !== undefined}
                       onContextMenu={(event) => {
                         event.stopPropagation();
@@ -430,7 +446,8 @@ export default function WorkspacePanel({
                   ),
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {bottomPane}
@@ -722,6 +739,7 @@ function FolderRow({
   onOpen,
   onToggle,
   onRetry,
+  assignment,
   onContextMenu,
 }: {
   row: TreeRow;
@@ -733,6 +751,8 @@ function FolderRow({
   /// Expands or collapses it - the band's job, and the arrows'.
   onToggle: () => void;
   onRetry: () => void;
+  /// What Obsidian draws on this folder, or null to keep the app's own glyph.
+  assignment: IconAssignment | null;
   onContextMenu: (event: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
@@ -773,9 +793,17 @@ function FolderRow({
               : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink hover:bg-hover"
           }
         >
-          <Glyph className={row.status === "error" ? "size-3.5 shrink-0 text-danger" : "size-3.5 shrink-0 text-leaf"}>
-          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-          </Glyph>
+          {/* A folder that failed to list keeps the danger glyph whatever Obsidian says: what is
+              wrong with a row matters more than its decoration. */}
+          {assignment === null || row.status === "error" ? (
+            <Glyph
+              className={row.status === "error" ? "size-3.5 shrink-0 text-danger" : "size-3.5 shrink-0 text-leaf"}
+            >
+              <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+            </Glyph>
+          ) : (
+            <AssignedIcon assignment={assignment} className="size-3.5" />
+          )}
           <span className="min-w-0 truncate">{row.node.name}</span>
           {row.status === "loading" && (
             <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
@@ -806,6 +834,7 @@ function FileRow({
   open,
   dirty,
   onOpen,
+  assignment,
   draggable,
   onContextMenu,
 }: {
@@ -814,6 +843,8 @@ function FileRow({
   open: boolean;
   dirty: boolean;
   onOpen: () => void;
+  /// What Obsidian draws on this file, or null to keep the app's own glyph.
+  assignment: IconAssignment | null;
   /// Whether the row can be dragged onto the chat panel. Only when there is a chat to drop it on.
   draggable: boolean;
   onContextMenu: (event: React.MouseEvent) => void;
@@ -871,10 +902,14 @@ function FileRow({
             : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink-3 hover:bg-hover"
       }
     >
-      <Glyph className="size-3.5 shrink-0 text-faint">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <path d="M14 2v6h6" />
-      </Glyph>
+      {assignment === null ? (
+        <Glyph className="size-3.5 shrink-0 text-faint">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+        </Glyph>
+      ) : (
+        <AssignedIcon assignment={assignment} className="size-3.5" />
+      )}
       <span className="min-w-0 truncate">{row.node.name}</span>
       {dirty && (
         <span
