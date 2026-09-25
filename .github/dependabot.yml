@@ -1,0 +1,48 @@
+# Dependabot version updates.
+#
+# One npm entry at the root covers every workspace: this is one npm workspace with one
+# package-lock.json, and Dependabot updates the workspace manifests alongside the lock file.
+#
+# Minor and patch updates arrive grouped, one PR per ecosystem per week, so CI runs once for the
+# batch; majors arrive one PR each, because a major is a decision rather than a refresh.
+#
+# Security updates are separate from this file and are not delayed by the cooldown below - they are
+# switched on in the repository's Settings > Code security.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # A release has a week to be found broken, or pulled, before it is proposed here.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Pinned to 5.x: typescript-eslint caps its peer below 6.1, so a TypeScript major would mean
+      # dropping the lint step. See CLAUDE.md. Remove this when typescript-eslint supports it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
