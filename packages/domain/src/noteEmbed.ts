@@ -1,4 +1,5 @@
 import { splitFrontMatter } from "./frontMatter";
+import { trimLeading, trimTrailing } from "./trimRun";
 
 /// What an Obsidian embed shows of the note it names.
 ///
@@ -9,7 +10,18 @@ import { splitFrontMatter } from "./frontMatter";
 /// Pure, over the note's text. Code blocks are skipped throughout: a heading or an id inside one is
 /// an example of the syntax, not a use of it.
 
-const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/;
+/// The level, and everything after the first space or tab. The title is cut out of that by
+/// `headingOf` rather than by the pattern: `[ \t]+(.*?)[ \t]*#*[ \t]*$` described the same thing and
+/// took seconds to reject a line holding a few thousand tabs.
+const HEADING = /^ {0,3}(#{1,6})[ \t](.*)$/;
+
+/// A heading line's level and title, or null for a line that is not a heading.
+function headingOf(line: string): { level: number; title: string } | null {
+  const match = HEADING.exec(line);
+  if (match === null) return null;
+  const title = trimLeading(trimTrailing(trimTrailing(match[2]!, " \t"), "#"), " \t");
+  return { level: match[1]!.length, title: trimTrailing(title, " \t") };
+}
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const LIST_ITEM = /^(\s*)(?:[-*+]|\d+[.)])[ \t]/;
 
@@ -46,16 +58,16 @@ export function embeddedSection(
 
   const wanted = heading.trim().toLowerCase();
   const start = lines.findIndex((line, index) => {
-    const match = code[index] ? null : HEADING.exec(line);
-    return match !== null && match[2]!.trim().toLowerCase() === wanted;
+    const match = code[index] ? null : headingOf(line);
+    return match !== null && match.title.trim().toLowerCase() === wanted;
   });
   if (start === -1) return null;
 
-  const level = HEADING.exec(lines[start]!)![1]!.length;
+  const level = headingOf(lines[start]!)!.level;
   let end = start + 1;
   while (end < lines.length) {
-    const match = code[end] ? null : HEADING.exec(lines[end]!);
-    if (match !== null && match[1]!.length <= level) break;
+    const match = code[end] ? null : headingOf(lines[end]!);
+    if (match !== null && match.level <= level) break;
     end += 1;
   }
   return tidy(lines.slice(start, end));

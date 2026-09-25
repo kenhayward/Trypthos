@@ -1,3 +1,5 @@
+import { trimTrailing } from "./trimRun";
+
 /// Deciding when two endpoint URLs mean the same provider.
 ///
 /// In the domain, and not in either process, because both sides ask the question and they must agree
@@ -14,5 +16,5 @@
 /// base URL that differs only by the case of its path is not a real case, and treating one user's
 /// `/V1` as a separate provider from their `/v1` would silently ask them for the key twice.
 export function normaliseEndpoint(endpoint: string): string {
-  return String(endpoint).trim().toLowerCase().replace(/\/+$/, "");
+  return trimTrailing(String(endpoint).trim().toLowerCase(), "/");
 }

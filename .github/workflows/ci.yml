@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only. CI checks out, builds and tests; nothing here writes to the repository, and a token
+# that cannot write is one a compromised dependency's install script cannot use to push.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Lint, typecheck, build and test

@@ -1,3 +1,5 @@
+import { withoutClosingHashes } from "./trimRun";
+
 /// Turning an edit the model proposed into a range in the document.
 ///
 /// This is where a mistake would do real damage: an anchor resolved to the wrong offset writes into
@@ -40,7 +42,9 @@ export type EditTarget =
   | { ok: true; from: number; to: number; insert: string }
   | { ok: false; reason: "heading-not-found" | "heading-ambiguous" | "no-selection" };
 
-const ATX = /^(#{1,6})\s+(.*)$/;
+/// One whitespace character, not a run: the title's own leading space is trimmed off it, and `\s+`
+/// followed by `.*` is two ways to match the same run, which makes a long one slow to reject.
+const ATX = /^(#{1,6})\s(.*)$/;
 /// An opening or closing code fence, and how long it is. CommonMark closes a fence only with a run
 /// at least as long, which is what lets a ```` block contain ``` without ending early.
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
@@ -72,7 +76,7 @@ export function findHeadings(doc: string): Heading[] {
         headings.push({
           level: heading[1]!.length,
           // A closed ATX heading ends in its own hashes, which are syntax rather than title.
-          text: heading[2]!.replace(/\s*#*\s*$/, "").trim(),
+          text: withoutClosingHashes(heading[2]!),
           from: offset,
           to: offset + line.length,
         });
@@ -91,11 +95,7 @@ export function findHeadings(doc: string): Heading[] {
 /// that would be pedantry at the user's expense, and "objectives" and "Objectives" are the same
 /// heading to everyone except a string comparison.
 function normaliseHeading(text: string): string {
-  return text
-    .replace(/^\s*#{1,6}\s*/, "")
-    .replace(/\s*#*\s*$/, "")
-    .trim()
-    .toLowerCase();
+  return withoutClosingHashes(text.replace(/^\s*#{1,6}\s*/, "")).toLowerCase();
 }
 
 /// Where a heading's section ends: at the next heading of the same or higher level, or the end.
@@ -138,7 +138,7 @@ export function resolveEdit(
     // step than the edit deserves, and it would move the caret from wherever the user left it.
     // Trailing blank lines are absorbed rather than added to, so appending twice does not leave a
     // widening gap down the file.
-    const trimmed = doc.replace(/\s*$/, "");
+    const trimmed = doc.trimEnd();
     return {
       ok: true,
       from: trimmed.length,

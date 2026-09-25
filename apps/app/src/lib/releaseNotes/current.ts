@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.87.1",
+    date: "2026-09-25",
+    pr: 193,
+    headline: "Long runs of spaces or tabs no longer freeze the app",
+    summary:
+      "A heading line holding a long run of spaces or tabs could stop the app responding for seconds, or indefinitely: a few thousand were enough. It showed up when chat inserted text after a heading, and when a note embedded a heading from another note. Several smaller slowdowns of the same kind are gone too - on documents chat appends to, on replies with many blank lines, and on addresses or paths full of slashes. All of these now take time in proportion to the text.",
+    fixed: [
+      "A heading line with a long run of spaces or tabs no longer freezes chat edits or embedded headings.",
+      "Appending with chat, reading a reply, and checking an address or path no longer slow down on long runs of one character.",
+    ],
+  },
+  {
     version: "0.87.0",
     date: "2026-09-25",
     pr: 184,
