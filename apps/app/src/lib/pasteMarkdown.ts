@@ -51,6 +51,13 @@ function converter(): TurndownService {
       return prefix + body.replace(/\n/g, `\n${" ".repeat(prefix.length)}`) + (node.nextSibling ? "\n" : "");
     },
   });
+  // A line break inside a table cell. A markdown table row is one line, so the table plugin writes a
+  // break as `<br>`; left to the default rule it would carry the two trailing spaces of a markdown
+  // hard break in front of it.
+  service.addRule("cellBreak", {
+    filter: (node) => node.nodeName === "BR" && node.parentElement?.closest("td, th") != null,
+    replacement: () => "\n",
+  });
   // Not content. A rendered code block usually carries a Copy button, and each of these would
   // otherwise arrive in the document as stray words.
   service.remove(["button", "script", "style", "noscript", "template"]);
@@ -74,9 +81,72 @@ export function clipboardMarkdown(content: ClipboardContent): string | null {
   }
 
   if (!content.text) return null;
+  const table = tabSeparatedTable(content.text);
+  if (table !== null) return table;
   // U+2028 and U+2029 are Unicode's own line and paragraph separators. CodeMirror does not break
   // lines on them, so without this they arrive as one long line.
   return content.text.replace(/\u2029/g, "\n\n").replace(/\u2028/g, "\n");
+}
+
+/// Tab-separated text - a spreadsheet range, from a program that offers nothing richer - as a
+/// markdown table, or null when the text is not one.
+///
+/// It is a table when there are at least two rows, every row has the same number of cells, there
+/// are at least two, and no row starts with a tab: code indented with tabs has tabs on every line
+/// as well, but never a cell before the first one. A cell holding a tab, a quote or a line break
+/// arrives quoted, the way Excel writes it.
+export function tabSeparatedTable(text: string): string | null {
+  const rows = parseTabSeparated(text.replace(/\r\n?/g, "\n").replace(/\n+$/, ""));
+  if (rows === null || rows.length < 2) return null;
+  const width = rows[0]!.length;
+  if (width < 2 || rows.some((row) => row.length !== width)) return null;
+
+  const line = (cells: readonly string[]) =>
+    `| ${cells.map((cell) => cell.trim().replace(/\|/g, "\\|").replace(/\n/g, "<br>")).join(" | ")} |`;
+  return [line(rows[0]!), line(rows[0]!.map(() => "---")), ...rows.slice(1).map(line)].join("\n");
+}
+
+/// Rows of cells, or null for text that has a line starting with a tab.
+function parseTabSeparated(text: string): string[][] | null {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  let atCellStart = true;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (quoted) {
+      if (character === '"' && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        cell += character;
+      }
+    } else if (character === '"' && atCellStart) {
+      quoted = true;
+      atCellStart = false;
+    } else if (character === "\t") {
+      if (row.length === 0 && cell === "") return null;
+      row.push(cell);
+      cell = "";
+      atCellStart = true;
+    } else if (character === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      atCellStart = true;
+    } else {
+      cell += character;
+      atCellStart = false;
+    }
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows;
 }
 
 /// Reads the system clipboard in the renderer.

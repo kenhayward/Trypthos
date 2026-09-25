@@ -190,7 +190,10 @@ round-trip and nothing that can reformat a user's file behind their back.
   Word's `mso-list` paragraphs into nested `ul`/`ol` (level from the style, numbered or bulleted from
   the `mso-list:Ignore` marker), `MsoTitle`/`MsoQuote` classes, Word for the web's
   `role="heading"` and one-item `data-aria-level` lists, span-style emphasis (Google Docs, Word for
-  the web), monospaced runs and paragraphs into `code`/`pre`, a header row for tables that lack one;
+  the web), monospaced runs and paragraphs into `code`/`pre`, a header row for tables that lack one
+  (with `col`/`colgroup` removed, since the GFM plugin only reads a row as the header when nothing
+  precedes it), right alignment for spreadsheet numbers (Excel's `x:num`, Google Sheets'
+  `data-sheets-value`) carried up to the header so a short column does not tie the plugin's vote;
   and it drops namespaced elements, comments, bookmarks and non-web images. It runs on a DOMParser
   document, never attached to the page. The clipboard is read with `{ unsanitized: ["text/html"] }`,
   because Chromium's default sanitiser re-serialises the markup and loses Word's list styles; that is

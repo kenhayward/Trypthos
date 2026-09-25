@@ -333,9 +333,22 @@ function dropEmptyParagraphs(root: HTMLElement): void {
 // --- Tables -------------------------------------------------------------------------------------
 
 /// A markdown table needs a header row and one line per cell. Word writes neither: its header is its
-/// first row, and a cell holds paragraphs.
+/// first row, and a cell holds paragraphs. Spreadsheets - Excel, Google Sheets - write a table whose
+/// first row is its header too, after a list of column widths.
 function shapeTables(root: HTMLElement): void {
   for (const table of [...root.querySelectorAll("table")]) {
+    // Column widths are layout, and the converter only reads a row as the header when nothing comes
+    // before it in the table.
+    removeAll(table as HTMLElement, "colgroup, col");
+
+    // A spreadsheet leaves a number's alignment to the cell's type rather than writing it, so a
+    // numeric column would otherwise be left-aligned in the table it becomes.
+    for (const cell of [...table.querySelectorAll("td")]) {
+      if (cell.hasAttribute("align") || /text-align/i.test(cell.getAttribute("style") ?? "")) continue;
+      const sheetsNumber = /"1"\s*:\s*3\b/.test(cell.getAttribute("data-sheets-value") ?? "");
+      if (cell.hasAttribute("x:num") || sheetsNumber) cell.setAttribute("align", "right");
+    }
+
     for (const cell of [...table.querySelectorAll("td, th")]) {
       const blocks = [...cell.querySelectorAll(":scope > p, :scope > div")];
       blocks.forEach((block, index) => {
@@ -344,11 +357,37 @@ function shapeTables(root: HTMLElement): void {
       });
     }
 
-    if (table.querySelector("th") !== null) continue;
     const first = table.querySelector("tr");
     if (first === null) continue;
-    for (const cell of [...first.querySelectorAll(":scope > td")]) rename(cell, "th");
+    if (table.querySelector("th") === null) {
+      for (const cell of [...first.querySelectorAll(":scope > td")]) rename(cell, "th");
+    }
+    alignHeaderWithColumn(table, first);
   }
+}
+
+/// The converter takes a column's alignment from a vote of its cells, the header included - so a
+/// short numeric column ties, and a tie is no alignment. A column whose every filled cell below the
+/// header is right-aligned is a right-aligned column.
+function alignHeaderWithColumn(table: Element, header: Element): void {
+  const rightAligned = (cell: Element) =>
+    cell.getAttribute("align")?.toLowerCase() === "right" ||
+    /text-align\s*:\s*right/i.test(cell.getAttribute("style") ?? "");
+  const byColumn = (row: Element) => {
+    const cells: (Element | undefined)[] = [];
+    for (const cell of [...row.querySelectorAll(":scope > td, :scope > th")]) {
+      const span = Math.max(1, Number(cell.getAttribute("colspan")) || 1);
+      cells.push(cell, ...new Array<undefined>(span - 1));
+    }
+    return cells;
+  };
+
+  const body = [...table.querySelectorAll("tr")].filter((row) => row !== header).map(byColumn);
+  byColumn(header).forEach((cell, column) => {
+    if (cell === undefined || cell.hasAttribute("align")) return;
+    const filled = body.map((row) => row[column]).filter((c): c is Element => c !== undefined && (c.textContent ?? "").trim() !== "");
+    if (filled.length > 0 && filled.every(rightAligned)) cell.setAttribute("align", "right");
+  });
 }
 
 // --- DOM helpers --------------------------------------------------------------------------------

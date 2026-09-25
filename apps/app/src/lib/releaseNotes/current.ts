@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.89.0",
+    date: "2026-09-25",
+    pr: 197,
+    headline: "Paste a spreadsheet range as a markdown table",
+    summary:
+      "The Paste as markdown button on the Source view toolbar now turns a range copied from Excel or Google Sheets into a markdown table. The range's first row becomes the header, columns of numbers are right-aligned, a line break inside a cell is kept as a break, and merged cells keep the columns lined up. Colours, fonts, borders and number formats are left behind, and numbers arrive exactly as the sheet displayed them. A single cell pastes as its text. Tab-separated text from programs that offer nothing richer becomes a table as well.",
+    added: [
+      "Paste as markdown turns a range copied from Excel or Google Sheets into a markdown table, with its first row as the header and numbers right-aligned.",
+      "Tab-separated text on the clipboard pastes as a table.",
+    ],
+  },
+  {
     version: "0.88.0",
     date: "2026-09-25",
     pr: 196,

@@ -143,3 +143,70 @@ describe("Google Docs", () => {
     expect(htmlToMarkdown(html)).toBe("**Heavy** and *slanted* ~~gone~~");
   });
 });
+
+/// Excel for Windows and macOS: a table with a column list before its rows, cells styled by class,
+/// numbers marked `x:num`, and a line break inside a cell written as `<br>`.
+function excel(rows: string): string {
+  return `<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta name=ProgId content=Excel.Sheet><meta name=Generator content="Microsoft Excel 15">
+<style><!--table {mso-displayed-decimal-separator:"\\.";} .xl65 {font-weight:700;} --></style></head>
+<body link="#0563C1" vlink="#954F72">
+<table border=0 cellpadding=0 cellspacing=0 width=256 style='border-collapse:collapse;width:192pt'>
+<!--StartFragment-->
+ <col width=64 span=4 style='width:48pt'>
+${rows}
+<!--EndFragment-->
+</table></body></html>`;
+}
+
+describe("Excel and Google Sheets", () => {
+  it("pastes a range as a table, its first row the header and its numbers right-aligned", () => {
+    const html = excel(`
+ <tr height=20 style='height:15.0pt'>
+  <td height=20 class=xl65 width=64 style='height:15.0pt;width:48pt'>Item</td>
+  <td class=xl65 width=64 style='width:48pt'>Qty</td>
+  <td class=xl65 width=64 style='width:48pt'>Price</td>
+  <td class=xl65 width=64 style='width:48pt'>Note</td>
+ </tr>
+ <tr height=20 style='height:15.0pt'>
+  <td height=20 style='height:15.0pt'>Apples</td>
+  <td x:num>12</td>
+  <td class=xl66 x:num="1234.5">1,234.50</td>
+  <td>Red | green</td>
+ </tr>
+ <tr height=40 style='height:30.0pt'>
+  <td height=40 style='height:30.0pt'>Pears</td>
+  <td x:num>3</td>
+  <td class=xl66 x:num="-5">(5.00)</td>
+  <td class=xl67 width=64 style='width:48pt'>Line one<br>
+    line two</td>
+ </tr>
+ <tr height=20 style='height:15.0pt'>
+  <td height=20 colspan=2 style='height:15.0pt;mso-ignore:colspan'>Total</td>
+  <td class=xl66 x:num="1229.5">1,229.50</td>
+  <td></td>
+ </tr>`);
+
+    expect(htmlToMarkdown(html)).toBe(
+      [
+        "| Item | Qty | Price | Note |",
+        "| --- | ---: | ---: | --- |",
+        "| Apples | 12  | 1,234.50 | Red \\| green |",
+        "| Pears | 3   | (5.00) | Line one<br>line two |",
+        "| Total |     | 1,229.50 |     |",
+      ].join("\n"),
+    );
+  });
+
+  // One cell is a value, not a table: a one-by-one table would be a header with nothing under it.
+  it("pastes a single cell as its text", () => {
+    expect(htmlToMarkdown(excel("<tr><td>Just one</td></tr>"))).toBe("Just one");
+  });
+
+  it("pastes a Google Sheets range the same way", () => {
+    const cell = "overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;";
+    const html = `<meta charset='utf-8'><google-sheets-html-origin><style type="text/css"><!--td {border: 1px solid #cccccc;}br {mso-data-placement:same-cell;}--></style><table xmlns="http://www.w3.org/1999/xhtml" cellspacing="0" cellpadding="0" dir="ltr" border="1" style="table-layout:fixed;font-size:10pt;font-family:Arial;width:0px;border-collapse:collapse;border:none" data-sheets-root="1"><colgroup><col width="100"/><col width="100"/></colgroup><tbody><tr style="height:21px;"><td style="${cell}font-weight:bold;">Name</td><td style="${cell}font-weight:bold;">Score</td></tr><tr style="height:21px;"><td style="${cell}">Ada</td><td style="${cell}text-align:right;" data-sheets-value="{&quot;1&quot;:3,&quot;3&quot;:12}">12</td></tr></tbody></table></google-sheets-html-origin>`;
+
+    expect(htmlToMarkdown(html)).toBe("| Name | Score |\n| --- | ---: |\n| Ada | 12  |");
+  });
+});

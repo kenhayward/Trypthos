@@ -499,6 +499,14 @@ They act on what you are doing rather than simply inserting characters:
   what Word puts on the clipboard is a temporary file on your machine rather than something a
   markdown file can refer to; a picture from a web page keeps its web address.
 
+  A range copied from **Excel** or **Google Sheets** becomes a markdown table, with the range's first
+  row as the header. Columns of numbers are right-aligned, a `|` inside a cell is escaped so it does
+  not split the cell, a line break inside a cell becomes `<br>`, and merged cells keep the columns
+  lined up. Cell colours, fonts, borders and number formats are left behind; a number arrives as it
+  was displayed, so `1,234.50` stays `1,234.50`. A single cell pastes as its text rather than as a
+  one-cell table. From a program that puts only tab-separated text on the clipboard, that text
+  becomes a table too - unless it looks like tab-indented code.
+
 Each press is a single change, so one Ctrl+Z (Cmd+Z on macOS) undoes it, and the cursor goes back
 into the document afterwards. The toolbar is in Source view only: Live hides the markers a press
 writes, so the same button there would insert punctuation that vanished as it landed, and Preview is

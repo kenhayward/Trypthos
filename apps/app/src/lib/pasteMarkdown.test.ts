@@ -91,6 +91,23 @@ describe("clipboardMarkdown", () => {
     );
   });
 
+  // What a spreadsheet puts on the clipboard as text: cells split by tabs, rows by line breaks, and a
+  // cell holding a tab, a quote or a line break quoted. Some programs offer nothing else.
+  it("turns tab-separated text into a table", () => {
+    const text = 'Item\tQty\tNote\r\nApples\t12\t"Line one\nline two"\r\nPears\t3\t"Say ""hi"""\r\n';
+
+    expect(clipboardMarkdown({ html: null, text })).toBe(
+      '| Item | Qty | Note |\n| --- | --- | --- |\n| Apples | 12 | Line one<br>line two |\n| Pears | 3 | Say "hi" |',
+    );
+  });
+
+  // Code indented with tabs has tabs on every line too. A table needs a cell before the first tab.
+  it("leaves tab-indented text, and a single line, as text", () => {
+    expect(clipboardMarkdown({ html: null, text: "\tone();\n\ttwo();" })).toBe("\tone();\n\ttwo();");
+    expect(clipboardMarkdown({ html: null, text: "just\tone line" })).toBe("just\tone line");
+    expect(clipboardMarkdown({ html: null, text: "a\tb\nc" })).toBe("a\tb\nc");
+  });
+
   it("answers null when there is nothing to paste", () => {
     expect(clipboardMarkdown({ html: null, text: null })).toBeNull();
     expect(clipboardMarkdown({ html: "", text: "" })).toBeNull();
