@@ -115,7 +115,10 @@ async function drawDiagrams(
     startOnLoad: false,
     // Mermaid's own sanitising, and no click handlers or links in a diagram.
     securityLevel: "strict",
-    theme: darkTheme() ? "dark" : "default",
+    // Mermaid 12's own look - redux colours, neo shapes, ELK layout - in its light or dark palette.
+    // Only the palette is chosen here; the look and the layout are left to Mermaid's defaults, so a
+    // diagram is drawn the way Mermaid 12 draws it everywhere else.
+    theme: darkTheme() ? "redux-dark-color" : "redux-color",
     // Labels as SVG text rather than HTML inside foreignObject, which the SVG sanitiser would empty.
     htmlLabels: false,
     flowchart: { htmlLabels: false },

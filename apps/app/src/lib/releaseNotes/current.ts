@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.87.3",
+    date: "2026-09-25",
+    pr: 195,
+    headline: "Diagrams drawn in Mermaid's new look",
+    summary:
+      "Mermaid diagrams in Preview are now drawn by Mermaid 12, in its new default look: rounded, softly coloured shapes for sequence and other diagrams, cleaner lines, and a new layout engine that arranges flowcharts and similar diagrams with fewer crossing lines. The dark theme has its own matching palette. Your diagrams' text is unchanged - only how they are drawn - so a diagram may take up a little more or less room than before.",
+    changed: [
+      "Mermaid diagrams are drawn in Mermaid 12's new look and layout, in light and dark.",
+    ],
+  },
+  {
     version: "0.87.2",
     date: "2026-09-25",
     pr: 194,

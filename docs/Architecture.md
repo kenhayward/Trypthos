@@ -361,8 +361,11 @@ plain text to GFM, so the second flavour only ever adds - which is what makes gu
   `securityLevel: "strict"` and SVG text labels (a `foreignObject` label would be emptied by the SVG
   sanitiser). Both outputs go through DOMPurify again. Done marks are flagged, so a pass is idempotent.
   `richBlocksBundle.test.ts` asserts neither library is imported statically anywhere - the same
-  module-graph guard the language grammars have. Mermaid is pinned to 11.x: 12.0.0 pulls a
-  `chevrotain`/`lodash-es` chain with open high-severity advisories.
+  module-graph guard the language grammars have. Mermaid 12 draws in its own current look - the
+  `redux-color` palette (`redux-dark-color` in the dark theme), `neo` shapes and ELK layout - and only
+  the palette is chosen here. Its `chevrotain` dependency pins `lodash-es` 4.17.23, which carries
+  high-severity advisories; the root `package.json` overrides `lodash-es` to 4.18.1, the patched
+  release on the same major. Remove the override once chevrotain ships a fixed pin.
 - **Embedded notes are filled in after rendering too.** A note embed renders as a
   `.md-transclusion[data-embed-note]` placeholder holding its link. `lib/transclusions.ts`
   (`useTransclusions`) resolves it with `findWikiTarget` (the same name search as a wiki link), reads it

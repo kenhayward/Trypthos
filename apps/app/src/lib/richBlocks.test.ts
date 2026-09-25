@@ -75,6 +75,28 @@ describe("diagrams", () => {
     expect(element.querySelector(".md-mermaid svg text")?.textContent).toBe("A");
   });
 
+  // Mermaid 12's own look - its redux colours, neo shapes and ELK layout - in the colours that match
+  // the app's theme. Only the theme is named: the look and the layout are Mermaid's defaults, so a
+  // diagram here is drawn as it is anywhere else Mermaid 12 draws one.
+  it("draws in Mermaid's current look, light or dark to match the app", async () => {
+    const source = '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+    const svg = async () => ({ svg: "<svg></svg>" });
+
+    const light = fakeMermaid(svg);
+    await renderRichBlocks(container(source), never, { mermaid: light.load });
+    expect(light.mermaid.initialize).toHaveBeenCalledWith(expect.objectContaining({ theme: "redux-color" }));
+
+    document.documentElement.setAttribute("data-theme", "dark");
+    try {
+      const dark = fakeMermaid(svg);
+      await renderRichBlocks(container(source), never, { mermaid: dark.load });
+      expect(dark.mermaid.initialize).toHaveBeenCalledWith(expect.objectContaining({ theme: "redux-dark-color" }));
+      expect(dark.mermaid.initialize).not.toHaveBeenCalledWith(expect.objectContaining({ look: expect.anything() }));
+    } finally {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  });
+
   // Mermaid sanitises in strict mode, and the SVG is sanitised again here: it goes into the app's own
   // origin, and a diagram is text from the user's file.
   it("strips anything active from the drawing", async () => {

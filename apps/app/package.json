@@ -1,7 +1,7 @@
 {
   "name": "trypthos-app",
   "private": true,
-  "version": "0.87.2",
+  "version": "0.87.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -45,7 +45,7 @@
     "katex": "0.18.7",
     "lucide-static": "1.47.0",
     "marked": "^18.0.13",
-    "mermaid": "11.17.2",
+    "mermaid": "12.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-i18next": "^17.0.14",

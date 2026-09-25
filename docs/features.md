@@ -634,7 +634,7 @@ In an Obsidian document Preview shows:
 - **A single line break shows as a line break**, as it does in Obsidian with its default settings.
 
 **Diagrams, in either flavour.** A code block whose language is `mermaid` is drawn as a diagram in
-Preview, as GitHub draws one, in the light or dark style to match the app. One Mermaid cannot read is
+Preview, in Mermaid's current look, in the light or dark style to match the app. One Mermaid cannot read is
 left as its code. KaTeX and Mermaid are both loaded the first time a document has math or a diagram,
 and not before.
 
