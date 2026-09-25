@@ -179,6 +179,17 @@ round-trip and nothing that can reformat a user's file behind their back.
   render can be a keystroke behind the buffer - the editor is the only place that knows the document
   and the selection as they are at the moment of the press. `EditorPanel` attaches the editor handle
   with a callback ref, since two callers need it: the toolbar, and the window applying a chat edit.
+- **Paste as markdown** is the toolbar's one button that is not a `ToolbarAction`: it reads the
+  clipboard, which is not a function of the document. `EditorToolbar` reports the press,
+  `EditorPanel` reads the clipboard (an injected `readClipboard`, the async Clipboard API by default -
+  Electron grants the renderer clipboard reads, so no IPC channel is involved), and
+  `lib/pasteMarkdown.ts` turns it into markdown: the `text/html` flavour through **Turndown** with the
+  GFM plugin (`@joplin/turndown-plugin-gfm`) when there is one, the `text/plain` flavour otherwise,
+  with U+2028/U+2029 made into real line breaks. The result goes in through
+  `EditorHandle.replaceSelection` as one `input.paste` transaction. The module is loaded with a
+  dynamic `import()` on the first press, so Turndown is not in the initial bundle. Turndown parses
+  the HTML into an inert document and never executes it, and its output is text in the buffer, not
+  markup on screen.
 - **A document can be read-only.** `OpenDocument.readOnly` marks a document with no file behind it -
   today, the built-in markdown guide at the reserved path `GUIDE_PATH` (`trypthos:markdown-guide`,
   which no workspace-relative path can collide with). The flag is enforced in three places, and all

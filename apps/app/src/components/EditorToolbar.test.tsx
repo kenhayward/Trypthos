@@ -42,10 +42,27 @@ describe("EditorToolbar", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe(LABELS.italic);
 
     await user.keyboard("{End}");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(LABELS.pasteMarkdown);
+
+    await user.keyboard("{ArrowLeft}");
     expect(document.activeElement?.getAttribute("aria-label")).toBe(LABELS.rule);
 
     // Past the last button is the document, not the first button again.
     await user.tab();
     expect(document.activeElement?.getAttribute("aria-label")).not.toBe(LABELS.bold);
+  });
+
+  // Not a formatting action: it reads the clipboard, which is the editor panel's business, so the
+  // toolbar only says it was pressed.
+  it("reports a press of Paste as markdown", async () => {
+    const user = userEvent.setup();
+    const onFormat = vi.fn();
+    const onPasteMarkdown = vi.fn();
+    render(<EditorToolbar onFormat={onFormat} onPasteMarkdown={onPasteMarkdown} />);
+
+    await user.click(screen.getByRole("button", { name: LABELS.pasteMarkdown! }));
+
+    expect(onPasteMarkdown).toHaveBeenCalledOnce();
+    expect(onFormat).not.toHaveBeenCalled();
   });
 });

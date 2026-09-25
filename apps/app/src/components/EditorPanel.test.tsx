@@ -330,6 +330,54 @@ describe("the formatting toolbar", () => {
     expect(onChange).toHaveBeenLastCalledWith(DOC.replace("# Title", "Title"));
   });
 
+  it("pastes the clipboard as markdown at the caret", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const readClipboard = vi.fn(async () => ({
+      html: "<h2>Plan</h2><ul><li>one</li><li>two</li></ul>",
+      text: "Plan one two",
+    }));
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value=""
+        onChange={onChange}
+        readClipboard={readClipboard}
+      />,
+    );
+
+    await user.click(modeButton("Source"));
+    await user.click(screen.getByRole("button", { name: "Paste as markdown" }));
+
+    expect(readClipboard).toHaveBeenCalledOnce();
+    // The converter is loaded on the first press, so the change lands a moment after the click.
+    await vi.waitFor(() => expect(onChange).toHaveBeenLastCalledWith("## Plan\n\n- one\n- two"));
+  });
+
+  it("leaves the document alone when the clipboard cannot be read", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={onChange}
+        readClipboard={() => Promise.reject(new Error("denied"))}
+      />,
+    );
+
+    await user.click(modeButton("Source"));
+    await user.click(screen.getByRole("button", { name: "Paste as markdown" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("is not offered for a document that cannot be edited", async () => {
     const user = userEvent.setup();
     render(
