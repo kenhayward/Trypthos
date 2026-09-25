@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ProviderError } from "./provider";
 import type { WorkspaceRef } from "./workspaceRef";
+import { trimLeading, trimTrailing } from "./trimRun";
 
 /// GitHub, as far as anything pure can describe it.
 ///
@@ -740,11 +741,11 @@ export function branchNameFor(filePath: string): string {
     .toLowerCase()
     // Anything that is not a letter, a digit or a separator becomes one. Deliberately narrow: git
     // permits far more than this, and a branch nobody can type is not a branch worth suggesting.
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^a-z0-9]+/g, "-");
+  const trimmed = trimTrailing(trimLeading(slug, "-"), "-");
 
   // A file whose name is entirely punctuation leaves nothing to slug. "update" alone is a name.
-  return `${BRANCH_PREFIX}update${slug === "" ? "" : `-${slug}`}`;
+  return `${BRANCH_PREFIX}update${trimmed === "" ? "" : `-${trimmed}`}`;
 }
 
 /// Whether git would accept this as a branch name.
@@ -798,10 +799,13 @@ export function countFromLink(link: string | null, returned: number): number | n
     const relation = /;\s*rel\s*=\s*"?'?last'?"?/i.exec(part);
     if (relation === null) continue;
 
-    const address = /<([^>]*)>/.exec(part);
-    if (address === null) return null;
+    // Found by position rather than by `/<([^>]*)>/`, which restarts at every `<` of a header that
+    // never closes one and so takes time quadratic in the header's length.
+    const open = part.indexOf("<");
+    const close = open === -1 ? -1 : part.indexOf(">", open + 1);
+    if (close === -1) return null;
 
-    const page = /[?&]page=(\d+)(?:&|$)/.exec(address[1] ?? "");
+    const page = /[?&]page=(\d+)(?:&|$)/.exec(part.slice(open + 1, close));
     return page === null ? null : Number(page[1]);
   }
 
