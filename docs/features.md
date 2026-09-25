@@ -488,6 +488,17 @@ They act on what you are doing rather than simply inserting characters:
   markdown - it goes in as it is. It replaces the selection, if there is one, and is one Ctrl+Z to
   undo. Ctrl+V still pastes exactly the plain text, which is what you want for source code.
 
+  It works on text copied from **Word** too - on Windows or macOS, Word for the web, or Google Docs -
+  on a best-effort basis. Headings become `#` headings (Word's Title style is a top-level one),
+  bulleted and numbered lists become markdown lists nested as they were in Word and starting at the
+  same number, bold, italic and strikethrough are kept, a Quote style becomes a quotation, and a
+  table becomes a markdown table with its first row as the header. Text set in a monospaced font
+  such as Consolas or Courier New becomes inline code, or a code block when whole paragraphs are.
+  Everything markdown cannot express is left behind: fonts, sizes, colours, underline, spacing,
+  page breaks and Word's own bookmarks. Pictures copied from a Word document are left out, because
+  what Word puts on the clipboard is a temporary file on your machine rather than something a
+  markdown file can refer to; a picture from a web page keeps its web address.
+
 Each press is a single change, so one Ctrl+Z (Cmd+Z on macOS) undoes it, and the cursor goes back
 into the document afterwards. The toolbar is in Source view only: Live hides the markers a press
 writes, so the same button there would insert punctuation that vanished as it landed, and Preview is

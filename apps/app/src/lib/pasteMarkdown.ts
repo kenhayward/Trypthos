@@ -1,5 +1,6 @@
 import TurndownService from "turndown";
 import { gfm } from "@joplin/turndown-plugin-gfm";
+import { normaliseClipboardHtml } from "./officeHtml";
 
 /// Paste as markdown: what was copied from a rendered page, turned back into markdown source.
 ///
@@ -60,7 +61,9 @@ let shared: TurndownService | null = null;
 
 export function htmlToMarkdown(html: string): string {
   shared ??= converter();
-  return shared.turndown(html).trim();
+  // Normalised first, so Word's, Word for the web's and Google Docs' own ways of writing a heading,
+  // a list or emphasis arrive as the plain elements the converter reads.
+  return shared.turndown(normaliseClipboardHtml(html)).trim();
 }
 
 /// The markdown a paste should insert, or null when the clipboard has nothing to give.
@@ -81,8 +84,21 @@ export function clipboardMarkdown(content: ClipboardContent): string | null {
 /// The async Clipboard API rather than a paste event, because a toolbar press is not a paste: there
 /// is no event carrying the data. Electron grants the renderer clipboard reads, and the press is a
 /// user gesture in a focused window, which is what the API asks for.
+///
+/// The HTML is asked for unsanitised. The browser's sanitiser re-serialises clipboard HTML, and Word's
+/// list levels and style classes do not survive the trip. That is safe here because the HTML is only
+/// ever parsed into an inert document and turned into text - it never reaches the page.
 export async function readSystemClipboard(): Promise<ClipboardContent> {
-  const items = await navigator.clipboard.read();
+  const read = navigator.clipboard.read.bind(navigator.clipboard) as (options?: {
+    unsanitized?: string[];
+  }) => Promise<ClipboardItems>;
+  let items: ClipboardItems;
+  try {
+    items = await read({ unsanitized: ["text/html"] });
+  } catch {
+    // An engine that does not know the option may refuse it rather than ignore it.
+    items = await read();
+  }
   let html: string | null = null;
   let text: string | null = null;
 

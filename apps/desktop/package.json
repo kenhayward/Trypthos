@@ -1,7 +1,7 @@
 {
   "name": "trypthos-desktop",
   "private": true,
-  "version": "0.87.3",
+  "version": "0.88.0",
   "main": "src/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
