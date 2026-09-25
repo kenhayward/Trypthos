@@ -62,7 +62,7 @@
     "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/browser": "^4.1.11",
-    "@vitest/browser-playwright": "^4.1.11",
+    "@vitest/browser-playwright": "^5.0.1",
     "jsdom": "^30.0.1",
     "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
