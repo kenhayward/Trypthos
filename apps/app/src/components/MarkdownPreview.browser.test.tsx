@@ -40,4 +40,23 @@ describe("math and diagrams in Preview, rendered", () => {
     expect(svg.textContent).toContain("Ship");
     expect(svg.getBoundingClientRect().width).toBeGreaterThan(0);
   });
+
+  // The dark theme is a different set of colours, drawn by the real library - and its labels are
+  // still SVG text after the drawing has been through the sanitiser, which is what would empty them
+  // if Mermaid put them in a foreignObject.
+  it("draws a diagram in the dark theme, with its labels intact", async () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    try {
+      const { container } = render(
+        <MarkdownPreview source={"```mermaid\ngraph LR\n  Draft --> Review --> Publish\n```\n"} fileTypes={["markdown"]} />,
+      );
+
+      const svg = await until(() => container.querySelector(".md-mermaid svg"));
+      expect(container.querySelector("pre")).toBeNull();
+      for (const label of ["Draft", "Review", "Publish"]) expect(svg.textContent).toContain(label);
+      expect(svg.querySelector("foreignObject")).toBeNull();
+    } finally {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  });
 });
