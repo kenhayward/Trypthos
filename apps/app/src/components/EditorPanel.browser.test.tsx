@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
 import { resolveEdit } from "@trypthos/domain";

@@ -558,7 +558,7 @@ into a container of your own that fills the viewport, as `#root` does in the rea
 
 One trap it is worth knowing: `@testing-library/user-event` dispatches **synthetic** events, and
 CodeMirror does not move its caret for them - it resolves a position from real pointer input. Use
-`userEvent` from `@vitest/browser/context` in this suite. The synthetic version passes while the
+`userEvent` from `vitest/browser` in this suite. The synthetic version passes while the
 caret never moves, so every assertion after it measures the wrong state.
 
 The suite justified itself on its first run by catching a defect the jsdom suite structurally could

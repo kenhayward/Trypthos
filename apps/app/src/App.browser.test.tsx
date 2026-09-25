@@ -1,5 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkspaceRef } from "@trypthos/domain";
 import { DEFAULT_SETTINGS } from "@trypthos/domain";
