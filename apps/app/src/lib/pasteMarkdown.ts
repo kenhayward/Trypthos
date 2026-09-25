@@ -102,8 +102,15 @@ export function tabSeparatedTable(text: string): string | null {
   if (width < 2 || rows.some((row) => row.length !== width)) return null;
 
   const line = (cells: readonly string[]) =>
-    `| ${cells.map((cell) => cell.trim().replace(/\|/g, "\\|").replace(/\n/g, "<br>")).join(" | ")} |`;
+    `| ${cells.map((cell) => escapeCell(cell.trim()).replace(/\n/g, "<br>")).join(" | ")} |`;
   return [line(rows[0]!), line(rows[0]!.map(() => "---")), ...rows.slice(1).map(line)].join("\n");
+}
+
+/// A cell's text, safe inside a table row. Backslashes first: escaping only the pipe would let a cell
+/// ending in a backslash escape the escape, and its pipe would split the cell. A doubled backslash
+/// renders as one, so the cell still reads as it did.
+function escapeCell(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 /// Rows of cells, or null for text that has a line starting with a tab.

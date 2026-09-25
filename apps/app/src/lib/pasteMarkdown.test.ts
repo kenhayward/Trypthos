@@ -101,6 +101,16 @@ describe("clipboardMarkdown", () => {
     );
   });
 
+  // A backslash in a cell is escaped along with the pipe. Escaping only the pipe would let a cell
+  // ending in a backslash swallow the escape - `a\|b` becoming `a\\|b`, which splits the cell.
+  it("keeps a cell holding a backslash and a pipe in one piece", () => {
+    const text = "Path\tNote\nC:\\temp\ta\\|b";
+
+    expect(clipboardMarkdown({ html: null, text })).toBe(
+      "| Path | Note |\n| --- | --- |\n| C:\\\\temp | a\\\\\\|b |",
+    );
+  });
+
   // Code indented with tabs has tabs on every line too. A table needs a cell before the first tab.
   it("leaves tab-indented text, and a single line, as text", () => {
     expect(clipboardMarkdown({ html: null, text: "\tone();\n\ttwo();" })).toBe("\tone();\n\ttwo();");
