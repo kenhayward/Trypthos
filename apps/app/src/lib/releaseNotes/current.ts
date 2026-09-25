@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.88.0",
+    date: "2026-09-25",
+    pr: 196,
+    headline: "Paste as markdown understands Word",
+    summary:
+      "The Paste as markdown button on the Source view toolbar now handles text copied from Word - on Windows or macOS, Word for the web, or Google Docs - as well as from web pages and chat replies. Headings, bulleted and numbered lists (nested as they were, and starting at the same number), bold, italic, strikethrough, quotations and tables come across as markdown, and text in a monospaced font becomes code. Everything markdown has no way to say - fonts, sizes, colours, underline, spacing and page breaks - is left behind rather than turning into stray characters. Pictures copied out of a Word document are left out, since Word only puts a temporary file on the clipboard. Tables from any source now use their first row as the header instead of an empty one.",
+    added: [
+      "Paste as markdown converts text copied from Word, Word for the web and Google Docs, keeping headings, lists, emphasis, quotations, tables and code.",
+    ],
+    changed: [
+      "A pasted table with no header row uses its first row as the header, instead of gaining an empty one.",
+    ],
+  },
+  {
     version: "0.87.3",
     date: "2026-09-25",
     pr: 195,

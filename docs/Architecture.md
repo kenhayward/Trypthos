@@ -185,7 +185,16 @@ round-trip and nothing that can reformat a user's file behind their back.
   Electron grants the renderer clipboard reads, so no IPC channel is involved), and
   `lib/pasteMarkdown.ts` turns it into markdown: the `text/html` flavour through **Turndown** with the
   GFM plugin (`@joplin/turndown-plugin-gfm`) when there is one, the `text/plain` flavour otherwise,
-  with U+2028/U+2029 made into real line breaks. The result goes in through
+  with U+2028/U+2029 made into real line breaks. Before Turndown sees the HTML,
+  `lib/officeHtml.ts` (`normaliseClipboardHtml`) rewrites word-processor markup into plain elements:
+  Word's `mso-list` paragraphs into nested `ul`/`ol` (level from the style, numbered or bulleted from
+  the `mso-list:Ignore` marker), `MsoTitle`/`MsoQuote` classes, Word for the web's
+  `role="heading"` and one-item `data-aria-level` lists, span-style emphasis (Google Docs, Word for
+  the web), monospaced runs and paragraphs into `code`/`pre`, a header row for tables that lack one;
+  and it drops namespaced elements, comments, bookmarks and non-web images. It runs on a DOMParser
+  document, never attached to the page. The clipboard is read with `{ unsanitized: ["text/html"] }`,
+  because Chromium's default sanitiser re-serialises the markup and loses Word's list styles; that is
+  safe only because the HTML never reaches a live document. The result goes in through
   `EditorHandle.replaceSelection` as one `input.paste` transaction. The module is loaded with a
   dynamic `import()` on the first press, so Turndown is not in the initial bundle. Turndown parses
   the HTML into an inert document and never executes it, and its output is text in the buffer, not

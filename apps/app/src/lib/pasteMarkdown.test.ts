@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { clipboardMarkdown, htmlToMarkdown } from "./pasteMarkdown";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clipboardMarkdown, htmlToMarkdown, readSystemClipboard } from "./pasteMarkdown";
 
 /// Paste as markdown turns what was copied from a rendered page - a chat reply, a web page - back
 /// into markdown source. Rendered text copied as plain text has lost its structure: headings are
@@ -94,5 +94,43 @@ describe("clipboardMarkdown", () => {
   it("answers null when there is nothing to paste", () => {
     expect(clipboardMarkdown({ html: null, text: null })).toBeNull();
     expect(clipboardMarkdown({ html: "", text: "" })).toBeNull();
+  });
+});
+
+describe("readSystemClipboard", () => {
+  const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  afterEach(() => {
+    if (original) Object.defineProperty(navigator, "clipboard", original);
+    else delete (navigator as { clipboard?: unknown }).clipboard;
+  });
+
+  function clipboard(read: (options?: unknown) => Promise<unknown>) {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { read: vi.fn(read) } });
+    return (navigator.clipboard as unknown as { read: ReturnType<typeof vi.fn> }).read;
+  }
+
+  const item = (types: Record<string, string>) => ({
+    types: Object.keys(types),
+    getType: async (type: string) => ({ text: async () => types[type]! }),
+  });
+
+  // The browser sanitises clipboard HTML by default, and its sanitiser rewrites the markup - Word's
+  // list and style information does not survive it. The HTML is only ever parsed into an inert
+  // document here, so the original is safe to ask for.
+  it("asks for the HTML as the copying program wrote it", async () => {
+    const read = clipboard(async () => [item({ "text/html": "<p>x</p>", "text/plain": "x" })]);
+
+    expect(await readSystemClipboard()).toEqual({ html: "<p>x</p>", text: "x" });
+    expect(read).toHaveBeenCalledWith({ unsanitized: ["text/html"] });
+  });
+
+  it("falls back to an ordinary read where that is refused", async () => {
+    const read = clipboard(async (options) => {
+      if (options !== undefined) throw new TypeError("unsupported");
+      return [item({ "text/plain": "plain" })];
+    });
+
+    expect(await readSystemClipboard()).toEqual({ html: null, text: "plain" });
+    expect(read).toHaveBeenCalledTimes(2);
   });
 });
