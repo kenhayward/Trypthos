@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.87.0",
+    date: "2026-09-25",
+    pr: 184,
+    headline: "Paste as markdown keeps the formatting of text copied from a chat reply",
+    summary:
+      "Copying part of a rendered chat reply - from Claude or anything else that shows formatted text - and pasting it into a markdown file used to give you plain text: headings became ordinary lines, list markers and code fences disappeared, and paragraphs could arrive run together on one line. The formatting toolbar in Source view now has a Paste as markdown button at its end. It reads the formatted copy on the clipboard and writes it back as markdown, keeping headings, lists, code blocks with their language, links, emphasis and tables, and leaving out the Copy buttons that sit on copied code blocks. If the clipboard holds only plain text, which is what a reply's own Copy button gives you, that is pasted as it is. Ctrl+V is unchanged and still pastes plain text.",
+    added: [
+      "A Paste as markdown button on the Source view toolbar, which pastes copied formatted text as markdown with its structure kept.",
+    ],
+  },
+  {
     version: "0.86.1",
     date: "2026-09-18",
     pr: 183,

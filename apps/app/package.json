@@ -1,7 +1,7 @@
 {
   "name": "trypthos-app",
   "private": true,
-  "version": "0.86.1",
+  "version": "0.87.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,6 +32,7 @@
     "@codemirror/legacy-modes": "^6.5.4",
     "@codemirror/state": "^6.7.2",
     "@codemirror/view": "^6.43.10",
+    "@joplin/turndown-plugin-gfm": "^1.0.68",
     "@lezer/highlight": "^1.2.3",
     "@sigma/node-image": "^3.0.0",
     "@trypthos/domain": "*",
@@ -48,7 +49,8 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-i18next": "^17.0.13",
-    "sigma": "^3.0.3"
+    "sigma": "^3.0.3",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -57,6 +59,7 @@
     "@testing-library/user-event": "^14.6.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/browser": "^4.1.11",
     "@vitest/browser-playwright": "^4.1.11",

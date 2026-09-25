@@ -27,6 +27,12 @@ import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../l
 import type { FindMatch } from "@trypthos/domain";
 import type { ImageResult } from "../lib/workspaceClient";
 import { currentPlatform } from "../lib/windowControls";
+import type { ClipboardContent } from "../lib/pasteMarkdown";
+
+/// The system clipboard, read through the module that converts it - loaded on the first press, so
+/// the HTML converter is not in the bundle of an app that never uses it.
+const readSystemClipboard = (): Promise<ClipboardContent> =>
+  import("../lib/pasteMarkdown").then((module) => module.readSystemClipboard());
 
 interface Props {
   workspaceName: string | null;
@@ -47,6 +53,9 @@ interface Props {
   /// It takes the toolbar away as well as the caret: a row of buttons that write into a document
   /// nothing can be written to is a row of buttons that do nothing.
   readOnly?: boolean;
+  /// Reads the clipboard for Paste as markdown. Injected so a test can say what was copied; the
+  /// system clipboard otherwise.
+  readClipboard?: () => Promise<ClipboardContent>;
   /// A data URL when the document is looked at rather than read - an image. Null otherwise, which
   /// is nearly always, and which is what makes every branch below read as "unless it is a picture".
   media?: string | null;
@@ -152,6 +161,7 @@ export default function EditorPanel({
   dirty,
   value,
   readOnly = false,
+  readClipboard = readSystemClipboard,
   media = null,
   page = null,
   readImage,
@@ -178,6 +188,23 @@ export default function EditorPanel({
   hidden = false,
 }: Props) {
   const { t } = useTranslation();
+
+  /// Paste as markdown: the clipboard, converted, in place of the selection.
+  ///
+  /// A clipboard that cannot be read - refused, or empty - changes nothing. There is no half-written
+  /// state to report: either the text lands as one undo step or the document is as it was.
+  const pasteMarkdown = async () => {
+    let content: ClipboardContent;
+    try {
+      content = await readClipboard();
+    } catch {
+      return;
+    }
+    const { clipboardMarkdown } = await import("../lib/pasteMarkdown");
+    const markdown = clipboardMarkdown(content);
+    if (markdown !== null) editor.current?.replaceSelection(markdown);
+  };
+
   /// The view each document is being read in, keyed by path.
   ///
   /// A map rather than one choice, now that several documents are open at once: a per-document
@@ -371,7 +398,10 @@ export default function EditorPanel({
         mode === "source" &&
         !readOnly &&
         fileType.id === "markdown" && (
-          <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
+          <EditorToolbar
+            onFormat={(action) => editor.current?.format(action)}
+            onPasteMarkdown={() => void pasteMarkdown()}
+          />
         )}
 
       <div className="min-h-0 grow">

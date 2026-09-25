@@ -478,6 +478,15 @@ They act on what you are doing rather than simply inserting characters:
 - **Code block**, **table** and **horizontal rule** insert a block. A rule or a table goes below the
   line you are on rather than into the middle of it, and a table arrives with its first heading
   selected.
+- **Paste as markdown**, the last button, pastes what is on the clipboard with its structure kept.
+  Text copied from a rendered page - a chat reply in Claude or another app, a web page - normally
+  pastes as plain text, which loses the headings, list markers, code fences and sometimes the line
+  breaks between paragraphs. This button reads the formatted copy instead and writes it back as
+  markdown: headings as `#`, lists as `-` and `1.`, code blocks fenced with their language, links,
+  bold, italic, strikethrough and tables. Copy buttons inside a copied code block are left out. When
+  the clipboard holds only plain text - what a reply's own Copy button puts there, which is already
+  markdown - it goes in as it is. It replaces the selection, if there is one, and is one Ctrl+Z to
+  undo. Ctrl+V still pastes exactly the plain text, which is what you want for source code.
 
 Each press is a single change, so one Ctrl+Z (Cmd+Z on macOS) undoes it, and the cursor goes back
 into the document afterwards. The toolbar is in Source view only: Live hides the markers a press

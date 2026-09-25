@@ -87,6 +87,10 @@ export interface EditorHandle {
   /// True when the change was written. False when there is no editor view to write it into, so the
   /// caller can put it into the document some other way rather than report an edit that went nowhere.
   applyChange(from: number, to: number, insert: string): boolean;
+  /// Replaces the selection with `text`, as a paste does - one undo step, caret after the text.
+  ///
+  /// False when there is no editor view, like `applyChange`.
+  replaceSelection(text: string): boolean;
 }
 
 interface Props {
@@ -281,6 +285,19 @@ export default function DocumentEditor({
           changes: { from: start, to: end, insert },
           // The caret follows the inserted text, so the user can see what landed.
           selection: { anchor: start + insert.length },
+          scrollIntoView: true,
+        });
+        editor.focus();
+        return true;
+      },
+      replaceSelection(text) {
+        const editor = view.current;
+        if (editor === null) return false;
+
+        // Marked as a paste, so it is one undo step of its own rather than joining the typing
+        // either side of it.
+        editor.dispatch(editor.state.replaceSelection(text), {
+          userEvent: "input.paste",
           scrollIntoView: true,
         });
         editor.focus();
