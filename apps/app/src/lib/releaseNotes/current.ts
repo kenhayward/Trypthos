@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.87.2",
+    date: "2026-09-25",
+    pr: 194,
+    headline: "Library updates, including Electron and React",
+    summary:
+      "Brings the libraries Trypthos is built on up to date: Electron 44.4.2, which carries the latest Chromium security fixes, React 19.3, and patch releases of the editor (CodeMirror), the markdown renderer (marked) and its sanitiser (DOMPurify). Nothing should look or behave differently. The test tooling moves to Vitest 5, which changes nothing you can see.",
+    changed: [
+      "Electron updated to 44.4.2 and React to 19.3, with patch releases of CodeMirror, marked, DOMPurify, i18next and zod.",
+    ],
+  },
+  {
     version: "0.87.1",
     date: "2026-09-25",
     pr: 193,

@@ -1,5 +1,5 @@
 import { render, waitFor } from "@testing-library/react";
-import { page } from "@vitest/browser/context";
+import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
 import { homeProps } from "../testing/workspaceHomeProps";
 import WorkspaceHome from "./WorkspaceHome";

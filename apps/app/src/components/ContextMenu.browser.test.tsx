@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { page } from "@vitest/browser/context";
+import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 
