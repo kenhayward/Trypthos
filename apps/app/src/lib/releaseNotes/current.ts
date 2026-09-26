@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.91.0",
+    date: "2026-09-26",
+    pr: 199,
+    headline: "A keyboard shortcut for Paste as markdown",
+    summary:
+      "The Paste as markdown command now has a keyboard shortcut - Ctrl+Shift+V (Cmd on macOS). With your caret in an editable markdown document, in Live or Source view, it converts what you copied and lands it at the caret as one undo step. With the focus anywhere else it does nothing, so a habit from another app cannot write into a document you are not looking at.",
+    added: [
+      "Ctrl+Shift+V (Cmd on macOS) pastes the clipboard as markdown while your caret is in an editable markdown document - the same conversion the toolbar button and right-click menu offer.",
+    ],
+  },
+  {
     version: "0.90.0",
     date: "2026-09-26",
     pr: 198,

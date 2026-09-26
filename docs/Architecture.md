@@ -180,9 +180,14 @@ round-trip and nothing that can reformat a user's file behind their back.
   and the selection as they are at the moment of the press. `EditorPanel` attaches the editor handle
   with a callback ref, since two callers need it: the toolbar, and the window applying a chat edit.
 - **Paste as markdown** is the one command that reads the clipboard, which is not a function of the
-  document. It lives on `EditorHandle.pasteMarkdown` in `DocumentEditor`, reached two ways: the last
-  button of the Source view toolbar (`EditorToolbar` reports the press) and an item in the editor's
-  right-click menu (see "The right-click menu" below). The handle reads the clipboard through an
+  document. It lives on `EditorHandle.pasteMarkdown` in `DocumentEditor`, reached three ways: the last
+  button of the Source view toolbar (`EditorToolbar` reports the press), an item in the editor's
+  right-click menu (see "The right-click menu" below), and the Ctrl+Shift+V shortcut (Cmd on macOS) -
+  bound in `EditorPanel` like the zoom keys but aimed where they are not: it acts only while the focus
+  is inside an editable markdown document surface, matching exactly where the right-click menu offers
+  the item. The key's identity is a pure function (`isPasteMarkdownShortcut` in `lib/pasteShortcut.ts`)
+  with the zoom keys' modifier rules - the platform's own modifier and only it, Alt refused because
+  Ctrl+Alt is AltGr on a European layout. The handle reads the clipboard through an
   injected `readClipboard` - the async Clipboard API by default, Electron grants the renderer
   clipboard reads, so no IPC channel is involved for the read itself - and
   `lib/pasteMarkdown.ts` turns it into markdown: the `text/html` flavour through **Turndown** with the

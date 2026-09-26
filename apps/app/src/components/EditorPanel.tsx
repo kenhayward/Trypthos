@@ -28,6 +28,7 @@ import type { FindMatch } from "@trypthos/domain";
 import type { ImageResult } from "../lib/workspaceClient";
 import { currentPlatform, windowControls } from "../lib/windowControls";
 import type { ClipboardContent } from "../lib/pasteMarkdown";
+import { isPasteMarkdownShortcut } from "../lib/pasteShortcut";
 
 interface Props {
   workspaceName: string | null;
@@ -327,6 +328,28 @@ export default function EditorPanel({
     },
     [ref],
   );
+
+  /// The same command as the right-click menu's item, from the keyboard: Ctrl and Shift with V - Cmd
+  /// on macOS. Bound on the window like the zoom keys, but aimed where those are not: it acts only
+  /// while the focus is inside an editable markdown document surface, matching exactly where the
+  /// menu offers the item. A press anywhere else does nothing, so a habit from another app cannot
+  /// write into a document the user is not looking at.
+  useEffect(() => {
+    if (!pasteMarkdownAvailable) return;
+    const platform = currentPlatform();
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A held key auto-repeats, and ten pastes from one held-down V are never what was asked for.
+      if (event.repeat || !isPasteMarkdownShortcut(event, platform)) return;
+      // The same host the right-click report asks about. Focus inside it is where a paste would land.
+      const focused = document.activeElement;
+      if (!(focused instanceof Element && focused.closest('[data-testid="document-editor"]') !== null))
+        return;
+      event.preventDefault();
+      void editor.current?.pasteMarkdown();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pasteMarkdownAvailable]);
 
   // Both walk the whole document, so they are memoised on the text rather than recomputed on every
   // keystroke-driven render. A word count is cheap on a page and not on a book.

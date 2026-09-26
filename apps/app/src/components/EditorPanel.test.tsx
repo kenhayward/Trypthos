@@ -482,6 +482,103 @@ describe("the right-click menu's paste", () => {
   });
 });
 
+/// The same command as the right-click menu's item, from the keyboard. It is aimed where that item
+/// is offered - an editable markdown document with the focus in it - and does nothing anywhere
+/// else, so a habit from another app cannot write into a document nobody is looking at.
+describe("the paste as markdown shortcut", () => {
+  function Pasting({ onChange = vi.fn() }: { onChange?: (value: string) => void }) {
+    const [value, setValue] = useState("");
+    return (
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={value}
+        onChange={(next) => {
+          setValue(next);
+          onChange(next);
+        }}
+        readClipboard={async () => ({ html: "<h2>Plan</h2><ul><li>one</li></ul>", text: "Plan one" })}
+      />
+    );
+  }
+
+  const surface = () => screen.getByLabelText("Document source");
+  const pressShortcut = (target: Element | Window) =>
+    fireEvent.keyDown(target, { key: "v", ctrlKey: true, shiftKey: true });
+
+  it("pastes the clipboard as markdown when the editor has focus in Live mode", async () => {
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+
+    surface().focus();
+    pressShortcut(surface());
+
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe("## Plan\n\n- one");
+  });
+
+  it("pastes the clipboard as markdown when the editor has focus in Source mode", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+    await user.click(modeButton("Source"));
+
+    surface().focus();
+    pressShortcut(surface());
+
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe("## Plan\n\n- one");
+  });
+
+  // The focus is not in the document - a tab, a settings field, the chat box. A press there must
+  // not reach across and write into the open document.
+  it("does nothing when the focus is outside the editor", async () => {
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+
+    screen.getByRole("tab", { name: /notes\.md/ }).focus();
+    pressShortcut(window);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // The guide opens read-only, and a paste into it would be an edit the document refuses.
+  it("does nothing for a document that cannot be edited", async () => {
+    const onChange = vi.fn();
+    render(
+      <EditorPanel
+        workspaceName={null}
+        paths={["trypthos:markdown-guide"]}
+        activePath="trypthos:markdown-guide"
+        dirty={false}
+        value={DOC}
+        readOnly
+        onChange={onChange}
+        readClipboard={async () => ({ html: "<h2>Plan</h2>", text: "Plan" })}
+      />,
+    );
+
+    surface().focus();
+    pressShortcut(surface());
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // Preview has no editing surface at all, so there is nothing for the paste to land in.
+  it("does nothing when the document is read as rendered prose", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+    await user.click(modeButton("Preview"));
+
+    pressShortcut(window);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
 /// Live and Preview are markdown constructs - Live hides markdown punctuation, Preview renders
 /// markdown - so the views a document offers are a property of its type rather than of the app.
 describe("the views a document offers", () => {

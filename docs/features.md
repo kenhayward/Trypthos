@@ -480,7 +480,10 @@ They act on what you are doing rather than simply inserting characters:
   selected.
 - **Paste as markdown** pastes what is on the clipboard with its structure kept. It sits at the end
   of the Source view toolbar, and the editor's right-click menu offers it too - in Live and Source
-  view alike, wherever the caret can write; a right-click anywhere else shows no such item.
+  view alike, wherever the caret can write; a right-click anywhere else shows no such item. The
+  shortcut Ctrl+Shift+V (Cmd on macOS) does the same while your focus is inside an editable markdown
+  document - with focus anywhere else it does nothing, so a habit from another app cannot write into
+  a document you are not looking at.
   Text copied from a rendered page - a chat reply in Claude or another app, a web page - normally
   pastes as plain text, which loses the headings, list markers, code fences and sometimes the line
   breaks between paragraphs. This button reads the formatted copy instead and writes it back as
