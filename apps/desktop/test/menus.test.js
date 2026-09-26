@@ -472,6 +472,14 @@ test("Paste as markdown is disabled when there is nothing to paste", () => {
   assert.equal(find(template, "Paste as markdown").enabled, false);
 });
 
+// The key works with the menu closed, so the item shows it - like Save and Find show theirs. Electron
+// draws CmdOrCtrl+Shift+V per platform (Cmd on macOS), matching what the renderer actually binds.
+test("Paste as markdown shows its Ctrl+Shift+V shortcut", () => {
+  const template = contextMenuTemplate(editable(), { on: handlers(), pasteMarkdownLabel: "Paste as markdown" });
+
+  assert.equal(find(template, "Paste as markdown").accelerator, "CmdOrCtrl+Shift+V");
+});
+
 test("read-only text offers copy but not cut or paste", () => {
   const template = contextMenuTemplate(
     { isEditable: false, selectionText: "some text", misspelledWord: "", dictionarySuggestions: [], editFlags: { canCopy: true } },
