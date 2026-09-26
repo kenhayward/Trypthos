@@ -239,8 +239,11 @@ function contextMenuTemplate(params, { on, pasteMarkdownLabel = null }) {
     // what was copied instead of taking its plain text. Enabled like Paste itself - nothing to paste
     // is a greyed item, not an absent one and not a live lie.
     if (pasteMarkdownLabel !== null) {
+      // The shortcut is bound in the renderer while focus is in an editable document; this only shows
+      // it, like Save and Find show theirs. Electron draws CmdOrCtrl per platform - Cmd on macOS.
       template.push({
         label: pasteMarkdownLabel,
+        accelerator: "CmdOrCtrl+Shift+V",
         enabled: params.editFlags?.canPaste === true,
         click: () => on.action("paste-markdown"),
       });
