@@ -47,6 +47,7 @@ const {
   SaveAsRequest,
   WriteRequest,
   OpenInNewWindowRequest,
+  PasteMarkdownContextRequest,
   WriteSettingsRequest,
   GraphRequest,
   IconsRequest,
@@ -81,6 +82,22 @@ const { createVaultIndexes } = require("./vaultIndex");
 /// which is a thing this side made up - and can never name a root, which would be a way to reach any
 /// directory on the machine.
 const open = new Map();
+
+/// What each window's right-click menu should offer over its document editor, by webContents id.
+///
+/// The value is what that window's renderer reported for the LAST right-click - and it is current
+/// when the menu is built, because the DOM contextmenu event precedes Electron's own: the report is
+/// posted before the browser even asks whether to show a menu. A click belongs to one window, which
+/// is why this is keyed per webContents rather than held once for the app.
+const pasteMarkdownContext = new Map();
+
+function pasteMarkdownLabelFor(webContentsId) {
+  return pasteMarkdownContext.get(webContentsId) ?? null;
+}
+
+function forgetPasteMarkdownContext(webContentsId) {
+  pasteMarkdownContext.delete(webContentsId);
+}
 
 /// What the renderer is told about an open workspace.
 ///
@@ -327,6 +344,16 @@ function registerIpcHandlers({
     // stay on disk with no way for the user to remove it.
     await secrets.retainOnly(parsed.data.chat.profiles.map((profile) => profile.endpoint));
 
+    return { ok: true };
+  });
+
+  // The right-click menu's one renderer-named item. A label rather than a flag, because the
+  // catalogue lives in the renderer and the menu is drawn here - see PasteMarkdownContextRequest.
+  ipcMain.handle("editor:pasteMarkdownContext", (event, payload) => {
+    const parsed = PasteMarkdownContextRequest.safeParse(payload);
+    if (!parsed.success) return { ok: false, reason: "bad-request" };
+
+    pasteMarkdownContext.set(event.sender.id, parsed.data.label);
     return { ok: true };
   });
 
@@ -1113,4 +1140,10 @@ function registerIpcHandlers({
   );
 }
 
-module.exports = { registerIpcHandlers, guarded, tabOpenerFor };
+module.exports = {
+  registerIpcHandlers,
+  guarded,
+  tabOpenerFor,
+  pasteMarkdownLabelFor,
+  forgetPasteMarkdownContext,
+};

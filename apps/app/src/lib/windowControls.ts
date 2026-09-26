@@ -26,6 +26,10 @@ export interface WindowControls {
   /// Tells the shell whether the document has unsaved changes, so it knows whether a close is worth
   /// interrupting. The flag only - never what the document says.
   setDocumentDirty(dirty: boolean): Promise<unknown>;
+  /// What the right-click menu should offer over the document editor: the name for Paste as
+  /// markdown, or null when there is no editable markdown document under the cursor. The name
+  /// travels because the catalogue lives here and the menu is drawn in the shell.
+  setPasteMarkdownContext(label: string | null): Promise<unknown>;
   /// The shared native prompt for anything about to discard a document. `name` is the document it
   /// asks about - one tab among several. Omitted when nothing in particular is at stake.
   confirmDiscard(name?: string | null): Promise<DiscardChoice>;
@@ -47,6 +51,7 @@ interface WindowBridge {
   toggleMaximizeWindow?: () => Promise<unknown>;
   closeWindow?: (force: boolean) => Promise<unknown>;
   setDocumentDirty?: (dirty: boolean) => Promise<unknown>;
+  setPasteMarkdownContext?: (label: string | null) => Promise<unknown>;
   confirmDiscard?: (name: string | null) => Promise<unknown>;
   onCloseRequested?: (listener: () => void) => () => void;
   onWindowState?: (listener: (state: unknown) => void) => () => void;
@@ -62,6 +67,8 @@ export const browserControls: WindowControls = {
   toggleMaximizeWindow: noop,
   closeWindow: noop,
   setDocumentDirty: noop,
+  // No shell to draw a right-click menu for the editor; the browser tab has its own.
+  setPasteMarkdownContext: noop,
   // Nothing to close and nowhere to save, so there is no question to put. Cancel is the answer that
   // changes nothing, which is the right one when the prompt cannot be shown.
   confirmDiscard: async () => "cancel",
@@ -83,6 +90,7 @@ export function windowControls(): WindowControls {
     toggleMaximizeWindow: bridge.toggleMaximizeWindow ?? noop,
     closeWindow: (force = false) => bridge.closeWindow?.(force) ?? noop(),
     setDocumentDirty: (dirty) => bridge.setDocumentDirty?.(dirty) ?? noop(),
+    setPasteMarkdownContext: (label) => bridge.setPasteMarkdownContext?.(label) ?? noop(),
     confirmDiscard: async (name = null) => {
       const answer = await bridge.confirmDiscard?.(name ?? null);
       // Validated on arrival, and anything unrecognised reads as cancel. This is the call that

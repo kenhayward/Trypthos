@@ -297,6 +297,7 @@ export {
   DeleteSecretRequest,
   DiscardChoiceSchema,
   DocumentDirtyRequest,
+  PasteMarkdownContextRequest,
   IPC_CHANNELS,
   OPEN_TARGET_CHANNEL,
   OpenTargetSchema,

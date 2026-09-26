@@ -26,13 +26,8 @@ import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorM
 import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
 import type { FindMatch } from "@trypthos/domain";
 import type { ImageResult } from "../lib/workspaceClient";
-import { currentPlatform } from "../lib/windowControls";
+import { currentPlatform, windowControls } from "../lib/windowControls";
 import type { ClipboardContent } from "../lib/pasteMarkdown";
-
-/// The system clipboard, read through the module that converts it - loaded on the first press, so
-/// the HTML converter is not in the bundle of an app that never uses it.
-const readSystemClipboard = (): Promise<ClipboardContent> =>
-  import("../lib/pasteMarkdown").then((module) => module.readSystemClipboard());
 
 interface Props {
   workspaceName: string | null;
@@ -161,7 +156,7 @@ export default function EditorPanel({
   dirty,
   value,
   readOnly = false,
-  readClipboard = readSystemClipboard,
+  readClipboard,
   media = null,
   page = null,
   readImage,
@@ -188,22 +183,6 @@ export default function EditorPanel({
   hidden = false,
 }: Props) {
   const { t } = useTranslation();
-
-  /// Paste as markdown: the clipboard, converted, in place of the selection.
-  ///
-  /// A clipboard that cannot be read - refused, or empty - changes nothing. There is no half-written
-  /// state to report: either the text lands as one undo step or the document is as it was.
-  const pasteMarkdown = async () => {
-    let content: ClipboardContent;
-    try {
-      content = await readClipboard();
-    } catch {
-      return;
-    }
-    const { clipboardMarkdown } = await import("../lib/pasteMarkdown");
-    const markdown = clipboardMarkdown(content);
-    if (markdown !== null) editor.current?.replaceSelection(markdown);
-  };
 
   /// The view each document is being read in, keyed by path.
   ///
@@ -293,6 +272,29 @@ export default function EditorPanel({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [key, stepZoom]);
+
+  /// The right-click menu is drawn in the shell, but its one renderer-named item can only be offered
+  /// where it would land: over an editable markdown document. So every right-click reports what was
+  /// under it - the label when this surface is that place, null otherwise - and the shell decides
+  /// from that plus the native edit flags. The DOM event precedes Electron's own menu request, so
+  /// the report arrives before the menu is built; a late one costs at most a single right-click
+  /// without the item, never a paste in the wrong place.
+  const pasteMarkdownAvailable =
+    media === null && page === null && !readOnly && fileType.id === MARKDOWN_FILE_TYPE.id;
+
+  useEffect(() => {
+    const label = pasteMarkdownAvailable ? t("editor.toolbar.pasteMarkdown") : null;
+    const onContextMenu = (event: MouseEvent) => {
+      // The editor's own host, marked for exactly this kind of question. Preview has no such host -
+      // nothing to write into - and a click anywhere else is not over the document at all.
+      const target = event.target;
+      const overEditor =
+        target instanceof Element && target.closest('[data-testid="document-editor"]') !== null;
+      void windowControls().setPasteMarkdownContext(overEditor ? label : null);
+    };
+    document.addEventListener("contextmenu", onContextMenu, true);
+    return () => document.removeEventListener("contextmenu", onContextMenu, true);
+  }, [pasteMarkdownAvailable, t]);
 
   /// Which markdown each document is rendered as, when the reader has chosen, keyed by path.
   ///
@@ -400,7 +402,8 @@ export default function EditorPanel({
         fileType.id === "markdown" && (
           <EditorToolbar
             onFormat={(action) => editor.current?.format(action)}
-            onPasteMarkdown={() => void pasteMarkdown()}
+            // The same path the right-click menu takes: one implementation, two ways to reach it.
+            onPasteMarkdown={() => void editor.current?.pasteMarkdown()}
           />
         )}
 
@@ -430,6 +433,7 @@ export default function EditorPanel({
             onFollowLink={onFollowLink}
             onFollowWikiLink={onFollowWikiLink}
             flavour={flavour}
+            readClipboard={readClipboard}
             readOnly={readOnly}
             ref={attach}
             ariaLabel={t("editor.surface")}

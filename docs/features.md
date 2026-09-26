@@ -478,7 +478,9 @@ They act on what you are doing rather than simply inserting characters:
 - **Code block**, **table** and **horizontal rule** insert a block. A rule or a table goes below the
   line you are on rather than into the middle of it, and a table arrives with its first heading
   selected.
-- **Paste as markdown**, the last button, pastes what is on the clipboard with its structure kept.
+- **Paste as markdown** pastes what is on the clipboard with its structure kept. It sits at the end
+  of the Source view toolbar, and the editor's right-click menu offers it too - in Live and Source
+  view alike, wherever the caret can write; a right-click anywhere else shows no such item.
   Text copied from a rendered page - a chat reply in Claude or another app, a web page - normally
   pastes as plain text, which loses the headings, list markers, code fences and sometimes the line
   breaks between paragraphs. This button reads the formatted copy instead and writes it back as

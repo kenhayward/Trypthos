@@ -47,6 +47,19 @@ test("every action a menu sends is one the renderer knows", () => {
 
   for (const name of MENU_NAMES) clickAll(popupTemplate(name, { platform: "win32", on }));
   clickAll(appMenuTemplate({ appName: "Trypthos", on }));
+  // The right-click menu too: its one renderer-named item is a menu action like the rest.
+  clickAll(
+    contextMenuTemplate(
+      {
+        isEditable: true,
+        selectionText: "",
+        misspelledWord: "",
+        dictionarySuggestions: [],
+        editFlags: { canCut: true, canCopy: true, canPaste: true, canSelectAll: true },
+      },
+      { on, pasteMarkdownLabel: "Paste as markdown" },
+    ),
+  );
 
   const unknown = [...sent].filter((action) => !MENU_ACTIONS.includes(action));
   assert.deepEqual(unknown, []);
@@ -411,6 +424,52 @@ test("items the click cannot do are disabled", () => {
   assert.equal(byRole("cut").enabled, false);
   assert.equal(byRole("copy").enabled, false);
   assert.equal(byRole("paste").enabled, true);
+});
+
+/// Paste as markdown.
+///
+/// The one right-click item the renderer names: the label comes over IPC because the catalogue lives
+/// in the renderer and the menu is drawn in main. It sits with the clipboard block - it IS a paste,
+/// just one that converts what was copied rather than taking its plain text.
+
+// Over an editable markdown document the editor reports a name, and the menu offers it beside Paste.
+test("an editable markdown editor gets Paste as markdown, named by the renderer", () => {
+  const template = contextMenuTemplate(editable(), { on: handlers(), pasteMarkdownLabel: "Paste as markdown" });
+
+  const item = find(template, "Paste as markdown");
+  assert.ok(item, "no Paste as markdown item");
+  // Beside its sibling rather than at the end of the menu: it is a kind of paste.
+  const labels = template.map((entry) => entry.label ?? entry.role);
+  assert.ok(labels.indexOf("paste") < labels.indexOf("Paste as markdown"));
+  assert.ok(labels.indexOf("Paste as markdown") < labels.indexOf("selectAll"));
+});
+
+// Choosing it sends the action, and only the action: the work is the renderer's, like Find.
+test("choosing Paste as markdown tells the renderer what was chosen", () => {
+  const chosen = [];
+  const on = { ...handlers(), action: (name) => chosen.push(name) };
+  const template = contextMenuTemplate(editable(), { on, pasteMarkdownLabel: "Paste as markdown" });
+
+  find(template, "Paste as markdown").click();
+  assert.deepEqual(chosen, ["paste-markdown"]);
+});
+
+// A name the editor did not report is no item at all. Right-clicking a chat box while a document is
+// open must not offer a paste that would land in the document rather than where the user clicked.
+test("no reported name means no Paste as markdown item", () => {
+  const template = contextMenuTemplate(editable(), { on: handlers() });
+
+  assert.equal(find(template, "Paste as markdown"), undefined);
+});
+
+// Like its sibling: nothing to paste is a greyed item, not an absent one and not a live lie.
+test("Paste as markdown is disabled when there is nothing to paste", () => {
+  const template = contextMenuTemplate(
+    editable({ editFlags: { canCut: true, canCopy: true, canPaste: false, canSelectAll: true } }),
+    { on: handlers(), pasteMarkdownLabel: "Paste as markdown" },
+  );
+
+  assert.equal(find(template, "Paste as markdown").enabled, false);
 });
 
 test("read-only text offers copy but not cut or paste", () => {

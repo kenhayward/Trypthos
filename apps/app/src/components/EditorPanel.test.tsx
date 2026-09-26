@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
 
 const DOC = "# Title\n\nSome **bold** text and `code`.\n\n- one\n- two\n";
@@ -395,6 +395,90 @@ describe("the formatting toolbar", () => {
     await user.click(modeButton("Source"));
 
     expect(toolbar()).toBeNull();
+  });
+});
+
+/// The right-click menu is drawn in the shell, but its one renderer-named item - Paste as markdown -
+/// can only be offered where it would land: over an editable markdown document. So every right-click
+/// reports what was under it, and the shell decides from that plus the native edit flags.
+
+describe("the right-click menu's paste", () => {
+  const reported: (string | null)[] = [];
+
+  beforeEach(() => {
+    reported.length = 0;
+    (window as unknown as { trypthos?: unknown }).trypthos = {
+      onWindowState: () => () => {},
+      setPasteMarkdownContext: async (label: string | null) => {
+        reported.push(label);
+        return { ok: true };
+      },
+    };
+  });
+
+  afterEach(() => {
+    delete (window as unknown as { trypthos?: unknown }).trypthos;
+  });
+
+  const surface = () => screen.getByLabelText("Document source");
+
+  it("reports the label when a right-click lands on the editor in Live mode", async () => {
+    render(<Harness />); // opens in Live, where the toolbar is not drawn but the paste still applies
+
+    fireEvent.contextMenu(surface());
+
+    expect(reported).toEqual(["Paste as markdown"]);
+  });
+
+  it("reports the label when a right-click lands on the editor in Source mode", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(modeButton("Source"));
+
+    fireEvent.contextMenu(surface());
+
+    expect(reported).toEqual(["Paste as markdown"]);
+  });
+
+  // A right-click anywhere else - the chat box, a settings field - must not offer a paste that would
+  // land in the document rather than where the user clicked.
+  it("reports nothing when the right-click is outside the editor", async () => {
+    render(<Harness />);
+
+    fireEvent.contextMenu(screen.getByRole("tab", { name: /notes\.md/ }));
+
+    expect(reported).toEqual([null]);
+  });
+
+  // The guide opens read-only, and a paste into it would be an edit the document refuses.
+  it("reports nothing for a document that cannot be edited", async () => {
+    render(
+      <EditorPanel
+        workspaceName={null}
+        paths={["trypthos:markdown-guide"]}
+        activePath="trypthos:markdown-guide"
+        dirty={false}
+        value={DOC}
+        readOnly
+        onChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(surface());
+
+    expect(reported).toEqual([null]);
+  });
+
+  // Preview has no editing surface at all, so there is nothing for the paste to land in. The prose
+  // is rendered HTML here - "Title" is a heading element, not source text.
+  it("reports nothing when the document is read as rendered prose", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(modeButton("Preview"));
+
+    fireEvent.contextMenu(screen.getByRole("heading", { name: "Title" }));
+
+    expect(reported).toEqual([null]);
   });
 });
 
