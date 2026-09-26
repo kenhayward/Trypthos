@@ -482,6 +482,11 @@ containing regex escapes or Windows paths, and prove a new guard test fails befo
 
 ## Conventions & gotchas
 
+- **Line endings are mixed in git, and agent editor tools normalize them.** Committed files mix CRLF
+  and bare-LF lines within one file, and a whole-file save rewrites every line to bare LF - so an
+  unattended commit ships hundreds of phantom diff pairs. Before staging any change that touched
+  existing files, repair the worktree against `main` (never HEAD) as the last step: findings, the
+  verified staging behavior, and the ready-to-run repair script are in [AGENTS.md](./AGENTS.md).
 - **No em/en dashes in user-facing text.** Use a plain hyphen `-` (not the long ones) in all UI strings,
   i18n catalogs, release notes and user-visible copy - user feedback on fancy dashes is negative.
   **Code, comments and internal docs are exempt**, this file included. Enforce it with a test across every
