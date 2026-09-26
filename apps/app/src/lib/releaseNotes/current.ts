@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.90.0",
+    date: "2026-09-26",
+    pr: 198,
+    headline: "Paste as markdown in the right-click menu",
+    summary:
+      "The Paste as markdown command is now reachable from the editor's right-click menu as well as from the Source view toolbar. Right-click inside a document - in Live or Source view - and choose it to paste what you copied with its structure kept: headings become # headings, lists keep their markers, code blocks arrive fenced and tables stay tables. The item appears only where it would land, over an editable markdown document; right-clicking anywhere else - the chat box, a settings field - shows the usual menu without it, so a paste can never end up in a document you were not looking at. As with the button, one press is one Ctrl+Z.",
+    added: [
+      "The editor's right-click menu offers Paste as markdown in Live and Source view, beside cut, copy, paste and select all.",
+    ],
+  },
+  {
     version: "0.89.0",
     date: "2026-09-25",
     pr: 197,

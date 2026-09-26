@@ -200,7 +200,12 @@ function appMenuTemplate({ appName = APP_NAME, on, recent = [] }) {
 ///
 /// An empty template is a real answer: right-clicking the middle of a paragraph with nothing
 /// selected and nothing to correct should open nothing, rather than a menu of dead items.
-function contextMenuTemplate(params, { on }) {
+///
+/// `pasteMarkdownLabel` is the one item the renderer names: the catalogue lives there and the menu
+/// is drawn here, so the words travel with the report (see `editor:pasteMarkdownContext`). Null or
+/// absent means the click was not over an editable markdown document, and the item is no item at
+/// all - offering it anywhere else would paste into a document the user was not looking at.
+function contextMenuTemplate(params, { on, pasteMarkdownLabel = null }) {
   const template = [];
 
   if (params.misspelledWord) {
@@ -230,6 +235,16 @@ function contextMenuTemplate(params, { on }) {
       separator,
     );
     template.push(...clipboardRoles(params.editFlags));
+    // Beside its sibling rather than at the end of the menu: it IS a paste, just one that converts
+    // what was copied instead of taking its plain text. Enabled like Paste itself - nothing to paste
+    // is a greyed item, not an absent one and not a live lie.
+    if (pasteMarkdownLabel !== null) {
+      template.push({
+        label: pasteMarkdownLabel,
+        enabled: params.editFlags?.canPaste === true,
+        click: () => on.action("paste-markdown"),
+      });
+    }
     template.push(separator, { role: "selectAll", enabled: params.editFlags?.canSelectAll === true });
   } else if (params.selectionText !== "") {
     template.push({ role: "copy", enabled: params.editFlags?.canCopy === true });

@@ -25,7 +25,11 @@ const { navigationDecision } = require("./navigationGuard");
 const { builtIndexPath } = require("./builtIndex");
 const { nextRetryDelayMs, shouldRetryLoad } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
-const { registerIpcHandlers } = require("./ipcHandlers");
+const {
+  registerIpcHandlers,
+  pasteMarkdownLabelFor,
+  forgetPasteMarkdownContext,
+} = require("./ipcHandlers");
 const { createSecretStore } = require("./secretStore");
 const { createAccountStore } = require("./accountStore");
 const { createGitHubApi } = require("./githubApi");
@@ -153,6 +157,7 @@ function createDocumentWindow(target) {
   documentWindow.on("closed", () => {
     documentGuards.delete(documentWindow);
     documentHandoff.abandon(contentsId);
+    forgetPasteMarkdownContext(contentsId);
   });
   documentWindow.once("ready-to-show", () => documentWindow.show());
   protectNavigation(documentWindow);
@@ -232,8 +237,15 @@ function createWindow() {
   /// spelling information only exists here: Electron reports the misspelled word and its
   /// suggestions on the event itself, and there is no way to ask for them afterwards. The renderer
   /// never sees them and does not need to.
+  ///
+  /// One item goes the other way: Paste as markdown is named by the RENDERER, because the catalogue
+  /// lives there. Its report arrives before this event - the DOM contextmenu precedes the browser's
+  /// own menu request - so `pasteMarkdownLabelFor` holds what was under the cursor that just clicked.
   mainWindow.webContents.on("context-menu", (_event, params) => {
-    const template = contextMenuTemplate(params, { on: menuHandlersRef.current });
+    const template = contextMenuTemplate(params, {
+      on: menuHandlersRef.current,
+      pasteMarkdownLabel: pasteMarkdownLabelFor(mainWindow.webContents.id),
+    });
     // An empty menu is a real answer - a right-click on a plain paragraph with nothing selected has
     // nothing to offer, and a menu of dead items would be worse than none.
     if (template.length === 0) return;
@@ -326,6 +338,7 @@ function createWindow() {
   });
 
   mainWindow.on("closed", () => {
+    forgetPasteMarkdownContext(mainWindow.webContents.id);
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
     mainWindow = null;

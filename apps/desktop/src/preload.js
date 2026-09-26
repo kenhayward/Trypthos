@@ -120,6 +120,12 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// says. The shell needs it to know whether a close is worth interrupting.
   setDocumentDirty: (dirty) => ipcRenderer.invoke("document:dirty", { dirty }),
 
+  /// What the right-click menu should offer over the document editor: the name for Paste as
+  /// markdown, or null when there is no editable markdown document under the cursor. The NAME
+  /// travels because the catalogue lives here and the menu is drawn in the shell - one spelling on
+  /// both surfaces rather than two that could drift.
+  setPasteMarkdownContext: (label) => ipcRenderer.invoke("editor:pasteMarkdownContext", { label }),
+
   /// The shared native prompt, for anything about to discard a document. The name is what the
   /// dialog asks about - one of several open tabs, or nothing in particular.
   confirmDiscard: (name) => ipcRenderer.invoke("document:confirmDiscard", { name: name ?? null }),

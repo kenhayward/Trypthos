@@ -179,10 +179,12 @@ round-trip and nothing that can reformat a user's file behind their back.
   render can be a keystroke behind the buffer - the editor is the only place that knows the document
   and the selection as they are at the moment of the press. `EditorPanel` attaches the editor handle
   with a callback ref, since two callers need it: the toolbar, and the window applying a chat edit.
-- **Paste as markdown** is the toolbar's one button that is not a `ToolbarAction`: it reads the
-  clipboard, which is not a function of the document. `EditorToolbar` reports the press,
-  `EditorPanel` reads the clipboard (an injected `readClipboard`, the async Clipboard API by default -
-  Electron grants the renderer clipboard reads, so no IPC channel is involved), and
+- **Paste as markdown** is the one command that reads the clipboard, which is not a function of the
+  document. It lives on `EditorHandle.pasteMarkdown` in `DocumentEditor`, reached two ways: the last
+  button of the Source view toolbar (`EditorToolbar` reports the press) and an item in the editor's
+  right-click menu (see "The right-click menu" below). The handle reads the clipboard through an
+  injected `readClipboard` - the async Clipboard API by default, Electron grants the renderer
+  clipboard reads, so no IPC channel is involved for the read itself - and
   `lib/pasteMarkdown.ts` turns it into markdown: the `text/html` flavour through **Turndown** with the
   GFM plugin (`@joplin/turndown-plugin-gfm`) when there is one, the `text/plain` flavour otherwise,
   with U+2028/U+2029 made into real line breaks. Before Turndown sees the HTML,
@@ -2331,6 +2333,21 @@ on a plain paragraph with nothing selected opens nothing, rather than a menu of 
 override in `contentAttributes`. Without it the app's main text surface would be the one place with
 no corrections while the chat box and settings fields had them, and nothing would say why.
 
+One item in the menu is named by the renderer: **Paste as markdown**. Its label comes from the i18n
+catalogue, which lives in the renderer - the shell has no catalogue of its own, and a second copy of
+the string could drift into a different spelling on the two surfaces that offer it. So `EditorPanel`
+listens for the DOM `contextmenu` event (capture phase) and reports through
+`editor:pasteMarkdownContext`: the translated label when the click was over an editable markdown
+document surface, null otherwise - a right-click in the chat box or a settings field must not offer a
+paste that would land in a document nobody is looking at. The main process keeps one report per web
+contents id and hands it to `contextMenuTemplate`, which adds the item after Paste when the label is
+present, enabled like Paste itself (greyed rather than absent when there is nothing to paste).
+
+The timing works because the DOM event fires before Chromium emits the web contents' own
+`context-menu`: a report posted during dispatch arrives before the menu is built. A late one costs at
+most a single right-click without the item - never a paste in the wrong place, since absence of the
+report means absence of the item.
+
 ## The IPC surface
 
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
@@ -2340,7 +2357,8 @@ The list is asserted exactly in a test, so adding one is deliberate rather than 
 (`obsidian:vaults`, `obsidian:openVault`), the graph (`graph:snapshot`, `graph:refresh`), a vault's assigned icons (`icons:map`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
-(`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
+(`document:dirty`, `document:confirmDiscard`), the editor's right-click menu
+(`editor:pasteMarkdownContext`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
 conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and
 links (`shell:openExternal`). Five channels flow the other way, all validated on arrival like

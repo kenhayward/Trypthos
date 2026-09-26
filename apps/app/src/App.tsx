@@ -600,6 +600,9 @@ export default function App() {
         else if (action === "preferences") setSettingsOn("appearance");
         else if (action === "about") setSettingsOn("about");
         else if (action === "markdown-guide") actions.openGuide(MARKDOWN_GUIDE);
+        // The right-click menu's one item the renderer names. It reaches the editor through the same
+        // handle a chat edit does - this window's document, at its caret, as one undo step.
+        else if (action === "paste-markdown") void editor.current?.pasteMarkdown();
         else if (action === "release-notes") setReadingNotes(true);
         // The escape hatch for a list full of files that have since moved. Nothing walks the disk to
         // check, so an entry stays until it falls off the end or this is chosen.
