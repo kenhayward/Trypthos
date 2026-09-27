@@ -3,6 +3,7 @@ import { highlightTree } from "@lezer/highlight";
 import type { Tree } from "@lezer/common";
 import { codeHighlighter } from "./editorTheme";
 import { fenceLanguages } from "./fenceLanguages";
+import { findMarksIn, restoreFindMarks } from "./findInPreview";
 
 /// Colouring fenced code blocks in rendered markdown - Preview, and the chat panel's replies.
 ///
@@ -103,7 +104,12 @@ export async function highlightCodeBlocks(
     if (cancelled() || !container.contains(code)) continue;
 
     const text = code.textContent ?? "";
+    // Rebuilding the block from its text would wipe the marks Find in Preview painted into it - the
+    // match still counted, but no longer shown, and every later "active" index one mark adrift. They
+    // are read off first and wrapped back over the coloured spans.
+    const marks = findMarksIn(code);
     code.replaceChildren(...spansFor(text, support.language.parser.parse(text)));
+    restoreFindMarks(code, marks);
     if (code instanceof HTMLElement) code.dataset.tpHighlighted = tag;
   }
 }

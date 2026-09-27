@@ -158,6 +158,57 @@ describe("useFind: the open document", () => {
   });
 });
 
+describe("useFind: which view a document is read in", () => {
+  // Preview shows the rendered prose, not the source - so a search while reading there must match what
+  // is on screen and say so, rather than report offsets into text the reader cannot see.
+  const PREVIEW_TEXT = "Title Some bold text.";
+
+  it("searches the rendered prose when the document is read in Preview", async () => {
+    const view = run({ surface: () => ({ kind: "preview", text: PREVIEW_TEXT }) });
+    act(() => view.result.current.openFind());
+    act(() => view.result.current.setQuery("bold"));
+    await act(async () => {
+      await view.result.current.search();
+    });
+
+    // The offsets are into the prose, not the source - `bold` sits where it is drawn.
+    expect(view.result.current.highlight.matches).toEqual([{ from: 11, to: 15 }]);
+    expect(view.result.current.highlight.surface).toBe("preview");
+    expect(view.result.current.status).toMatchObject({ kind: "results", total: 1 });
+  });
+
+  it("keeps source offsets when the document is read in an editable view", async () => {
+    const view = run({ surface: () => ({ kind: "editable", text: DOC }) });
+    act(() => view.result.current.openFind());
+    act(() => view.result.current.setQuery("cat"));
+    await act(async () => {
+      await view.result.current.search();
+    });
+
+    expect(view.result.current.highlight.matches).toEqual([
+      { from: 4, to: 7 },
+      { from: 32, to: 35 },
+    ]);
+    expect(view.result.current.highlight.surface).toBe("editable");
+  });
+
+  it("puts its results away when the view changes", async () => {
+    const view = run({ surface: () => ({ kind: "preview", text: PREVIEW_TEXT }) });
+    act(() => view.result.current.openFind());
+    act(() => view.result.current.setQuery("bold"));
+    await act(async () => {
+      await view.result.current.search();
+    });
+    expect(view.result.current.status).toMatchObject({ kind: "results" });
+
+    // Switching views leaves the old offsets behind - they were measured against a surface that is no
+    // longer on screen, and a count with nothing to show it would read as an answer.
+    act(() => view.result.current.reset());
+    expect(view.result.current.status).toEqual({ kind: "idle" });
+    expect(view.result.current.highlight.matches).toHaveLength(0);
+  });
+});
+
 /// Where the panel sits.
 ///
 /// Remembered by the hook rather than by the dialog, which unmounts when the find closes: a panel
@@ -226,6 +277,14 @@ describe("useFind: the files under a folder", () => {
   it("highlights the hit it opened, and only that one", async () => {
     const { result } = await searchFiles({ findInFiles: async () => HITS });
     expect(result.current.highlight.matches).toEqual([{ from: 0, to: 3 }]);
+  });
+
+  // A hit's offsets are into the source as read off disk, whatever view the file is in - unlike a
+  // search of the open document, which is measured against the view on screen. The panel reads this
+  // to know it must bring the file out of Preview for a hit, and must not for a document search.
+  it("says its offsets are into the source, not into the view on screen", async () => {
+    const { result } = await searchFiles({ findInFiles: async () => HITS });
+    expect(result.current.highlight.surface).toBe("source");
   });
 
   it("opens the next file when it steps into one", async () => {

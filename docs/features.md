@@ -568,9 +568,17 @@ types you have turned on**, so a type you have switched off is not searched any 
 listed. And it **stops at a sensible size** rather than walking a fifty-thousand-file tree - and when
 it stops early it says so, because a list silently cut short is a wrong answer given confidently.
 
-One consequence worth knowing: **a document in Preview switches to an editable view while a match is
-on screen.** Preview has no caret and no place to draw a highlight, so a search there would report
-matches and show none of them. It goes back to Preview when you close the find.
+One consequence worth knowing: **a search follows the view you are reading in.** In Live or Source it
+marks matches over the source text, and in Preview it marks them in the rendered prose - so a find
+while reading stays where you are instead of dragging you into an editable view to show its answer.
+Because it searches what is on screen rather than the file underneath, a query aimed at markdown's
+own characters (a `#` heading marker, a pair of asterisks) finds nothing in Preview, where those
+characters are not drawn; the same query still finds them in Source. For the same reason Preview does
+not search inside maths, diagrams or embedded notes, which are drawn from their source rather than
+shown as its text, and it reads a line break inside a paragraph as the space you see - so a phrase
+that wraps onto a new line in the file is still found. Switching views while a find is
+open clears its results - offsets measured against one view would sit over nothing in the other - and
+Find in Files always opens its hits in an editable view, since their offsets are into the source.
 
 ## Zoom and pan
 

@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceRef } from "@trypthos/domain";
 import { DEFAULT_SETTINGS } from "@trypthos/domain";
 import App from "./App";
@@ -711,5 +711,90 @@ describe("the chat's width", () => {
 
     await waitFor(() => expect(Math.round(chat().right)).toBe(1280));
     expect(Math.round(chat().left)).toBe(Math.round(rail.right));
+  });
+});
+
+/// A find run while reading in Preview - the reader's own path: open a file, read it as rendered
+/// prose, ask for some text, and get an answer they can see. The parts are tested on their own; this
+/// is the wiring between them, which is what can be right in every part and still wrong in the window.
+describe("a find run while reading in Preview", () => {
+  const FILE = "# Title\n\nSome **bold** text.\n";
+
+  /// The bridge-level listener, which receives the raw message `windowControls` validates before it
+  /// hands App a plain action - so this fake speaks the wire shape, like the shell would.
+  function shellWithFile(): { push: (action: string) => void } {
+    let menuListener: ((message: { action: string }) => void) | null = null;
+    window.trypthos = {
+      ...browserClient,
+      isDesktop: true,
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          workspaces: [{ kind: "local" as const, root: "D:/Notes" }],
+        },
+      }),
+      writeSettings: async () => {},
+      openWorkspaceRef: async (ref: WorkspaceRef) => ({
+        ok: true as const,
+        workspace: { id: "Notes", name: "Notes", ref },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [{ id: "Notes/one.md", name: "one.md", kind: "file" as const }],
+      }),
+      readFile: async (_path: string) => ({ ok: true as const, content: FILE, revision: { id: "r1" } }),
+      confirmDiscard: async () => ({ ok: true as const, choice: "discard" as const }),
+      onWindowState: () => () => {},
+      onCloseRequested: () => () => {},
+      onMenuAction: (listener: (message: { action: string }) => void) => {
+        menuListener = listener;
+        return () => {};
+      },
+      setDocumentDirty: async () => {},
+    } as unknown as typeof window.trypthos;
+
+    return { push: (action: string) => menuListener?.({ action }) };
+  }
+
+  it("stays in Preview and shows what was found right where it is reading", async () => {
+    const user = userEvent.setup();
+    await page.viewport(1280, 860);
+    const container = document.createElement("div");
+    container.style.cssText = "position:fixed;inset:0";
+    document.body.append(container);
+    const menu = shellWithFile();
+    render(<App />, { container });
+
+    // The file, open and read as rendered prose.
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
+    await user.click(
+      within(screen.getByRole("complementary", { name: "Workspace" })).getByRole("button", {
+        name: /one\.md/,
+      }),
+    );
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="document-editor"]')).not.toBeNull());
+    await user.click(await screen.findByRole("button", { name: "Preview" }));
+    expect(document.querySelector('[aria-label="Markdown preview"]')).not.toBeNull();
+
+    // Edit > Find, from the menu - the dialog opens over the view it was reading in.
+    await act(async () => menu.push("find"));
+    const field = document.getElementById("find-query") as HTMLInputElement;
+    expect(field).not.toBeNull();
+
+    // The query and its Enter: the search runs against what is on screen - the rendered prose, not the source.
+    await user.type(field, "Title");
+    await user.keyboard("{Enter}");
+
+    // The answer comes back down to the view it was found in...
+    await vi.waitFor(() => expect(document.querySelector(".cm-find-match")).not.toBeNull());
+    const mark = document.querySelector(".cm-find-match")!;
+    expect(mark.textContent).toBe("Title");
+    // ...and it is painted, not merely present.
+    expect(mark.getBoundingClientRect().width).toBeGreaterThan(0);
+
+    // Still reading as rendered prose - a find while reading did not drag the reader into Live to show it.
+    expect(document.querySelector('[data-testid="document-editor"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Markdown preview"]')).not.toBeNull();
   });
 });

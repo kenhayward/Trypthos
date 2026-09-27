@@ -4,6 +4,8 @@ import { repoPath } from "../testing/repoRoot";
 import { TOKEN_ROLES } from "./editorTheme";
 import { highlightCodeBlocks } from "./codeHighlight";
 import { renderMarkdown } from "./markdown";
+import { markPreviewMatches, previewVisibleText } from "./findInPreview";
+import { findMatches } from "@trypthos/domain";
 
 const ALL = ["markdown", "python", "json", "javascript", "batch"];
 
@@ -184,5 +186,28 @@ describe("a batch file", () => {
   it("leaves a batch block alone when the type is turned off", async () => {
     const container = await rendered(BATCH, ["markdown"]);
     expect(block(container).querySelectorAll("span")).toHaveLength(0);
+  });
+});
+
+/// Find in Preview marks its matches into the rendered markup, and colouring rebuilds a block from its
+/// text - which, left alone, wipes every mark inside it. The match is still counted, so the count and
+/// the highlights disagree and every later "active" index lands on the wrong mark.
+describe("find marks inside a coloured block", () => {
+  it("survive the colouring, active one included", async () => {
+    const html = renderMarkdown("```javascript\nconst total = 1;\n```\n\nThe total is here.\n");
+    const matches = findMatches(previewVisibleText(html), "total", { regex: false, caseSensitive: false })!;
+    const container = document.createElement("div");
+    container.innerHTML = markPreviewMatches(html, matches);
+    container.querySelector(".cm-find-match")!.classList.add("cm-find-active");
+
+    await highlightCodeBlocks(container, ALL, () => false);
+
+    const code = block(container);
+    expect(code.querySelector("span[class^='tp-tok']")).not.toBeNull();
+    const marks = [...container.querySelectorAll(".cm-find-match")];
+    expect(marks.map((mark) => mark.textContent)).toEqual(["total", "total"]);
+    expect(marks[0]!.closest("pre")).not.toBeNull();
+    expect(marks[0]!.classList.contains("cm-find-active")).toBe(true);
+    expect(code.textContent).toBe("const total = 1;\n");
   });
 });
