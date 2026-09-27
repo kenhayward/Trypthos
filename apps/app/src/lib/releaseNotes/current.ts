@@ -16,6 +16,17 @@ export const RECENT: Release[] = [
     ],
   },
   {
+    version: "0.91.1",
+    date: "2026-09-26",
+    pr: 202,
+    headline: "The Paste as markdown menu item shows its shortcut",
+    summary:
+      "The right-click menu's Paste as markdown item now displays the key that performs it - Ctrl+Shift+V (Cmd on macOS) - beside its label, like Save and Find show theirs. The shortcut itself is unchanged; this makes it visible where you would look for it.",
+    fixed: [
+      "The right-click menu's Paste as markdown item shows its Ctrl+Shift+V (Cmd on macOS) shortcut next to the label.",
+    ],
+  },
+  {
     version: "0.91.0",
     date: "2026-09-26",
     pr: 199,
