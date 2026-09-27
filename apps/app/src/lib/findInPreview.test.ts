@@ -84,3 +84,44 @@ describe("markPreviewMatches", () => {
     expect(previewVisibleText(marked)).toBe(previewVisibleText(html));
   });
 });
+
+/// What Preview draws as something other than its text. Maths is typeset from its TeX, a diagram is
+/// drawn from its code, and an embed placeholder is replaced by the note it names - so their text as
+/// rendered here is not what a reader sees, and a mark wrapped into it is wiped when they are drawn.
+/// Counting a match there would report an answer that can never be shown, and shift every later
+/// match's index off the mark it belongs to.
+describe("what Preview draws rather than shows as text", () => {
+  const HTML =
+    '<p>total <span class="md-math">total^2</span> x</p>' +
+    '<pre><code class="language-mermaid">graph TD; total</code></pre>' +
+    '<div class="md-transclusion"><a href="n.md">total</a></div>' +
+    "<p>total</p>";
+
+  it("is left out of the text Find searches", () => {
+    const matches = findMatches(previewVisibleText(HTML), "total", { regex: false, caseSensitive: false })!;
+    expect(matches).toHaveLength(2);
+  });
+
+  it("is never marked", () => {
+    const matches = findMatches(previewVisibleText(HTML), "total", { regex: false, caseSensitive: false })!;
+    const root = document.createElement("div");
+    root.innerHTML = markPreviewMatches(HTML, matches);
+    const marks = [...root.querySelectorAll(".cm-find-match")];
+    expect(marks.map((mark) => mark.textContent)).toEqual(["total", "total"]);
+    expect(marks.every((mark) => mark.closest(".md-math, pre, .md-transclusion") === null)).toBe(true);
+  });
+
+  // Leaving it out must not join the words either side of it into one.
+  it("does not let a match run across it", () => {
+    const html = '<p>ab<span class="md-math">x</span>cd</p>';
+    expect(findMatches(previewVisibleText(html), "bc", { regex: false, caseSensitive: false })).toEqual([]);
+  });
+});
+
+describe("line breaks", () => {
+  // A line break inside a paragraph is a space to a reader - the source wrapped there, the prose did
+  // not - so a phrase that wraps in the source is still found. Inside a code block it is a real break.
+  it("reads a soft wrap as a space, and keeps a code block's line breaks", () => {
+    expect(previewVisibleText("<p>one\ntwo</p><pre><code>x\ny</code></pre>")).toBe("one twox\ny");
+  });
+});

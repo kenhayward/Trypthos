@@ -227,7 +227,9 @@ round-trip and nothing that can reformat a user's file behind their back.
   showing and the main process matches the bytes it reads off disk, and a query that meant different
   things in each would find a line the editor could not then highlight.
   - `hooks/useFind.ts` holds the state both tabs need - a query, a list, and a place in it. The
-    document search runs here against `state.content`; the folder search goes over
+    document search runs here against the text of the view on screen, which `EditorPanel` reports up
+    through `onFindSurface` - the source for Live and Source, `previewVisibleText` of the rendered
+    prose for Preview; the folder search goes over
     `workspace:find`, whose walk in `apps/desktop/src/fileSearch.js` goes through the **provider**
     rather than `fs`, which is what applies the workspace guard including its realpath check. Only
     file types the user has turned on are opened, and the answer is capped and says when it was.
@@ -240,10 +242,23 @@ round-trip and nothing that can reformat a user's file behind their back.
     come from outside the document rather than being derived from it, so nothing in the editor could
     recompute them - and a field maps them through edits for free, so a highlight moves with its text
     instead of staying where the text used to be.
-  - **Preview cannot show a match**, having no caret and no decorations, so `EditorPanel` DERIVES an
-    editable view while there are matches and returns to the reader's choice when there are none. It
-    is derived rather than stored, which costs one thing worth knowing: pressing Preview while
-    results are on screen does nothing.
+  - **A highlight carries the coordinates its offsets are in** (`FindHighlight.surface`): `editable`
+    or `preview` for a search of the open document, measured against the view on screen, and
+    `source` for a Find in Files hit, measured against the file as read off disk. A document search is
+    shown only in the view it was made in; `App` clears it when the reported view changes. Only a
+    `source` hit makes `EditorPanel` DERIVE an editable view out of Preview - derived rather than
+    stored, so pressing Preview while a hit is on screen does nothing until the results clear.
+  - **Preview paints its own marks**: `lib/findInPreview.ts` reads the rendered markup as its visible
+    text (`previewVisibleText`, what the search runs over) and wraps the found ranges into the markup
+    (`markPreviewMatches`), both walking the same text runs so an offset one produces is a position
+    the other understands. Both parse with `DOMParser`, an inert document, so reading the prose never
+    fetches a picture it names. Anything drawn after the markup lands as something other than its text
+    - `.md-math`, `code.language-mermaid`, `.md-transclusion` - is skipped and stands as one `U+FFFC`
+    in the searched text, so a match can neither be counted where its mark would be wiped nor run
+    across one; a soft wrap outside `pre` reads as a space. Code colouring rebuilds a block from its
+    text, so `highlightCodeBlocks` reads any find marks off first (`findMarksIn`) and wraps them back
+    (`restoreFindMarks`). The active match is a class toggled on the Nth mark, so stepping does not
+    reset the markup - which only holds while the marks on screen and the matches are one list.
   - The dialog is **not a modal**, unlike every other in the app. The answer is a highlight in the
     document underneath it, so a backdrop over that document would report matches and show none. For
     the same reason it is **draggable**: it can end up over the text it is reporting on.

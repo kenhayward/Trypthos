@@ -38,6 +38,13 @@ export type FindStatus =
 /// only the surface it names wears it.
 export type FindSurfaceKind = "editable" | "preview";
 
+/// Which coordinates a highlight's offsets are in. A search of the open document is measured against
+/// the view on screen - `editable` or `preview` - and belongs to that view only: switch away and it is
+/// cleared. A Find in Files hit is `source`: offsets into the file as read off disk, whatever view it
+/// is in, which is why the panel brings such a file out of Preview to show it and does not for a
+/// document search.
+export type FindHighlightSurface = FindSurfaceKind | "source";
+
 /// What a document's find searches: the text of the view on screen. The source for an editable view,
 /// the rendered prose's visible text for Preview.
 export interface FindSurface {
@@ -54,7 +61,7 @@ export interface FindHighlight {
   path: string | null;
   matches: readonly FindMatch[];
   active: number;
-  surface: FindSurfaceKind;
+  surface: FindHighlightSurface;
 }
 
 const NOTHING: FindHighlight = { path: null, matches: [], active: -1, surface: "editable" };
@@ -156,7 +163,7 @@ export function useFind(where: FindSurroundings) {
       // is always read in an editable view: its offsets are into the source as read off disk, and the
       // panel brings such a document out of Preview so they can be shown at all.
       await where.openPath(hit.path);
-      setHighlight({ path: hit.path, matches: [{ from: hit.from, to: hit.to }], active: 0, surface: "editable" });
+      setHighlight({ path: hit.path, matches: [{ from: hit.from, to: hit.to }], active: 0, surface: "source" });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [where.openPath],

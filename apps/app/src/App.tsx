@@ -954,13 +954,13 @@ export default function App() {
           findSurface={find.highlight.path === state.activePath ? find.highlight.surface : null}
           matches={
             find.highlight.path === state.activePath &&
-            (find.highlight.surface === "editable" || find.highlight.surface === findSurfaceKind)
+            (find.highlight.surface === "source" || find.highlight.surface === findSurfaceKind)
               ? find.highlight.matches
               : NO_MATCHES
           }
           activeMatch={
             find.highlight.path === state.activePath &&
-            (find.highlight.surface === "editable" || find.highlight.surface === findSurfaceKind)
+            (find.highlight.surface === "source" || find.highlight.surface === findSurfaceKind)
               ? find.highlight.active
               : -1
           }

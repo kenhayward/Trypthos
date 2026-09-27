@@ -961,11 +961,38 @@ describe("EditorPanel: showing what Find found", () => {
         onChange={vi.fn()}
         matches={MATCHES}
         activeMatch={0}
-        findSurface="editable"
+        findSurface="source"
       />,
     );
 
     expect(screen.getByTestId("document-editor")).toBeDefined();
+  });
+
+  // A search of the open document made in Source is measured against the source. Switching to Preview
+  // must still switch - the results then belong to a view that is no longer on screen, and the window
+  // clears them - rather than being overridden as a Files hit is.
+  it("switches to Preview while a search of the open document is showing in Source", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        defaultMode="source"
+        matches={MATCHES}
+        activeMatch={0}
+        findSurface="editable"
+      />,
+    );
+    expect(screen.getByTestId("document-editor")).toBeDefined();
+
+    await user.click(modeButton("Preview"));
+
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+    expect(screen.getByLabelText("Markdown preview")).toBeDefined();
   });
 
   // The switch lasts as long as the results do. Closing the find puts the reader back in the view
@@ -985,6 +1012,7 @@ describe("EditorPanel: showing what Find found", () => {
         onChange={vi.fn()}
         matches={MATCHES}
         activeMatch={0}
+        findSurface="source"
       />,
     );
     expect(screen.getByTestId("document-editor")).toBeDefined();

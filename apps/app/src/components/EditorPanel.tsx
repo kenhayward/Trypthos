@@ -27,7 +27,7 @@ import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../l
 import type { FindMatch } from "@trypthos/domain";
 import { previewVisibleText } from "../lib/findInPreview";
 import { renderMarkdown } from "../lib/markdown";
-import type { FindSurfaceKind } from "../hooks/useFind";
+import type { FindHighlightSurface, FindSurfaceKind } from "../hooks/useFind";
 import type { ImageResult } from "../lib/workspaceClient";
 import { currentPlatform, windowControls } from "../lib/windowControls";
 import type { ClipboardContent } from "../lib/pasteMarkdown";
@@ -122,7 +122,7 @@ interface Props {
   /// there are none for it. It decides which surface wears them (an editable one only shows source
   /// offsets, Preview only rendered-prose ones) and whether a Files hit must be brought out of Preview
   /// so its source offsets can be shown at all.
-  findSurface?: FindSurfaceKind | null;
+  findSurface?: FindHighlightSurface | null;
   /// Reports what the document on screen is read as - the source for an editable view, the rendered
   /// prose's visible text for Preview - so the search a level up runs against what is actually shown.
   /// Called whenever that changes; absent where there is no find to feed (a test, a focused window).
@@ -241,12 +241,16 @@ export default function EditorPanel({
   /// view is on screen (source or rendered prose), so they can be shown where the reader already is -
   /// which is what keeps a find while reading in Preview from dragging them into Live to do it.
   ///
+  /// Only a Files hit (`source`) does this. A search of the open document made in an editable view is
+  /// measured against that view, so pressing Preview must still switch - the window then clears results
+  /// that belong to a view no longer on screen - rather than be overridden into keeping them.
+  ///
   /// Derived rather than stored, which has one cost worth stating: pressing Preview while a Files hit
   /// is on screen does nothing, because the derivation overrides it on the next render. That is the
   /// better of the two trades - the alternative is a search whose answer is invisible - and it lasts
   /// only as long as the results do.
   const mode =
-    matches.length > 0 && findSurface !== "preview" && !isEditable(reading)
+    matches.length > 0 && findSurface === "source" && !isEditable(reading)
       ? (fileType.modes.find((candidate) => isEditable(candidate)) ?? reading)
       : reading;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
@@ -498,8 +502,8 @@ export default function EditorPanel({
             onZoom={stepZoom}
             // Only source offsets belong here: a rendered-prose highlight measured against Preview would
             // sit over the wrong characters in CodeMirror, so it is not shown rather than shown wrongly.
-            matches={findSurface === "editable" ? matches : NO_MATCHES}
-            activeMatch={findSurface === "editable" ? activeMatch : -1}
+            matches={findSurface === "editable" || findSurface === "source" ? matches : NO_MATCHES}
+            activeMatch={findSurface === "editable" || findSurface === "source" ? activeMatch : -1}
           />
         ) : (
           <MarkdownPreview

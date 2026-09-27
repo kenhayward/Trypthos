@@ -279,6 +279,14 @@ describe("useFind: the files under a folder", () => {
     expect(result.current.highlight.matches).toEqual([{ from: 0, to: 3 }]);
   });
 
+  // A hit's offsets are into the source as read off disk, whatever view the file is in - unlike a
+  // search of the open document, which is measured against the view on screen. The panel reads this
+  // to know it must bring the file out of Preview for a hit, and must not for a document search.
+  it("says its offsets are into the source, not into the view on screen", async () => {
+    const { result } = await searchFiles({ findInFiles: async () => HITS });
+    expect(result.current.highlight.surface).toBe("source");
+  });
+
   it("opens the next file when it steps into one", async () => {
     const openPath = vi.fn(async () => {});
     const { result } = await searchFiles({ findInFiles: async () => HITS, openPath });
