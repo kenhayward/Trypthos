@@ -1144,6 +1144,8 @@ describe("Find's highlights, in a real browser", () => {
         onChange={() => {}}
         matches={matches}
         activeMatch={active}
+        // Source offsets, so the editable surface is the one that wears them.
+        findSurface={matches.length > 0 ? "editable" : null}
       />,
     );
 
