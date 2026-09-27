@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.92.0",
+    date: "2026-09-27",
+    pr: 204,
+    headline: "Find stays where you are reading",
+    summary:
+      "Finding something while you read a document in Preview no longer drags you into an editable view to show the answer. The search now follows the view you are in: in Live or Source it marks matches over the source as before, and in Preview it marks them in the rendered prose right where you were reading. Because it searches what is on screen, a query aimed at markdown's own characters - a # heading marker, a pair of asterisks - finds nothing in Preview, where those characters are not drawn; the same query still finds them in Source. Switching views while a find is open clears its results, since offsets measured against one view would sit over nothing in the other. Find in Files is unchanged: its hits are source offsets, so opening one of them brings the file into an editable view.",
+    changed: [
+      "Find now searches and highlights within Preview instead of switching you to Live or Source - it marks matches in the rendered prose where you were reading.",
+    ],
+  },
+  {
     version: "0.91.0",
     date: "2026-09-26",
     pr: 199,
