@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiscardChoice, DocumentDraft } from "@trypthos/domain";
-import type { DocumentSet, OpenDocument, Revision, WorkspaceRef } from "@trypthos/domain";
+import type { DocumentSet, OpenDocument, ProviderKind, Revision, WorkspaceRef } from "@trypthos/domain";
 import {
   CONVERSATION_LOG_PATH,
   GUIDE_PATH,
@@ -322,9 +322,35 @@ export function failureKey(reason: string): string | null {
       return "errors.timedOut";
     case "not-configured":
       return "errors.notConfigured";
+    // A provider that can be read and not written. Its own key, because the file is fine and so is
+    // the user - Trypthos cannot save there yet.
+    case "read-only":
+      return "errors.readOnly";
     default:
       return "errors.unknown";
   }
+}
+
+/// `failureKey`, worded for the provider the failure came from.
+///
+/// The shared keys for offline, rate-limited and not-connected name GitHub, which is the wrong
+/// provider for a Google Drive folder or the Google account. Everything else is provider-neutral.
+/// Null `kind` is a failure with no workspace to name.
+export function providerFailureKey(kind: ProviderKind | null, reason: string): string | null {
+  if (kind === "google-drive") {
+    switch (reason) {
+      case "offline":
+        return "errors.googleOffline";
+      case "rate-limited":
+        return "errors.googleRateLimited";
+      case "not-connected":
+        return "errors.googleNotConnected";
+      // The shared key says GitHub, which is wrong here.
+      case "media-not-local":
+        return "errors.driveMediaNotLocal";
+    }
+  }
+  return failureKey(reason);
 }
 
 /// What a failure message interpolates, or null when it needs nothing.
@@ -390,6 +416,12 @@ function isKnownNonLocal(workspaces: readonly WorkspaceInfo[], qualified: string
   const workspaceId = splitQualified(qualified)?.workspaceId;
   const workspace = workspaces.find((candidate) => candidate.id === workspaceId);
   return workspace !== undefined && workspace.ref.kind !== "local";
+}
+
+/// The provider a qualified path's workspace belongs to, or null when no open workspace claims it.
+function kindOf(workspaces: readonly WorkspaceInfo[], qualified: string): ProviderKind | null {
+  const workspaceId = splitQualified(qualified)?.workspaceId;
+  return workspaces.find((candidate) => candidate.id === workspaceId)?.ref.kind ?? null;
 }
 
 /// Whether an open document can be moved into a window of its own.
@@ -568,14 +600,17 @@ export function useWorkspace(
   ///
   /// Takes the whole result rather than its reason, because one refusal carries numbers with it and
   /// a reason string alone would have thrown them away at the call site.
-  const fail = useCallback((result: { reason: string; sizeBytes?: number; limitBytes?: number }) => {
-    setInternal((prev) => ({
-      ...prev,
-      busy: false,
-      errorKey: failureKey(result.reason),
-      errorParams: failureParams(result),
-    }));
-  }, []);
+  const fail = useCallback(
+    (result: { reason: string; sizeBytes?: number; limitBytes?: number }, kind: ProviderKind | null = null) => {
+      setInternal((prev) => ({
+        ...prev,
+        busy: false,
+        errorKey: providerFailureKey(kind, result.reason),
+        errorParams: failureParams(result),
+      }));
+    },
+    [],
+  );
 
   const loadFolder = useCallback(
     async (path: string) => {
@@ -981,7 +1016,7 @@ export function useWorkspace(
     async (ref: WorkspaceRef) => {
       setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
       const result = await client.openWorkspaceRef(ref);
-      if (!result.ok) return fail(result);
+      if (!result.ok) return fail(result, ref.kind);
 
       await addWorkspace(result.workspace);
     },
@@ -1075,7 +1110,7 @@ export function useWorkspace(
       const mediaKind = mediaKindFor(path);
       if (mediaKind !== null) {
         if (isKnownNonLocal(stateRef.current.workspaces, path)) {
-          return fail({ reason: "media-not-local" });
+          return fail({ reason: "media-not-local" }, kindOf(stateRef.current.workspaces, path));
         }
 
         setInternal((prev) => ({
@@ -1098,7 +1133,7 @@ export function useWorkspace(
       // A link can point at a file that has been renamed, moved or deleted since it was written, and
       // that is ordinary rather than exceptional - it reports through the same banner as any other
       // failed read, which already says "not found" in the user's language.
-      if (!result.ok) return fail(result);
+      if (!result.ok) return fail(result, kindOf(stateRef.current.workspaces, path));
 
       setInternal((prev) => ({
         ...prev,
@@ -1106,6 +1141,9 @@ export function useWorkspace(
           path,
           content: result.content,
           revision: result.revision,
+          // Saving to Google Drive is the next release; until then the editor does not let a user
+          // type into a file it cannot save.
+          readOnly: kindOf(stateRef.current.workspaces, path) === "google-drive",
         }),
         busy: false,
       }));

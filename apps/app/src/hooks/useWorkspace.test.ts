@@ -6,6 +6,7 @@ import {
   failureKey,
   failureParams,
   parentOf,
+  providerFailureKey,
   useWorkspace,
   withoutSubtree,
 } from "./useWorkspace";
@@ -200,6 +201,79 @@ describe("failureKey", () => {
   it("maps anything unrecognised to the generic key", () => {
     expect(failureKey("EACCES")).toBe("errors.unknown");
     expect(failureKey("")).toBe("errors.unknown");
+  });
+});
+
+describe("providerFailureKey", () => {
+  // The shared keys for these three name GitHub. A Drive failure must name Google.
+  it("words a Drive workspace's connection failures for Google", () => {
+    expect(providerFailureKey("google-drive", "offline")).toBe("errors.googleOffline");
+    expect(providerFailureKey("google-drive", "rate-limited")).toBe("errors.googleRateLimited");
+    expect(providerFailureKey("google-drive", "not-connected")).toBe("errors.googleNotConnected");
+    expect(providerFailureKey("google-drive", "not-found")).toBe("errors.notFound");
+  });
+
+  it("says media cannot play from Drive without naming GitHub", () => {
+    expect(providerFailureKey("google-drive", "media-not-local")).toBe("errors.driveMediaNotLocal");
+    expect(providerFailureKey("github", "media-not-local")).toBe("errors.mediaNotLocal");
+  });
+
+  it("leaves every other provider to failureKey", () => {
+    expect(providerFailureKey("github", "offline")).toBe("errors.offline");
+    expect(providerFailureKey(null, "offline")).toBe("errors.offline");
+  });
+
+  it("names a refused write", () => {
+    expect(failureKey("read-only")).toBe("errors.readOnly");
+  });
+});
+
+describe("a Google Drive workspace", () => {
+  const driveRef = { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" };
+
+  it("opens its files read-only, and a local file stays editable", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan.md");
+    });
+    expect(result.current.state.file?.path).toBe("Notes/Plan.md");
+    expect(result.current.state.readOnly).toBe(true);
+
+    await act(async () => {
+      await result.current.actions.openPath("ws/a.md");
+    });
+    expect(result.current.state.file?.path).toBe("ws/a.md");
+    expect(result.current.state.readOnly).toBe(false);
+  });
+
+  it("says a Drive video cannot play, without naming GitHub", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/clip.mp4");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.driveMediaNotLocal");
+  });
+
+  it("says a Drive folder could not be reached in Google's words", async () => {
+    const { client } = fakeClient({ openWorkspaceRef: async () => ({ ok: false, reason: "offline" }) });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.googleOffline");
   });
 });
 
