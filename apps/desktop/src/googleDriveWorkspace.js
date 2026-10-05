@@ -30,7 +30,11 @@ function parentOf(path) {
   return slash < 0 ? "" : path.slice(0, slash);
 }
 
-function createGoogleDriveProvider({ ref, api }) {
+/// How long a folder's listing is trusted. The filter, Find in Files and the chat's outline all walk
+/// the tree through `list`, so without this each query is a storm of sequential Drive requests.
+const LISTING_TTL_MS = 60_000;
+
+function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_MS }) {
   const guard = createPathGuard({ root: GUARD_ROOT, caseInsensitive: false });
   /// Workspace-relative path -> `DriveEntry`. The root is not in it: its id is the ref's.
   const entries = new Map();
@@ -43,10 +47,37 @@ function createGoogleDriveProvider({ ref, api }) {
     return resolved.path.slice(GUARD_ROOT.length + 1);
   }
 
+  /// Drive folder id -> the raw files of its last successful listing, and when that was.
+  const listings = new Map();
+  /// Drive folder id -> the request in flight, so concurrent walks of one folder ask Drive once.
+  const inFlight = new Map();
+
+  /// The files of one folder: from the cache while it is fresh, else from Drive. A failure is passed
+  /// on and never remembered.
+  async function filesOf(folderId) {
+    const cached = listings.get(folderId);
+    if (cached !== undefined && now() - cached.at < ttlMs) return { ok: true, files: cached.files };
+
+    let pending = inFlight.get(folderId);
+    if (pending === undefined) {
+      pending = (async () => {
+        try {
+          const listed = await api.listChildren(folderId);
+          if (listed.ok) listings.set(folderId, { at: now(), files: listed.files });
+          return listed;
+        } finally {
+          inFlight.delete(folderId);
+        }
+      })();
+      inFlight.set(folderId, pending);
+    }
+    return pending;
+  }
+
   /// Lists one folder and records its children, replacing only that folder's direct children - what
   /// is known about the folders below them stays.
   async function listInto(path, folderId) {
-    const listed = await api.listChildren(folderId);
+    const listed = await filesOf(folderId);
     if (!listed.ok) return listed;
 
     const children = childrenToEntries(path, listed.files);
@@ -156,6 +187,7 @@ function createGoogleDriveProvider({ ref, api }) {
 
     async refresh() {
       entries.clear();
+      listings.clear();
       return { ok: true, truncated: false };
     },
   };
@@ -163,11 +195,11 @@ function createGoogleDriveProvider({ ref, api }) {
 
 /// Opens a Drive folder: it must exist, be a folder, and not be in the trash. Answers its CURRENT
 /// name - the one in the reference is what it was called when it was chosen.
-async function openGoogleDriveWorkspace({ ref, api }) {
+async function openGoogleDriveWorkspace({ ref, api, now, ttlMs }) {
   const meta = await api.fileMeta(ref.folderId);
   if (!meta.ok) return meta;
   if (meta.file.mimeType !== FOLDER_MIME || meta.file.trashed === true) return failure("not-found");
-  return { ok: true, name: meta.file.name, provider: createGoogleDriveProvider({ ref, api }) };
+  return { ok: true, name: meta.file.name, provider: createGoogleDriveProvider({ ref, api, now, ttlMs }) };
 }
 
 module.exports = { openGoogleDriveWorkspace, GUARD_ROOT };

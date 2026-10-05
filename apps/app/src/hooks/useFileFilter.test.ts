@@ -134,6 +134,64 @@ describe("useFileFilter", () => {
     });
   });
 
+  // One slow cloud folder must not hold up the local one beside it: each folder's matches are shown
+  // as its answer arrives.
+  it("shows a folder's matches before the slower folder has answered", async () => {
+    let releaseWork: ((result: FilterResult) => void) | null = null;
+    const where: FilterSurroundings = {
+      workspaces: [NOTES, WORK],
+      filterFiles: (request) =>
+        request.path === "Work"
+          ? new Promise<FilterResult>((resolve) => (releaseWork = resolve))
+          : Promise.resolve({ ok: true, paths: ["Notes/a.md"], truncated: false }),
+    };
+    const { result } = run(where);
+
+    act(() => result.current.setFilter("a"));
+    act(() => void vi.advanceTimersByTime(1000));
+    await flush();
+
+    expect(result.current.status).toEqual({ kind: "results", paths: ["Notes/a.md"], truncated: false });
+
+    await act(async () => {
+      releaseWork?.({ ok: true, paths: ["Work/b.md"], truncated: false });
+    });
+    expect(result.current.status).toEqual({
+      kind: "results",
+      paths: ["Notes/a.md", "Work/b.md"],
+      truncated: false,
+    });
+  });
+
+  it("ignores a late answer from a superseded filter, per folder", async () => {
+    const releases: Record<string, (result: FilterResult) => void> = {};
+    const where: FilterSurroundings = {
+      workspaces: [NOTES, WORK],
+      filterFiles: (request) =>
+        request.filter === "old" && request.path === "Work"
+          ? new Promise<FilterResult>((resolve) => (releases.work = resolve))
+          : Promise.resolve({ ok: true, paths: [`${request.path}/${request.filter}.md`], truncated: false }),
+    };
+    const { result } = run(where);
+
+    act(() => result.current.setFilter("old"));
+    act(() => void vi.advanceTimersByTime(1000));
+    await flush();
+    act(() => result.current.setFilter("new"));
+    act(() => void vi.advanceTimersByTime(1000));
+    await flush();
+
+    await act(async () => {
+      releases.work?.({ ok: true, paths: ["Work/stale.md"], truncated: false });
+    });
+
+    expect(result.current.status).toEqual({
+      kind: "results",
+      paths: ["Notes/new.md", "Work/new.md"],
+      truncated: false,
+    });
+  });
+
   it("goes back to showing the tree when the box is cleared", async () => {
     const { where } = shell({ Notes: { ok: true, paths: ["Notes/plan.md"], truncated: false } });
     const { result } = run(where);

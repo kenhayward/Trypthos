@@ -348,6 +348,8 @@ export function providerFailureKey(kind: ProviderKind | null, reason: string): s
       // The shared key says GitHub, which is wrong here.
       case "media-not-local":
         return "errors.driveMediaNotLocal";
+      case "read-only":
+        return "errors.driveReadOnly";
     }
   }
   return failureKey(reason);

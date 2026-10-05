@@ -49,9 +49,9 @@ function fakeApi(overrides = {}) {
   return { api, calls };
 }
 
-async function open(overrides) {
+async function open(overrides, options = {}) {
   const { api, calls } = fakeApi(overrides);
-  const opened = await openGoogleDriveWorkspace({ ref: REF, api });
+  const opened = await openGoogleDriveWorkspace({ ref: REF, api, ...options });
   assert.equal(opened.ok, true);
   return { provider: opened.provider, name: opened.name, calls };
 }
@@ -171,7 +171,7 @@ test("writing is refused: this release opens Drive read-only", async () => {
 // Re-expanding a folder without a refresh must replace only its own children, so what was learned
 // about the folders below them (and any open file under them) stays readable.
 test("re-listing a folder keeps what was learned about the folders under it", async () => {
-  const { provider, calls } = await open();
+  const { provider, calls } = await open({}, { ttlMs: 0 });
   await provider.list("");
   await provider.list("Archive");
   await provider.list("");
@@ -190,7 +190,7 @@ test("re-listing drops a child that has gone", async () => {
         return { ok: true, files };
       };
     })(),
-  });
+  }, { ttlMs: 0 });
   await provider.list("");
   await provider.list("");
   assert.deepEqual(await provider.read("Plan.md"), { ok: false, reason: "not-found" });
@@ -208,7 +208,7 @@ test("a folder replaced by a new one of the same name does not keep the old one'
       if (id === "dirBBB") return { ok: true, files: DRIVE.dirBBB };
       return { ok: true, files: [] };
     },
-  });
+  }, { ttlMs: 0 });
   await provider.list("");
   await provider.list("Archive");
   await provider.list("");
@@ -227,7 +227,7 @@ test("a folder that has gone takes what was learned beneath it", async () => {
       }
       return { ok: true, files: DRIVE.dirBBB };
     },
-  });
+  }, { ttlMs: 0 });
   await provider.list("");
   await provider.list("Archive");
   await provider.list("");
@@ -256,4 +256,58 @@ test("refresh forgets every path, so the next read asks Drive again", async () =
 test("a listing failure passes through", async () => {
   const { provider } = await open({ listChildren: async () => ({ ok: false, reason: "rate-limited" }) });
   assert.deepEqual(await provider.list(""), { ok: false, reason: "rate-limited" });
+});
+
+// Listing is a network request, and the filter, Find in Files and the chat's outline walk the tree
+// through `list` - so each query would be a storm of requests without a short memory.
+test("a second listing of a folder within the TTL does not ask Drive again", async () => {
+  let clock = 1000;
+  const { provider, calls } = await open({}, { now: () => clock, ttlMs: 60_000 });
+  const first = await provider.list("");
+  clock += 59_000;
+  assert.deepEqual(await provider.list(""), first);
+  assert.deepEqual(calls.list, ["rootAAA"]);
+  // The cached answer still records paths, so a read resolves without another listing.
+  assert.equal((await provider.read("Plan.md")).ok, true);
+  assert.deepEqual(calls.list, ["rootAAA"]);
+});
+
+test("a listing older than the TTL is asked for again", async () => {
+  let clock = 1000;
+  const { provider, calls } = await open({}, { now: () => clock, ttlMs: 60_000 });
+  await provider.list("");
+  clock += 60_001;
+  await provider.list("");
+  assert.deepEqual(calls.list, ["rootAAA", "rootAAA"]);
+});
+
+test("refresh empties the listing cache as well as the paths", async () => {
+  const { provider, calls } = await open();
+  await provider.list("");
+  await provider.refresh();
+  await provider.list("");
+  assert.deepEqual(calls.list, ["rootAAA", "rootAAA"]);
+});
+
+test("concurrent reads of an unlisted path share one listing per ancestor", async () => {
+  const { provider, calls } = await open();
+  const [one, two] = await Promise.all([provider.read("Archive/Old.md"), provider.read("Archive/Old.md")]);
+  assert.equal(one.ok, true);
+  assert.equal(two.ok, true);
+  assert.deepEqual(calls.list, ["rootAAA", "dirBBB"]);
+});
+
+test("a failed listing is not cached", async () => {
+  let fail = true;
+  const asked = [];
+  const { provider } = await open({
+    listChildren: async (id) => {
+      asked.push(id);
+      return fail ? { ok: false, reason: "offline" } : { ok: true, files: DRIVE.rootAAA };
+    },
+  });
+  assert.deepEqual(await provider.list(""), { ok: false, reason: "offline" });
+  fail = false;
+  assert.equal((await provider.list("")).ok, true);
+  assert.deepEqual(asked, ["rootAAA", "rootAAA"]);
 });

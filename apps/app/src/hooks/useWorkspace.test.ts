@@ -223,8 +223,9 @@ describe("providerFailureKey", () => {
     expect(providerFailureKey(null, "offline")).toBe("errors.offline");
   });
 
-  it("names a refused write", () => {
+  it("names a refused write, for Drive in Drive's words", () => {
     expect(failureKey("read-only")).toBe("errors.readOnly");
+    expect(providerFailureKey("google-drive", "read-only")).toBe("errors.driveReadOnly");
   });
 });
 
@@ -274,6 +275,20 @@ describe("a Google Drive workspace", () => {
     });
     await act(async () => {
       await result.current.actions.openPath("Notes/pic.png");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.googleOffline");
+  });
+
+  it("says a Drive text file could not be read in Google's words", async () => {
+    const { client } = fakeClient({ readFile: async () => ({ ok: false, reason: "offline" }) });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan.md");
     });
 
     expect(result.current.state.errorKey).toBe("errors.googleOffline");
