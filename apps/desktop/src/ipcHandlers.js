@@ -256,6 +256,10 @@ function registerIpcHandlers({
   /// An instance rather than a factory, unlike GitHub: there is no token to verify before storing,
   /// because the sign-in itself is the verification and happens entirely in the main process.
   google = null,
+  /// Builds the Google Drive client over an access-token supplier - `googleDriveApi.js` in the app.
+  /// A factory, like `createGitHub`, so a test can hand in a fake. No client without `google`: a
+  /// build with no OAuth client has no token to make one with.
+  createGoogleDrive = null,
   chat,
   openExternal = async () => {},
   /// Shows an absolute path in the operating system's file manager: a folder opened, a file shown
@@ -655,7 +659,12 @@ function registerIpcHandlers({
 
   /// The dependencies a provider is opened with. Built once, so `workspace:open`, `workspace:openRef`
   /// and anything after them cannot end up holding different clients.
-  const providerDeps = { github };
+  const drive =
+    google === null || createGoogleDrive === null
+      ? null
+      : createGoogleDrive((options) => google.accessToken(options));
+
+  const providerDeps = { github, drive };
 
   /// The repositories the account owns, held for the session.
   ///

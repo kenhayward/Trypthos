@@ -1009,6 +1009,8 @@ function sourceColour(mark: WorkspaceMark): string {
       return "text-leaf";
     case "obsidian":
       return "text-obsidian";
+    case "google-drive":
+      return "text-drive";
   }
 }
 
@@ -1038,6 +1040,14 @@ function SourceGlyph({ mark, className }: { mark: WorkspaceMark; className?: str
         <Glyph className={className} mark="obsidian">
           <path d="M14.5 2 6.5 8.5 5 15.5l5 6.5 8-2.5 1.5-10.5Z" />
           <path d="M14.5 2 11 12l-1 10M6.5 8.5 11 12l7 7.5M11 12l8.5-3" />
+        </Glyph>
+      );
+    case "google-drive":
+      // Drive's triangle, as an outline with its three folds.
+      return (
+        <Glyph className={className} mark="google-drive">
+          <path d="M8 3h8l6 11-3 6H5l-3-6Z" />
+          <path d="m8 3 7 11H2m14-11-7 11-4 6m17-6H9" />
         </Glyph>
       );
   }

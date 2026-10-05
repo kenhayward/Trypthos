@@ -5,6 +5,7 @@ const path = require("node:path");
 const { createPathGuard, workspaceRefName } = require("@trypthos/domain");
 const { createLocalWorkspace } = require("./localWorkspace");
 const { openGitHubWorkspace } = require("./githubWorkspace");
+const { openGoogleDriveWorkspace } = require("./googleDriveWorkspace");
 
 /// The provider registry: a reference in, an open workspace out.
 ///
@@ -115,9 +116,23 @@ async function openGitHub(ref, { github }) {
   };
 }
 
+/// A Google Drive folder. Read through the Drive client the handlers built over the Google account;
+/// a build without a Google OAuth client has none, which is "not configured" rather than
+/// "unsupported" - the interface words that as a build without Google Drive.
+async function openGoogleDrive(ref, { drive }) {
+  if (!drive) return { ok: false, reason: "not-configured" };
+  const opened = await openGoogleDriveWorkspace({ ref, api: drive });
+  if (!opened.ok) return opened;
+  return {
+    ok: true,
+    workspace: { ref, name: opened.name, root: null, guard: null, provider: opened.provider, vault: false },
+  };
+}
+
 const OPENERS = {
   local: openLocal,
   github: openGitHub,
+  "google-drive": openGoogleDrive,
 };
 
 /// Opens whatever a reference names, or explains why it could not be opened.
