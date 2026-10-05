@@ -20,7 +20,11 @@ module.exports = {
     // Outside the asar: Electron's Tray reads its icon from disk and cannot open an archive.
     // By name, not "*.png": the app icon files sit in the same directory and are consumed at build
     // time - shipping them too is dead weight in every install.
-    { from: "build", to: "build", filter: ["tray*"] },
+    //
+    // google-oauth-client.json is written here by the release workflow (see googleClient.js). A
+    // filter that names a file which is not there copies nothing, so a build without the secret
+    // still packages.
+    { from: "build", to: "build", filter: ["tray*", "google-oauth-client.json"] },
   ],
   // Declared so electron-builder writes the updater feed files (latest.yml, latest-mac.yml) that an
   // in-app updater will read. It does NOT publish: the workflow packages with --publish never and a

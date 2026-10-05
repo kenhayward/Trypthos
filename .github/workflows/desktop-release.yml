@@ -35,6 +35,23 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The Google OAuth client for Drive sign-in, from a repository secret holding the JSON Google's
+      # console downloads for the Desktop app client. A Desktop client's secret is not confidential by
+      # Google's own definition, but it does not belong in a public repository either. Without the
+      # secret the app still builds, and says Google Drive is not available.
+      - name: Write the Google OAuth client
+        shell: bash
+        env:
+          GOOGLE_OAUTH_CLIENT_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
+        run: |
+          if [ -n "$GOOGLE_OAUTH_CLIENT_JSON" ]; then
+            mkdir -p apps/desktop/build
+            printf '%s' "$GOOGLE_OAUTH_CLIENT_JSON" > apps/desktop/build/google-oauth-client.json
+            echo "ok: Google OAuth client written"
+          else
+            echo "::warning::GOOGLE_OAUTH_CLIENT_JSON is not set, so this build has no Google Drive sign-in."
+          fi
+
       # --publish never, deliberately. Letting each matrix job publish for itself is what produced
       # TWO draft releases for v0.4.2, with one asset stranded on the wrong one: both jobs finish at
       # roughly the same moment, each looks for a draft, neither sees the other's, and both create
