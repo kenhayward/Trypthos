@@ -271,12 +271,6 @@ export const ConnectGitHubRequest = z
 
 export type ConnectGitHubRequest = z.infer<typeof ConnectGitHubRequest>;
 
-/// Asking for the repositories the connected account owns.
-///
-/// `refresh` skips the copy the shell is holding. The list is fetched once and kept, because it is
-/// several requests over a slow connection and the picker is opened far more often than a
-/// repository is created - but a user who has just made one needs a way to see it without restarting
-/// the app.
 /// The Drive folder picker asking what is inside a folder. Folders only, ids and names only.
 ///
 /// Null is the top level: My Drive's folders and the Shared Drives. The id is a Drive id or nothing -
@@ -285,6 +279,12 @@ export const GoogleFoldersRequest = z.object({ parentId: DriveIdSchema.nullable(
 
 export type GoogleFoldersRequest = z.infer<typeof GoogleFoldersRequest>;
 
+/// Asking for the repositories the connected account owns.
+///
+/// `refresh` skips the copy the shell is holding. The list is fetched once and kept, because it is
+/// several requests over a slow connection and the picker is opened far more often than a
+/// repository is created - but a user who has just made one needs a way to see it without restarting
+/// the app.
 export const ListReposRequest = z.object({ refresh: z.boolean().default(false) }).strict();
 
 export type ListReposRequest = z.infer<typeof ListReposRequest>;

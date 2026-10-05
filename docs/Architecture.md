@@ -604,7 +604,7 @@ character too far right.
 
 ## Storage providers
 
-Order: local (**built**), GitHub (**built; reads, and commits to a branch**), Google Drive (**sign-in built; folders next**), OneDrive, Dropbox.
+Order: local (**built**), GitHub (**built; reads, and commits to a branch**), Google Drive (**sign-in and read-only folders built; saving next**), OneDrive, Dropbox.
 
 ### A workspace is named by a reference
 
@@ -844,9 +844,9 @@ from `CommitDialog`. That keeps the save path one straight line - await the answ
 commit - rather than the app juggling a half-finished save while a dialog is up. A branch is state
 and a message is per-commit, which is why only the first is held in the provider.
 
-### Google Drive (sign-in)
+### Google Drive (sign-in and folders)
 
-`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `packages/domain/src/googleAuth.ts` holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). As of 0.96.0 this is sign-in only: no Drive folder can be opened yet.
+`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `packages/domain/src/googleAuth.ts` holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). As of 0.97.0 a Drive folder can be opened as a read-only workspace (see "Drive folders as workspaces" below); saving to Drive is not built.
 
 - **Loopback plus PKCE, in the main process.** Google refuses OAuth inside an embedded webview, so Connect opens the system browser at Google's consent page. The redirect goes to a listener on 127.0.0.1 on a port the OS chose, and the code is exchanged with a PKCE verifier the renderer never sees. The `state` is checked before the code is used. The browser tab then shows a short English "return to Trypthos" page, hard-coded like the shell's menus.
 - **One sign-in at a time.** A second Connect, or Cancel, stops a waiting one. A Disconnect that lands while a sign-in is in flight wins: when the sign-in finishes, nothing is stored. A sign-in nobody completes ends on a five-minute timeout and answers `timed-out`.
@@ -855,6 +855,15 @@ and a message is per-commit, which is why only the first is held in the provider
 - **Four channels, none of which returns a token.** `google:status`, `google:connect`, `google:cancelConnect` and `google:disconnect` answer an email address or a refusal reason, as results `{ ok: false, reason }` and never as a throw. `googleIpc.test.js` walks every registered handler and fails if any answer, or any thrown error, contains a token. `useGoogle` in the renderer turns a rejected invoke into an ordinary refusal, as `useGitHub` does.
 - **Where the OAuth client comes from.** Packaged builds read `resources/build/google-oauth-client.json`, which the release workflow writes from the `GOOGLE_OAUTH_CLIENT_JSON` repository secret before packaging. In development `TRYPTHOS_GOOGLE_CLIENT` names the client JSON, kept outside the repository. A desktop client's secret is not confidential to Google, but it is kept out of a public repository all the same. No client means `null`, which is a normal answer: the section says this build has no Google Drive support and `google:connect` answers `not-configured`.
 - **Publishing is gated by Google, not by us.** While the client belongs to a Workspace organisation's internal project, only that organisation can sign in. Opening it to anyone needs Google's verification of a restricted scope, which is a review process with its own lead time.
+
+#### Drive folders as workspaces
+
+- **`googleDriveApi.js` is the only thing that speaks to Drive.** It takes the access token from `googleAuth.accessToken` on every call, so a token is never held here. Every id is checked with `isDriveId` before it reaches a URL and a failing one answers `not-found`: an id arrives from settings or the renderer and goes into a query string, so the check is what keeps it an id. One deadline covers the fetch and the body read, because a connection that stalls mid-body would otherwise hang a listing forever. A 401 gets one refresh of the token and one retry; a rate limit gets one backoff retry; anything further is answered, not looped. Log lines carry the step and `error.code ?? error.name` only, never a URL, since a URL holds a folder id.
+- **`googleDriveWorkspace.js` is the provider object, with paths over ids.** Every seam in the app is path-shaped (path guard, qualified ids, recent files, wiki-link resolution), so the workspace keeps a path-to-Drive-id map filled from listings by `childrenToEntries`, which is also where display names are made: a Google Doc is `<title>.md`, slash, backslash, colon and control characters become `_`, and a duplicate sibling gets `~<6 id chars>`. A path the map has not seen is found by an on-demand walk from the root rather than refused. Re-listing a folder replaces that folder's direct children and drops the descendants of any child that vanished or came back under a different id or kind, so a stale id can never be read through a reused path; a refresh clears the map. The guard root is the fake `/drive`, as GitHub's is `/repo`, so the one shared boundary module serves both. `write` answers `read-only`.
+- **A Drive workspace is a `google-drive` ref.** The ref (folder id, optional shared drive id, display name) is part of settings, which moved to schema v23 with a migration; a 0.96 build refuses a settings file holding one rather than discarding every workspace.
+- **`google:folders` is the picker's only view of Drive.** It returns folders only, ids and names, for a parent id that is null (My Drive's folders and the shared drives) or a Drive id; `OpenDriveDialog` walks it with a breadcrumb. It validates its argument in the main process and answers a result, never a throw.
+- **Read-only is enforced twice.** The renderer opens Drive files read-only and chat Apply refuses a read-only document before the editor is touched; the shell refuses the write regardless. Drive failures are worded for Google through `providerFailureKey`. Drive videos cannot play, because the player needs a local file (`errors.driveMediaNotLocal`).
+- **Drive is excluded from the vault graph.** The graph walks a whole tree, and a walk of a Drive is a request per folder; it is for local vaults only.
 
 ### Local
 
