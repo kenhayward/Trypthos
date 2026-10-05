@@ -1,7 +1,7 @@
 "use strict";
 
 const http = require("node:http");
-const crypto = require("node:crypto");
+const nodeCrypto = require("node:crypto");
 const {
   GOOGLE_REVOKE_URL,
   GOOGLE_TOKEN_URL,
@@ -86,7 +86,7 @@ function createGoogleAuth({
   fetch = globalThis.fetch,
   openExternal,
   listen = listenOnce,
-  randomBytes = crypto.randomBytes,
+  randomBytes = nodeCrypto.randomBytes,
   now = Date.now,
   logger = console,
   timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -98,6 +98,20 @@ function createGoogleAuth({
   let refreshing = null;
   /// The sign-in waiting on the browser, so a second Connect or a Cancel can stop it.
   let pending = null;
+  /// Bumped by every sign-out. Work that began before one must not outlive it: a refresh that lands
+  /// afterwards would bring back an access token the user just signed out of.
+  let generation = 0;
+
+  /// An account-store call that cannot throw outward. A failed store is `unknown`, and the log line
+  /// names the step and the error's code or name - never its message.
+  async function safely(step, operation) {
+    try {
+      return { ok: true, value: await operation() };
+    } catch (error) {
+      logger.error?.(`Account store ${step} failed: ${error?.code ?? error?.name}`);
+      return failure("unknown");
+    }
+  }
 
   /// One request to Google, with a timeout. Answers `{ status, ok, body }` or null when it never
   /// arrived. `step` is the only thing a log line says about it.
@@ -117,7 +131,7 @@ function createGoogleAuth({
       const parsed = await response.json().catch(() => null);
       return { ok: response.ok, status: response.status, body: parsed };
     } catch (error) {
-      logger.error?.(`Google ${step} did not complete: ${error.message}`);
+      logger.error?.(`Google ${step} did not complete: ${error?.code ?? error?.name}`);
       return null;
     } finally {
       clearTimeout(timer);
@@ -156,23 +170,39 @@ function createGoogleAuth({
     if (client === null) return failure("not-configured");
     pending?.cancel("cancelled");
 
+    // Registered before the listener starts, so a Cancel or a second Connect arriving while it
+    // starts still finds this sign-in.
+    let resolveStopped;
+    const stopped = new Promise((resolve) => (resolveStopped = resolve));
+    const mine = {
+      reason: undefined,
+      cancel: (reason) => {
+        if (mine.reason !== undefined) return;
+        mine.reason = reason;
+        resolveStopped({ stopped: reason });
+      },
+    };
+    pending = mine;
+
     let listener;
     try {
       listener = await listen();
     } catch (error) {
-      logger.error?.(`Could not listen for Google's answer: ${error.message}`);
-      return failure("offline");
+      logger.error?.(`Could not listen for Google's answer: ${error?.code ?? error?.name}`);
+      if (pending === mine) pending = null;
+      return failure(mine.reason ?? "offline");
+    }
+    if (mine.reason !== undefined) {
+      listener.close();
+      if (pending === mine) pending = null;
+      return failure(mine.reason);
     }
 
     const verifier = randomBytes(32).toString("base64url");
-    const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+    const challenge = nodeCrypto.createHash("sha256").update(verifier).digest("base64url");
     const state = randomBytes(16).toString("base64url");
 
-    let stop;
-    const stopped = new Promise((resolve) => (stop = (reason) => resolve({ stopped: reason })));
-    const timer = setTimeout(() => stop("timed-out"), consentTimeoutMs);
-    const mine = { cancel: stop };
-    pending = mine;
+    const timer = setTimeout(() => mine.cancel("timed-out"), consentTimeoutMs);
 
     try {
       try {
@@ -180,12 +210,14 @@ function createGoogleAuth({
           authorizationUrl({ clientId: client.clientId, redirectUri: listener.redirectUri, state, codeChallenge: challenge }),
         );
       } catch (error) {
-        logger.error?.(`Could not open the browser for Google sign-in: ${error.message}`);
+        logger.error?.(`Could not open the browser for Google sign-in: ${error?.code ?? error?.name}`);
         return failure("unknown");
       }
 
       const outcome = await Promise.race([listener.arrived.then((url) => ({ url })), stopped]);
       if (outcome.stopped !== undefined) return failure(outcome.stopped);
+      // The answer is in: a late timeout or cancel timer is no longer what ends this.
+      clearTimeout(timer);
 
       const redirect = readRedirect(outcome.url, state);
       if (!redirect.ok) return redirect;
@@ -212,10 +244,18 @@ function createGoogleAuth({
       const who = await whoami(token.access_token);
       if (!who.ok) return who;
 
-      // Stored last: a credential reaches disk only once it has been shown to work.
-      const stored = await accounts.setToken(GOOGLE_PROVIDER, token.refresh_token);
-      if (!stored.ok) return stored;
+      // A sign-out or cancel during the exchange wins: nothing is stored.
+      if (mine.reason !== undefined) return failure(mine.reason);
 
+      // Stored last: a credential reaches disk only once it has been shown to work.
+      const saved = await safely("save", () => accounts.setToken(GOOGLE_PROVIDER, token.refresh_token));
+      if (!saved.ok) return saved;
+      if (!saved.value.ok) return saved.value;
+
+      if (mine.reason !== undefined) {
+        await safely("delete", () => accounts.deleteToken(GOOGLE_PROVIDER));
+        return failure(mine.reason);
+      }
       remember(token);
       return { ok: true, email: who.email };
     } finally {
@@ -230,7 +270,10 @@ function createGoogleAuth({
   }
 
   async function refresh() {
-    const refreshToken = await accounts.getToken(GOOGLE_PROVIDER);
+    const began = generation;
+    const read = await safely("read", () => accounts.getToken(GOOGLE_PROVIDER));
+    if (!read.ok) return read;
+    const refreshToken = read.value;
     if (typeof refreshToken !== "string" || refreshToken === "") return failure("not-connected");
 
     const refreshed = await tokenCall(
@@ -238,6 +281,7 @@ function createGoogleAuth({
       "refresh",
     );
     if (!refreshed.ok) return refreshed;
+    if (generation !== began) return failure("not-connected");
     remember(refreshed.token);
     return { ok: true, token: refreshed.token.access_token };
   }
@@ -248,16 +292,20 @@ function createGoogleAuth({
       return { ok: true, token: access.token };
     }
     if (refreshing === null) {
-      refreshing = refresh().finally(() => {
-        refreshing = null;
+      const mineRefresh = refresh().finally(() => {
+        if (refreshing === mineRefresh) refreshing = null;
       });
+      refreshing = mineRefresh;
     }
     return refreshing;
   }
 
   async function status() {
     const answer = (fields) => ({ ok: true, configured: client !== null, connected: false, email: null, reason: null, ...fields });
-    if (client === null || !(await accounts.hasToken(GOOGLE_PROVIDER))) return answer({});
+    if (client === null) return answer({});
+    const has = await safely("check", () => accounts.hasToken(GOOGLE_PROVIDER));
+    if (!has.ok) return answer({ reason: has.reason });
+    if (!has.value) return answer({});
 
     // Asked of Google rather than answered from a stored name: a grant can be revoked from the
     // Google account, and an indicator naming an account the app cannot reach would be a lie.
@@ -269,15 +317,22 @@ function createGoogleAuth({
 
   async function disconnect() {
     pending?.cancel("cancelled");
-    const refreshToken = await accounts.getToken(GOOGLE_PROVIDER);
+    // Forgotten in memory first, before anything is awaited: whatever the store does next, this
+    // process no longer holds an access token for the account the user signed out of.
+    generation += 1;
+    access = null;
+    refreshing = null;
+
+    const read = await safely("read", () => accounts.getToken(GOOGLE_PROVIDER));
+    const refreshToken = read.ok ? read.value : null;
     if (typeof refreshToken === "string" && refreshToken !== "") {
       const answer = await call(GOOGLE_REVOKE_URL, { method: "POST", body: revokeRequestBody(refreshToken) }, "sign-out");
       // Signing out is what the user asked for, and it happens here regardless. Google forgets the
       // grant on its own side when the token is never used again.
       if (answer !== null && !answer.ok) logger.error?.("Google did not confirm the sign-out. It is forgotten here regardless.");
     }
-    await accounts.deleteToken(GOOGLE_PROVIDER);
-    access = null;
+    const deleted = await safely("delete", () => accounts.deleteToken(GOOGLE_PROVIDER));
+    if (!deleted.ok) return deleted;
     return { ok: true };
   }
 
