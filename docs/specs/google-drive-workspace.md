@@ -256,6 +256,23 @@ Doc answers `read-only`.
   `sourceColour` cases for `"google-drive"` (the switches are exhaustive, so the compiler enforces it).
 - Restoring at launch needs nothing new: `reopen` already opens refs sequentially and drops failures.
 
+### PR 2 decisions taken while planning
+
+These settle details the sections above left open. Where they differ from the text above, these win.
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Drive id shape | `DriveIdSchema` = `^[A-Za-z0-9_-]{1,256}$`, in `workspaceRef.ts`, used by the ref and by `google:folders` | Every Drive id is that alphabet. Validating it at the boundary means an id from settings or the renderer can never be spliced into a Drive query string as anything but an id. |
+| A Google Doc's name in the tree | `<title>.md` (unless the title already ends in `.md`) | The renderer decides what it can open by extension. A bare title would be greyed out as an unknown type. |
+| Characters a path cannot hold | `/`, `\`, `:` and control characters in a Drive name become `_`; an empty, `.` or `..` name becomes `_` | Drive allows all of them in a name; the path guard reads `/` as a separator and `C:` as drive-qualified. Renaming for display only - nothing is written. |
+| Duplicate suffix | `stem~<first 6 of id>.ext`, applied after the two rules above | As in "Decisions taken"; applied to the final display name. |
+| Read-only in PR 2 | The provider's `write` answers `read-only`; the renderer opens every text file from a Drive workspace with `readOnly: true` | The editor should not let a user type into a file it cannot save. `failureKey("read-only")` -> `errors.readOnly`. |
+| Provider-specific wording | `providerFailureKey(kind, reason)` in `useWorkspace.ts`: for `google-drive`, offline / rate-limited / not-connected use the `errors.google*` keys; everything else is `failureKey`. `useGoogle` uses it too | One mapping both the account section and the workspace use, so a Drive failure never names GitHub. |
+| Re-listing a folder | Replaces that folder's direct children in the id map only | A refresh lists the root before the folders under it; dropping grandchildren would make an open file under an expanded folder briefly unreadable. |
+| Folder picker top level | My Drive's folders, then Shared Drives. "Open this folder" is offered inside any folder and at a Shared Drive's root, not at the top level | Whole-My-Drive roots stay deferred. |
+| Colour | A `drive` token (`--tp-drive`, `--color-drive`) defined in all three theme blocks | Same rule as every other source mark. |
+| Connect from the picker | `GoogleAccountSection` gains `onConnected`; the picker shows it when a listing answers `not-connected` / `not-configured`, and reloads after connecting | No second connect control. |
+
 ## Error handling
 
 | Situation | Where it shows |
