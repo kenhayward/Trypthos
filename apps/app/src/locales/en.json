@@ -77,7 +77,8 @@
       "taskList": "Task list",
       "codeBlock": "Code block",
       "table": "Table",
-      "rule": "Horizontal rule"
+      "rule": "Horizontal rule",
+      "pasteMarkdown": "Paste as markdown"
     },
     "guide": "Markdown Syntax Guide",
     "readOnly": "Read-only",

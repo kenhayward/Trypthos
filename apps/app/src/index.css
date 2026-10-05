@@ -466,6 +466,20 @@ body {
   border-radius: 2px;
   padding: 0 0.1em;
 }
+/* What Find found in Preview mode - the same colours the editor paints its matches with, read from
+   the same tokens, so a highlight looks identical whether it is drawn over source or over prose. A
+   span rather than `mark`, which above belongs to an author's own ==highlight==: a search hit and a
+   permanent emphasis are different things and must not share one element. */
+.markdown-body .cm-find-match {
+  background: var(--color-find-match);
+  border-radius: 2px;
+}
+.markdown-body .cm-find-active {
+  background: var(--color-find-active);
+  /* An outline as well as a colour, like the editor's active match: the one being read has to be
+     findable at a glance in prose where a dozen others are highlighted. */
+  outline: 1px solid var(--color-find-active-edge);
+}
 :is(.markdown-body, .chat-md) .md-tag {
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);

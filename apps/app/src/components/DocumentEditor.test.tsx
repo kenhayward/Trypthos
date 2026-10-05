@@ -178,6 +178,99 @@ describe("formatting", () => {
   });
 });
 
+/// Paste as markdown, driven from outside the editor - the toolbar button and the right-click menu
+/// both reach it through the handle. The conversion itself is `pasteMarkdown.test.ts`; what matters
+/// here is that the clipboard is read once, the result lands in place of the selection, and a
+/// clipboard with nothing to give changes nothing.
+describe("paste as markdown", () => {
+  function Pasting({
+    onChange,
+    readClipboard,
+  }: {
+    onChange: (value: string) => void;
+    readClipboard?: () => Promise<{ html: string | null; text: string | null }>;
+  }) {
+    const handle = useRef<EditorHandle>(null);
+    return (
+      <>
+        <button type="button" onClick={() => void handle.current?.pasteMarkdown()}>
+          paste markdown
+        </button>
+        <DocumentEditor
+          documentId="a.md"
+          value=""
+          onChange={onChange}
+          live={false}
+          fileType={MARKDOWN_FILE_TYPE}
+          fileTypes={["markdown"]}
+          readClipboard={readClipboard}
+          ref={handle}
+          ariaLabel="Document source"
+        />
+      </>
+    );
+  }
+
+  it("inserts the clipboard as markdown at the caret", async () => {
+    const onChange = vi.fn();
+    const readClipboard = vi.fn(async () => ({
+      html: "<h2>Plan</h2><ul><li>one</li><li>two</li></ul>",
+      text: "Plan one two",
+    }));
+    render(<Pasting onChange={onChange} readClipboard={readClipboard} />);
+
+    screen.getByRole("button", { name: "paste markdown" }).click();
+    // The converter is loaded on first use, so the change lands a moment after the press.
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+
+    expect(readClipboard).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe("## Plan\n\n- one\n- two");
+  });
+
+  // A clipboard with only plain text - what a reply's own Copy button puts there - goes in as it is.
+  it("falls back to the plain text when there is no HTML", async () => {
+    const onChange = vi.fn();
+    render(
+      <Pasting
+        onChange={onChange}
+        readClipboard={async () => ({ html: null, text: "plain\ntext" })}
+      />,
+    );
+
+    screen.getByRole("button", { name: "paste markdown" }).click();
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe("plain\ntext");
+  });
+
+  // Either flavour missing is nothing to paste, and a press that changes nothing must not report an
+  // edit - the document stays exactly as it was.
+  it("leaves the document alone when the clipboard holds nothing", async () => {
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} readClipboard={async () => ({ html: null, text: null })} />);
+
+    screen.getByRole("button", { name: "paste markdown" }).click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("leaves the document alone when the clipboard cannot be read", async () => {
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} readClipboard={() => Promise.reject(new Error("denied"))} />);
+
+    screen.getByRole("button", { name: "paste markdown" }).click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // The one-undo-step property is asserted in the browser suite (`EditorPanel.browser.test.tsx`):
+  // it needs CodeMirror's keymap to answer a real Ctrl+Z, and synthetic events do not reach it.
+});
+
 /// Editing behaviour follows the file type's `kind`, and all three of these are invisible when
 /// wrong: a source file quietly underlined in red, or a log quietly rewrapped so the column a
 /// character sits in stops meaning anything.

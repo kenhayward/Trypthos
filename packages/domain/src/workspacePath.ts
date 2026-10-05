@@ -1,3 +1,5 @@
+import { trimTrailing } from "./trimRun";
+
 /// The workspace boundary check, in one place.
 ///
 /// Every path the folder browser or an AI tool resolves goes through this - local and cloud alike.
@@ -44,7 +46,7 @@ function normalizeSeparators(value: string): string {
 }
 
 function stripTrailingSlash(value: string): string {
-  return value.length > 1 && value.endsWith("/") ? value.replace(/\/+$/, "") : value;
+  return value.length > 1 && value.endsWith("/") ? trimTrailing(value, "/") : value;
 }
 
 /// Absolute in any of the three senses that matter on Windows: rooted (`/x`, `\x`), drive-absolute

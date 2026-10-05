@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceRef } from "@trypthos/domain";
 import type { FilterStatus } from "../hooks/useFileFilter";

@@ -478,6 +478,39 @@ They act on what you are doing rather than simply inserting characters:
 - **Code block**, **table** and **horizontal rule** insert a block. A rule or a table goes below the
   line you are on rather than into the middle of it, and a table arrives with its first heading
   selected.
+- **Paste as markdown** pastes what is on the clipboard with its structure kept. It sits at the end
+  of the Source view toolbar, and the editor's right-click menu offers it too - in Live and Source
+  view alike, wherever the caret can write; a right-click anywhere else shows no such item. The
+  shortcut Ctrl+Shift+V (Cmd on macOS) does the same while your focus is inside an editable markdown
+  document - with focus anywhere else it does nothing, so a habit from another app cannot write into
+  a document you are not looking at.
+  Text copied from a rendered page - a chat reply in Claude or another app, a web page - normally
+  pastes as plain text, which loses the headings, list markers, code fences and sometimes the line
+  breaks between paragraphs. This button reads the formatted copy instead and writes it back as
+  markdown: headings as `#`, lists as `-` and `1.`, code blocks fenced with their language, links,
+  bold, italic, strikethrough and tables. Copy buttons inside a copied code block are left out. When
+  the clipboard holds only plain text - what a reply's own Copy button puts there, which is already
+  markdown - it goes in as it is. It replaces the selection, if there is one, and is one Ctrl+Z to
+  undo. Ctrl+V still pastes exactly the plain text, which is what you want for source code.
+
+  It works on text copied from **Word** too - on Windows or macOS, Word for the web, or Google Docs -
+  on a best-effort basis. Headings become `#` headings (Word's Title style is a top-level one),
+  bulleted and numbered lists become markdown lists nested as they were in Word and starting at the
+  same number, bold, italic and strikethrough are kept, a Quote style becomes a quotation, and a
+  table becomes a markdown table with its first row as the header. Text set in a monospaced font
+  such as Consolas or Courier New becomes inline code, or a code block when whole paragraphs are.
+  Everything markdown cannot express is left behind: fonts, sizes, colours, underline, spacing,
+  page breaks and Word's own bookmarks. Pictures copied from a Word document are left out, because
+  what Word puts on the clipboard is a temporary file on your machine rather than something a
+  markdown file can refer to; a picture from a web page keeps its web address.
+
+  A range copied from **Excel** or **Google Sheets** becomes a markdown table, with the range's first
+  row as the header. Columns of numbers are right-aligned, a `|` inside a cell is escaped so it does
+  not split the cell, a line break inside a cell becomes `<br>`, and merged cells keep the columns
+  lined up. Cell colours, fonts, borders and number formats are left behind; a number arrives as it
+  was displayed, so `1,234.50` stays `1,234.50`. A single cell pastes as its text rather than as a
+  one-cell table. From a program that puts only tab-separated text on the clipboard, that text
+  becomes a table too - unless it looks like tab-indented code.
 
 Each press is a single change, so one Ctrl+Z (Cmd+Z on macOS) undoes it, and the cursor goes back
 into the document afterwards. The toolbar is in Source view only: Live hides the markers a press
@@ -535,9 +568,17 @@ types you have turned on**, so a type you have switched off is not searched any 
 listed. And it **stops at a sensible size** rather than walking a fifty-thousand-file tree - and when
 it stops early it says so, because a list silently cut short is a wrong answer given confidently.
 
-One consequence worth knowing: **a document in Preview switches to an editable view while a match is
-on screen.** Preview has no caret and no place to draw a highlight, so a search there would report
-matches and show none of them. It goes back to Preview when you close the find.
+One consequence worth knowing: **a search follows the view you are reading in.** In Live or Source it
+marks matches over the source text, and in Preview it marks them in the rendered prose - so a find
+while reading stays where you are instead of dragging you into an editable view to show its answer.
+Because it searches what is on screen rather than the file underneath, a query aimed at markdown's
+own characters (a `#` heading marker, a pair of asterisks) finds nothing in Preview, where those
+characters are not drawn; the same query still finds them in Source. For the same reason Preview does
+not search inside maths, diagrams or embedded notes, which are drawn from their source rather than
+shown as its text, and it reads a line break inside a paragraph as the space you see - so a phrase
+that wraps onto a new line in the file is still found. Switching views while a find is
+open clears its results - offsets measured against one view would sit over nothing in the other - and
+Find in Files always opens its hits in an editable view, since their offsets are into the source.
 
 ## Zoom and pan
 
@@ -625,7 +666,7 @@ In an Obsidian document Preview shows:
 - **A single line break shows as a line break**, as it does in Obsidian with its default settings.
 
 **Diagrams, in either flavour.** A code block whose language is `mermaid` is drawn as a diagram in
-Preview, as GitHub draws one, in the light or dark style to match the app. One Mermaid cannot read is
+Preview, in Mermaid's current look, in the light or dark style to match the app. One Mermaid cannot read is
 left as its code. KaTeX and Mermaid are both loaded the first time a document has math or a diagram,
 and not before.
 

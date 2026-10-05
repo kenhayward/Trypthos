@@ -72,8 +72,9 @@ test("the file on disk contains nothing resembling the key", async () => {
     const raw = await fs.readFile(secretsPath(dir), "utf8");
     assert.ok(!raw.includes(KEY), "the key itself is on disk in plain text");
     assert.ok(!raw.includes("sk-test"), "a recognisable prefix of the key is on disk");
-    // The endpoint is not a secret and is needed to look the key up, so it is expected here.
-    assert.ok(raw.includes(ENDPOINT));
+    // The endpoint is not a secret and is needed to look the key up, so it is expected here - as the
+    // name the key is stored under, which is a sharper check than finding it somewhere in the text.
+    assert.ok(Object.hasOwn(JSON.parse(raw).keys, ENDPOINT));
   });
 });
 

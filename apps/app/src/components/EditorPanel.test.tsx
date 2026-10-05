@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
 
 const DOC = "# Title\n\nSome **bold** text and `code`.\n\n- one\n- two\n";
@@ -330,6 +330,54 @@ describe("the formatting toolbar", () => {
     expect(onChange).toHaveBeenLastCalledWith(DOC.replace("# Title", "Title"));
   });
 
+  it("pastes the clipboard as markdown at the caret", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const readClipboard = vi.fn(async () => ({
+      html: "<h2>Plan</h2><ul><li>one</li><li>two</li></ul>",
+      text: "Plan one two",
+    }));
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value=""
+        onChange={onChange}
+        readClipboard={readClipboard}
+      />,
+    );
+
+    await user.click(modeButton("Source"));
+    await user.click(screen.getByRole("button", { name: "Paste as markdown" }));
+
+    expect(readClipboard).toHaveBeenCalledOnce();
+    // The converter is loaded on the first press, so the change lands a moment after the click.
+    await vi.waitFor(() => expect(onChange).toHaveBeenLastCalledWith("## Plan\n\n- one\n- two"));
+  });
+
+  it("leaves the document alone when the clipboard cannot be read", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={onChange}
+        readClipboard={() => Promise.reject(new Error("denied"))}
+      />,
+    );
+
+    await user.click(modeButton("Source"));
+    await user.click(screen.getByRole("button", { name: "Paste as markdown" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("is not offered for a document that cannot be edited", async () => {
     const user = userEvent.setup();
     render(
@@ -347,6 +395,187 @@ describe("the formatting toolbar", () => {
     await user.click(modeButton("Source"));
 
     expect(toolbar()).toBeNull();
+  });
+});
+
+/// The right-click menu is drawn in the shell, but its one renderer-named item - Paste as markdown -
+/// can only be offered where it would land: over an editable markdown document. So every right-click
+/// reports what was under it, and the shell decides from that plus the native edit flags.
+
+describe("the right-click menu's paste", () => {
+  const reported: (string | null)[] = [];
+
+  beforeEach(() => {
+    reported.length = 0;
+    (window as unknown as { trypthos?: unknown }).trypthos = {
+      onWindowState: () => () => {},
+      setPasteMarkdownContext: async (label: string | null) => {
+        reported.push(label);
+        return { ok: true };
+      },
+    };
+  });
+
+  afterEach(() => {
+    delete (window as unknown as { trypthos?: unknown }).trypthos;
+  });
+
+  const surface = () => screen.getByLabelText("Document source");
+
+  it("reports the label when a right-click lands on the editor in Live mode", async () => {
+    render(<Harness />); // opens in Live, where the toolbar is not drawn but the paste still applies
+
+    fireEvent.contextMenu(surface());
+
+    expect(reported).toEqual(["Paste as markdown"]);
+  });
+
+  it("reports the label when a right-click lands on the editor in Source mode", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(modeButton("Source"));
+
+    fireEvent.contextMenu(surface());
+
+    expect(reported).toEqual(["Paste as markdown"]);
+  });
+
+  // A right-click anywhere else - the chat box, a settings field - must not offer a paste that would
+  // land in the document rather than where the user clicked.
+  it("reports nothing when the right-click is outside the editor", async () => {
+    render(<Harness />);
+
+    fireEvent.contextMenu(screen.getByRole("tab", { name: /notes\.md/ }));
+
+    expect(reported).toEqual([null]);
+  });
+
+  // The guide opens read-only, and a paste into it would be an edit the document refuses.
+  it("reports nothing for a document that cannot be edited", async () => {
+    render(
+      <EditorPanel
+        workspaceName={null}
+        paths={["trypthos:markdown-guide"]}
+        activePath="trypthos:markdown-guide"
+        dirty={false}
+        value={DOC}
+        readOnly
+        onChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(surface());
+
+    expect(reported).toEqual([null]);
+  });
+
+  // Preview has no editing surface at all, so there is nothing for the paste to land in. The prose
+  // is rendered HTML here - "Title" is a heading element, not source text.
+  it("reports nothing when the document is read as rendered prose", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(modeButton("Preview"));
+
+    fireEvent.contextMenu(screen.getByRole("heading", { name: "Title" }));
+
+    expect(reported).toEqual([null]);
+  });
+});
+
+/// The same command as the right-click menu's item, from the keyboard. It is aimed where that item
+/// is offered - an editable markdown document with the focus in it - and does nothing anywhere
+/// else, so a habit from another app cannot write into a document nobody is looking at.
+describe("the paste as markdown shortcut", () => {
+  function Pasting({ onChange = vi.fn() }: { onChange?: (value: string) => void }) {
+    const [value, setValue] = useState("");
+    return (
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={value}
+        onChange={(next) => {
+          setValue(next);
+          onChange(next);
+        }}
+        readClipboard={async () => ({ html: "<h2>Plan</h2><ul><li>one</li></ul>", text: "Plan one" })}
+      />
+    );
+  }
+
+  const surface = () => screen.getByLabelText("Document source");
+  const pressShortcut = (target: Element | Window) =>
+    fireEvent.keyDown(target, { key: "v", ctrlKey: true, shiftKey: true });
+
+  it("pastes the clipboard as markdown when the editor has focus in Live mode", async () => {
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+
+    surface().focus();
+    pressShortcut(surface());
+
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe("## Plan\n\n- one");
+  });
+
+  it("pastes the clipboard as markdown when the editor has focus in Source mode", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+    await user.click(modeButton("Source"));
+
+    surface().focus();
+    pressShortcut(surface());
+
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe("## Plan\n\n- one");
+  });
+
+  // The focus is not in the document - a tab, a settings field, the chat box. A press there must
+  // not reach across and write into the open document.
+  it("does nothing when the focus is outside the editor", async () => {
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+
+    screen.getByRole("tab", { name: /notes\.md/ }).focus();
+    pressShortcut(window);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // The guide opens read-only, and a paste into it would be an edit the document refuses.
+  it("does nothing for a document that cannot be edited", async () => {
+    const onChange = vi.fn();
+    render(
+      <EditorPanel
+        workspaceName={null}
+        paths={["trypthos:markdown-guide"]}
+        activePath="trypthos:markdown-guide"
+        dirty={false}
+        value={DOC}
+        readOnly
+        onChange={onChange}
+        readClipboard={async () => ({ html: "<h2>Plan</h2>", text: "Plan" })}
+      />,
+    );
+
+    surface().focus();
+    pressShortcut(surface());
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // Preview has no editing surface at all, so there is nothing for the paste to land in.
+  it("does nothing when the document is read as rendered prose", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Pasting onChange={onChange} />);
+    await user.click(modeButton("Preview"));
+
+    pressShortcut(window);
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
@@ -728,7 +957,42 @@ describe("EditorPanel: showing what Find found", () => {
       />,
     );
 
-  it("brings a document out of Preview when a match arrives", async () => {
+  it("stays in Preview and highlights the match there for a search of the open document", async () => {
+    const user = userEvent.setup();
+    const view = panel();
+
+    await user.click(modeButton("Preview"));
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+
+    // A search of the OPEN document: its offsets are measured against the rendered prose, so they can be
+    // shown where the reader already is rather than dragging them into Live to do it.
+    view.rerender(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        matches={MATCHES}
+        activeMatch={0}
+        findSurface="preview"
+      />,
+    );
+
+    // Still reading as rendered prose - not switched to an editing surface...
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+    expect(screen.getByLabelText("Markdown preview")).toBeDefined();
+    // ...and the match is painted on it, with the one being read drawn differently.
+    const marks = Array.from(document.querySelectorAll(".cm-find-match"));
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks[0]!.classList.contains("cm-find-active")).toBe(true);
+  });
+
+  // A Files hit is different from a search of the open document: its offsets are into the source as read
+  // off disk, which Preview cannot show at all - so such a document is brought out of Preview while there
+  // is something to show.
+  it("brings a Find in Files hit out of Preview so its source offsets can be shown", async () => {
     const user = userEvent.setup();
     const view = panel();
 
@@ -745,10 +1009,38 @@ describe("EditorPanel: showing what Find found", () => {
         onChange={vi.fn()}
         matches={MATCHES}
         activeMatch={0}
+        findSurface="source"
       />,
     );
 
     expect(screen.getByTestId("document-editor")).toBeDefined();
+  });
+
+  // A search of the open document made in Source is measured against the source. Switching to Preview
+  // must still switch - the results then belong to a view that is no longer on screen, and the window
+  // clears them - rather than being overridden as a Files hit is.
+  it("switches to Preview while a search of the open document is showing in Source", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditorPanel
+        workspaceName="Diariz"
+        paths={["docs/notes.md"]}
+        activePath="docs/notes.md"
+        dirty={false}
+        value={DOC}
+        onChange={vi.fn()}
+        defaultMode="source"
+        matches={MATCHES}
+        activeMatch={0}
+        findSurface="editable"
+      />,
+    );
+    expect(screen.getByTestId("document-editor")).toBeDefined();
+
+    await user.click(modeButton("Preview"));
+
+    expect(screen.queryByTestId("document-editor")).toBeNull();
+    expect(screen.getByLabelText("Markdown preview")).toBeDefined();
   });
 
   // The switch lasts as long as the results do. Closing the find puts the reader back in the view
@@ -768,6 +1060,7 @@ describe("EditorPanel: showing what Find found", () => {
         onChange={vi.fn()}
         matches={MATCHES}
         activeMatch={0}
+        findSurface="source"
       />,
     );
     expect(screen.getByTestId("document-editor")).toBeDefined();

@@ -4,6 +4,7 @@ import {
   CloseWindowRequest,
   ConfirmDiscardRequest,
   OpenTargetSchema,
+  PasteMarkdownContextRequest,
   SetIntegrationRequest,
   DiscardChoiceSchema,
   DocumentDirtyRequest,
@@ -65,6 +66,7 @@ describe("IPC_CHANNELS", () => {
       "document:dirty",
       "document:confirmDiscard",
       "document:takeDraft",
+      "editor:pasteMarkdownContext",
       "shell:openExternal",
       "shell:integration",
       "shell:setIntegration",
@@ -430,6 +432,35 @@ describe("ConfirmDiscardRequest", () => {
 
   it("refuses a name that is not a string", () => {
     expect(ConfirmDiscardRequest.safeParse({ name: 7 }).success).toBe(false);
+  });
+});
+
+describe("PasteMarkdownContextRequest", () => {
+  // The label travels from the renderer because the catalogue lives there and the menu is drawn in
+  // main. A name, not a flag: the item must read as the toolbar's button does, in whatever language
+  // the app is showing.
+  it("carries the name the right-click menu should give the item", () => {
+    const parsed = PasteMarkdownContextRequest.safeParse({ label: "Paste as markdown" });
+
+    expect(parsed.success && parsed.data.label).toBe("Paste as markdown");
+  });
+
+  // Null is the common answer: most right-clicks are not over an editable markdown document, and a
+  // menu that offered the item there would paste into a document the user was not looking at.
+  it("allows no label at all", () => {
+    const parsed = PasteMarkdownContextRequest.safeParse({ label: null });
+
+    expect(parsed.success && parsed.data.label).toBeNull();
+  });
+
+  // An empty name would draw an item that is a line of nothing, which the menu's own rules refuse.
+  it("refuses a blank label", () => {
+    expect(PasteMarkdownContextRequest.safeParse({ label: "" }).success).toBe(false);
+    expect(PasteMarkdownContextRequest.safeParse({}).success).toBe(false);
+  });
+
+  it("registers its channel on the enumerated surface", () => {
+    expect(IPC_CHANNELS).toContain("editor:pasteMarkdownContext");
   });
 });
 

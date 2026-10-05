@@ -34,6 +34,9 @@ export const MENU_ACTIONS = [
   "markdown-guide",
   "release-notes",
   "clear-recent",
+  // The right-click menu's one item the renderer names: it reads the clipboard and converts it,
+  // which is work only the side holding the document can do.
+  "paste-markdown",
 ] as const;
 
 export type MenuAction = (typeof MENU_ACTIONS)[number];

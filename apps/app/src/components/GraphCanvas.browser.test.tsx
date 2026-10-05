@@ -1,5 +1,5 @@
 import { render, waitFor } from "@testing-library/react";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import type Sigma from "sigma";
 import { describe, expect, it, vi } from "vitest";
 import type { VaultGraph } from "@trypthos/domain";

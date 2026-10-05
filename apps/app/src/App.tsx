@@ -53,7 +53,7 @@ import { useWorkspaceIcons } from "./hooks/useWorkspaceIcons";
 import { useReadme } from "./hooks/useReadme";
 import { useRepoPage } from "./hooks/useRepoPage";
 import { useFileFilter } from "./hooks/useFileFilter";
-import { useFind } from "./hooks/useFind";
+import { useFind, type FindSurfaceKind } from "./hooks/useFind";
 import { builtInTitleKey } from "./lib/builtInDocuments";
 import { conversationLog } from "./lib/conversationLog";
 import { answerFor } from "./lib/commandAnswers";
@@ -337,14 +337,41 @@ export default function App() {
   /// this level: one needs the text of the document on screen, and the other needs the folder
   /// selected in the browser and the ability to open a file in a tab. Neither is the editor's to
   /// know about.
+  ///
+  /// What the document tab searches is reported up from the panel - the source for an editable view,
+  /// the rendered prose's visible text for Preview - so a search runs against what is actually on
+  /// screen rather than always the source. Held in a ref read at search time (a keystroke updates it
+  /// without re-rendering this window), with only the KIND mirrored into state: that is what decides
+  /// whether to clear stale results when the reader switches views, and nothing else needs to react.
+  const findSurfaceRef = useRef<{ kind: FindSurfaceKind; text: string }>({
+    kind: "editable",
+    text: state.content,
+  });
+  const [findSurfaceKind, setFindSurfaceKind] = useState<FindSurfaceKind>("editable");
+  const handleFindSurface = useCallback((surface: { kind: FindSurfaceKind; text: string }) => {
+    findSurfaceRef.current = surface;
+    setFindSurfaceKind((prev) => (prev === surface.kind ? prev : surface.kind));
+  }, []);
+
   const find = useFind({
     content: state.content,
     activePath: state.activePath,
     selectedFolder: state.selectedFolder,
     fileTypes: settings.fileTypes.enabled,
+    surface: () => findSurfaceRef.current,
     findInFiles: (request) => client.findInFiles(request),
     openPath: (path) => actions.openPath(path),
   });
+
+  // A search's offsets were measured against one view. When the reader switches views they would sit
+  // over nothing, and a count with nothing to show it reads as an answer - so the results go away with
+  // the view rather than lingering as a number that points at no highlight.
+  const { open: findOpen, reset: findReset } = find;
+  const previousFindSurfaceKind = useRef(findSurfaceKind);
+  useEffect(() => {
+    if (previousFindSurfaceKind.current !== findSurfaceKind && findOpen) findReset();
+    previousFindSurfaceKind.current = findSurfaceKind;
+  }, [findSurfaceKind, findOpen, findReset]);
 
   /// What chat may see, read when a turn is sent so it reflects the buffer as it is then.
   ///
@@ -600,6 +627,9 @@ export default function App() {
         else if (action === "preferences") setSettingsOn("appearance");
         else if (action === "about") setSettingsOn("about");
         else if (action === "markdown-guide") actions.openGuide(MARKDOWN_GUIDE);
+        // The right-click menu's one item the renderer names. It reaches the editor through the same
+        // handle a chat edit does - this window's document, at its caret, as one undo step.
+        else if (action === "paste-markdown") void editor.current?.pasteMarkdown();
         else if (action === "release-notes") setReadingNotes(true);
         // The escape hatch for a list full of files that have since moved. Nothing walks the disk to
         // check, so an entry stays until it falls off the end or this is chosen.
@@ -917,10 +947,23 @@ export default function App() {
           onFollowWikiLink={(target) => void followWikiLink(target, linkHandlers)}
           ref={editor}
           onChange={actions.edit}
-          // Only for the document the matches were found in. Switching to another tab must not leave
-          // one file's offsets painted over another file's text.
-          matches={find.highlight.path === state.activePath ? find.highlight.matches : NO_MATCHES}
-          activeMatch={find.highlight.path === state.activePath ? find.highlight.active : -1}
+          onFindSurface={handleFindSurface}
+          // Only for the document the matches were found in, and only while they are measured against the
+          // view on screen. A Files hit is always shown so its file can be brought out of Preview; a search
+          // of the open document is shown only in the view it was found in - switching views clears it above.
+          findSurface={find.highlight.path === state.activePath ? find.highlight.surface : null}
+          matches={
+            find.highlight.path === state.activePath &&
+            (find.highlight.surface === "source" || find.highlight.surface === findSurfaceKind)
+              ? find.highlight.matches
+              : NO_MATCHES
+          }
+          activeMatch={
+            find.highlight.path === state.activePath &&
+            (find.highlight.surface === "source" || find.highlight.surface === findSurfaceKind)
+              ? find.highlight.active
+              : -1
+          }
           overlay={
             find.open ? (
               <FindDialog

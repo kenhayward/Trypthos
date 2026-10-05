@@ -5,6 +5,9 @@ import { ACTION_LABEL_KEYS, TOOLBAR_GROUPS } from "../lib/toolbarActions";
 
 interface Props {
   onFormat: (action: ToolbarAction) => void;
+  /// Paste as markdown was pressed. Not a formatting action - it reads the clipboard, which is the
+  /// panel's business - so the toolbar only reports the press.
+  onPasteMarkdown?: () => void;
 }
 
 /// The formatting toolbar above the Source view.
@@ -17,7 +20,7 @@ interface Props {
 /// the markers are visible, so a button that adds one shows its work. In Live the same press would
 /// insert punctuation that is immediately hidden again, which is a confusing way to learn what the
 /// button did.
-export default function EditorToolbar({ onFormat }: Props) {
+export default function EditorToolbar({ onFormat, onPasteMarkdown }: Props) {
   const { t } = useTranslation();
   const bar = useRef<HTMLDivElement | null>(null);
   /// Which button the keyboard is on. One tab stop for the whole toolbar, as the tab strip has:
@@ -26,9 +29,12 @@ export default function EditorToolbar({ onFormat }: Props) {
   const [focused, setFocused] = useState(0);
 
   const actions = TOOLBAR_GROUPS.flat();
+  /// Paste as markdown sits after the last action, in the same keyboard walk.
+  const pasteIndex = actions.length;
+  const count = actions.length + 1;
 
   const focus = (index: number) => {
-    const next = (index + actions.length) % actions.length;
+    const next = (index + count) % count;
     setFocused(next);
     bar.current?.querySelectorAll<HTMLElement>("button")[next]?.focus();
   };
@@ -42,7 +48,7 @@ export default function EditorToolbar({ onFormat }: Props) {
     }
     if (event.key === "Home" || event.key === "End") {
       event.preventDefault();
-      focus(event.key === "Home" ? 0 : actions.length - 1);
+      focus(event.key === "Home" ? 0 : count - 1);
     }
   };
 
@@ -88,6 +94,39 @@ export default function EditorToolbar({ onFormat }: Props) {
           })}
         </div>
       ))}
+
+      {/* Its own group: every button before it rewrites what is in the document, and this one brings
+          text in from outside it. */}
+      <div className="flex items-center gap-0.5">
+        <span aria-hidden="true" className="mx-1 h-4 w-px bg-rule" />
+        <button
+          type="button"
+          aria-label={t("editor.toolbar.pasteMarkdown")}
+          title={t("editor.toolbar.pasteMarkdown")}
+          tabIndex={pasteIndex === focused ? 0 : -1}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onPasteMarkdown?.()}
+          onKeyDown={(event) => onKeyDown(event, pasteIndex)}
+          onFocus={() => setFocused(pasteIndex)}
+          className="grid size-7 place-items-center rounded text-ink-3 hover:bg-hover hover:text-ink"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="size-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {/* A clipboard, with an arrow into the page. */}
+            <rect x="5" y="4" width="14" height="17" rx="2" />
+            <path d="M9 4V3h6v1" />
+            <path d="M12 9v7M9.5 13.5L12 16l2.5-2.5" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

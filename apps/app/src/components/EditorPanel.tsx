@@ -26,8 +26,13 @@ import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
 import type { FindMatch, MediaSource } from "@trypthos/domain";
+import { previewVisibleText } from "../lib/findInPreview";
+import { renderMarkdown } from "../lib/markdown";
+import type { FindHighlightSurface, FindSurfaceKind } from "../hooks/useFind";
 import type { ImageResult } from "../lib/workspaceClient";
-import { currentPlatform } from "../lib/windowControls";
+import { currentPlatform, windowControls } from "../lib/windowControls";
+import type { ClipboardContent } from "../lib/pasteMarkdown";
+import { isPasteMarkdownShortcut } from "../lib/pasteShortcut";
 
 interface Props {
   workspaceName: string | null;
@@ -48,6 +53,9 @@ interface Props {
   /// It takes the toolbar away as well as the caret: a row of buttons that write into a document
   /// nothing can be written to is a row of buttons that do nothing.
   readOnly?: boolean;
+  /// Reads the clipboard for Paste as markdown. Injected so a test can say what was copied; the
+  /// system clipboard otherwise.
+  readClipboard?: () => Promise<ClipboardContent>;
   /// Set when the document is shown rather than read - a picture, a video or a sound. Null
   /// otherwise, which is nearly always, and which is what makes every branch below read as "unless
   /// it is something to look at".
@@ -105,13 +113,22 @@ interface Props {
   ref?: React.Ref<EditorHandle>;
   /// What Find found in the document ON SCREEN. Empty when nothing is being shown.
   ///
-  /// The panel does not search - it is handed the answer. What it decides is that there is an
-  /// editing surface to show it in: a match arriving while the document is in Preview would be
-  /// highlighted on a surface that is not there, and a Find that reports three matches and shows
-  /// none is a Find that looks broken.
+  /// The panel does not search - it is handed the answer, and decides which of its two surfaces wears
+  /// it: an editable view paints source offsets through CodeMirror, Preview paints rendered-prose
+  /// offsets as marks in the prose itself. Either way there is a surface to show them on, so a find
+  /// while reading stays where the reader is rather than dragging them into another view first.
   matches?: readonly FindMatch[];
   /// Which of them the reader is on, or -1.
   activeMatch?: number;
+  /// Which view those offsets were measured against, when they belong to this document - or null when
+  /// there are none for it. It decides which surface wears them (an editable one only shows source
+  /// offsets, Preview only rendered-prose ones) and whether a Files hit must be brought out of Preview
+  /// so its source offsets can be shown at all.
+  findSurface?: FindHighlightSurface | null;
+  /// Reports what the document on screen is read as - the source for an editable view, the rendered
+  /// prose's visible text for Preview - so the search a level up runs against what is actually shown.
+  /// Called whenever that changes; absent where there is no find to feed (a test, a focused window).
+  onFindSurface?: (surface: { kind: FindSurfaceKind; text: string }) => void;
   /// Drawn over the editing area - the find dialog, and nothing else so far.
   ///
   /// Here rather than in the window, because this is the panel it has to float over: rendered a
@@ -154,6 +171,7 @@ export default function EditorPanel({
   dirty,
   value,
   readOnly = false,
+  readClipboard,
   media = null,
   page = null,
   readImage,
@@ -174,12 +192,15 @@ export default function EditorPanel({
   ref,
   matches = NO_MATCHES,
   activeMatch = -1,
+  findSurface = null,
+  onFindSurface,
   overlay = null,
   singleDocument = false,
   onCollapse,
   hidden = false,
 }: Props) {
   const { t } = useTranslation();
+
   /// The view each document is being read in, keyed by path.
   ///
   /// A map rather than one choice, now that several documents are open at once: a per-document
@@ -215,17 +236,23 @@ export default function EditorPanel({
 
   /// The view actually on screen.
   ///
-  /// Almost always the one the reader chose. The exception is Find: Preview has no caret and no
-  /// decorations, so it cannot show a match - a search that reported three matches and highlighted
-  /// none would be a Find that looks broken. While there is something to show, the document is read
-  /// in the view it would have opened in, and it goes back to Preview when the find is closed.
+  /// Almost always the one the reader chose. The exception is a Find in Files hit: its offsets are into
+  /// the source as read off disk, and Preview cannot show those - so while there is something to show,
+  /// such a document is read in the view it would have opened in, and goes back when the find clears.
+  /// A search of the OPEN document does not switch anything: its offsets are measured against whatever
+  /// view is on screen (source or rendered prose), so they can be shown where the reader already is -
+  /// which is what keeps a find while reading in Preview from dragging them into Live to do it.
   ///
-  /// Derived rather than stored, which has one cost worth stating: pressing Preview while results
-  /// are on screen does nothing, because the derivation overrides it on the next render. That is the
+  /// Only a Files hit (`source`) does this. A search of the open document made in an editable view is
+  /// measured against that view, so pressing Preview must still switch - the window then clears results
+  /// that belong to a view no longer on screen - rather than be overridden into keeping them.
+  ///
+  /// Derived rather than stored, which has one cost worth stating: pressing Preview while a Files hit
+  /// is on screen does nothing, because the derivation overrides it on the next render. That is the
   /// better of the two trades - the alternative is a search whose answer is invisible - and it lasts
   /// only as long as the results do.
   const mode =
-    matches.length > 0 && !isEditable(reading)
+    matches.length > 0 && findSurface === "source" && !isEditable(reading)
       ? (fileType.modes.find((candidate) => isEditable(candidate)) ?? reading)
       : reading;
   const setMode = (next: EditorMode) => setChosen((prev) => ({ ...prev, [key]: next }));
@@ -269,6 +296,29 @@ export default function EditorPanel({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [key, stepZoom]);
 
+  /// The right-click menu is drawn in the shell, but its one renderer-named item can only be offered
+  /// where it would land: over an editable markdown document. So every right-click reports what was
+  /// under it - the label when this surface is that place, null otherwise - and the shell decides
+  /// from that plus the native edit flags. The DOM event precedes Electron's own menu request, so
+  /// the report arrives before the menu is built; a late one costs at most a single right-click
+  /// without the item, never a paste in the wrong place.
+  const pasteMarkdownAvailable =
+    media === null && page === null && !readOnly && fileType.id === MARKDOWN_FILE_TYPE.id;
+
+  useEffect(() => {
+    const label = pasteMarkdownAvailable ? t("editor.toolbar.pasteMarkdown") : null;
+    const onContextMenu = (event: MouseEvent) => {
+      // The editor's own host, marked for exactly this kind of question. Preview has no such host -
+      // nothing to write into - and a click anywhere else is not over the document at all.
+      const target = event.target;
+      const overEditor =
+        target instanceof Element && target.closest('[data-testid="document-editor"]') !== null;
+      void windowControls().setPasteMarkdownContext(overEditor ? label : null);
+    };
+    document.addEventListener("contextmenu", onContextMenu, true);
+    return () => document.removeEventListener("contextmenu", onContextMenu, true);
+  }, [pasteMarkdownAvailable, t]);
+
   /// Which markdown each document is rendered as, when the reader has chosen, keyed by path.
   ///
   /// For as long as the app is open and no longer - the choice is a way of reading a file, like the
@@ -301,6 +351,28 @@ export default function EditorPanel({
     [ref],
   );
 
+  /// The same command as the right-click menu's item, from the keyboard: Ctrl and Shift with V - Cmd
+  /// on macOS. Bound on the window like the zoom keys, but aimed where those are not: it acts only
+  /// while the focus is inside an editable markdown document surface, matching exactly where the
+  /// menu offers the item. A press anywhere else does nothing, so a habit from another app cannot
+  /// write into a document the user is not looking at.
+  useEffect(() => {
+    if (!pasteMarkdownAvailable) return;
+    const platform = currentPlatform();
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A held key auto-repeats, and ten pastes from one held-down V are never what was asked for.
+      if (event.repeat || !isPasteMarkdownShortcut(event, platform)) return;
+      // The same host the right-click report asks about. Focus inside it is where a paste would land.
+      const focused = document.activeElement;
+      if (!(focused instanceof Element && focused.closest('[data-testid="document-editor"]') !== null))
+        return;
+      event.preventDefault();
+      void editor.current?.pasteMarkdown();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pasteMarkdownAvailable]);
+
   // Both walk the whole document, so they are memoised on the text rather than recomputed on every
   // keystroke-driven render. A word count is cheap on a page and not on a book.
   const words = useMemo(() => countWords(value), [value]);
@@ -310,6 +382,24 @@ export default function EditorPanel({
     caret: formatCaret(caret.line, caret.column),
     words: words.toLocaleString(),
   });
+
+  /// What Find searches in this view - reported up so the search a level above runs against what is on
+  /// screen. The source for an editable view; the rendered prose's visible text for Preview. Only a
+  /// markdown document has both halves to report - a picture or a page has no find surface at all, and
+  /// reporting nothing leaves whatever was last reported in place rather than claiming a false one.
+  const findSurfaceReport = useMemo(() => {
+    if (media !== null || page !== null) return null;
+    // Preview reads the rendered prose as its visible text - what a reader actually sees here, which is
+    // not the source: markdown scaffolding is gone and words sit where they are drawn.
+    if (!isEditable(mode)) {
+      return { kind: "preview" as const, text: previewVisibleText(renderMarkdown(value, { flavour })) };
+    }
+    return { kind: "editable" as const, text: value };
+  }, [mode, media, page, value, flavour]);
+
+  useEffect(() => {
+    if (findSurfaceReport !== null) onFindSurface?.(findSurfaceReport);
+  }, [findSurfaceReport, onFindSurface]);
 
   return (
     <main
@@ -373,7 +463,11 @@ export default function EditorPanel({
         mode === "source" &&
         !readOnly &&
         fileType.id === "markdown" && (
-          <EditorToolbar onFormat={(action) => editor.current?.format(action)} />
+          <EditorToolbar
+            onFormat={(action) => editor.current?.format(action)}
+            // The same path the right-click menu takes: one implementation, two ways to reach it.
+            onPasteMarkdown={() => void editor.current?.pasteMarkdown()}
+          />
         )}
 
       <div className="min-h-0 grow">
@@ -411,13 +505,16 @@ export default function EditorPanel({
             onFollowLink={onFollowLink}
             onFollowWikiLink={onFollowWikiLink}
             flavour={flavour}
+            readClipboard={readClipboard}
             readOnly={readOnly}
             ref={attach}
             ariaLabel={t("editor.surface")}
             zoom={zoom}
             onZoom={stepZoom}
-            matches={matches}
-            activeMatch={activeMatch}
+            // Only source offsets belong here: a rendered-prose highlight measured against Preview would
+            // sit over the wrong characters in CodeMirror, so it is not shown rather than shown wrongly.
+            matches={findSurface === "editable" || findSurface === "source" ? matches : NO_MATCHES}
+            activeMatch={findSurface === "editable" || findSurface === "source" ? activeMatch : -1}
           />
         ) : (
           <MarkdownPreview
@@ -432,6 +529,10 @@ export default function EditorPanel({
             flavour={flavour}
             findByName={findByName}
             readDocument={readDocument}
+            // Only rendered-prose offsets belong here - the ones measured against what a reader sees in
+            // this view. Source offsets are not shown rather than painted over the wrong words.
+            matches={findSurface === "preview" ? matches : NO_MATCHES}
+            activeMatch={findSurface === "preview" ? activeMatch : -1}
           />
         )}
       </div>

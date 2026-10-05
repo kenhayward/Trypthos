@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
-import { page, userEvent } from "@vitest/browser/context";
+import { page, userEvent } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
 import { resolveEdit } from "@trypthos/domain";
@@ -459,6 +459,51 @@ describe("Applying a resolved edit, in a real browser", () => {
 
     handle.current!.applyChange(9_000, 10_000, "Appended anyway.");
     expect(await sourceText()).toContain("Appended anyway.");
+  });
+});
+
+/// Paste as markdown, from the clipboard to the buffer.
+///
+/// The conversion is tested as data (`pasteMarkdown.test.ts`) and the handle's wiring in jsdom; what
+/// only a real browser answers here is that one press lands as ONE undo step - CodeMirror's history
+/// is driven by its keymap, which synthetic events do not reach.
+describe("Paste as markdown, in a real browser", () => {
+  const BASE = "# Title\n\nSome text.\n";
+
+  function Pasting({ handle }: { handle: React.Ref<EditorHandle> }) {
+    const [value, setValue] = useState(BASE);
+    return (
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["notes.md"]}
+        activePath="notes.md"
+        dirty={false}
+        value={value}
+        onChange={setValue}
+        readClipboard={async () => ({ html: "<h2>Plan</h2><ul><li>one</li></ul>", text: "Plan one" })}
+        ref={handle}
+      />
+    );
+  }
+
+  const live = () =>
+    [...document.querySelectorAll(".cm-line")].map((line) => line.textContent).join("\n");
+
+  it("lands as one undo step", async () => {
+    const handle = { current: null as EditorHandle | null };
+    render(<Pasting handle={handle} />);
+    await waitFor(() => expect(handle.current).not.toBeNull());
+
+    // The caret opens at the start of the document, so the paste lands before the title. Live mode
+    // hides the markers away from the caret, so assert on the prose it renders as rather than on
+    // "## Plan". The press leaves the caret in the editor, which is where the undo keystroke goes.
+    void handle.current!.pasteMarkdown();
+    await waitFor(() => expect(live()).toContain("Plan"));
+
+    // One Ctrl+Z takes the whole paste back - not a line of it at a time.
+    await userEvent.keyboard("{Control>}z{/Control}");
+    await waitFor(() => expect(live()).not.toContain("Plan"));
+    expect(live()).toContain("Some text.");
   });
 });
 
@@ -1101,6 +1146,8 @@ describe("Find's highlights, in a real browser", () => {
         onChange={() => {}}
         matches={matches}
         activeMatch={active}
+        // Source offsets, so the editable surface is the one that wears them.
+        findSurface={matches.length > 0 ? "editable" : null}
       />,
     );
 

@@ -66,6 +66,19 @@ describe("windowControls with a shell", () => {
     expect(bridge.setDocumentDirty).toHaveBeenCalledWith(true);
   });
 
+  // The right-click menu is drawn in the shell, but its one renderer-named item reads from the
+  // catalogue, which lives here. So the name travels with the report - and so does "nothing to add".
+  it("tells the shell what the right-click menu should offer over the editor", async () => {
+    const setPasteMarkdownContext = vi.fn(async () => ({ ok: true }));
+    shell({ setPasteMarkdownContext });
+
+    await windowControls().setPasteMarkdownContext("Paste as markdown");
+    expect(setPasteMarkdownContext).toHaveBeenLastCalledWith("Paste as markdown");
+
+    await windowControls().setPasteMarkdownContext(null);
+    expect(setPasteMarkdownContext).toHaveBeenLastCalledWith(null);
+  });
+
   // Force is how the renderer says "I have asked, go ahead" - without it the shell would ask again.
   it("forces the close it performs after asking", async () => {
     const bridge = shell();

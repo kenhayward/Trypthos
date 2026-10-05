@@ -437,7 +437,7 @@ engine, so its geometry is a polyfill returning zeros; a test asserting Live mod
 there would be testing the polyfill. Rules expressible over data stay in the jsdom suite or as pure
 functions, because a browser failure tells you much less about why.
 
-In the browser suite use `userEvent` from **`@vitest/browser/context`**, not
+In the browser suite use `userEvent` from **`vitest/browser`**, not
 `@testing-library/user-event`: the latter dispatches synthetic events, and CodeMirror does not move
 its caret for them. The synthetic version passes while the caret never moves, so everything asserted
 afterwards measures the wrong state.
@@ -464,7 +464,8 @@ TypeScript - and the path guard has to run there, since the renderer is untruste
 resolves `@trypthos/domain` to the **source** (a Vite alias, and a `paths` entry so tsc agrees), so
 it hot-reloads; node resolves `main` to `dist`. Three consequences: `npm run app` builds the domain
 first, the package must not declare `"type": "module"` or node treats the emitted CommonJS as ESM and
-rejects its own requires, and typecheck must not depend on `dist` existing - it does not on a clean
+rejects its own requires (which is also why its vitest config is `vitest.config.mts`: an ESM `.ts`
+config in a CommonJS package makes Vite print a warning on every run), and typecheck must not depend on `dist` existing - it does not on a clean
 checkout, which is how a green local run becomes a red CI one.
 
 **TypeScript is pinned to 5.9, not 7.** `typescript-eslint` caps its peer at `<6.1.0`, so TS 7 would
@@ -481,6 +482,11 @@ containing regex escapes or Windows paths, and prove a new guard test fails befo
 
 ## Conventions & gotchas
 
+- **Line endings are mixed in git, and agent editor tools normalize them.** Committed files mix CRLF
+  and bare-LF lines within one file, and a whole-file save rewrites every line to bare LF - so an
+  unattended commit ships hundreds of phantom diff pairs. Before staging any change that touched
+  existing files, repair the worktree against `main` (never HEAD) as the last step: findings, the
+  verified staging behavior, and the ready-to-run repair script are in [AGENTS.md](./AGENTS.md).
 - **No em/en dashes in user-facing text.** Use a plain hyphen `-` (not the long ones) in all UI strings,
   i18n catalogs, release notes and user-visible copy - user feedback on fancy dashes is negative.
   **Code, comments and internal docs are exempt**, this file included. Enforce it with a test across every

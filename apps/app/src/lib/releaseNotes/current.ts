@@ -5,6 +5,121 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.92.0",
+    date: "2026-09-27",
+    pr: 204,
+    headline: "Find stays where you are reading",
+    summary:
+      "Finding something while you read a document in Preview no longer drags you into an editable view to show the answer. The search now follows the view you are in: in Live or Source it marks matches over the source as before, and in Preview it marks them in the rendered prose right where you were reading. Because it searches what is on screen, a query aimed at markdown's own characters - a # heading marker, a pair of asterisks - finds nothing in Preview, where those characters are not drawn; the same query still finds them in Source. Maths, diagrams and embedded notes are drawn rather than shown as text, so Preview does not search inside them, and a phrase that wraps onto a new line in the source is still found as one. Switching views while a find is open clears its results, since offsets measured against one view would sit over nothing in the other. Find in Files is unchanged: its hits are source offsets, so opening one of them brings the file into an editable view.",
+    changed: [
+      "Find now searches and highlights within Preview instead of switching you to Live or Source - it marks matches in the rendered prose where you were reading.",
+    ],
+  },
+  {
+    version: "0.91.1",
+    date: "2026-09-26",
+    pr: 202,
+    headline: "The Paste as markdown menu item shows its shortcut",
+    summary:
+      "The right-click menu's Paste as markdown item now displays the key that performs it - Ctrl+Shift+V (Cmd on macOS) - beside its label, like Save and Find show theirs. The shortcut itself is unchanged; this makes it visible where you would look for it.",
+    fixed: [
+      "The right-click menu's Paste as markdown item shows its Ctrl+Shift+V (Cmd on macOS) shortcut next to the label.",
+    ],
+  },
+  {
+    version: "0.91.0",
+    date: "2026-09-26",
+    pr: 199,
+    headline: "A keyboard shortcut for Paste as markdown",
+    summary:
+      "The Paste as markdown command now has a keyboard shortcut - Ctrl+Shift+V (Cmd on macOS). With your caret in an editable markdown document, in Live or Source view, it converts what you copied and lands it at the caret as one undo step. With the focus anywhere else it does nothing, so a habit from another app cannot write into a document you are not looking at.",
+    added: [
+      "Ctrl+Shift+V (Cmd on macOS) pastes the clipboard as markdown while your caret is in an editable markdown document - the same conversion the toolbar button and right-click menu offer.",
+    ],
+  },
+  {
+    version: "0.90.0",
+    date: "2026-09-26",
+    pr: 198,
+    headline: "Paste as markdown in the right-click menu",
+    summary:
+      "The Paste as markdown command is now reachable from the editor's right-click menu as well as from the Source view toolbar. Right-click inside a document - in Live or Source view - and choose it to paste what you copied with its structure kept: headings become # headings, lists keep their markers, code blocks arrive fenced and tables stay tables. The item appears only where it would land, over an editable markdown document; right-clicking anywhere else - the chat box, a settings field - shows the usual menu without it, so a paste can never end up in a document you were not looking at. As with the button, one press is one Ctrl+Z.",
+    added: [
+      "The editor's right-click menu offers Paste as markdown in Live and Source view, beside cut, copy, paste and select all.",
+    ],
+  },
+  {
+    version: "0.89.0",
+    date: "2026-09-25",
+    pr: 197,
+    headline: "Paste a spreadsheet range as a markdown table",
+    summary:
+      "The Paste as markdown button on the Source view toolbar now turns a range copied from Excel or Google Sheets into a markdown table. The range's first row becomes the header, columns of numbers are right-aligned, a line break inside a cell is kept as a break, and merged cells keep the columns lined up. Colours, fonts, borders and number formats are left behind, and numbers arrive exactly as the sheet displayed them. A single cell pastes as its text. Tab-separated text from programs that offer nothing richer becomes a table as well.",
+    added: [
+      "Paste as markdown turns a range copied from Excel or Google Sheets into a markdown table, with its first row as the header and numbers right-aligned.",
+      "Tab-separated text on the clipboard pastes as a table.",
+    ],
+  },
+  {
+    version: "0.88.0",
+    date: "2026-09-25",
+    pr: 196,
+    headline: "Paste as markdown understands Word",
+    summary:
+      "The Paste as markdown button on the Source view toolbar now handles text copied from Word - on Windows or macOS, Word for the web, or Google Docs - as well as from web pages and chat replies. Headings, bulleted and numbered lists (nested as they were, and starting at the same number), bold, italic, strikethrough, quotations and tables come across as markdown, and text in a monospaced font becomes code. Everything markdown has no way to say - fonts, sizes, colours, underline, spacing and page breaks - is left behind rather than turning into stray characters. Pictures copied out of a Word document are left out, since Word only puts a temporary file on the clipboard. Tables from any source now use their first row as the header instead of an empty one.",
+    added: [
+      "Paste as markdown converts text copied from Word, Word for the web and Google Docs, keeping headings, lists, emphasis, quotations, tables and code.",
+    ],
+    changed: [
+      "A pasted table with no header row uses its first row as the header, instead of gaining an empty one.",
+    ],
+  },
+  {
+    version: "0.87.3",
+    date: "2026-09-25",
+    pr: 195,
+    headline: "Diagrams drawn in Mermaid's new look",
+    summary:
+      "Mermaid diagrams in Preview are now drawn by Mermaid 12, in its new default look: rounded, softly coloured shapes for sequence and other diagrams, cleaner lines, and a new layout engine that arranges flowcharts and similar diagrams with fewer crossing lines. The dark theme has its own matching palette. Your diagrams' text is unchanged - only how they are drawn - so a diagram may take up a little more or less room than before.",
+    changed: [
+      "Mermaid diagrams are drawn in Mermaid 12's new look and layout, in light and dark.",
+    ],
+  },
+  {
+    version: "0.87.2",
+    date: "2026-09-25",
+    pr: 194,
+    headline: "Library updates, including Electron and React",
+    summary:
+      "Brings the libraries Trypthos is built on up to date: Electron 44.4.2, which carries the latest Chromium security fixes, React 19.3, and patch releases of the editor (CodeMirror), the markdown renderer (marked) and its sanitiser (DOMPurify). Nothing should look or behave differently. The test tooling moves to Vitest 5, which changes nothing you can see.",
+    changed: [
+      "Electron updated to 44.4.2 and React to 19.3, with patch releases of CodeMirror, marked, DOMPurify, i18next and zod.",
+    ],
+  },
+  {
+    version: "0.87.1",
+    date: "2026-09-25",
+    pr: 193,
+    headline: "Long runs of spaces or tabs no longer freeze the app",
+    summary:
+      "A heading line holding a long run of spaces or tabs could stop the app responding for seconds, or indefinitely: a few thousand were enough. It showed up when chat inserted text after a heading, and when a note embedded a heading from another note. Several smaller slowdowns of the same kind are gone too - on documents chat appends to, on replies with many blank lines, and on addresses or paths full of slashes. All of these now take time in proportion to the text.",
+    fixed: [
+      "A heading line with a long run of spaces or tabs no longer freezes chat edits or embedded headings.",
+      "Appending with chat, reading a reply, and checking an address or path no longer slow down on long runs of one character.",
+    ],
+  },
+  {
+    version: "0.87.0",
+    date: "2026-09-25",
+    pr: 184,
+    headline: "Paste as markdown keeps the formatting of text copied from a chat reply",
+    summary:
+      "Copying part of a rendered chat reply - from Claude or anything else that shows formatted text - and pasting it into a markdown file used to give you plain text: headings became ordinary lines, list markers and code fences disappeared, and paragraphs could arrive run together on one line. The formatting toolbar in Source view now has a Paste as markdown button at its end. It reads the formatted copy on the clipboard and writes it back as markdown, keeping headings, lists, code blocks with their language, links, emphasis and tables, and leaving out the Copy buttons that sit on copied code blocks. If the clipboard holds only plain text, which is what a reply's own Copy button gives you, that is pasted as it is. Ctrl+V is unchanged and still pastes plain text.",
+    added: [
+      "A Paste as markdown button on the Source view toolbar, which pastes copied formatted text as markdown with its structure kept.",
+    ],
+  },
+  {
     version: "0.86.1",
     date: "2026-09-18",
     pr: 183,

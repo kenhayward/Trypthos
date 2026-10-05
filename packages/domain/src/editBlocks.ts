@@ -1,4 +1,5 @@
 import type { EditOp, ProposedEdit } from "./documentEdit";
+import { trimLeading, trimTrailing } from "./trimRun";
 
 /// Reading a proposed edit out of the model's reply.
 ///
@@ -97,7 +98,7 @@ export function splitReply(reply: string, { complete = false } = {}): ReplyPart[
     // Blank lines at the edges are separation from the block beside it, not content. Only whole
     // blank LINES are removed - trimming the text itself would eat the indentation that makes a
     // first line part of a code block or a nested list item.
-    const joined = text.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+    const joined = trimTrailing(trimLeading(text.join("\n"), "\n"), "\n");
     if (joined.trim() !== "") parts.push({ kind: "text", text: joined });
     text = [];
   };

@@ -53,6 +53,7 @@ export const IPC_CHANNELS = [
   "document:dirty",
   "document:confirmDiscard",
   "document:takeDraft",
+  "editor:pasteMarkdownContext",
   "shell:openExternal",
   "shell:integration",
   "shell:setIntegration",
@@ -98,6 +99,17 @@ export const CLOSE_REQUESTED_CHANNEL = "window:closeRequested";
 /// What the renderer reports about the document it holds. Nothing about the document itself: the
 /// shell needs to know whether there is unsaved work, never what it says.
 export const DocumentDirtyRequest = z.object({ dirty: z.boolean() }).strict();
+
+/// What the right-click menu should add when a click lands over the document editor.
+///
+/// The LABEL rather than a flag, because the menu is drawn in the main process and the catalogue
+/// lives in the renderer - the words travel with the report, so both surfaces cannot call the same
+/// thing two different names. Null says "nothing to add": most right-clicks are not over an
+/// editable markdown document, and offering the item there would paste into a document the user was
+/// not looking at.
+export const PasteMarkdownContextRequest = z.object({ label: z.string().min(1).nullable() }).strict();
+
+export type PasteMarkdownContextRequest = z.infer<typeof PasteMarkdownContextRequest>;
 
 /// A link the user clicked, on its way to their browser.
 ///

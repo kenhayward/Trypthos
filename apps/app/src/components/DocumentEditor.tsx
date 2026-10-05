@@ -12,11 +12,17 @@ import { currentPlatform } from "../lib/windowControls";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { DEFAULT_ZOOM, type ZoomDirection } from "../lib/zoom";
 import { findHighlighting, setFoundMatches } from "../lib/findExtension";
+import type { ClipboardContent } from "../lib/pasteMarkdown";
 import type { FindMatch, MarkdownFlavour } from "@trypthos/domain";
 
 /// Hoisted rather than defaulted inline. The highlight effect keys on this array, so a fresh `[]`
 /// on every render would dispatch into CodeMirror on every keystroke.
 const NO_MATCHES: readonly FindMatch[] = [];
+
+/// The system clipboard, read through the module that converts it - loaded on first use, so the
+/// HTML converter is not in the bundle of an app that never uses it.
+const readSystemClipboard = (): Promise<ClipboardContent> =>
+  import("../lib/pasteMarkdown").then((module) => module.readSystemClipboard());
 
 /// Marks a transaction as replacing the document from outside rather than editing it.
 ///
@@ -87,6 +93,16 @@ export interface EditorHandle {
   /// True when the change was written. False when there is no editor view to write it into, so the
   /// caller can put it into the document some other way rather than report an edit that went nowhere.
   applyChange(from: number, to: number, insert: string): boolean;
+  /// Replaces the selection with `text`, as a paste does - one undo step, caret after the text.
+  ///
+  /// False when there is no editor view, like `applyChange`.
+  replaceSelection(text: string): boolean;
+  /// Paste as markdown: the clipboard, converted, in place of the selection - one undo step.
+  ///
+  /// A clipboard that cannot be read, or holds nothing to give, changes nothing: either the text
+  /// lands as one undo step or the document is exactly as it was. The toolbar button and the
+  /// right-click menu both reach this rather than a second copy of it.
+  pasteMarkdown(): Promise<void>;
 }
 
 interface Props {
@@ -137,6 +153,9 @@ interface Props {
   /// Which markdown a markdown document is written in, so its editor parses Obsidian's marks when it
   /// is Obsidian's. Ignored for every other type.
   flavour?: MarkdownFlavour;
+  /// The clipboard for Paste as markdown. Injected so a test can say what was copied; the system
+  /// clipboard otherwise - loaded on first use, like the language loaders.
+  readClipboard?: () => Promise<ClipboardContent>;
   /// Handle for applying a change from outside - a chat edit the user accepted.
   ref?: React.Ref<EditorHandle>;
   /// Labels the editing surface for assistive technology and for tests.
@@ -184,6 +203,7 @@ export default function DocumentEditor({
   onFollowLink,
   onFollowWikiLink,
   flavour = "gfm",
+  readClipboard = readSystemClipboard,
   ref,
   ariaLabel,
   zoom = DEFAULT_ZOOM,
@@ -221,6 +241,9 @@ export default function DocumentEditor({
   const latestOnSelection = useRef(onSelectionChange);
   const latestOnFollowLink = useRef(onFollowLink);
   const latestOnFollowWikiLink = useRef(onFollowWikiLink);
+  /// The clipboard reader, read through a ref for the same reason as the handlers above: the handle
+  /// is built once and must not close over a prop that can be replaced by its caller.
+  const latestReadClipboard = useRef(readClipboard);
   /// The document the editor is currently showing, so a change of file can be told from a change of
   /// text. Written after the transaction that switches it, never during render.
   const shownDocument = useRef(documentId);
@@ -236,7 +259,8 @@ export default function DocumentEditor({
     latestOnSelection.current = onSelectionChange;
     latestOnFollowLink.current = onFollowLink;
     latestOnFollowWikiLink.current = onFollowWikiLink;
-  }, [onChange, onCaret, onSelectionChange, onFollowLink, onFollowWikiLink]);
+    latestReadClipboard.current = readClipboard;
+  }, [onChange, onCaret, onSelectionChange, onFollowLink, onFollowWikiLink, readClipboard]);
 
   useImperativeHandle(
     ref,
@@ -285,6 +309,38 @@ export default function DocumentEditor({
         });
         editor.focus();
         return true;
+      },
+      replaceSelection(text) {
+        const editor = view.current;
+        if (editor === null) return false;
+
+        // Marked as a paste, so it is one undo step of its own rather than joining the typing
+        // either side of it.
+        editor.dispatch(editor.state.replaceSelection(text), {
+          userEvent: "input.paste",
+          scrollIntoView: true,
+        });
+        editor.focus();
+        return true;
+      },
+      async pasteMarkdown() {
+        const editor = view.current;
+        if (editor === null) return;
+
+        let content: ClipboardContent;
+        try {
+          content = await latestReadClipboard.current();
+        } catch {
+          // A clipboard that cannot be read changes nothing - there is no half-written state to
+          // report, and the document stays exactly as it was.
+          return;
+        }
+
+        const { clipboardMarkdown } = await import("../lib/pasteMarkdown");
+        const markdown = clipboardMarkdown(content);
+        if (markdown === null) return;
+
+        this.replaceSelection(markdown);
       },
     }),
     [],

@@ -179,6 +179,36 @@ round-trip and nothing that can reformat a user's file behind their back.
   render can be a keystroke behind the buffer - the editor is the only place that knows the document
   and the selection as they are at the moment of the press. `EditorPanel` attaches the editor handle
   with a callback ref, since two callers need it: the toolbar, and the window applying a chat edit.
+- **Paste as markdown** is the one command that reads the clipboard, which is not a function of the
+  document. It lives on `EditorHandle.pasteMarkdown` in `DocumentEditor`, reached three ways: the last
+  button of the Source view toolbar (`EditorToolbar` reports the press), an item in the editor's
+  right-click menu (see "The right-click menu" below), and the Ctrl+Shift+V shortcut (Cmd on macOS) -
+  bound in `EditorPanel` like the zoom keys but aimed where they are not: it acts only while the focus
+  is inside an editable markdown document surface, matching exactly where the right-click menu offers
+  the item. The key's identity is a pure function (`isPasteMarkdownShortcut` in `lib/pasteShortcut.ts`)
+  with the zoom keys' modifier rules - the platform's own modifier and only it, Alt refused because
+  Ctrl+Alt is AltGr on a European layout. The handle reads the clipboard through an
+  injected `readClipboard` - the async Clipboard API by default, Electron grants the renderer
+  clipboard reads, so no IPC channel is involved for the read itself - and
+  `lib/pasteMarkdown.ts` turns it into markdown: the `text/html` flavour through **Turndown** with the
+  GFM plugin (`@joplin/turndown-plugin-gfm`) when there is one, the `text/plain` flavour otherwise,
+  with U+2028/U+2029 made into real line breaks. Before Turndown sees the HTML,
+  `lib/officeHtml.ts` (`normaliseClipboardHtml`) rewrites word-processor markup into plain elements:
+  Word's `mso-list` paragraphs into nested `ul`/`ol` (level from the style, numbered or bulleted from
+  the `mso-list:Ignore` marker), `MsoTitle`/`MsoQuote` classes, Word for the web's
+  `role="heading"` and one-item `data-aria-level` lists, span-style emphasis (Google Docs, Word for
+  the web), monospaced runs and paragraphs into `code`/`pre`, a header row for tables that lack one
+  (with `col`/`colgroup` removed, since the GFM plugin only reads a row as the header when nothing
+  precedes it), right alignment for spreadsheet numbers (Excel's `x:num`, Google Sheets'
+  `data-sheets-value`) carried up to the header so a short column does not tie the plugin's vote;
+  and it drops namespaced elements, comments, bookmarks and non-web images. It runs on a DOMParser
+  document, never attached to the page. The clipboard is read with `{ unsanitized: ["text/html"] }`,
+  because Chromium's default sanitiser re-serialises the markup and loses Word's list styles; that is
+  safe only because the HTML never reaches a live document. The result goes in through
+  `EditorHandle.replaceSelection` as one `input.paste` transaction. The module is loaded with a
+  dynamic `import()` on the first press, so Turndown is not in the initial bundle. Turndown parses
+  the HTML into an inert document and never executes it, and its output is text in the buffer, not
+  markup on screen.
 - **A document can be read-only.** `OpenDocument.readOnly` marks a document with no file behind it -
   today, the built-in markdown guide at the reserved path `GUIDE_PATH` (`trypthos:markdown-guide`,
   which no workspace-relative path can collide with). The flag is enforced in three places, and all
@@ -197,7 +227,9 @@ round-trip and nothing that can reformat a user's file behind their back.
   showing and the main process matches the bytes it reads off disk, and a query that meant different
   things in each would find a line the editor could not then highlight.
   - `hooks/useFind.ts` holds the state both tabs need - a query, a list, and a place in it. The
-    document search runs here against `state.content`; the folder search goes over
+    document search runs here against the text of the view on screen, which `EditorPanel` reports up
+    through `onFindSurface` - the source for Live and Source, `previewVisibleText` of the rendered
+    prose for Preview; the folder search goes over
     `workspace:find`, whose walk in `apps/desktop/src/fileSearch.js` goes through the **provider**
     rather than `fs`, which is what applies the workspace guard including its realpath check. Only
     file types the user has turned on are opened, and the answer is capped and says when it was.
@@ -210,10 +242,23 @@ round-trip and nothing that can reformat a user's file behind their back.
     come from outside the document rather than being derived from it, so nothing in the editor could
     recompute them - and a field maps them through edits for free, so a highlight moves with its text
     instead of staying where the text used to be.
-  - **Preview cannot show a match**, having no caret and no decorations, so `EditorPanel` DERIVES an
-    editable view while there are matches and returns to the reader's choice when there are none. It
-    is derived rather than stored, which costs one thing worth knowing: pressing Preview while
-    results are on screen does nothing.
+  - **A highlight carries the coordinates its offsets are in** (`FindHighlight.surface`): `editable`
+    or `preview` for a search of the open document, measured against the view on screen, and
+    `source` for a Find in Files hit, measured against the file as read off disk. A document search is
+    shown only in the view it was made in; `App` clears it when the reported view changes. Only a
+    `source` hit makes `EditorPanel` DERIVE an editable view out of Preview - derived rather than
+    stored, so pressing Preview while a hit is on screen does nothing until the results clear.
+  - **Preview paints its own marks**: `lib/findInPreview.ts` reads the rendered markup as its visible
+    text (`previewVisibleText`, what the search runs over) and wraps the found ranges into the markup
+    (`markPreviewMatches`), both walking the same text runs so an offset one produces is a position
+    the other understands. Both parse with `DOMParser`, an inert document, so reading the prose never
+    fetches a picture it names. Anything drawn after the markup lands as something other than its text
+    - `.md-math`, `code.language-mermaid`, `.md-transclusion` - is skipped and stands as one `U+FFFC`
+    in the searched text, so a match can neither be counted where its mark would be wiped nor run
+    across one; a soft wrap outside `pre` reads as a space. Code colouring rebuilds a block from its
+    text, so `highlightCodeBlocks` reads any find marks off first (`findMarksIn`) and wraps them back
+    (`restoreFindMarks`). The active match is a class toggled on the Nth mark, so stepping does not
+    reset the markup - which only holds while the marks on screen and the matches are one list.
   - The dialog is **not a modal**, unlike every other in the app. The answer is a highlight in the
     document underneath it, so a backdrop over that document would report matches and show none. For
     the same reason it is **draggable**: it can end up over the text it is reporting on.
@@ -350,8 +395,11 @@ plain text to GFM, so the second flavour only ever adds - which is what makes gu
   `securityLevel: "strict"` and SVG text labels (a `foreignObject` label would be emptied by the SVG
   sanitiser). Both outputs go through DOMPurify again. Done marks are flagged, so a pass is idempotent.
   `richBlocksBundle.test.ts` asserts neither library is imported statically anywhere - the same
-  module-graph guard the language grammars have. Mermaid is pinned to 11.x: 12.0.0 pulls a
-  `chevrotain`/`lodash-es` chain with open high-severity advisories.
+  module-graph guard the language grammars have. Mermaid 12 draws in its own current look - the
+  `redux-color` palette (`redux-dark-color` in the dark theme), `neo` shapes and ELK layout - and only
+  the palette is chosen here. Its `chevrotain` dependency pins `lodash-es` 4.17.23, which carries
+  high-severity advisories; the root `package.json` overrides `lodash-es` to 4.18.1, the patched
+  release on the same major. Remove the override once chevrotain ships a fixed pin.
 - **Embedded notes are filled in after rendering too.** A note embed renders as a
   `.md-transclusion[data-embed-note]` placeholder holding its link. `lib/transclusions.ts`
   (`useTransclusions`) resolves it with `findWikiTarget` (the same name search as a wiki link), reads it
@@ -547,7 +595,7 @@ into a container of your own that fills the viewport, as `#root` does in the rea
 
 One trap it is worth knowing: `@testing-library/user-event` dispatches **synthetic** events, and
 CodeMirror does not move its caret for them - it resolves a position from real pointer input. Use
-`userEvent` from `@vitest/browser/context` in this suite. The synthetic version passes while the
+`userEvent` from `vitest/browser` in this suite. The synthetic version passes while the
 caret never moves, so every assertion after it measures the wrong state.
 
 The suite justified itself on its first run by catching a defect the jsdom suite structurally could
@@ -2305,6 +2353,21 @@ on a plain paragraph with nothing selected opens nothing, rather than a menu of 
 override in `contentAttributes`. Without it the app's main text surface would be the one place with
 no corrections while the chat box and settings fields had them, and nothing would say why.
 
+One item in the menu is named by the renderer: **Paste as markdown**. Its label comes from the i18n
+catalogue, which lives in the renderer - the shell has no catalogue of its own, and a second copy of
+the string could drift into a different spelling on the two surfaces that offer it. So `EditorPanel`
+listens for the DOM `contextmenu` event (capture phase) and reports through
+`editor:pasteMarkdownContext`: the translated label when the click was over an editable markdown
+document surface, null otherwise - a right-click in the chat box or a settings field must not offer a
+paste that would land in a document nobody is looking at. The main process keeps one report per web
+contents id and hands it to `contextMenuTemplate`, which adds the item after Paste when the label is
+present, enabled like Paste itself (greyed rather than absent when there is nothing to paste).
+
+The timing works because the DOM event fires before Chromium emits the web contents' own
+`context-menu`: a report posted during dispatch arrives before the menu is built. A late one costs at
+most a single right-click without the item - never a paste in the wrong place, since absence of the
+report means absence of the item.
+
 ## The IPC surface
 
 Every channel is listed in `packages/domain/src/ipc.ts` and exposed by name in the preload bridge.
@@ -2314,7 +2377,8 @@ The list is asserted exactly in a test, so adding one is deliberate rather than 
 (`obsidian:vaults`, `obsidian:openVault`), the graph (`graph:snapshot`, `graph:refresh`), a vault's assigned icons (`icons:map`), cloud accounts (`github:status`, `github:connect`,
 `github:disconnect`, `github:repos`), files (`file:read`,
 `file:readImage`, `file:write`, `file:openInNewWindow`, `file:saveAs`), window (`window:minimize`, `window:toggleMaximize`, `window:close`), documents
-(`document:dirty`, `document:confirmDiscard`), settings (`settings:read`, `settings:write`), keys
+(`document:dirty`, `document:confirmDiscard`), the editor's right-click menu
+(`editor:pasteMarkdownContext`), settings (`settings:read`, `settings:write`), keys
 (`secrets:list`, `secrets:set`, `secrets:delete`), chat (`chat:send`, `chat:cancel`) and its saved
 conversations (`chats:list`, `chats:load`, `chats:save`, `chats:delete`), menus (`menu:popup`) and
 links (`shell:openExternal`). Five channels flow the other way, all validated on arrival like
