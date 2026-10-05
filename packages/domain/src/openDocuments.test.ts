@@ -469,13 +469,13 @@ describe("a document with media", () => {
       content: "",
       revision: rev("r1"),
       readOnly: true,
-      media: "data:image/png;base64,AAAA",
+      media: { source: "data:image/png;base64,AAAA", kind: "image" as const },
     });
 
   it("carries the data URL, and no content", () => {
     const document = activeDocument(picture());
 
-    expect(document?.media).toBe("data:image/png;base64,AAAA");
+    expect(document?.media).toEqual({ source: "data:image/png;base64,AAAA", kind: "image" });
     expect(document?.content).toBe("");
   });
 

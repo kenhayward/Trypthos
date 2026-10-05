@@ -11,6 +11,16 @@ import type { Revision } from "./provider";
 /// Every function returns a NEW set. Nothing mutates, so a stale reference is always a snapshot of a
 /// past state rather than a half-applied change.
 
+/// Where a document that is shown rather than read comes from, and which element shows it.
+///
+/// The kind travels WITH the source because the two cannot be derived from one another: a picture
+/// arrives as a base64 data URL and a recording as a `tp-media://` URL the main process serves in
+/// ranges, and a bare URL cannot say whether a window should draw it, play it, or sound it.
+export interface MediaSource {
+  readonly source: string;
+  readonly kind: "image" | "video" | "audio";
+}
+
 export interface OpenDocument {
   /// Workspace-relative path. This is the tab's identity: one document per path, and a path is what
   /// the tree, a markdown link and a saved chat all name a file by.
@@ -28,12 +38,12 @@ export interface OpenDocument {
   /// Editable and saveable, unlike `readOnly`: what it lacks is a PLACE, not permission. Saving one
   /// asks where it should go, and it stops being a draft the moment it lands there.
   readonly draft: boolean;
-  /// A data URL for a document that is looked at rather than read - an image.
+  /// What a document that is looked at or listened to rather than read is shown from.
   ///
   /// Separate from `content`, and `content` stays empty, which is the point: `content` is what the
   /// chat panel sends and what the editor holds, and twenty megabytes of base64 in either would be
   /// a disaster in a different direction each time.
-  readonly media: string | null;
+  readonly media: MediaSource | null;
   /// True for a document with no file behind it - the built-in markdown guide.
   ///
   /// One flag for the whole of what that means: it is never written anywhere, and so it must never
@@ -57,8 +67,8 @@ export interface DocumentSource {
   readonly readOnly?: boolean;
   /// Opens a document that has never been saved. Defaults to false, as above.
   readonly draft?: boolean;
-  /// Opens a document that is looked at rather than read. Defaults to null - not an image.
-  readonly media?: string | null;
+  /// Opens a document that is looked at or listened to. Defaults to null - an ordinary document.
+  readonly media?: MediaSource | null;
   /// Opens with unsaved work - text handed over from a tab moved into its own window, measured
   /// against the revision that tab had read. Defaults to false, as above.
   readonly dirty?: boolean;

@@ -1032,8 +1032,10 @@ describe("Zoom, in a real browser", () => {
 describe("Zooming a picture, in a real browser", () => {
   // 40x20, solid. Small enough to sit in a test file, and rectangular so a width and a height
   // cannot be confused for one another.
-  const PNG =
+  const PNG_DATA_URL =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mOIqjgxIIhh1OJRi0ctHrV41OJRi0ctHrV45FgMAPz9AYwylnrnAAAAAElFTkSuQmCC";
+
+  const PNG = { source: PNG_DATA_URL, kind: "image" as const };
 
   const withImage = () =>
     render(

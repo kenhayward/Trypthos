@@ -431,7 +431,7 @@ describe("the views a document offers", () => {
 /// three views to switch between - and for a picture all of them would be answers about a file with
 /// no lines in it.
 describe("EditorPanel: an image", () => {
-  const PNG = "data:image/png;base64,AAAA";
+  const PNG = { source: "data:image/png;base64,AAAA", kind: "image" as const };
 
   const withImage = () =>
     render(
@@ -450,7 +450,7 @@ describe("EditorPanel: an image", () => {
 
   it("draws the picture", () => {
     withImage();
-    expect(screen.getByRole("img", { name: "shot.png" }).getAttribute("src")).toBe(PNG);
+    expect(screen.getByRole("img", { name: "shot.png" }).getAttribute("src")).toBe(PNG.source);
   });
 
   it("offers no view to switch to", () => {
@@ -469,6 +469,54 @@ describe("EditorPanel: an image", () => {
 
   it("puts no editing surface on screen", () => {
     withImage();
+    expect(document.querySelector(".cm-content")).toBeNull();
+  });
+});
+
+/// A recording, which the editor plays.
+///
+/// It takes the same route through the panel as a picture - no views, no status bar, no editing
+/// surface - and then diverges at the last branch, because a video is played rather than drawn.
+describe("EditorPanel: a recording", () => {
+  const CLIP = { source: "tp-media://workspace/Notes%2Fclip.mp4", kind: "video" as const };
+
+  const withClip = () =>
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["Notes/clip.mp4"]}
+        activePath="Notes/clip.mp4"
+        dirty={false}
+        value=""
+        readOnly
+        media={CLIP}
+        fileTypes={["markdown", "video"]}
+        onChange={vi.fn()}
+      />,
+    );
+
+  it("plays it rather than drawing it as a picture", () => {
+    const { container } = withClip();
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(CLIP.source);
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("offers no view to switch to", () => {
+    withClip();
+    for (const view of ["Live", "Source", "Preview"]) {
+      expect(screen.queryByRole("button", { name: view })).toBeNull();
+    }
+  });
+
+  // A caret position and a word count are questions about text. For a recording they would be
+  // fields that are lies about a file with no lines in it.
+  it("says nothing about lines or words", () => {
+    withClip();
+    expect(screen.queryByText(/words/)).toBeNull();
+  });
+
+  it("puts no editing surface on screen", () => {
+    withClip();
     expect(document.querySelector(".cm-content")).toBeNull();
   });
 });
@@ -627,7 +675,7 @@ describe("EditorPanel: zoom", () => {
 
 /// Zoom over a picture, which is scaled rather than restyled.
 describe("EditorPanel: zooming an image", () => {
-  const PNG = "data:image/png;base64,AAAA";
+  const PNG = { source: "data:image/png;base64,AAAA", kind: "image" as const };
 
   const withImage = () =>
     render(

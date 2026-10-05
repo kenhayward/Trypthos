@@ -156,7 +156,13 @@ export {
   tabsToClose,
   updateContent,
 } from "./openDocuments";
-export type { DocumentSet, DocumentSource, OpenDocument, TabCloseAction } from "./openDocuments";
+export type {
+  DocumentSet,
+  DocumentSource,
+  MediaSource,
+  OpenDocument,
+  TabCloseAction,
+} from "./openDocuments";
 
 export {
   RECENT_FILES_LIMIT,
