@@ -44,11 +44,27 @@ function createGoogleDriveApi({
     return error?.code ?? error?.name ?? "error";
   }
 
-  async function send(url, token) {
+  /// One attempt: the request AND the reading of its body under a single deadline. Aborting alone
+  /// is not enough (a fake, or a stalled socket, may never settle), so the work is raced against the
+  /// deadline as well. Answers `{ response, value }` - `value` is what `read` made of the body - or
+  /// `null` when the attempt did not complete.
+  async function attempt(url, token, read) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(new Error("timed out")), timeoutMs);
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const error = Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
+        controller.abort(error);
+        reject(error);
+      }, timeoutMs);
+    });
+    const work = (async () => {
+      const response = await fetch(url, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } });
+      const value = response.ok ? await read(response) : await response.json().catch(() => null);
+      return { response, value };
+    })();
     try {
-      return await fetch(url, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } });
+      return await Promise.race([work, deadline]);
     } catch (error) {
       logger.error?.(`A request to Google Drive did not complete: ${codeOf(error)}`);
       return null;
@@ -57,24 +73,32 @@ function createGoogleDriveApi({
     }
   }
 
+  async function tokenFrom(options) {
+    try {
+      return await accessToken(options);
+    } catch (error) {
+      logger.error?.(`The Google Drive access token could not be obtained: ${codeOf(error)}`);
+      return failure("not-connected");
+    }
+  }
+
   /// One GET, with at most one retry after refreshing an expired token and one after waiting out a
-  /// rate limit. Answers `{ ok: true, response }` or a failure.
-  async function get(url) {
-    let token = await accessToken();
+  /// rate limit. Answers `{ ok: true, value }` (the body as `read` made it) or a failure.
+  async function get(url, read) {
+    let token = await tokenFrom();
     if (!token.ok) return token;
 
     let refreshed = false;
     let waited = false;
     for (;;) {
-      const response = await send(url, token.token);
-      if (response === null) return failure("offline");
-      if (response.ok) return { ok: true, response };
+      const got = await attempt(url, token.token, read);
+      if (got === null) return failure("offline");
+      if (got.response.ok) return { ok: true, value: got.value };
 
-      const body = await response.json().catch(() => null);
-      const reason = driveErrorFor(response.status, body);
+      const reason = driveErrorFor(got.response.status, got.value);
       if (reason === "not-connected" && !refreshed) {
         refreshed = true;
-        token = await accessToken({ force: true });
+        token = await tokenFrom({ force: true });
         if (!token.ok) return token;
         continue;
       }
@@ -88,17 +112,9 @@ function createGoogleDriveApi({
   }
 
   async function getJson(url, schema) {
-    const got = await get(url);
+    const got = await get(url, (response) => response.json());
     if (!got.ok) return got;
-
-    let body;
-    try {
-      body = await got.response.json();
-    } catch {
-      logger.error?.("Google Drive answered with something that is not JSON.");
-      return failure("offline");
-    }
-    const parsed = schema.safeParse(body);
+    const parsed = schema.safeParse(got.value);
     if (!parsed.success) {
       logger.error?.("Google Drive answered in a shape this build does not recognise.");
       return failure("offline");
@@ -107,14 +123,8 @@ function createGoogleDriveApi({
   }
 
   async function getBytes(url) {
-    const got = await get(url);
-    if (!got.ok) return got;
-    try {
-      return { ok: true, bytes: Buffer.from(await got.response.arrayBuffer()) };
-    } catch (error) {
-      logger.error?.(`A download from Google Drive did not complete: ${codeOf(error)}`);
-      return failure("offline");
-    }
+    const got = await get(url, async (response) => Buffer.from(await response.arrayBuffer()));
+    return got.ok ? { ok: true, bytes: got.value } : got;
   }
 
   async function listChildren(folderId, { foldersOnly = false } = {}) {
