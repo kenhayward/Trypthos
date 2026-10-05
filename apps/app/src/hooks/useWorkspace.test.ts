@@ -265,6 +265,20 @@ describe("a Google Drive workspace", () => {
     expect(result.current.state.errorKey).toBe("errors.driveMediaNotLocal");
   });
 
+  it("says a Drive image could not be read in Google's words", async () => {
+    const { client } = fakeClient({ readImage: async () => ({ ok: false, reason: "offline" }) });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/pic.png");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.googleOffline");
+  });
+
   it("says a Drive folder could not be reached in Google's words", async () => {
     const { client } = fakeClient({ openWorkspaceRef: async () => ({ ok: false, reason: "offline" }) });
     const { result } = renderHook(() => useWorkspace(client));

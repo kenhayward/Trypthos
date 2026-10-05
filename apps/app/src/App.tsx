@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { applyToDocument } from "./lib/applyToDocument";
 import { useTranslation } from "react-i18next";
 import {
   PANEL_BOUNDS,
@@ -446,12 +447,16 @@ export default function App() {
       // Into the live editor when there is one, so the change is one undo step with the caret after
       // it. Preview has no editor mounted - and an Apply there used to write nowhere while the card
       // said Applied (#155) - so the change goes into the document's text instead, through the same
-      // path typing takes: it shows in Preview and marks the document unsaved.
-      if (editor.current?.applyChange(target.from, target.to, target.insert) === true) return true;
-      // A read-only document refuses the text, so it is not reported as applied.
-      if (state.readOnly) return false;
-      actions.edit(state.content.slice(0, target.from) + target.insert + state.content.slice(target.to));
-      return true;
+      // path typing takes: it shows in Preview and marks the document unsaved. A read-only document
+      // is refused before either, because the editor would take a programmatic change it will not
+      // take from typing.
+      return applyToDocument({
+        readOnly: state.readOnly,
+        content: state.content,
+        target,
+        applyInEditor: (from, to, insert) => editor.current?.applyChange(from, to, insert),
+        commit: actions.edit,
+      });
     },
     [actions, resolveAgainstDocument, state.content, state.readOnly],
   );
