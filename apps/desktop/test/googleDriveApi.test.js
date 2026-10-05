@@ -28,19 +28,20 @@ function answer(status, body, { bytes = null } = {}) {
   };
 }
 
-function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }] } = {}) {
+function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }], timeoutMs, accessToken } = {}) {
   const calls = [];
   const tokenCalls = [];
   const logs = [];
   const slept = [];
   let tokenIndex = 0;
   const api = createGoogleDriveApi({
-    accessToken: async (options = {}) => {
+    timeoutMs,
+    accessToken: accessToken ?? (async (options = {}) => {
       tokenCalls.push(options);
       const next = tokens[Math.min(tokenIndex, tokens.length - 1)];
       tokenIndex += 1;
       return next;
-    },
+    }),
     fetch: async (url, init) => {
       calls.push({ url, authorization: init.headers.Authorization });
       const route = routes.shift();
@@ -184,4 +185,56 @@ test("an unreachable Drive is offline, logged with no URL, token or message", as
 test("statuses map through driveErrorFor", async () => {
   const { api } = setup({ routes: [answer(404, {})] });
   assert.deepEqual(await api.download("f1"), { ok: false, reason: "not-found" });
+});
+
+const never = () => new Promise(() => {});
+
+test("a body that never arrives is offline once the deadline passes", async () => {
+  const stalled = { ok: true, status: 200, json: never, arrayBuffer: never };
+  const { api, logs } = setup({ timeoutMs: 20, routes: [stalled, stalled] });
+  assert.deepEqual(await api.download("f1"), { ok: false, reason: "offline" });
+  assert.deepEqual(await api.listChildren(FOLDER), { ok: false, reason: "offline" });
+  assert.equal(logs.length, 2);
+  assert.ok(logs.every((line) => !line.includes(FOLDER) && !line.includes("googleapis")));
+});
+
+test("an error body that never arrives is offline", async () => {
+  const stalled = { ok: false, status: 500, json: never, arrayBuffer: never };
+  const { api } = setup({ timeoutMs: 20, routes: [stalled] });
+  assert.deepEqual(await api.fileMeta("f1"), { ok: false, reason: "offline" });
+});
+
+test("a request that never answers is offline", async () => {
+  const { api } = setup({ timeoutMs: 20, routes: [never] });
+  assert.deepEqual(await api.fileMeta("f1"), { ok: false, reason: "offline" });
+});
+
+test("a token supplier that throws is not connected, with no request", async () => {
+  const logs = [];
+  const calls = [];
+  const api = createGoogleDriveApi({
+    accessToken: async () => {
+      throw new Error(`boom ${ACCESS}`);
+    },
+    fetch: async (url) => void calls.push(url),
+    logger: { error: (line) => logs.push(String(line)) },
+  });
+  assert.deepEqual(await api.listChildren(FOLDER), { ok: false, reason: "not-connected" });
+  assert.equal(calls.length, 0);
+  assert.equal(logs.length, 1);
+  assert.ok(!logs[0].includes(ACCESS));
+});
+
+test("a token supplier that throws on the forced refresh is not connected", async () => {
+  let n = 0;
+  const api = createGoogleDriveApi({
+    accessToken: async () => {
+      n += 1;
+      if (n > 1) throw new Error("boom");
+      return { ok: true, token: "stale" };
+    },
+    fetch: async () => answer(401, {}),
+    logger: { error: () => {} },
+  });
+  assert.deepEqual(await api.listChildren(FOLDER), { ok: false, reason: "not-connected" });
 });
