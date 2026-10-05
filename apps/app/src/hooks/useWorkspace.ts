@@ -1084,7 +1084,7 @@ export function useWorkspace(
       // reads to make.
       if (isImageName(path)) {
         const image = await client.readImage(path);
-        if (!image.ok) return fail(image);
+        if (!image.ok) return fail(image, kindOf(stateRef.current.workspaces, path));
 
         setInternal((prev) => ({
           ...prev,
