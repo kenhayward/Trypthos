@@ -9,11 +9,11 @@ import {
   childrenUrl,
   displayNameFor,
   driveErrorFor,
+  driveMediaUrl,
   exportUrl,
   fileUrl,
   foldersOf,
   isDriveId,
-  mediaUrl,
   sharedDrivesUrl,
   type DriveFile,
 } from "./googleDrive";
@@ -64,7 +64,7 @@ describe("URLs", () => {
   it("builds the per-file addresses", () => {
     expect(fileUrl("f1")).toMatch(new RegExp(`^${DRIVE_API}/files/f1\\?`));
     expect(new URL(fileUrl("f1")).searchParams.get("supportsAllDrives")).toBe("true");
-    expect(new URL(mediaUrl("f1")).searchParams.get("alt")).toBe("media");
+    expect(new URL(driveMediaUrl("f1")).searchParams.get("alt")).toBe("media");
     expect(new URL(exportUrl("f1")).searchParams.get("mimeType")).toBe("text/markdown");
     expect(new URL(exportUrl("f1")).pathname).toBe("/drive/v3/files/f1/export");
     expect(new URL(sharedDrivesUrl(null)).pathname).toBe("/drive/v3/drives");

@@ -66,7 +66,7 @@ export function fileUrl(id: string): string {
   return `${DRIVE_API}/files/${id}?${new URLSearchParams({ fields: FILE_FIELDS, supportsAllDrives: "true" }).toString()}`;
 }
 
-export function mediaUrl(id: string): string {
+export function driveMediaUrl(id: string): string {
   return `${DRIVE_API}/files/${id}?alt=media&supportsAllDrives=true`;
 }
 
