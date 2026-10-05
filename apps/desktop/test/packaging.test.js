@@ -59,14 +59,17 @@ test("macOS builds are explicitly unsigned rather than accidentally so", () => {
   assert.equal(config.mac.identity, null);
 });
 
-// The resource filter must name the tray files, not a whole extension: "*.png" also swept build/
-// icon.png into resources, and "*.ico" would sweep the 9 KB app icon in with the tray's.
-test("only the tray icons are packed as resources, by name", () => {
+// The resource filter must name the tray files and google-oauth-client by name, not a whole extension:
+// "*.png" also swept build/icon.png into resources, and "*.ico" would sweep the 9 KB app icon in with the tray's.
+test("only the tray icons and google-oauth-client are packed as resources, by name", () => {
   const entry = (config.extraResources ?? []).find((item) => item.to === "build");
-  assert.ok(entry, "the tray resource entry must exist");
+  assert.ok(entry, "the build resource entry must exist");
   assert.ok(Array.isArray(entry.filter) && entry.filter.length > 0, "the entry must filter");
   for (const pattern of entry.filter) {
-    assert.match(pattern, /^tray/, `resource filter "${pattern}" must be tray-only`);
+    assert.ok(
+      pattern.match(/^tray/) || pattern === "google-oauth-client.json",
+      `resource filter "${pattern}" must be tray* or google-oauth-client.json`,
+    );
   }
 });
 
@@ -118,4 +121,15 @@ test("the App User Model ID matches the packaged appId", () => {
 
   assert.ok(declared, "main.js must set an App User Model ID");
   assert.equal(declared, config.appId, "the identity must match the appId the installer uses");
+});
+
+// The Google OAuth client is written into build/ by the release workflow and has to reach the
+// installed app, where googleClient.js looks for it. Listed by name in the filter rather than by a
+// wildcard, so the app icon sources beside it stay out of every install.
+test("the Google OAuth client file is shipped when the build has one", () => {
+  const build = (config.extraResources ?? []).find((entry) => entry.from === "build");
+  assert.ok(build, "build/ must be copied into resources");
+  assert.equal(build.to, "build");
+  assert.ok(build.filter.includes("google-oauth-client.json"));
+  assert.ok(build.filter.includes("tray*"), "the tray icons must still ship");
 });
