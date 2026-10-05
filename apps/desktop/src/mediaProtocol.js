@@ -24,6 +24,13 @@ const { parseRange } = require("./mediaRange");
 const MEDIA_SCHEME_PRIVILEGES = {
   scheme: MEDIA_SCHEME,
   privileges: {
+    // Without this the scheme's URLs are OPAQUE to Chromium - no host, no path - and a media
+    // element refuses to load one even though `fetch` to the same URL succeeds and returns the
+    // right bytes. The two take different code paths, which is why this was found by playing a
+    // file rather than by any test: every assertion about the handler passed throughout.
+    //
+    // `corsEnabled` also depends on it.
+    standard: true,
     secure: true,
     supportFetchAPI: true,
     stream: true,

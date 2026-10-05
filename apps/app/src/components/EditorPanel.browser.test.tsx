@@ -1216,3 +1216,62 @@ describe("Obsidian marks in Live mode, rendered", () => {
     expect(onFollowWikiLink).toHaveBeenCalledWith("Goals#This year");
   });
 });
+
+/// A recording, in a real browser.
+///
+/// jsdom has no media element worth the name, so the attributes playback actually depends on are
+/// worth pinning where a real one exists. Not the control bar itself - that is Chromium's, and it
+/// is the reason this component has so little code to test.
+describe("A recording, in a real browser", () => {
+  const CLIP = { source: "tp-media://workspace/Notes%2Fclip.mp4", kind: "video" as const };
+
+  const withClip = () =>
+    render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["Notes/clip.mp4"]}
+        activePath="Notes/clip.mp4"
+        dirty={false}
+        value=""
+        readOnly
+        media={CLIP}
+        fileTypes={["markdown", "video"]}
+        onChange={() => {}}
+      />,
+    );
+
+  const video = () => document.querySelector("video") as HTMLVideoElement;
+
+  it("renders a real media element with the attributes playback depends on", async () => {
+    withClip();
+    await vi.waitFor(() => expect(video()).not.toBeNull());
+
+    expect(video().getAttribute("src")).toBe(CLIP.source);
+    // Fetches a duration and a first frame, not the file.
+    expect(video().getAttribute("preload")).toBe("metadata");
+    expect(video().hasAttribute("controls")).toBe(true);
+    // Opening a tab must not start making noise.
+    expect(video().hasAttribute("autoplay")).toBe(false);
+  });
+
+  // The element is what asks for the file, so what the browser makes of the URL is a real question
+  // and `src` being a string is not an answer to it. A `tp-media://` scheme is unregistered in the
+  // test browser, so the load fails - but it must fail as a load, having been resolved as written,
+  // rather than being rewritten or rejected as malformed.
+  it("keeps the protocol URL intact as the element's source", async () => {
+    withClip();
+    await vi.waitFor(() => expect(video()).not.toBeNull());
+
+    expect(video().src).toBe(CLIP.source);
+  });
+
+  it("gives the panel no status bar and no view buttons", async () => {
+    withClip();
+    await vi.waitFor(() => expect(video()).not.toBeNull());
+
+    for (const view of ["Live", "Source", "Preview"]) {
+      expect(screen.queryByRole("button", { name: view })).toBeNull();
+    }
+    expect(screen.queryByText(/words/)).toBeNull();
+  });
+});

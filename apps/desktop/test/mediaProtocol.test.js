@@ -49,9 +49,14 @@ const get = (url, headers = {}) => new Request(url, { headers });
 
 test("the scheme is privileged in the ways playback needs, and no others", () => {
   const { privileges } = MEDIA_SCHEME_PRIVILEGES;
-  // `stream` is the one that matters: without it a media element cannot issue a Range request
-  // against the scheme at all, and the scrub bar is dead however well the handler serves ranges.
+  // `stream` is the one that matters for seeking: without it a media element cannot issue a Range
+  // request against the scheme at all, and the scrub bar is dead however well ranges are served.
   assert.equal(privileges.stream, true);
+  // And `standard` is the one that matters for playing AT ALL. Without it Chromium treats the
+  // scheme's URLs as opaque and a media element refuses to load one - while `fetch` to the very
+  // same URL succeeds and returns the right bytes, because the two take different code paths.
+  // Found by playing a file in the real app; every assertion in this file passed without it.
+  assert.equal(privileges.standard, true);
   assert.equal(privileges.supportFetchAPI, true);
   assert.equal(privileges.secure, true);
   // There is no CSP in the app today. Pinning this to false means adding one later is a policy
