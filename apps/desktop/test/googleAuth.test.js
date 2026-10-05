@@ -85,6 +85,7 @@ function auth(options = {}) {
     openExternal: browser.openExternal,
     now: () => clock,
     logger,
+    listen: options.listen,
     consentTimeoutMs: options.consentTimeoutMs ?? 5_000,
   });
   return { auth: instance, accounts, google, browser, logger, advance: (ms) => (clock += ms) };
@@ -290,5 +291,165 @@ test("an unreachable Google is offline, and nothing secret is logged", async () 
   assert.deepEqual(await signIn.connect(), { ok: false, reason: "offline" });
   for (const line of logger.lines) {
     assert.ok(!/code-1|invented-secret|state=|verifier/.test(line), `logged something secret: ${line}`);
+  }
+});
+
+/// A listener that counts how many it opened and how many were closed.
+function countingListen() {
+  const { listenOnce } = require("../src/googleAuth");
+  const counts = { opened: 0, closed: 0 };
+  const listen = async () => {
+    const listener = await listenOnce();
+    counts.opened += 1;
+    return {
+      ...listener,
+      close: () => {
+        counts.closed += 1;
+        listener.close();
+      },
+    };
+  };
+  return { listen, counts };
+}
+
+// connect() has not reached the browser yet while the listener starts; a cancel then must still land.
+test("a cancel in the same tick as connect still cancels, and closes the listener", async () => {
+  const browser = silentBrowser();
+  const { listen, counts } = countingListen();
+  const { auth: signIn } = auth({ browser, listen });
+
+  const waiting = signIn.connect();
+  signIn.cancelConnect();
+
+  assert.deepEqual(await waiting, { ok: false, reason: "cancelled" });
+  assert.equal(browser.opened.length, 0);
+  assert.equal(counts.closed, counts.opened);
+});
+
+test("two connects in one tick, then a cancel: both settle cancelled and at most one browser opens", async () => {
+  const browser = silentBrowser();
+  const { listen, counts } = countingListen();
+  const { auth: signIn } = auth({ browser, listen });
+
+  const first = signIn.connect();
+  const second = signIn.connect();
+  signIn.cancelConnect();
+
+  assert.deepEqual(await first, { ok: false, reason: "cancelled" });
+  assert.deepEqual(await second, { ok: false, reason: "cancelled" });
+  assert.ok(browser.opened.length <= 1);
+  assert.equal(counts.closed, counts.opened);
+});
+
+/// A promise to hold a fake Google answer open, and the key that releases it.
+function gate() {
+  let release;
+  const open = new Promise((resolve) => (release = resolve));
+  return { open, release };
+}
+
+// Signing out after the redirect has arrived must not be undone by the sign-in still finishing.
+test("disconnect while sign-in is checking the account wins: nothing stored, not connected", async () => {
+  const held = gate();
+  const google = fakeGoogle({
+    userinfo: async () => {
+      await held.open;
+      return json(200, { email: "ada@example.com" });
+    },
+  });
+  const { auth: signIn, accounts } = auth({ google });
+
+  const connecting = signIn.connect();
+  await until(() => google.calls.some((call) => call.url === "https://openidconnect.googleapis.com/v1/userinfo"));
+  assert.deepEqual(await signIn.disconnect(), { ok: true });
+  held.release();
+
+  assert.deepEqual(await connecting, { ok: false, reason: "cancelled" });
+  assert.equal(accounts.tokens.size, 0);
+  assert.deepEqual(await signIn.accessToken(), { ok: false, reason: "not-connected" });
+});
+
+test("a refresh that finishes after disconnect does not bring the access token back", async () => {
+  const accounts = fakeAccounts();
+  await accounts.setToken(GOOGLE_PROVIDER, REFRESH);
+  const held = gate();
+  const google = fakeGoogle({
+    token: async () => {
+      await held.open;
+      return json(200, { access_token: "access-stale", expires_in: 3600, scope: DRIVE, token_type: "Bearer" });
+    },
+  });
+  const { auth: signIn } = auth({ accounts, google });
+
+  const refreshing = signIn.accessToken();
+  await until(() => google.calls.some((call) => call.url === "https://oauth2.googleapis.com/token"));
+  await signIn.disconnect();
+  held.release();
+
+  assert.deepEqual(await refreshing, { ok: false, reason: "not-connected" });
+  assert.deepEqual(await signIn.accessToken(), { ok: false, reason: "not-connected" });
+});
+
+test("an account store that throws on save fails the sign-in as unknown and closes the listener", async () => {
+  const accounts = fakeAccounts();
+  accounts.setToken = async () => {
+    throw new Error("disk full");
+  };
+  const { listen, counts } = countingListen();
+  const { auth: signIn, logger } = auth({ accounts, listen });
+
+  assert.deepEqual(await signIn.connect(), { ok: false, reason: "unknown" });
+  assert.equal(counts.closed, counts.opened);
+  assert.ok(logger.lines.every((line) => !line.includes("disk full")));
+});
+
+test("a store that cannot delete answers unknown, and the old access token is gone", async () => {
+  const { auth: signIn, accounts } = auth();
+  await signIn.connect();
+  accounts.deleteToken = async () => {
+    throw new Error("locked");
+  };
+
+  assert.deepEqual(await signIn.disconnect(), { ok: false, reason: "unknown" });
+  const after = await signIn.accessToken();
+  assert.notDeepEqual(after, { ok: true, token: ACCESS });
+});
+
+test("no secret reaches a log line on any failing path", async () => {
+  const recording = (route) => {
+    const google = fakeGoogle({ token: route });
+    return google;
+  };
+  const offline = fakeGoogle();
+  const realFetch = offline.fetch;
+  offline.fetch = async (url, init) => {
+    await realFetch(url, init); // recorded, answered, then discarded: the line drops
+    throw Object.assign(new Error("connection lost"), { code: "ECONNRESET" });
+  };
+  const paths = [
+    { name: "offline", google: offline, run: (s) => s.connect() },
+    {
+      name: "scope denied",
+      google: recording(() => json(200, { access_token: ACCESS, expires_in: 3600, scope: "openid", token_type: "Bearer", refresh_token: REFRESH })),
+      run: (s) => s.connect(),
+    },
+    { name: "revoke 503", google: fakeGoogle({ revoke: () => json(503, {}) }), run: async (s) => (await s.connect(), s.disconnect()) },
+    { name: "schema mismatch", google: recording(() => json(200, {})), run: (s) => s.connect() },
+  ];
+
+  for (const path of paths) {
+    const { auth: signIn, browser, logger } = auth({ google: path.google });
+    await path.run(signIn);
+
+    const consent = new URL(browser.opened[0]).searchParams;
+    const exchange = path.google.calls.find((call) => call.body.get("grant_type") === "authorization_code");
+    const secrets = [consent.get("state"), consent.get("code_challenge"), REFRESH, ACCESS, "code-1", "invented-secret"];
+    if (exchange) secrets.push(exchange.body.get("code_verifier"));
+    assert.ok(secrets.every((secret) => typeof secret === "string" && secret !== ""), "every secret was captured");
+    for (const line of logger.lines) {
+      for (const secret of secrets) {
+        assert.ok(!line.includes(secret), `${path.name}: logged a secret: ${line}`);
+      }
+    }
   }
 });
