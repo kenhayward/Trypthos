@@ -5,7 +5,7 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
-    version: "0.93.0",
+    version: "0.94.0",
     date: "2026-10-05",
     pr: 210,
     headline: "Play video and audio from your folders",
