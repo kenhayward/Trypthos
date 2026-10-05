@@ -1116,4 +1116,24 @@ function registerIpcHandlers({
   );
 }
 
-module.exports = { registerIpcHandlers, guarded, tabOpenerFor };
+/// Where a media file is, for the protocol that streams it.
+///
+/// The same registry and the same guard as every IPC handler, which is the entire point: the
+/// protocol is a second way to reach a file and must not be a second set of rules.
+///
+/// A provider with no `locateFile` - GitHub - answers "unsupported" here, and that absence is the
+/// one place playback is decided to be local-only. A repository's blobs arrive base64 over an API
+/// with no range support, so there is nothing to stream from one.
+async function locateMedia(qualifiedPath) {
+  const attached = locateQualifiedPath(qualifiedPath);
+  if (attached === null) return { ok: false, reason: "no-workspace" };
+
+  const { workspace, path: relativePath } = attached;
+  if (typeof workspace.provider.locateFile !== "function") return { ok: false, reason: "unsupported" };
+  // A qualified path naming only a workspace has no file in it to serve.
+  if (relativePath === "") return { ok: false, reason: "not-found" };
+
+  return workspace.provider.locateFile(relativePath);
+}
+
+module.exports = { registerIpcHandlers, guarded, tabOpenerFor, locateMedia };
