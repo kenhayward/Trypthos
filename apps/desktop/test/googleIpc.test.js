@@ -110,18 +110,27 @@ test("no channel answers with a Google token", async () => {
   await withHandlers(async ({ ipcMain }) => {
     await ipcMain.invoke("google:connect");
 
-    for (const [channel, handler] of ipcMain.handlers) {
-      if (channel === "google:disconnect") continue; // walked last, below, so the others see a signed-in account
-      let answer;
-      try {
-        answer = await handler(null, {});
-      } catch {
-        continue;
+    // Unrelated handlers log "Rejected malformed IPC payload" for `{}`; collect rather than print.
+    const logged = [];
+    const realConsoleError = console.error;
+    console.error = (...args) => void logged.push(args.map(String).join(" "));
+    try {
+      for (const [channel, handler] of ipcMain.handlers) {
+        if (channel === "google:disconnect") continue; // walked last, below, so the others see a signed-in account
+        let text;
+        try {
+          text = JSON.stringify((await handler(null, {})) ?? null);
+        } catch (error) {
+          text = `${String(error)} ${error?.stack ?? ""}`;
+        }
+        assert.ok(!text.includes(REFRESH), `${channel} answered with the refresh token`);
+        assert.ok(!text.includes(ACCESS), `${channel} answered with the access token`);
       }
-      const text = JSON.stringify(answer ?? null);
-      assert.ok(!text.includes(REFRESH), `${channel} answered with the refresh token`);
-      assert.ok(!text.includes(ACCESS), `${channel} answered with the access token`);
+    } finally {
+      console.error = realConsoleError;
     }
+    const leaked = logged.join("\n");
+    assert.ok(!leaked.includes(REFRESH) && !leaked.includes(ACCESS), "a log line carried a Google token");
     const last = JSON.stringify(await ipcMain.invoke("google:disconnect"));
     assert.ok(!last.includes(REFRESH) && !last.includes(ACCESS));
   });
