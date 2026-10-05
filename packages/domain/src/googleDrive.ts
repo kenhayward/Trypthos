@@ -108,6 +108,7 @@ export function driveErrorFor(status: number, body: unknown): DriveFailure {
 /// become `_` - for display only, nothing is written back. A Google Doc is named `.md` because that
 /// is what it opens as, and the interface decides what it can open by extension.
 export function displayNameFor(file: { name: string; mimeType: string }): string {
+  // eslint-disable-next-line no-control-regex -- Drive allows control characters in a name; a path cannot hold them.
   const cleaned = file.name.replace(/[/\\:\u0000-\u001f\u007f]/g, "_");
   const safe = cleaned.trim() === "" || cleaned === "." || cleaned === ".." ? "_" : cleaned;
   return file.mimeType === GOOGLE_DOC_MIME && !/\.md$/i.test(safe) ? `${safe}.md` : safe;
