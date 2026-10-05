@@ -121,7 +121,7 @@ it took 40 seconds across 113,000 folders.
 
 If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
 the tree keeps working, because one unreadable folder is a fact about that folder rather than about
-your workspace. OneDrive, Google Drive and Dropbox arrive behind the same interface, in that order.
+your workspace. Google Drive, OneDrive and Dropbox arrive behind the same interface, in that order.
 
 ## GitHub repositories
 
@@ -271,6 +271,12 @@ respects, and it is not a permissions problem with the folder you picked.
 Local and cloud look like one tree to you, but they behave differently underneath: cloud listings are
 paged, slow, and can fail part-way through. Trypthos shows that on the node it affects rather than
 blanking the whole panel, so a directory that is still loading, or that failed, says so in place.
+
+## Google Drive
+
+**Connect a Google account from Settings > Accounts.** Connect opens Google's own sign-in page in your browser, where you allow Trypthos to use Google Drive, and the section then shows which account is connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and every request goes from this machine straight to Google.
+
+**Trypthos does not pretend to be connected.** If you untick Google Drive on Google's page, Trypthos says so and stays disconnected. Cancel stops a sign-in you did not finish, and Disconnect signs out and asks Google to forget the permission. Opening Drive folders as workspaces arrives in the next release.
 
 ## Home page and graph
 
