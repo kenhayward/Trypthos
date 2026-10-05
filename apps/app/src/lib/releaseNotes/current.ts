@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.95.1",
+    date: "2026-10-05",
+    pr: 215,
+    headline: "Dependency updates now arrive as diffs you can read",
+    summary:
+      "Nothing in the app changes. Trypthos records every library it is built on in one lock file of over 10,000 lines. That file was committed with Windows line endings, while the tools that rewrite it write Unix ones, so a proposal to update a single library arrived as a rewrite of the entire file with 33 real lines buried inside it - which is not a diff anyone can review. The file is now pinned to one line ending, so a dependency update shows the versions that changed and nothing else. This is housekeeping: it is what makes the regular dependency updates reviewable rather than something you have to wave through.",
+    changed: [
+      "The dependency lock file is committed with LF line endings and pinned to them, so tools that regenerate it stop rewriting the whole file.",
+    ],
+  },
+  {
     version: "0.95.0",
     date: "2026-10-05",
     pr: 214,
