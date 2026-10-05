@@ -43,6 +43,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     activePath: null,
     openPaths: [] as readonly string[],
     dirtyPaths: [] as readonly string[],
+    opening: null as string | null,
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
     onOpenDrive: vi.fn(),
@@ -122,6 +123,29 @@ describe("WorkspacePanel", () => {
 
     expect(screen.getByRole("button", { name: /README\.md/ }).dataset.open).toBe("true");
     expect(screen.getByRole("button", { name: /README\.md/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  // Reading from a cloud provider is slow, and the row clicked is the only place to say so.
+  it("shows a spinner on the file being opened, and on no other", () => {
+    panel({ opening: "Diariz/docs/plan.md" });
+
+    const opening = screen.getByRole("button", { name: /plan\.md/ });
+    expect(within(opening).getByRole("status", { name: "Opening..." })).toBeDefined();
+    expect(within(screen.getByRole("button", { name: /README\.md/ })).queryByRole("status")).toBeNull();
+  });
+
+  it("shows a spinner, labelled as loading, on a folder that is being listed", () => {
+    panel({
+      folders: { ...FOLDERS, "Diariz/docs": { status: "loading" } },
+    });
+
+    expect(within(screen.getByRole("button", { name: /^docs/ })).getByRole("status", { name: "Loading..." })).toBeDefined();
+  });
+
+  it("shows a spinner on a workspace that is being listed", () => {
+    panel({ folders: { Diariz: { status: "loading" } } });
+
+    expect(screen.getAllByRole("status", { name: "Loading..." })).toHaveLength(1);
   });
 
   it("marks unsaved changes on each file that has them", () => {

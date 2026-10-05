@@ -31,6 +31,14 @@ describe("OpenDriveDialog", () => {
     expect(screen.queryByRole("button", { name: "Open this folder" })).toBeNull();
   });
 
+  it("shows a spinner while the folders are being listed", async () => {
+    const bridge = fakeBridge({ listDriveFolders: vi.fn(() => new Promise<DriveFoldersResult>(() => {})) });
+    render(<OpenDriveDialog bridge={bridge} onCancel={() => {}} onOpen={() => {}} />);
+
+    expect(await screen.findByRole("status", { name: "Loading folders..." })).toBeDefined();
+    expect(screen.getByText("Loading folders...")).toBeDefined();
+  });
+
   it("opens the folder it was taken into, under the name it showed", async () => {
     const onOpen = vi.fn();
     const bridge = fakeBridge();

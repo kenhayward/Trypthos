@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkspaceRef } from "@trypthos/domain";
 import GoogleAccountSection from "./GoogleAccountSection";
+import Spinner from "./Spinner";
 import { attempt } from "../hooks/useGitHub";
 import { providerFailureKey } from "../hooks/useWorkspace";
 import type { DriveFoldersResult, GoogleBridge } from "../lib/workspaceClient";
@@ -124,7 +125,12 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
             </nav>
 
             <div className="mt-2 min-h-32 flex-1 overflow-y-auto rounded border border-rule">
-              {listing.state === "loading" && <p className="p-2 text-xs text-ink-3">{t("drive.loading")}</p>}
+              {listing.state === "loading" && (
+                <p className="flex items-center gap-2 p-2 text-xs text-ink-3">
+                  <Spinner label={t("drive.loading")} />
+                  {t("drive.loading")}
+                </p>
+              )}
               {listing.state === "failed" && (
                 <p role="alert" className="m-2 rounded border border-rule bg-panel p-2 text-xs text-ink-2">
                   {t(listing.errorKey)}

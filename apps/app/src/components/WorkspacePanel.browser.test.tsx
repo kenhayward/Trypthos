@@ -42,6 +42,7 @@ function panel() {
     activePath: null,
     openPaths: [] as readonly string[],
     dirtyPaths: [] as readonly string[],
+    opening: null as string | null,
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
     onOpenDrive: vi.fn(),

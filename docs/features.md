@@ -280,6 +280,8 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 **Open a Drive folder beside your other folders.** With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive: My Drive's folders, then your shared drives, with a breadcrumb to go back up. Choose a folder and it opens as another tree beside your local folders and repositories, marked with Drive's logo, and comes back the next time you start Trypthos. Markdown and text files open as they do anywhere else, Google Docs open as markdown, and pictures a note embeds are shown. Folders are read as you open them, so a large Drive is not read all at once, and right-click Refresh asks Drive again. Drive folders open read-only in this release: the editor does not let you type into a Drive file, and saving to Drive arrives in the next release. Shortcuts, Sheets and Slides are not listed.
 
+**A spinner shows while things load.** A file you have clicked shows a spinner at the end of its row until it opens, a folder shows one while it lists, and the Drive folder picker shows one beside "Loading folders...". It does the same for local folders and repositories, and holds still if your system asks for reduced motion.
+
 ## Home page and graph
 
 **Every workspace has a home page.** Click a workspace's name in the folder browser and its page
