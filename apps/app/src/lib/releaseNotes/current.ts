@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.96.0",
+    date: "2026-10-05",
+    pr: 219,
+    headline: "Connect a Google account, ready for Google Drive folders",
+    summary:
+      "The first step towards opening Google Drive folders as workspaces: Settings > Accounts now has a Google Drive section. Connect opens Google's own sign-in page in your browser, where you allow Trypthos to use Google Drive, and the section then shows which account is connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and every request goes from this machine straight to Google. If you untick Google Drive on Google's page, Trypthos says so rather than pretending to be connected. Disconnect signs out and asks Google to forget the permission. Opening Drive folders in the folder browser arrives in the next release.",
+    added: [
+      "Settings > Accounts > Google Drive: connect through Google's sign-in page in your browser, see which account is connected, cancel a sign-in you did not finish, and disconnect.",
+    ],
+  },
+  {
     version: "0.95.4",
     date: "2026-10-05",
     pr: 218,

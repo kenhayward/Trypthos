@@ -14,7 +14,7 @@ Trypthos is a **cross-platform desktop (Windows + macOS) markdown editor**, laid
 
 > **Status: the left two panels work.** Open a local folder, browse it, edit markdown in Live, Source
 > or Preview, and save with conflict detection. Installers ship for Windows and macOS. The chat panel
-> is still a placeholder, and the cloud backends are not written.
+> is still a placeholder, and Google Drive sign-in is built and its folders are in progress; the other cloud backends are not written.
 
 ## Architecture & data flow
 
@@ -96,7 +96,7 @@ renders as source - a graceful floor, and one no two-engine design can offer.
 
 ### Cloud providers: one interface, but GitHub is not like the others
 
-Phase 1 is **local filesystem only.** Then, in order: **OneDrive, Google Drive, Dropbox, GitHub.**
+Phase 1 is **local filesystem only.** Then, in order: **Google Drive, OneDrive, Dropbox** (GitHub shipped first, out of the original order).
 
 The first three are the same shape - OAuth, a mutable file at a stable id, delta sync, last-writer
 conflict. **GitHub is not.** There is no mutable path: a save is a **commit on a branch**, with

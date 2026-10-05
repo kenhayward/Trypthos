@@ -604,7 +604,7 @@ character too far right.
 
 ## Storage providers
 
-Order: local (**built**), GitHub (**built; reads, and commits to a branch**), OneDrive, Google Drive, Dropbox.
+Order: local (**built**), GitHub (**built; reads, and commits to a branch**), Google Drive (**sign-in built; folders next**), OneDrive, Dropbox.
 
 ### A workspace is named by a reference
 
@@ -843,6 +843,18 @@ holds a ref of which repositories have been settled and calls `askCommit`, a pro
 from `CommitDialog`. That keeps the save path one straight line - await the answer, set the branch,
 commit - rather than the app juggling a half-finished save while a dialog is up. A branch is state
 and a message is per-commit, which is why only the first is held in the provider.
+
+### Google Drive (sign-in)
+
+`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `google` module holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). This PR is sign-in only: no Drive folder can be opened yet.
+
+- **Loopback plus PKCE, in the main process.** Google refuses OAuth inside an embedded webview, so Connect opens the system browser at Google's consent page. The redirect goes to a listener on 127.0.0.1 on a port the OS chose, and the code is exchanged with a PKCE verifier the renderer never sees. The `state` is checked before the code is used. The browser tab then shows a short English "return to Trypthos" page, hard-coded like the shell's menus.
+- **One sign-in at a time.** A second Connect, or Cancel, stops a waiting one. A Disconnect that lands while a sign-in is in flight wins: when the sign-in finishes, nothing is stored. A sign-in nobody completes ends on a five-minute timeout and answers `timed-out`.
+- **The scope is `drive`, not `drive.file`.** A spike showed `drive.file` lists nothing a user did not create through this app, which is no use for opening existing folders. `drive` is a restricted scope. If the user unticks it on the consent page the sign-in answers `scope-denied`, and nothing is stored, rather than reporting a connection that cannot read.
+- **Where the tokens live.** The refresh token is written to `providerAccounts.json` under `google-drive`, by the same encrypted store GitHub's token uses, and only after the sign-in fully succeeded. The access token lives in `googleAuth.js` memory and nowhere else. Neither crosses IPC, and no log line or error message carries a token, the code, the verifier or the state: log lines name the step and an error code only. Disconnect revokes the grant with Google as well as deleting the local copy. An account-store failure answers `unknown` rather than throwing.
+- **Four channels, none of which returns a token.** `google:status`, `google:connect`, `google:cancelConnect` and `google:disconnect` answer an email address or a refusal reason, as results `{ ok: false, reason }` and never as a throw. `googleIpc.test.js` walks every registered handler and fails if any answer, or any thrown error, contains a token. `useGoogle` in the renderer turns a rejected invoke into an ordinary refusal, as `useGitHub` does.
+- **Where the OAuth client comes from.** Packaged builds read `resources/build/google-oauth-client.json`, which the release workflow writes from the `GOOGLE_OAUTH_CLIENT_JSON` repository secret before packaging. In development `TRYPTHOS_GOOGLE_CLIENT` names the client JSON, kept outside the repository. A desktop client's secret is not confidential to Google, but it is kept out of a public repository all the same. No client means `null`, which is a normal answer: the section says this build has no Google Drive support and `google:connect` answers `not-configured`.
+- **Publishing is gated by Google, not by us.** While the client belongs to a Workspace organisation's internal project, only that organisation can sign in. Opening it to anyone needs Google's verification of a restricted scope, which is a review process with its own lead time.
 
 ### Local
 
