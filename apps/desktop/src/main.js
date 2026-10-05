@@ -36,6 +36,8 @@ const { MEDIA_SCHEME_PRIVILEGES, createMediaHandler } = require("./mediaProtocol
 const { createSecretStore } = require("./secretStore");
 const { createAccountStore } = require("./accountStore");
 const { createGitHubApi } = require("./githubApi");
+const { loadGoogleClient } = require("./googleClient");
+const { createGoogleAuth } = require("./googleAuth");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
 const { enableSpellChecker } = require("./spellcheck");
@@ -393,6 +395,22 @@ if (!gotLock) {
       encryptor: safeStorage,
     });
 
+    // The Google account. Null in a build without an OAuth client - a fork, or a developer who has
+    // not set TRYPTHOS_GOOGLE_CLIENT - which the interface reports as Google Drive being unavailable.
+    // Every Google call is made here with net.fetch, for the same proxy and certificate reasons as
+    // GitHub, and the consent page opens in the user's own browser: Google refuses sign-in inside an
+    // embedded window.
+    const googleClient = loadGoogleClient({ packaged: app.isPackaged, resourcesPath: process.resourcesPath });
+    const google =
+      googleClient === null
+        ? null
+        : createGoogleAuth({
+            client: googleClient,
+            accounts,
+            fetch: (url, options) => net.fetch(url, options),
+            openExternal: (url) => shell.openExternal(url),
+          });
+
     registerIpcHandlers({
       ipcMain,
       dialog,
@@ -426,6 +444,7 @@ if (!gotLock) {
       // passed by reference, so it keeps its receiver.
       createGitHub: (getToken) =>
         createGitHubApi({ getToken, fetch: (url, options) => net.fetch(url, options) }),
+      google,
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),

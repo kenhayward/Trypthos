@@ -163,6 +163,13 @@ contextBridge.exposeInMainWorld("trypthos", {
   githubStatus: () => ipcRenderer.invoke("github:status"),
   connectGitHub: (token) => ipcRenderer.invoke("github:connect", { token }),
   disconnectGitHub: () => ipcRenderer.invoke("github:disconnect"),
+  /// Google, as an account. Write-only like GitHub: `status` answers with an EMAIL and never a
+  /// token. Connecting takes no argument - the sign-in happens in the user's browser and the main
+  /// process, and nothing from this side is part of it.
+  googleStatus: () => ipcRenderer.invoke("google:status"),
+  connectGoogle: () => ipcRenderer.invoke("google:connect"),
+  cancelGoogleConnect: () => ipcRenderer.invoke("google:cancelConnect"),
+  disconnectGoogle: () => ipcRenderer.invoke("google:disconnect"),
   /// The repositories the connected account owns. Fetched in the main process, where the token is,
   /// and held for the session - `refresh` is for a user who has just made one.
   listRepositories: (refresh = false) => ipcRenderer.invoke("github:repos", { refresh }),
