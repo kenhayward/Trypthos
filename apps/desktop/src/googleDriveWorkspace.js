@@ -49,10 +49,19 @@ function createGoogleDriveProvider({ ref, api }) {
     const listed = await api.listChildren(folderId);
     if (!listed.ok) return listed;
 
-    for (const key of [...entries.keys()]) {
-      if (parentOf(key) === path) entries.delete(key);
-    }
     const children = childrenToEntries(path, listed.files);
+    const incoming = new Map(children.map((child) => [child.path, child]));
+    for (const [key, former] of [...entries]) {
+      if (parentOf(key) !== path) continue;
+      entries.delete(key);
+      const now = incoming.get(key);
+      // A child that is gone, or is now a different file, takes what was learned beneath it.
+      if (now === undefined || now.fileId !== former.fileId || now.kind !== former.kind) {
+        for (const below of [...entries.keys()]) {
+          if (below.startsWith(key + "/")) entries.delete(below);
+        }
+      }
+    }
     for (const child of children) entries.set(child.path, child);
     return { ok: true, children };
   }
