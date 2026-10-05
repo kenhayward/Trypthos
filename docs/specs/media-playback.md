@@ -108,13 +108,29 @@ A privileged scheme, `tp-media://`, registered before app-ready and handled with
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "tp-media",
-    privileges: { secure: true, supportFetchAPI: true, stream: true, corsEnabled: true, bypassCSP: false },
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+      bypassCSP: false,
+    },
   },
 ]);
 ```
 
-`stream: true` is the one that matters: it is what lets a media element issue `Range` requests
-against the scheme and receive a partial response, which is what seeking is.
+Two of those are load-bearing, for different reasons.
+
+`stream: true` is what lets a media element issue `Range` requests against the scheme and receive a
+partial response, which is what seeking is.
+
+`standard: true` is what lets it load at all. **Added after the fact, and worth recording why:**
+without it Chromium treats the scheme's URLs as opaque and a media element refuses to load one -
+while `fetch` to the very same URL succeeds and returns the right bytes, because the two take
+different code paths. Every assertion about the handler passed without it. It was found only by
+playing a file in the real app, which is the clearest argument this spec makes for that last
+verification step existing at all.
 
 **The handler does four things, in this order:**
 

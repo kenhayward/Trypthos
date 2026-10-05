@@ -1129,12 +1129,73 @@ apart that had been one:
   and the picture is not something to send.
 
 `MAX_IMAGE_FILE_BYTES` is its own limit for its own reason: a data URL is a third larger than the
-file and crosses IPC as one string. The alternative - a custom protocol so `<img src>` loads without
-IPC at all - is the right answer for very large images and is not built.
+file and crosses IPC as one string. A custom protocol so the element loads without IPC at all
+is the right answer for anything larger, and it now exists for video and audio - see below.
 
 `isImageName` decides which of the two reads to make, from the **name** rather than the settings:
 whether the type is turned on is already answered by the tree that offered the file, and by
 `linkAction` for a link.
+
+### Video and audio, served rather than read
+
+A picture crosses IPC as a base64 data URL. A recording cannot: a one minute clip is around a
+hundred megabytes, a data URL of it is a third larger again and arrives as one string, and it could
+not be seeked anyway, because seeking is byte ranges and a data URL has none. So media is the
+**second route out of the shell**, and the first one that is not IPC.
+
+- **`tp-media://` is a privileged scheme**, registered by `protocol.registerSchemesAsPrivileged` at
+  module scope in `main.js` - before app-ready, because a scheme's privileges are fixed once the
+  first page has loaded, and granting them late fails silently. `protocol.handle` serves it after
+  the IPC handlers are registered, because the locator it is given reads the registry they fill.
+- **Both `standard` and `stream` are load-bearing, for different reasons.** Without `stream` a media
+  element will not issue a `Range` request against the scheme at all, so the scrub bar is dead.
+  Without `standard` Chromium treats the scheme's URLs as opaque and a media element refuses to load
+  one - while `fetch` to the very same URL succeeds and returns the right bytes, because the two
+  take different code paths. That second one was found by playing a file in the real app; every
+  assertion about the handler passed without it. `bypassCSP` is pinned to false: there is no CSP in
+  the app today, so it changes nothing now, and adding one later should be a policy decision rather
+  than a hole that was already open.
+- **The handler never resolves a path.** `mediaProtocol.js` is handed a `locate` function and does
+  what it says. That function is `locateMedia` in `ipcHandlers.js`, which uses the same registry and
+  the same guard every IPC handler uses, so there is **one** workspace boundary check in this app
+  rather than two that could drift. Injecting it also means the handler's refusal tests - traversal,
+  UNC, drive-relative, a workspace that is not open - run with no Electron and no open workspace.
+- **`openWorkspaces.js` holds that shared registry**, extracted from `ipcHandlers.js` when the
+  protocol arrived. Two copies of the open-workspace map and its lookup would be two boundary
+  checks, and the day they differ is the day one of them is wrong with nothing failing.
+- **`provider.locateFile` exists on the local backend only**, and that absence is the single place
+  playback is decided to be local-only. A repository's blobs arrive base64 over an API with no range
+  support, so there is nothing to stream from one; `locateMedia` answers `unsupported` for a
+  provider without the method. It is a separate method from `locate` because that name was already
+  taken by reveal-in-file-manager, whose contract allows a folder and carries no size.
+- **There are no new IPC channels.** The URL is derivable from the qualified path, so the renderer
+  builds it and reads nothing. `mediaUrl` and `mediaPathFromUrl` both live in the domain, because
+  two implementations of one URL format is how a path arrives subtly different from how it left.
+  A fixed host with the whole qualified path as one encoded segment: a hostname is lowercased and
+  character-restricted while a workspace id is a folder's name, and one segment stops a slash
+  becoming a separator or a `#` becoming a fragment.
+- **There is no size limit, and that is the point.** `MAX_IMAGE_FILE_BYTES` exists because a data
+  URL arrives in one lump. A streamed range response does not, so memory stays flat whether the
+  file is four megabytes or four gigabytes. `mediaRange.js` is pure and separate because every
+  mistake available in range arithmetic is an off-by-one, and all of them are invisible until
+  somebody drags a scrub bar to the last second. A range past the end answers 416, not 200: a player
+  handed the start of a file it asked to seek past sits there showing nothing.
+- **On authority:** the URL is guessable, and it needs no token, because what it can reach is
+  exactly what `file:read` already grants the renderer - a file inside a workspace the user has
+  open. A token would imply a stronger guarantee than the app makes anywhere else.
+- **`media` on `OpenDocument` carries its kind**, not just a source. A picture is drawn, a video is
+  played and a sound is sounded, and a bare URL cannot say which. `scopeSource` still treats any
+  document with `media` set as nothing open, so chat needed no change.
+
+**The format list is measured, not assumed.** Every container and codec was put to `canPlayType` in
+Electron 44.1.0 (Chromium 152) rather than taken from a published table, and three answers would
+have been got wrong from memory: Theora is gone, so there is no `.ogv`; `video/quicktime` is refused
+outright, so a `.mov` is declared `video/mp4` - defensible because both are ISO base media format
+and the same demuxer reads them, and recorded as a test at the point it is enforced; and HEVC
+answers "probably", including main10. `.mkv` is admitted knowing some files in it will not decode,
+which is only defensible because the player distinguishes a decode failure from a read failure and
+says so.
+
 
 **Batch is the one grammar this app writes itself.** Nothing ships a mode for `.bat` and `.cmd`, and
 a type with no colouring at all would fail the one thing the file-types spec asks of a type, so

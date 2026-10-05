@@ -333,7 +333,7 @@ you want a narrower list:
 | --- | --- |
 | Documents | Markdown (always on), Plain text |
 | Markup and data | JSON, YAML, TOML, INI and properties, XML and SVG, HTML, CSS and preprocessors |
-| Images | PNG, JPEG, GIF, WebP, BMP, AVIF, ICO |
+| Pictures, video and audio | Images: PNG, JPEG, GIF, WebP, BMP, AVIF, ICO. Video: MP4, M4V, MOV, WebM, MKV, 3GP. Audio: MP3, M4A, AAC, WAV, FLAC, OGG, OGA, Opus, WEBA |
 | Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, Batch, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
 | Utility | Diff and patch, Dockerfile, Makefile, LaTeX, R, Lua, Perl, Swift, Scala, Dart |
 
@@ -361,7 +361,29 @@ cannot let two rows claim one extension - so it stays with XML, where you can ed
 more useful of the two answers.
 
 **An image is not sent to a chat model.** Asking about a folder still lists it by name, and the
-picture itself stays on your machine.
+picture itself stays on your machine. The same holds for a recording.
+**Video and audio play in the centre panel.** Click a recording and it opens with the usual controls:
+play and pause, a scrub bar you can drag, volume, playback speed, picture in picture, and a button
+that takes it fullscreen. All of them work from the keyboard. A sound shows its name above the
+controls, since there is no picture to fill the panel with. Nothing plays until you press play, and
+nothing is loaded up front - so a long recording opens as quickly as a short one, and there is no
+size limit at all: dragging the scrub bar jumps straight to that point whether the file is four
+megabytes or four gigabytes. Unlike a picture there is no zoom, because a recording is watched at
+the panel's size, and the way to make it bigger is fullscreen.
+
+**The formats are the ones Trypthos can really decode**, chosen by testing rather than by listing
+what exists. That is why some familiar names are missing: AVI, WMV, MPEG and FLV cannot be decoded
+at all, and OGV's video coding was removed from the engine Trypthos is built on. A row for any of
+them would put a file in your folder browser that would then refuse to play.
+
+A container can still hold a coding this computer has no decoder for. It happens most often with
+`.mkv`, which is a wrapper that can hold almost anything. When it does, the panel says the file
+opened but cannot be played, rather than showing a black rectangle and leaving you to guess.
+
+**Playback is for folders on this computer.** A GitHub repository hands its files over in a form
+that cannot be streamed or skipped through, so opening a recording from one says so plainly instead
+of failing quietly.
+
 
 **Dockerfile and Makefile are matched by name**, not by extension, because neither has one. Makefile
 is the only type Trypthos does not colour: no grammar for it exists. It has a row anyway, because
