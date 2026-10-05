@@ -811,6 +811,7 @@ export default function App() {
           activePath={state.activePath}
           openPaths={openPaths}
           dirtyPaths={state.dirtyPaths}
+          opening={state.opening}
           onOpenWorkspace={() => void actions.open()}
           onOpenRepo={() => setPickingRepo(true)}
           onOpenDrive={() => setPickingDrive(true)}

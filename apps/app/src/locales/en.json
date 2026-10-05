@@ -15,6 +15,7 @@
     "searching": "Searching...",
     "matchesCapped": "Stopped early - there may be more matches.",
     "loading": "Loading...",
+    "opening": "Opening...",
     "listFailed": "Couldn't list this folder.",
     "retry": "Retry",
     "unsavedDot": "Unsaved changes",

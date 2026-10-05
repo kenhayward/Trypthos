@@ -3200,3 +3200,99 @@ describe("opening a recording", () => {
     expect(result.current.state.documents).toHaveLength(0);
   });
 });
+
+/// What the tree shows a spinner for: the file `openPath` is waiting on.
+describe("opening, while a file is being read", () => {
+  /// A read the test settles by hand, so what the hook says while it waits can be looked at.
+  function pendingRead() {
+    const settle: ((result: ReadResult) => void)[] = [];
+    const readFile = (): Promise<ReadResult> => new Promise((resolve) => settle.push(resolve));
+    return { readFile, settle };
+  }
+
+  const ok: ReadResult = { ok: true, content: "# Text\n", revision: { id: "r1" } };
+
+  it("is the path while the read is pending, and null once it arrives", async () => {
+    const pending = pendingRead();
+    const { client } = fakeClient({ readFile: pending.readFile });
+    const { result } = renderHook(() => useWorkspace(client));
+    expect(result.current.state.opening).toBeNull();
+
+    let opened: Promise<void> = Promise.resolve();
+    act(() => {
+      opened = result.current.actions.openPath("ws/a.md");
+    });
+    expect(result.current.state.opening).toBe("ws/a.md");
+
+    await act(async () => {
+      pending.settle[0]?.(ok);
+      await opened;
+    });
+    expect(result.current.state.opening).toBeNull();
+  });
+
+  it("is null after a failed read", async () => {
+    const pending = pendingRead();
+    const { client } = fakeClient({ readFile: pending.readFile });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    let opened: Promise<void> = Promise.resolve();
+    act(() => {
+      opened = result.current.actions.openPath("ws/a.md");
+    });
+    await act(async () => {
+      pending.settle[0]?.({ ok: false, reason: "offline" });
+      await opened;
+    });
+
+    expect(result.current.state.opening).toBeNull();
+  });
+
+  it("is also set while a picture is read", async () => {
+    let settle: (value: { ok: true; dataUrl: string }) => void = () => {};
+    const { client } = fakeClient({
+      readImage: () => new Promise((resolve) => (settle = resolve)),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    let opened: Promise<void> = Promise.resolve();
+    act(() => {
+      opened = result.current.actions.openPath("ws/pic.png");
+    });
+    expect(result.current.state.opening).toBe("ws/pic.png");
+
+    await act(async () => {
+      settle({ ok: true, dataUrl: "data:image/png;base64,AAAA" });
+      await opened;
+    });
+    expect(result.current.state.opening).toBeNull();
+  });
+
+  it("stays the second path when the first finishes first", async () => {
+    const pending = pendingRead();
+    const { client } = fakeClient({ readFile: pending.readFile });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    let first: Promise<void> = Promise.resolve();
+    let second: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.actions.openPath("ws/a.md");
+    });
+    act(() => {
+      second = result.current.actions.openPath("ws/b.md");
+    });
+    expect(result.current.state.opening).toBe("ws/b.md");
+
+    await act(async () => {
+      pending.settle[0]?.(ok);
+      await first;
+    });
+    expect(result.current.state.opening).toBe("ws/b.md");
+
+    await act(async () => {
+      pending.settle[1]?.(ok);
+      await second;
+    });
+    expect(result.current.state.opening).toBeNull();
+  });
+});

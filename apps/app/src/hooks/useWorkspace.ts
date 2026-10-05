@@ -89,6 +89,9 @@ export interface WorkspaceState {
   /// Set when the document on screen is shown rather than read - a picture, a video or a sound.
   /// Null otherwise, which is nearly always.
   media: MediaSource | null;
+  /// The qualified path of the file being read right now, or null. What the tree puts a spinner on.
+  /// Only the latest: a second open that starts first is the one shown until it arrives.
+  opening: string | null;
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
   errorKey: string | null;
@@ -230,6 +233,7 @@ interface Internal {
   /// How many drafts this session has made. Only ever used to tell two of them apart: nothing stops
   /// somebody making a second "notes.md", and the tab strip tells documents apart by path.
   drafts: number;
+  opening: string | null;
   busy: boolean;
   errorKey: string | null;
   errorParams: Record<string, string> | null;
@@ -242,6 +246,7 @@ const INITIAL: Internal = {
   documents: emptyDocumentSet(),
   scratch: "",
   drafts: 0,
+  opening: null,
   busy: false,
   errorKey: null,
   errorParams: null,
@@ -612,6 +617,15 @@ export function useWorkspace(
       }));
     },
     [],
+  );
+
+  /// A failed read of `path`: the banner, and the spinner down unless a later open has taken it over.
+  const failOpening = useCallback(
+    (result: { reason: string; sizeBytes?: number; limitBytes?: number }, path: string) => {
+      setInternal((prev) => ({ ...prev, opening: prev.opening === path ? null : prev.opening }));
+      fail(result, kindOf(stateRef.current.workspaces, path));
+    },
+    [fail],
   );
 
   const loadFolder = useCallback(
@@ -1077,7 +1091,10 @@ export function useWorkspace(
         return;
       }
 
-      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      setInternal((prev) => ({ ...prev, busy: true, opening: path, errorKey: null, errorParams: null }));
+
+      // Cleared only if it is still this path: a later open owns the spinner until it arrives.
+      const arrived = (prev: Internal): string | null => (prev.opening === path ? null : prev.opening);
 
       // An image goes down a different channel, because `readFile` decodes and would refuse it -
       // which is right for a document and wrong for a picture. Decided from the NAME rather than
@@ -1086,7 +1103,7 @@ export function useWorkspace(
       // reads to make.
       if (isImageName(path)) {
         const image = await client.readImage(path);
-        if (!image.ok) return fail(image, kindOf(stateRef.current.workspaces, path));
+        if (!image.ok) return failOpening(image, path);
 
         setInternal((prev) => ({
           ...prev,
@@ -1098,6 +1115,7 @@ export function useWorkspace(
             readOnly: true,
             media: { source: image.dataUrl, kind: "image" },
           }),
+          opening: arrived(prev),
           busy: false,
         }));
 
@@ -1112,7 +1130,7 @@ export function useWorkspace(
       const mediaKind = mediaKindFor(path);
       if (mediaKind !== null) {
         if (isKnownNonLocal(stateRef.current.workspaces, path)) {
-          return fail({ reason: "media-not-local" }, kindOf(stateRef.current.workspaces, path));
+          return failOpening({ reason: "media-not-local" }, path);
         }
 
         setInternal((prev) => ({
@@ -1124,6 +1142,7 @@ export function useWorkspace(
             readOnly: true,
             media: { source: mediaUrl(path), kind: mediaKind },
           }),
+          opening: arrived(prev),
           busy: false,
         }));
 
@@ -1135,10 +1154,11 @@ export function useWorkspace(
       // A link can point at a file that has been renamed, moved or deleted since it was written, and
       // that is ordinary rather than exceptional - it reports through the same banner as any other
       // failed read, which already says "not found" in the user's language.
-      if (!result.ok) return fail(result, kindOf(stateRef.current.workspaces, path));
+      if (!result.ok) return failOpening(result, path);
 
       setInternal((prev) => ({
         ...prev,
+        opening: arrived(prev),
         documents: openDocument(prev.documents, {
           path,
           content: result.content,
@@ -1155,7 +1175,7 @@ export function useWorkspace(
       // which absolute folder that workspace is.
       reportIfLocal(reportOpened, stateRef.current.workspaces, path);
     },
-    [client, fail, reportOpened],
+    [client, failOpening, reportOpened],
   );
 
   /// Clicking a row in the tree. The node's id IS its workspace-relative path, and its name is the
@@ -1346,6 +1366,7 @@ export function useWorkspace(
       dirty: active?.dirty ?? false,
       readOnly: active?.readOnly ?? false,
       media: active?.media ?? null,
+      opening: internal.opening,
       busy: internal.busy,
       errorKey: internal.errorKey,
       errorParams: internal.errorParams,

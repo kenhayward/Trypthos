@@ -17,6 +17,7 @@ import type { RemoteNode } from "../lib/workspaceClient";
 import AssignedIcon from "./AssignedIcon";
 import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 import Glyph from "./Glyph";
+import Spinner from "./Spinner";
 
 interface Props {
   /// Rendered width, resolved against the window. The panel does not choose its own size.
@@ -41,6 +42,8 @@ interface Props {
   openPaths: readonly string[];
   /// The open documents with unsaved work.
   dirtyPaths: readonly string[];
+  /// The qualified path of the file being read, or null. Its row shows a spinner.
+  opening: string | null;
   onOpenWorkspace: () => void;
   /// Opens the repository picker. A separate act from `onOpenWorkspace` because it asks a different
   /// question - the folder picker is the operating system's, and this one is ours.
@@ -121,6 +124,7 @@ export default function WorkspacePanel({
   activePath,
   openPaths,
   dirtyPaths,
+  opening,
   onOpenWorkspace,
   onOpenRepo,
   onOpenDrive,
@@ -451,6 +455,7 @@ export default function WorkspacePanel({
                       selected={row.node.id === activePath}
                       open={openPaths.includes(row.node.id)}
                       dirty={dirtyPaths.includes(row.node.id)}
+                      opening={row.node.id === opening}
                       onOpen={() => onOpenFile(row.node)}
                       assignment={assigned(row.node.id)}
                       draggable={onAddToChat !== undefined}
@@ -716,7 +721,7 @@ function WorkspaceRow({
           />
           <span className="min-w-0 truncate">{workspace.name}</span>
           {status === "loading" && (
-            <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
+            <Spinner label={t("workspace.loading")} className="ml-auto" />
           )}
         </button>
         <button
@@ -831,7 +836,7 @@ function FolderRow({
           )}
           <span className="min-w-0 truncate">{row.node.name}</span>
           {row.status === "loading" && (
-            <span className="ml-auto shrink-0 text-2xs text-faint">{t("workspace.loading")}</span>
+            <Spinner label={t("workspace.loading")} className="ml-auto" />
           )}
         </button>
       </div>
@@ -858,6 +863,7 @@ function FileRow({
   selected,
   open,
   dirty,
+  opening,
   onOpen,
   assignment,
   draggable,
@@ -867,6 +873,7 @@ function FileRow({
   selected: boolean;
   open: boolean;
   dirty: boolean;
+  opening: boolean;
   onOpen: () => void;
   /// What Obsidian draws on this file, or null to keep the app's own glyph.
   assignment: IconAssignment | null;
@@ -929,6 +936,7 @@ function FileRow({
     >
       {assignment === null ? fileGlyph() : <AssignedIcon assignment={assignment} className="size-3.5" fallback={fileGlyph()} />}
       <span className="min-w-0 truncate">{row.node.name}</span>
+      {opening && <Spinner label={t("workspace.opening")} className="ml-auto" />}
       {dirty && (
         <span
           title={t("workspace.unsavedDot")}
