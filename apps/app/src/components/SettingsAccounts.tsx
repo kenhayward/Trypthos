@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useGitHub } from "../hooks/useGitHub";
-import type { GitHubBridge } from "../lib/workspaceClient";
+import type { GitHubBridge, GoogleBridge } from "../lib/workspaceClient";
+import GoogleAccountSection from "./GoogleAccountSection";
 
 interface Props {
   /// The GitHub half of the shell, or null in the browser preview.
   bridge: GitHubBridge | null;
+  /// The Google half of the shell, or null in the browser preview.
+  google: GoogleBridge | null;
 }
 
 /// The cloud accounts Trypthos can open folders from.
@@ -18,7 +21,7 @@ interface Props {
 /// the shell reports after asking GitHub - so a revoked token reads as disconnected rather than as an
 /// account that is still there. There is no channel that returns a token, and there must never be
 /// one.
-export default function SettingsAccounts({ bridge }: Props) {
+export default function SettingsAccounts({ bridge, google }: Props) {
   const { t } = useTranslation();
   const github = useGitHub(bridge);
   const [token, setToken] = useState("");
@@ -93,6 +96,8 @@ export default function SettingsAccounts({ bridge }: Props) {
 
         <p className="mt-3 text-xs text-ink-4">{t("github.readOnlyNote")}</p>
       </section>
+
+      <GoogleAccountSection bridge={google} />
     </div>
   );
 }

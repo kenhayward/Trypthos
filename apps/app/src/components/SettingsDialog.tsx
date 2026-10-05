@@ -7,7 +7,7 @@ import {
   type Settings,
 } from "@trypthos/domain";
 import type { ExplorerIntegration } from "../hooks/useExplorerIntegration";
-import type { GitHubBridge } from "../lib/workspaceClient";
+import type { GitHubBridge, GoogleBridge } from "../lib/workspaceClient";
 import { blankDraft, draftFrom, removeProfile, upsertProfile } from "../lib/chatProfiles";
 import { MODE_HINT_KEYS, MODE_LABEL_KEYS } from "../lib/editorMode";
 import { SECTION_LABEL_KEYS, type SettingsSection } from "../lib/settingsSections";
@@ -40,6 +40,9 @@ interface Props {
   /// The GitHub half of the shell, or null in the browser preview. Passed in rather than reached for
   /// so the dialog can be rendered in a test without a bridge at all.
   github: GitHubBridge | null;
+  /// The Google half of the shell, or null in the browser preview. Passed in for the same reason as
+  /// `github`.
+  google: GoogleBridge | null;
 }
 
 /// A segmented control: one row of choices where exactly one is on.
@@ -96,6 +99,7 @@ export default function SettingsDialog({
   onDeleteKey,
   explorer,
   github,
+  google,
 }: Props) {
   const { t } = useTranslation();
   const [section, setSection] = useState<SettingsSection>(openOn);
@@ -353,7 +357,7 @@ export default function SettingsDialog({
               </div>
             )}
 
-            {section === "accounts" && <SettingsAccounts bridge={github} />}
+            {section === "accounts" && <SettingsAccounts bridge={github} google={google} />}
 
             {section === "fileTypes" && (
               <SettingsFileTypes

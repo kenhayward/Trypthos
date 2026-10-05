@@ -523,7 +523,8 @@
     "accounts": {
       "title": "Accounts",
       "blurb": "Cloud sources Trypthos can open folders from. Tokens are encrypted by your operating system and stored outside your settings file.",
-      "github": "GitHub"
+      "github": "GitHub",
+      "googleDrive": "Google Drive"
     }
   },
   "menu": {
@@ -644,6 +645,19 @@
     "cancel": "Cancel",
     "readOnlyNote": "A repository opens at its default branch. Saving makes a commit - Trypthos asks which branch it goes to the first time you save.",
     "browserOnly": "Connecting to GitHub needs the desktop app. This is the browser preview."
+  },
+  "google": {
+    "checking": "Checking your Google account...",
+    "connect": "Connect Google Drive",
+    "connecting": "Waiting for your browser...",
+    "cancel": "Cancel",
+    "disconnect": "Disconnect",
+    "connectedAs": "Connected as {{email}}",
+    "notConnected": "Not connected",
+    "connectBlurb": "Trypthos opens Google's sign-in page in your browser. Allow access to Google Drive there, then come back here. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Google directly from this machine.",
+    "notConfigured": "This build of Trypthos was made without Google Drive support.",
+    "browserOnly": "Connecting to Google Drive needs the desktop app. This is the browser preview.",
+    "nextRelease": "Opening Drive folders as workspaces arrives in the next release."
   },
   "commit": {
     "title": "Save to GitHub",

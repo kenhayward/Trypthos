@@ -70,6 +70,7 @@ import {
   keyBridge,
   settingsBridge,
   githubBridge,
+  googleBridge,
   workspaceClient,
 } from "./lib/workspaceClient";
 import { currentPlatform, windowControls } from "./lib/windowControls";
@@ -175,6 +176,7 @@ export default function App() {
   /// The GitHub half of the shell, or null in the browser preview. Read once: it is the preload
   /// bridge, which does not change while the window is open.
   const github = useMemo(() => githubBridge(), []);
+  const google = useMemo(() => googleBridge(), []);
   const { settings, loaded, updatePanels, update } = useSettings(bridge);
 
   const keys = useMemo(() => keyBridge(), []);
@@ -1097,6 +1099,7 @@ export default function App() {
           onDeleteKey={deleteKey}
           explorer={explorer}
           github={github}
+          google={google}
         />
       )}
 
