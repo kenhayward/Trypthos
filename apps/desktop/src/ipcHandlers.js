@@ -63,6 +63,7 @@ const { createFolderToolRunner } = require("./folderToolRunner");
 const { searchFiles } = require("./fileSearch");
 const { searchNames } = require("./nameSearch");
 const { createVaultIndexes } = require("./vaultIndex");
+const { openWorkspaces, locateQualifiedPath } = require("./openWorkspaces");
 
 /// The main-process side of the IPC surface.
 ///
@@ -77,10 +78,13 @@ const { createVaultIndexes } = require("./vaultIndex");
 
 /// The open workspaces, by the id the main process minted for each.
 ///
-/// Not exported, and not settable except by the user choosing a folder. A renderer can name an id -
-/// which is a thing this side made up - and can never name a root, which would be a way to reach any
-/// directory on the machine.
-const open = new Map();
+/// Not settable except by the user choosing a folder. A renderer can name an id - which is a thing
+/// this side made up - and can never name a root, which would be a way to reach any directory on
+/// the machine.
+///
+/// Shared with the media protocol, which is why it is no longer declared here - see
+/// `openWorkspaces.js`. Two copies of this map would be two boundary checks.
+const open = openWorkspaces;
 
 /// What the renderer is told about an open workspace.
 ///
@@ -154,12 +158,11 @@ function tabOpenerFor(workspace, openInWindow) {
 /// The ONE place a qualified path is taken apart. What comes out is an ordinary workspace-relative
 /// path, and it goes through the provider's guard unchanged: naming a workspace adds a folder to a
 /// path, never permission to leave it.
+///
+/// The rule itself now lives in `openWorkspaces.js`, so this surface and the media protocol cannot
+/// drift apart. What stays here is the request-shaped signature every handler calls.
 function locateQualified(request) {
-  const split = splitQualified(request.path ?? "");
-  if (split === null) return null;
-
-  const workspace = open.get(split.workspaceId);
-  return workspace === undefined ? null : { workspace, path: split.path };
+  return locateQualifiedPath(request.path ?? "");
 }
 
 /// The workspace a request names outright, for the one call that has no path to read it from.
