@@ -121,7 +121,7 @@ it took 40 seconds across 113,000 folders.
 
 If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
 the tree keeps working, because one unreadable folder is a fact about that folder rather than about
-your workspace. Google Drive, OneDrive and Dropbox arrive behind the same interface, in that order.
+your workspace. Google Drive is behind the same interface, and OneDrive and Dropbox follow.
 
 ## GitHub repositories
 
@@ -276,7 +276,9 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 **Connect a Google account from Settings > Accounts.** Connect opens Google's own sign-in page in your browser, where you allow Trypthos to use Google Drive, and the section then shows which account is connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and every request goes from this machine straight to Google.
 
-**Trypthos does not pretend to be connected.** If you untick Google Drive on Google's page, Trypthos says so and stays disconnected. Cancel stops a sign-in you did not finish, and Disconnect signs out and asks Google to forget the permission. Opening Drive folders as workspaces arrives in the next release.
+**Trypthos does not pretend to be connected.** If you untick Google Drive on Google's page, Trypthos says so and stays disconnected. Cancel stops a sign-in you did not finish, and Disconnect signs out and asks Google to forget the permission.
+
+**Open a Drive folder beside your other folders.** With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive: My Drive's folders, then your shared drives, with a breadcrumb to go back up. Choose a folder and it opens as another tree beside your local folders and repositories, marked with Drive's logo, and comes back the next time you start Trypthos. Markdown and text files open as they do anywhere else, Google Docs open as markdown, and pictures a note embeds are shown. Folders are read as you open them, so a large Drive is not read all at once, and right-click Refresh asks Drive again. Drive folders open read-only in this release: the editor does not let you type into a Drive file, and saving to Drive arrives in the next release. Shortcuts, Sheets and Slides are not listed.
 
 ## Home page and graph
 

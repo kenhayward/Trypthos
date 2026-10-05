@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.97.0",
+    date: "2026-10-05",
+    pr: 220,
+    headline: "Open a Google Drive folder beside your other folders",
+    summary:
+      "With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive: My Drive's folders, then your shared drives, with a breadcrumb to go back up. Choose a folder and it opens as another tree beside your local folders and repositories, marked with Drive's logo, and comes back the next time you start Trypthos. Markdown and text files open as they do anywhere else, Google Docs open as markdown, and pictures a note embeds are shown. Folders are read as you open them, so a large Drive is not read all at once, and right-click Refresh asks Drive again. This release opens Drive folders read-only: the editor does not let you type into a Drive file, and saving to Drive arrives in the next release. Shortcuts, Sheets and Slides are not listed.",
+    added: [
+      "Google Drive folders as workspaces: pick a folder in My Drive or a shared drive and browse it beside your other folders, read-only for now.",
+      "Google Docs open as markdown, and pictures embedded in a Drive note are shown.",
+    ],
+  },
+  {
     version: "0.96.0",
     date: "2026-10-05",
     pr: 219,

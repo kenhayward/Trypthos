@@ -81,10 +81,6 @@ export default function GoogleAccountSection({ bridge, onConnected }: Props) {
           </button>
         </>
       )}
-
-      {google.supported && !google.checking && !missingInBuild && (
-        <p className="mt-3 text-xs text-ink-4">{t("google.nextRelease")}</p>
-      )}
     </section>
   );
 }

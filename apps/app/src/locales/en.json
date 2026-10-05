@@ -663,8 +663,7 @@
     "notConnected": "Not connected",
     "connectBlurb": "Trypthos opens Google's sign-in page in your browser. Allow access to Google Drive there, then come back here. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Google directly from this machine.",
     "notConfigured": "This build of Trypthos was made without Google Drive support.",
-    "browserOnly": "Connecting to Google Drive needs the desktop app. This is the browser preview.",
-    "nextRelease": "Opening Drive folders as workspaces arrives in the next release."
+    "browserOnly": "Connecting to Google Drive needs the desktop app. This is the browser preview."
   },
   "drive": {
     "title": "Open a Google Drive folder",
