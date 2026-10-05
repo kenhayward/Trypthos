@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.95.3",
+    date: "2026-10-05",
+    pr: 217,
+    headline: "Three security fixes in the libraries behind the app",
+    summary:
+      "Three updates Dependabot proposed as its security batch, all of them libraries the app builds and tests with rather than libraries you interact with. fast-uri, used when the packaging tool reads a URL, now validates the port and the IP-literal brackets it serialises and normalises host names consistently, which closes two high-severity and one medium-severity advisory. undici, which the test environment and the native build tool use for network requests, no longer lets a WebSocket server pick a subprotocol nobody asked for, destroys the decompressor once it hits its limit, and checks a resumed download against the framing of the original response; all three were ways to crash the process or corrupt a response. brace-expansion, the pattern matcher inside ESLint and the packaging tool, gets its hardening against patterns crafted to exhaust memory. Nothing about how Trypthos looks or behaves changes.",
+    fixed: [
+      "fast-uri 3.1.6 to 3.1.8 - authority injection via an unvalidated port, host confusion via misplaced IP-literal brackets, and inconsistent host case normalisation.",
+      "undici 6.28.0 to 6.29.0 and 7.29.0 to 7.30.0 - three ways a hostile server could end the process, plus response splitting in the retry interceptor.",
+      "brace-expansion 1.1.18 to 1.1.21, with the copies nested inside ESLint, typescript-eslint, electron-builder and the icon tooling, hardened against memory-exhausting patterns.",
+    ],
+  },
+  {
     version: "0.95.2",
     date: "2026-10-05",
     pr: 216,
