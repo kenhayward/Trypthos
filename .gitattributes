@@ -1,0 +1,14 @@
+# Line endings.
+#
+# Committed files in this repo carry mixed line endings and dev machines run core.autocrlf=true, so
+# a file committed CRLF and rewritten by a tool that emits bare LF churns its entire diff.
+#
+# package-lock.json is the one that matters: npm generates it, it is over 10,000 lines, it is
+# committed all-CRLF, and every tool that regenerates it writes bare LF. Dependabot does, which
+# turned a single indirect version bump into a +10807/-10834 whole-file diff with 33 real lines
+# inside it. Pin the file to LF so the committed blob matches what npm writes and a dependency
+# diff shows only the versions that changed.
+#
+# Scoped to this file on purpose. A blanket `* text=auto` would rewrite the 87 files that are
+# already committed with mixed endings, which is a churn commit in its own right.
+package-lock.json text eol=lf
