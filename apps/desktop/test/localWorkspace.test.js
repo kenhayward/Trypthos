@@ -460,3 +460,60 @@ test("creates a new file without a byte order mark", async () => {
     assert.equal(bytes[0], 0x23);
   });
 });
+
+/// `locateFile` exists for the one caller that must STREAM rather than read: the media protocol. The
+/// boundary has to be the same one `read` and `readBytes` go through, because a streaming caller
+/// getting a cheaper check is exactly the hole a second route out of the shell could open.
+
+test("locateFile answers a real path and a size for a file in the workspace", async () => {
+  await withWorkspace(async ({ workspace, root }) => {
+    const found = await workspace.locateFile("top.md");
+    assert.equal(found.ok, true);
+    assert.equal(found.size, "# Top\n".length);
+    assert.equal(found.path, path.join(root, "top.md"));
+  });
+});
+
+test("locateFile refuses a path that leaves the workspace", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    for (const bad of ["../outside/secret.md", "notes/../../outside/secret.md"]) {
+      const found = await workspace.locateFile(bad);
+      assert.equal(found.ok, false, bad);
+      assert.equal(found.reason, "permission-denied", bad);
+    }
+  });
+});
+
+// A directory resolves perfectly well and has no bytes to serve. Streaming one would answer a
+// media element with a successful response it cannot decode.
+test("locateFile refuses a directory", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    const found = await workspace.locateFile("notes");
+    assert.equal(found.ok, false);
+    assert.equal(found.reason, "not-found");
+  });
+});
+
+test("locateFile reports a missing file rather than throwing", async () => {
+  await withWorkspace(async ({ workspace }) => {
+    const found = await workspace.locateFile("gone.mp4");
+    assert.equal(found.ok, false);
+    assert.equal(found.reason, "not-found");
+  });
+});
+
+// The realpath check, not the lexical one. A name inside the workspace pointing out of it is the
+// case the lexical guard cannot see, and the one a streaming route must not miss.
+test("locateFile refuses a symlink that points out of the workspace", async () => {
+  await withWorkspace(async ({ workspace, root, outside }) => {
+    try {
+      await fs.symlink(path.join(outside, "secret.md"), path.join(root, "escape.md"));
+    } catch {
+      return; // Windows without developer mode cannot create one; nothing to assert.
+    }
+
+    const found = await workspace.locateFile("escape.md");
+    assert.equal(found.ok, false);
+    assert.equal(found.reason, "permission-denied");
+  });
+});
