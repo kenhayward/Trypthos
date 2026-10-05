@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.95.0",
+    date: "2026-10-05",
+    pr: 214,
+    headline: "Two buttons set every file type at once",
+    summary:
+      "The File types page of Settings now has Enable all and Disable all across its top. Turning your whole folder browser on used to mean ticking thirty-odd boxes one at a time, and turning it back to notes-only meant finding every one that was ticked. Enable all turns on every type Trypthos knows; Disable all turns off every type that can be turned off - markdown stays on, because it is what the app is. Each button is greyed out when it would change nothing, and the list they write is the same list the boxes write, so nothing about what the setting does changes.",
+    added: [
+      "Enable all and Disable all buttons at the top of the File types page of Settings.",
+    ],
+  },
+  {
     version: "0.94.0",
     date: "2026-10-05",
     pr: 210,

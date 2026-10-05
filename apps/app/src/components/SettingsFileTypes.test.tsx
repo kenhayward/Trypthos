@@ -135,4 +135,61 @@ describe("SettingsFileTypes", () => {
       expect(onChange).not.toHaveBeenCalled();
     });
   });
+
+  describe("the enable all / disable all buttons", () => {
+    const button = (name: string) => screen.getByRole("button", { name: new RegExp(name) });
+
+    // The reason for the buttons: nobody ticks thirty-odd boxes to make a source repository readable.
+    it("turns every type on", async () => {
+      const { onChange } = page();
+      await userEvent.click(button("Enable all"));
+      expect(onChange).toHaveBeenCalledWith(FILE_TYPES.map((type) => type.id));
+    });
+
+    // Markdown is what the app is, so "disable all" means everything that CAN be disabled. The
+    // stored list keeps it, in catalogue order, exactly as a box toggle would leave it.
+    it("turns every type off except the pinned ones", async () => {
+      const { onChange } = page(["markdown", "python", "rust"]);
+      await userEvent.click(button("Disable all"));
+      expect(onChange).toHaveBeenCalledWith(["markdown"]);
+    });
+
+    // The same rule the boxes follow: a settings file written by a NEWER build names types this one
+    // has never heard of, and a bulk button is the likeliest thing on the page to sweep them away.
+    // Each click is asserted by call number: the page is drawn from the prop it was given, and the
+    // mock does not change it, so the second button acts on the state the first one started from.
+    it("carries an id it does not recognise through both buttons", async () => {
+      const { onChange } = page(["markdown", "python", "klingon"]);
+      await userEvent.click(button("Enable all"));
+      expect(onChange).toHaveBeenNthCalledWith(1, [...FILE_TYPES.map((type) => type.id), "klingon"]);
+
+      await userEvent.click(button("Disable all"));
+      expect(onChange).toHaveBeenNthCalledWith(2, ["markdown", "klingon"]);
+    });
+
+    // A control that cannot change anything is not offered as though it could.
+    it("offers Enable all disabled when every type is already on", () => {
+      page(["markdown", ...FILE_TYPES.filter((type) => !type.pinned).map((type) => type.id)]);
+      expect((button("Enable all") as HTMLButtonElement).disabled).toBe(true);
+      expect((button("Disable all") as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    // Only the types that CAN be turned off make the button worth offering. Markdown reads as on
+    // forever, and greying the button out because markdown is ticked would say the page has nothing
+    // to take off when it has thirty-odd things to take off.
+    it("offers Disable all disabled when only the pinned types are on", () => {
+      page();
+      expect((button("Disable all") as HTMLButtonElement).disabled).toBe(true);
+      expect((button("Enable all") as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    // They act on the whole page, so they belong at its top rather than under its last group.
+    it("sits above the tables", () => {
+      page();
+      const first = screen.getAllByRole("table")[0]!;
+      for (const control of screen.getAllByRole("button")) {
+        expect(first.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+      }
+    });
+  });
 });

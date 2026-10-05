@@ -16,6 +16,10 @@ interface Props {
 const CHECK_COLUMN = "w-[30px]";
 const NAME_COLUMN = "w-[190px]";
 
+/// The bulk buttons at the top of the page.
+const BUTTON =
+  "rounded-md border border-rule px-3 py-1.5 text-ui text-ink enabled:hover:bg-hover disabled:cursor-not-allowed disabled:border-hairline disabled:text-ink-4";
+
 /// Settings: which file types Trypthos takes an interest in.
 ///
 /// The page is about SCOPE, not about performance, and the wording says so. A language's colouring
@@ -32,22 +36,54 @@ const NAME_COLUMN = "w-[190px]";
 export default function SettingsFileTypes({ enabled, onChange }: Props) {
   const { t } = useTranslation();
 
+  /// Every write to settings rebuilds the list in catalogue order and appends the ids this build has
+  /// never heard of, so a page rewrite is never the thing that deletes a newer version's choices.
+  const unknownIds = () => {
+    const known = new Set(FILE_TYPES.map((type) => type.id) as string[]);
+    return enabled.filter((stored) => !known.has(stored));
+  };
+
   const toggle = (id: FileTypeId, on: boolean) => {
     // Rebuilt from the catalogue order rather than appended to, so the stored list reads the same
     // way the page does - and an id from a newer build is carried across untouched rather than
     // being dropped by a rewrite it had nothing to do with.
-    const known = new Set(FILE_TYPES.map((type) => type.id) as string[]);
-    const unknown = enabled.filter((stored) => !known.has(stored));
     const chosen = FILE_TYPES.filter((type) =>
       type.id === id ? on : type.pinned || enabled.includes(type.id),
     ).map((type) => type.id);
 
-    onChange([...chosen, ...unknown]);
+    onChange([...chosen, ...unknownIds()]);
   };
+
+  // "All" means every type in the catalogue, in catalogue order - the same list a fresh install
+  // starts with, derived the same way.
+  const enableAll = () => onChange([...FILE_TYPES.map((type) => type.id), ...unknownIds()]);
+
+  // And "none" means every type that CAN be turned off. Markdown is pinned, so it stays; a page
+  // that implied it could go would be lying about the one type the app cannot run without.
+  const disableAll = () =>
+    onChange([...FILE_TYPES.filter((type) => type.pinned).map((type) => type.id), ...unknownIds()]);
+
+  const everyTypeOn = FILE_TYPES.every((type) => type.pinned || enabled.includes(type.id));
+  // Only the types that CAN be turned off make this button worth offering. Markdown reads as on
+  // forever, so greying the button out because markdown is ticked would say the page has nothing to
+  // take off when it has thirty-odd things to take off.
+  const nothingToTurnOff = !FILE_TYPES.some((type) => !type.pinned && enabled.includes(type.id));
 
   return (
     <div>
       <p className="mb-4 text-xs text-ink-4">{t("settings.fileTypes.intro")}</p>
+
+      {/* Thirty-odd boxes is a lot of ticking, and the two directions people actually want are all
+          of them (a source repository) and none of them (notes only). Offered greyed out when they
+          would change nothing, rather than hidden: the page would jump as you ticked. */}
+      <div className="mb-5 flex gap-2">
+        <button type="button" onClick={enableAll} disabled={everyTypeOn} className={BUTTON}>
+          {t("settings.fileTypes.enableAll")}
+        </button>
+        <button type="button" onClick={disableAll} disabled={nothingToTurnOff} className={BUTTON}>
+          {t("settings.fileTypes.disableAll")}
+        </button>
+      </div>
 
       {FILE_TYPE_GROUPS.map((group) => {
         const types = FILE_TYPES.filter((type) => type.group === group);
