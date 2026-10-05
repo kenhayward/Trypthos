@@ -493,3 +493,23 @@ export { newNoteDirectory, newNoteLocationFrom, OBSIDIAN_APP_CONFIG } from "./ob
 export type { NewNoteLocation } from "./obsidianAppConfig";
 export { ICON_LIMIT, iconFor, NO_ICONS, OBSIDIAN_ICONS_FILE, parseObsidianIcons } from "./obsidianIcons";
 export type { IconAssignment, IconMap } from "./obsidianIcons";
+
+export {
+  DRIVE_API,
+  DriveFileListSchema,
+  DriveFileSchema,
+  DriveIdSchema,
+  FOLDER_MIME,
+  GOOGLE_DOC_MIME,
+  SharedDriveListSchema,
+  childrenToEntries,
+  childrenUrl,
+  displayNameFor,
+  driveErrorFor,
+  exportUrl,
+  fileUrl,
+  foldersOf,
+  isDriveId,
+  sharedDrivesUrl,
+} from "./googleDrive";
+export type { DriveEntry, DriveFailure, DriveFile } from "./googleDrive";
