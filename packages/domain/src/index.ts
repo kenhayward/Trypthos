@@ -506,6 +506,7 @@ export {
   childrenUrl,
   displayNameFor,
   driveErrorFor,
+  driveMediaUrl,
   exportUrl,
   fileUrl,
   foldersOf,
