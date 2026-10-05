@@ -337,6 +337,12 @@ you want a narrower list:
 | Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, Batch, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
 | Utility | Diff and patch, Dockerfile, Makefile, LaTeX, R, Lua, Perl, Swift, Scala, Dart |
 
+The page draws these as a table: one row per type, with a box to turn it on or off, its name, and every
+extension and filename it matches in the column beside it. The columns line up across the groups, so
+the whole page is one list to run your eye down. Clicking anywhere on a row - the name, the space to
+its right - is the same as clicking its box. Markdown's row says **Always on** and does not answer to
+clicks, because it is what the app is.
+
 Some rows carry more than one language, where the difference is not one you would want to tick a box
 about. **JavaScript and TypeScript** is one choice covering `.js`, `.ts`, `.jsx` and `.tsx`;
 **CSS and preprocessors** covers SCSS, Sass and LESS; **Java and Kotlin** and **C and C++** each
