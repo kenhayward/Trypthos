@@ -149,6 +149,13 @@ describe("grantsDrive", () => {
     expect(grantsDrive("https://www.googleapis.com/auth/drive.file")).toBe(false);
     expect(grantsDrive("")).toBe(false);
   });
+
+  // A whole-token comparison, never a substring search: the Drive scope's URL appearing inside a
+  // longer token is not a grant of Drive.
+  it("does not count the Drive URL embedded in another token", () => {
+    expect(grantsDrive(`https://evil.example/${DRIVE_SCOPE}`)).toBe(false);
+    expect(grantsDrive(`${DRIVE_SCOPE}.readonly openid`)).toBe(false);
+  });
 });
 
 describe("response schemas", () => {

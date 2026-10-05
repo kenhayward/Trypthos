@@ -20,8 +20,11 @@ export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 export const GOOGLE_SCOPES = [DRIVE_SCOPE, "openid", "email"] as const;
 
 /// Whether a granted scope string includes Drive. Google's consent screen lets a user untick it.
+///
+/// Compared token by token for equality, never searched as a substring: `drive.readonly`, or the
+/// Drive URL inside some longer token, is not a grant of Drive.
 export function grantsDrive(scope: string): boolean {
-  return scope.split(/\s+/).includes(DRIVE_SCOPE);
+  return scope.split(/\s+/).some((granted) => granted === DRIVE_SCOPE);
 }
 
 /// The client file Google's console downloads for a **Desktop app** client.
