@@ -145,3 +145,17 @@ test("the Google account calls reach their handlers, carrying nothing from the r
     ["google:disconnect", undefined],
   ]);
 });
+
+test("listing Drive folders sends the parent id and nothing else", async () => {
+  const { bridge, ipcMain } = loadBridge();
+  const received = [];
+  ipcMain.handle("google:folders", async (_event, payload) => {
+    received.push(payload);
+    return { ok: true, folders: [], drives: [] };
+  });
+
+  await bridge.listDriveFolders(null);
+  await bridge.listDriveFolders("1H60yEnI5d4");
+
+  assert.deepEqual(received, [{ parentId: null }, { parentId: "1H60yEnI5d4" }]);
+});

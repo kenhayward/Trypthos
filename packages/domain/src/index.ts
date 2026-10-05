@@ -344,6 +344,7 @@ export {
   ConnectGitHubRequest,
   BranchesRequest,
   ListReposRequest,
+  GoogleFoldersRequest,
   RepoInfoRequest,
   RefreshWorkspaceRequest,
   SetBranchRequest,

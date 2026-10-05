@@ -45,6 +45,8 @@ interface Props {
   /// Opens the repository picker. A separate act from `onOpenWorkspace` because it asks a different
   /// question - the folder picker is the operating system's, and this one is ours.
   onOpenRepo: () => void;
+  /// Opens the Google Drive folder picker.
+  onOpenDrive: () => void;
   /// Opens the Obsidian vault picker. Absent where Obsidian is not installed, which takes the button
   /// away - a picker that could only ever be empty is not worth a place in the header.
   onOpenVault?: () => void;
@@ -121,6 +123,7 @@ export default function WorkspacePanel({
   dirtyPaths,
   onOpenWorkspace,
   onOpenRepo,
+  onOpenDrive,
   onOpenVault,
   onFilterChange,
   onToggleFolder,
@@ -310,6 +313,15 @@ export default function WorkspacePanel({
           className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
         >
           <SourceGlyph mark="github" className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenDrive}
+          aria-label={t("workspace.openDrive")}
+          title={t("workspace.openDrive")}
+          className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+        >
+          <SourceGlyph mark="google-drive" className="size-4" />
         </button>
         <button
           type="button"
@@ -568,6 +580,14 @@ export default function WorkspacePanel({
             }}
           >
             {t("workspace.openRepo")}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setSourceMenu(null);
+              onOpenDrive();
+            }}
+          >
+            {t("workspace.openDrive")}
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() => {

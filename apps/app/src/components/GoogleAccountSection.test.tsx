@@ -11,6 +11,7 @@ function fakeBridge(overrides: Partial<GoogleBridge> = {}) {
     connectGoogle: vi.fn(async (): Promise<GoogleConnectResult> => ({ ok: true, email: "ada@example.com" })),
     cancelGoogleConnect: vi.fn(async () => ({ ok: true })),
     disconnectGoogle: vi.fn(async () => ({ ok: true })),
+    listDriveFolders: vi.fn(async () => ({ ok: true as const, folders: [], drives: [] })),
     ...overrides,
   } satisfies GoogleBridge;
 }
@@ -93,5 +94,21 @@ describe("GoogleAccountSection", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Google");
     expect(alert.textContent).not.toContain("GitHub");
+  });
+
+  it("tells its owner when an account has been connected", async () => {
+    const onConnected = vi.fn();
+    render(<GoogleAccountSection bridge={fakeBridge()} onConnected={onConnected} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+    await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not report a sign-in that did not connect", async () => {
+    const onConnected = vi.fn();
+    const bridge = fakeBridge({ connectGoogle: vi.fn(async () => ({ ok: false as const, reason: "cancelled" })) });
+    render(<GoogleAccountSection bridge={bridge} onConnected={onConnected} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+    await waitFor(() => expect(bridge.connectGoogle).toHaveBeenCalled());
+    expect(onConnected).not.toHaveBeenCalled();
   });
 });

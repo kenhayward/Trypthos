@@ -51,6 +51,8 @@ const {
   WriteSettingsRequest,
   GraphRequest,
   IconsRequest,
+  GoogleFoldersRequest,
+  foldersOf,
   NO_ICONS,
   OBSIDIAN_ICONS_FILE,
   parseObsidianIcons,
@@ -742,6 +744,26 @@ function registerIpcHandlers({
   });
 
   ipcMain.handle("google:disconnect", async () => (google === null ? { ok: true } : google.disconnect()));
+
+  /// The Drive folder picker's only window onto Drive: the folders inside one folder, by id and name.
+  /// Opening one goes through `workspace:openRef` like every other workspace.
+  ipcMain.handle("google:folders", async (_event, payload) => {
+    const parsed = GoogleFoldersRequest.safeParse(payload);
+    if (!parsed.success) {
+      console.error("Rejected a malformed Drive folder request.");
+      return { ok: false, reason: "bad-request" };
+    }
+    if (drive === null) return { ok: false, reason: "not-configured" };
+
+    const { parentId } = parsed.data;
+    const listed = await drive.listChildren(parentId ?? "root", { foldersOnly: true });
+    if (!listed.ok) return listed;
+    if (parentId !== null) return { ok: true, folders: foldersOf(listed.files), drives: [] };
+
+    const shared = await drive.sharedDrives();
+    if (!shared.ok) return shared;
+    return { ok: true, folders: foldersOf(listed.files), drives: shared.drives };
+  });
 
   ipcMain.handle("github:repos", async (_event, payload) => {
     const parsed = ListReposRequest.safeParse(payload ?? {});
