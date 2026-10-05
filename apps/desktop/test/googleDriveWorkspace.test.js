@@ -168,8 +168,8 @@ test("writing is refused: this release opens Drive read-only", async () => {
   assert.deepEqual(await provider.write("Plan.md", "changed", { id: "rev1" }), { ok: false, reason: "read-only" });
 });
 
-// A refresh lists the root before the folders under it. Re-listing a folder must replace only its
-// own children, or an open file under an expanded folder would briefly be unreadable.
+// Re-expanding a folder without a refresh must replace only its own children, so what was learned
+// about the folders below them (and any open file under them) stays readable.
 test("re-listing a folder keeps what was learned about the folders under it", async () => {
   const { provider, calls } = await open();
   await provider.list("");
@@ -194,6 +194,55 @@ test("re-listing drops a child that has gone", async () => {
   await provider.list("");
   await provider.list("");
   assert.deepEqual(await provider.read("Plan.md"), { ok: false, reason: "not-found" });
+});
+
+test("a folder replaced by a new one of the same name does not keep the old one's contents", async () => {
+  const root = [
+    [{ id: "dirBBB", name: "Archive", mimeType: FOLDER }],
+    [{ id: "dirNEW", name: "Archive", mimeType: FOLDER }],
+  ];
+  let round = 0;
+  const { provider, calls } = await open({
+    listChildren: async (id) => {
+      if (id === "rootAAA") return { ok: true, files: root[Math.min(round++, 1)] };
+      if (id === "dirBBB") return { ok: true, files: DRIVE.dirBBB };
+      return { ok: true, files: [] };
+    },
+  });
+  await provider.list("");
+  await provider.list("Archive");
+  await provider.list("");
+  assert.deepEqual(await provider.read("Archive/Old.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(calls.download, []);
+});
+
+test("a folder that has gone takes what was learned beneath it", async () => {
+  let first = true;
+  const { provider, calls } = await open({
+    listChildren: async (id) => {
+      if (id === "rootAAA") {
+        const files = first ? [{ id: "dirBBB", name: "Archive", mimeType: FOLDER }] : [];
+        first = false;
+        return { ok: true, files };
+      }
+      return { ok: true, files: DRIVE.dirBBB };
+    },
+  });
+  await provider.list("");
+  await provider.list("Archive");
+  await provider.list("");
+  assert.deepEqual(await provider.read("Archive/Old.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(calls.download, []);
+});
+
+test("a Google Doc whose export is over the limit is refused after exporting", async () => {
+  const { provider } = await open();
+  await provider.list("");
+  const read = await provider.readBytes("Meeting.md", 3);
+  assert.equal(read.ok, false);
+  assert.equal(read.reason, "too-large");
+  assert.equal(read.sizeBytes, 9);
+  assert.equal(read.limitBytes, 3);
 });
 
 test("refresh forgets every path, so the next read asks Drive again", async () => {
