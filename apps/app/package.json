@@ -36,7 +36,7 @@
     "@lezer/highlight": "^1.2.3",
     "@sigma/node-image": "^3.0.0",
     "@trypthos/domain": "*",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.16",
     "graphology": "^0.26.0",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",
