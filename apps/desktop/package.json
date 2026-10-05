@@ -1,7 +1,7 @@
 {
   "name": "trypthos-desktop",
   "private": true,
-  "version": "0.95.1",
+  "version": "0.95.2",
   "main": "src/main.js",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -14,11 +14,11 @@
   "dependencies": {
     "@trypthos/domain": "*",
     "electron-updater": "^6.8.9",
-    "ignore": "7.0.9"
+    "ignore": "7.0.10"
   },
   "devDependencies": {
-    "electron": "44.4.2",
+    "electron": "44.4.5",
     "electron-builder": "^26.15.3",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   }
 }

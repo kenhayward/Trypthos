@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.95.2",
+    date: "2026-10-05",
+    pr: 216,
+    headline: "The libraries Trypthos is built on, brought up to date",
+    summary:
+      "A routine refresh of the libraries underneath the app: the 18 updates Dependabot proposed as its weekly minor-and-patch batch. None is a major upgrade, and nothing here is meant to look or behave differently. What reaches you through the installer is Electron 44.4.5, which carries Chromium's latest security fixes, together with the markdown renderer (marked), its sanitiser (DOMPurify), the math typesetter (KaTeX), the editor's own decoration engine (CodeMirror and Lezer) and the interface wording layer (react-i18next). The icon library gains new glyphs and redraws three it already had, so a small number of icons in the interface are drawn slightly differently. The rest is the tooling that builds and tests the app - Vite, Vitest, ESLint and jsdom - which changes nothing you can see.",
+    changed: [
+      "Electron 44.4.2 to 44.4.5, with marked, DOMPurify, KaTeX, CodeMirror's state and view, Lezer highlight and react-i18next all updated to their latest patch releases.",
+      "Lucide icons 1.47 to 1.48: new glyphs, and map-pinned, mail-pen and card-sim are redrawn, so any of those you use is drawn slightly differently.",
+      "The build and test tooling updated: Vite 8.3.1, Vitest 5.0.2, ESLint 10.11, typescript-eslint 8.70.1 and jsdom 30.1.1.",
+    ],
+  },
+  {
     version: "0.95.1",
     date: "2026-10-05",
     pr: 215,
