@@ -586,6 +586,22 @@ describe("the sources a workspace can be opened from", () => {
     expect(screen.getByRole("button", { name: "Garden" }).getAttribute("title")).toBe("D:/Garden");
   });
 
+  it("marks a Google Drive folder with Drive's glyph and colour", () => {
+    panel({
+      workspaces: [
+        {
+          id: "Notes",
+          name: "Notes",
+          ref: { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" },
+          truncated: false,
+        },
+      ],
+    });
+    const mark = [...screen.getByRole("button", { name: "Notes" }).querySelectorAll("svg")].at(-1);
+    expect(mark?.getAttribute("data-mark")).toBe("google-drive");
+    expect(mark?.getAttribute("class") ?? "").toContain("text-drive");
+  });
+
   // A folder and a repository sit in the same tree and behave very differently - one can be saved
   // into and the other cannot - so the row says which it is rather than looking alike.
   it("draws a repository's row differently from a folder's", () => {

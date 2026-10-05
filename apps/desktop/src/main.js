@@ -38,6 +38,7 @@ const { createAccountStore } = require("./accountStore");
 const { createGitHubApi } = require("./githubApi");
 const { loadGoogleClient } = require("./googleClient");
 const { createGoogleAuth } = require("./googleAuth");
+const { createGoogleDriveApi } = require("./googleDriveApi");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
 const { enableSpellChecker } = require("./spellcheck");
@@ -445,6 +446,10 @@ if (!gotLock) {
       createGitHub: (getToken) =>
         createGitHubApi({ getToken, fetch: (url, options) => net.fetch(url, options) }),
       google,
+      // Every Drive call is made here, with the token googleAuth holds - net.fetch for the same proxy
+      // and certificate reasons as GitHub.
+      createGoogleDrive: (accessToken) =>
+        createGoogleDriveApi({ accessToken, fetch: (url, options) => net.fetch(url, options) }),
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),

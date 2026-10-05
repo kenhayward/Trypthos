@@ -95,7 +95,9 @@ export default function WorkspaceHome({
         >
           {workspace.ref.kind === "github"
             ? t("home.kindRepository")
-            : `${workspace.vault === true ? t("home.kindVault") : t("home.kindFolder")} - ${workspace.ref.root}`}
+            : workspace.ref.kind === "google-drive"
+              ? `${t("home.kindDrive")} - ${workspace.name}`
+              : `${workspace.vault === true ? t("home.kindVault") : t("home.kindFolder")} - ${workspace.ref.root}`}
         </p>
 
         {snapshot !== null && (

@@ -41,7 +41,9 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       workspace:
         ref.kind === "github"
           ? { id: ref.repo, name: ref.repo, ref, truncated: false }
-          : { id: ref.root.replace(/^\//, ""), name: "ws", ref, truncated: false },
+          : ref.kind === "google-drive"
+            ? { id: ref.name, name: ref.name, ref, truncated: false }
+            : { id: ref.root.replace(/^\//, ""), name: "ws", ref, truncated: false },
     }),
     // Qualified ids, as the shell answers with - so the renderer never has to work out which
     // workspace a row belongs to.

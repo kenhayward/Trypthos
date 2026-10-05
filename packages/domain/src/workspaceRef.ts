@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DriveIdSchema } from "./googleDrive";
 
 /// Which place a workspace is, named in a way both processes and the settings file can carry.
 ///
@@ -46,9 +47,23 @@ export const GitHubWorkspaceRefSchema = z
   })
   .strict();
 
+export const GoogleDriveWorkspaceRefSchema = z
+  .object({
+    kind: z.literal("google-drive"),
+    /// The folder's Drive id. Opaque, and stable across a rename or a move.
+    folderId: DriveIdSchema,
+    /// The Shared Drive the folder lives in, or absent for My Drive.
+    driveId: DriveIdSchema.optional(),
+    /// What the folder was called when it was chosen. Display only - a rename in Drive makes it
+    /// stale, and the shell reads the real name when the folder opens.
+    name: z.string().min(1),
+  })
+  .strict();
+
 export const WorkspaceRefSchema = z.discriminatedUnion("kind", [
   LocalWorkspaceRefSchema,
   GitHubWorkspaceRefSchema,
+  GoogleDriveWorkspaceRefSchema,
 ]);
 
 export type WorkspaceRef = z.infer<typeof WorkspaceRefSchema>;
@@ -59,7 +74,7 @@ export type ProviderKind = WorkspaceRef["kind"];
 /// Walked by the shell's registry test and by the interface's source picker, so a kind added to the
 /// schema and forgotten in either shows up as a failing test rather than as a row that can be
 /// chosen and never opened.
-export const PROVIDER_KINDS = ["local", "github"] as const satisfies readonly ProviderKind[];
+export const PROVIDER_KINDS = ["local", "github", "google-drive"] as const satisfies readonly ProviderKind[];
 
 /// The last segment of a path, whichever separator wrote it. "" when there is none to take.
 function lastSegment(value: string): string {
@@ -74,10 +89,16 @@ function lastSegment(value: string): string {
 /// two. Two repositories with the same name from different owners are deduplicated by
 /// `workspaceIdFor` exactly as two folders with the same name already are.
 export function workspaceRefName(ref: WorkspaceRef): string {
-  if (ref.kind === "github") return ref.repo;
-  // A drive root has no segment to take, and an empty name would leave the workspace called
-  // "Folder" - which says less than "D:\" does.
-  return lastSegment(ref.root) || ref.root;
+  switch (ref.kind) {
+    case "github":
+      return ref.repo;
+    case "google-drive":
+      return ref.name;
+    case "local":
+      // A drive root has no segment to take, and an empty name would leave the workspace called
+      // "Folder" - which says less than "D:\" does.
+      return lastSegment(ref.root) || ref.root;
+  }
 }
 
 /// Which mark a workspace's row is drawn with: its provider's, or Obsidian's for a folder that was
@@ -96,11 +117,17 @@ export function workspaceRefMark(ref: WorkspaceRef): WorkspaceMark {
 /// **Case is folded for GitHub and not for a local root**, because that is what is true of each.
 /// Owner and repository names are case-insensitive at GitHub, so `Ada/Notes` and `ada/notes` are one
 /// repository; Linux tells `/ws` and `/WS` apart, and folding there would refuse to open the second
-/// of two folders that really do both exist.
+/// of two folders that really do both exist. A Drive folder is keyed by its id, unfolded, because
+/// Drive ids are case-sensitive.
 export function workspaceRefKey(ref: WorkspaceRef): string {
-  return ref.kind === "github"
-    ? `github:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`
-    : `local:${ref.root}`;
+  switch (ref.kind) {
+    case "github":
+      return `github:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`;
+    case "google-drive":
+      return `google-drive:${ref.folderId}`;
+    case "local":
+      return `local:${ref.root}`;
+  }
 }
 
 /// Whether two references name the same place. The comparison is the key above and nothing else, so
@@ -116,5 +143,12 @@ export function sameWorkspaceRef(one: WorkspaceRef, other: WorkspaceRef): boolea
 /// the line that tells them apart, and it is the only place the owner of a repository appears, since
 /// a workspace id may not contain a separator.
 export function workspaceRefLabel(ref: WorkspaceRef): string {
-  return ref.kind === "github" ? `${ref.owner}/${ref.repo}` : ref.root;
+  switch (ref.kind) {
+    case "github":
+      return `${ref.owner}/${ref.repo}`;
+    case "google-drive":
+      return `Google Drive / ${ref.name}`;
+    case "local":
+      return ref.root;
+  }
 }

@@ -387,6 +387,7 @@ export type {
 export {
   PROVIDER_KINDS,
   GitHubWorkspaceRefSchema,
+  GoogleDriveWorkspaceRefSchema,
   LocalWorkspaceRefSchema,
   WorkspaceRefSchema,
   sameWorkspaceRef,

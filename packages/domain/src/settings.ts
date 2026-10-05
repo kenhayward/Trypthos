@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 22;
+export const SETTINGS_VERSION = 23;
 
 export const SettingsSchema = z
   .object({
@@ -175,6 +175,14 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 23,
+    // Version 23 lets a remembered workspace be a Google Drive folder. Nothing already remembered
+    // changes. The version is for the OTHER direction, as with 18: the reference is strict, so a file
+    // naming a Drive folder, read by the previous build, would fail to parse and take every
+    // remembered workspace with it - this makes that build refuse the file instead.
+    migrate: (input) => input,
+  },
   {
     to: 22,
     // Version 22 added video and audio. Unlike every other type added since version 11, these are

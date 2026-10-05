@@ -156,3 +156,34 @@ describe("the line under a workspace's name", () => {
     expect(workspaceRefLabel({ kind: "github", owner: "ada", repo: "notes" })).toBe("ada/notes");
   });
 });
+
+describe("a Google Drive folder", () => {
+  const ref = { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" };
+
+  it("parses, with or without the Shared Drive it lives in", () => {
+    expect(WorkspaceRefSchema.parse(ref)).toEqual(ref);
+    expect(WorkspaceRefSchema.parse({ ...ref, driveId: "0AbcDEF" })).toEqual({ ...ref, driveId: "0AbcDEF" });
+  });
+
+  // Ids reach a Drive query string; the schema is the boundary that keeps them ids.
+  it("refuses an id that is not a Drive id, and an unknown field", () => {
+    expect(WorkspaceRefSchema.safeParse({ ...ref, folderId: "a' or 'b" }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, driveId: "../x" }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, name: "" }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, extra: 1 }).success).toBe(false);
+  });
+
+  it("is named, keyed, labelled and marked as a Drive folder", () => {
+    expect(workspaceRefName(ref)).toBe("Notes");
+    expect(workspaceRefKey(ref)).toBe("google-drive:1H60yEnI5d4");
+    expect(workspaceRefLabel(ref)).toBe("Google Drive / Notes");
+    expect(workspaceRefMark(ref)).toBe("google-drive");
+    expect(PROVIDER_KINDS).toContain("google-drive");
+  });
+
+  // The id is the folder; the name is only what it was called. A rename in Drive is the same folder.
+  it("is the same workspace whatever it was called when chosen", () => {
+    expect(sameWorkspaceRef(ref, { ...ref, name: "Renamed" })).toBe(true);
+    expect(sameWorkspaceRef(ref, { ...ref, folderId: "1H60yEnI5d5" })).toBe(false);
+  });
+});

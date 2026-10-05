@@ -142,3 +142,24 @@ test("says whether a GitHub repository is an Obsidian vault", async () => {
   assert.equal((await open([marker, { ...marker, path: ".obsidian/app.json", type: "blob" }, note])).workspace.vault, true);
   assert.equal((await open([note])).workspace.vault, false);
 });
+
+test("opens a Google Drive folder through the Drive client, under its current name", async () => {
+  const drive = {
+    fileMeta: async () => ({ ok: true, file: { id: "rootAAA", name: "Notes now", mimeType: "application/vnd.google-apps.folder" } }),
+    listChildren: async () => ({ ok: true, files: [] }),
+  };
+  const opened = await openWorkspaceFor({ kind: "google-drive", folderId: "rootAAA", name: "Notes then" }, { drive });
+
+  assert.equal(opened.ok, true);
+  assert.equal(opened.workspace.name, "Notes now");
+  assert.equal(opened.workspace.root, null);
+  assert.equal(opened.workspace.vault, false);
+  assert.equal(opened.workspace.provider.kind, "google-drive");
+});
+
+test("a Drive folder in a build without Google answers not configured", async () => {
+  assert.deepEqual(await openWorkspaceFor({ kind: "google-drive", folderId: "rootAAA", name: "Notes" }, {}), {
+    ok: false,
+    reason: "not-configured",
+  });
+});
