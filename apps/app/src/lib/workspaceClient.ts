@@ -297,7 +297,29 @@ export interface GitHubBridge {
   repoInfo(workspaceId: string): Promise<RepoInfoResult>;
 }
 
-interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge {
+/// What the shell says about the Google account. An EMAIL, never a token - see `GitHubBridge`.
+///
+/// `configured` false is a build without a Google OAuth client, which offers no way to connect.
+export interface GoogleStatus {
+  ok: true;
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  reason: string | null;
+}
+
+export type GoogleConnectResult = { ok: true; email: string } | { ok: false; reason: string };
+
+/// The Google half of the bridge. Connecting takes no argument: the sign-in happens in the user's
+/// browser and the main process, and there is deliberately no `getToken`.
+export interface GoogleBridge {
+  googleStatus(): Promise<GoogleStatus>;
+  connectGoogle(): Promise<GoogleConnectResult>;
+  cancelGoogleConnect(): Promise<{ ok: boolean }>;
+  disconnectGoogle(): Promise<{ ok: boolean }>;
+}
+
+interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge, GoogleBridge {
   platform: string;
   isDesktop: true;
   explorerIntegration(): Promise<IntegrationStatus>;
@@ -388,6 +410,18 @@ export function githubBridge(): GitHubBridge | null {
     disconnectGitHub: bridge.disconnectGitHub,
     listRepositories: bridge.listRepositories,
     repoInfo: bridge.repoInfo,
+  };
+}
+
+/// The Google half of the bridge, or null outside the desktop shell - same reasoning as `githubBridge`.
+export function googleBridge(): GoogleBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.googleStatus) return null;
+  return {
+    googleStatus: bridge.googleStatus,
+    connectGoogle: bridge.connectGoogle,
+    cancelGoogleConnect: bridge.cancelGoogleConnect,
+    disconnectGoogle: bridge.disconnectGoogle,
   };
 }
 

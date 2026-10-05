@@ -314,6 +314,14 @@ export function failureKey(reason: string): string | null {
     // after a move that did not happen is where their text went - and the answer is "still here".
     case "window-failed":
       return "errors.windowFailed";
+    // Google sign-in's own refusals. Each sends the user somewhere different: tick the Drive box,
+    // try again, or use a build that has Google Drive at all.
+    case "scope-denied":
+      return "errors.scopeDenied";
+    case "timed-out":
+      return "errors.timedOut";
+    case "not-configured":
+      return "errors.notConfigured";
     default:
       return "errors.unknown";
   }

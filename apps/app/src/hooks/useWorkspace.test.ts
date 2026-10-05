@@ -182,6 +182,12 @@ describe("failureKey", () => {
     expect(failureKey("encryption-unavailable")).toBe("errors.encryptionUnavailable");
   });
 
+  it("names the three Google sign-in refusals", () => {
+    expect(failureKey("scope-denied")).toBe("errors.scopeDenied");
+    expect(failureKey("timed-out")).toBe("errors.timedOut");
+    expect(failureKey("not-configured")).toBe("errors.notConfigured");
+  });
+
   // A tab that could not move into its own window is still open. The message has to say that,
   // because the one thing a user wonders after a failed move is where their text went.
   it("says a tab stayed where it was when its window did not open", () => {
