@@ -40,17 +40,21 @@ const SETTLE_MS = 250;
 
 export function useFileFilter(where: FilterSurroundings) {
   const [filter, setText] = useState("");
-  /// The last search that came back, and the filter it was about.
+  /// The search in progress or last finished, and the answers that have come back for it so far.
   ///
   /// The filter travels with it so `status` can be DERIVED rather than stored: an answer about
   /// something other than what is in the box means a search is still out, which is exactly what
   /// "searching" means. A second piece of state saying the same thing is a second thing that can
   /// disagree - and setting it would be a state update inside an effect, which React now warns is
   /// how a render loop starts.
+  ///
+  /// One slot per open folder, filled as each folder's walk finishes, so a quick local folder's
+  /// matches are on screen while a slow cloud folder is still being listed. `run` names the search
+  /// the slots belong to, since the same text can be asked again over a different set of folders.
   const [answer, setAnswer] = useState<{
+    run: number;
     query: string;
-    paths: readonly string[];
-    truncated: boolean;
+    slots: readonly (FilterResult | undefined)[];
   } | null>(null);
 
   /// Which question is outstanding.
@@ -82,27 +86,18 @@ export function useFileFilter(where: FilterSurroundings) {
     if (query === "") return;
 
     const timer = setTimeout(() => {
-      void (async () => {
-        // In parallel: they are separate folders behind separate providers, and one slow cloud
-        // folder should not hold up the local one beside it.
-        const answers = await Promise.all(
-          workspaces.map((workspace) => filterFiles.current({ path: workspace.id, filter: query })),
-        );
-        if (generation.current !== mine) return;
-
-        const paths: string[] = [];
-        let truncated = false;
-        for (const answer of answers) {
-          // A folder that has gone since it was opened is skipped rather than failing the filter:
-          // its own row in the tree is where a folder that cannot be listed says so, and taking the
-          // other folders' matches away would be answering a different question badly.
-          if (!answer.ok) continue;
-          paths.push(...answer.paths);
-          truncated = truncated || answer.truncated;
-        }
-
-        setAnswer({ query, paths, truncated });
-      })();
+      // In parallel: they are separate folders behind separate providers, and one slow cloud
+      // folder should not hold up the local one beside it - so each answer is applied as it comes.
+      workspaces.forEach((workspace, index) => {
+        void filterFiles.current({ path: workspace.id, filter: query }).then((result) => {
+          if (generation.current !== mine) return;
+          setAnswer((prev) => {
+            const slots = prev !== null && prev.run === mine ? [...prev.slots] : [];
+            slots[index] = result;
+            return { run: mine, query, slots };
+          });
+        });
+      });
     }, SETTLE_MS);
 
     return () => clearTimeout(timer);
@@ -110,12 +105,22 @@ export function useFileFilter(where: FilterSurroundings) {
 
   const setFilter = useCallback((text: string) => setText(text), []);
 
-  const status: FilterStatus =
-    query === ""
-      ? { kind: "idle" }
-      : answer !== null && answer.query === query
-        ? { kind: "results", paths: answer.paths, truncated: answer.truncated }
-        : { kind: "searching" };
+  let status: FilterStatus = { kind: "searching" };
+  if (query === "") {
+    status = { kind: "idle" };
+  } else if (answer !== null && answer.query === query && answer.slots.some((slot) => slot !== undefined)) {
+    const paths: string[] = [];
+    let truncated = false;
+    for (const slot of answer.slots) {
+      // A folder that has gone since it was opened is skipped rather than failing the filter:
+      // its own row in the tree is where a folder that cannot be listed says so, and taking the
+      // other folders' matches away would be answering a different question badly.
+      if (slot === undefined || !slot.ok) continue;
+      paths.push(...slot.paths);
+      truncated = truncated || slot.truncated;
+    }
+    status = { kind: "results", paths, truncated };
+  }
 
   return { filter, setFilter, status };
 }
