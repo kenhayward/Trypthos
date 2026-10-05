@@ -10,6 +10,14 @@ import {
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
 
+/// What version 22 appends to any list it migrates - see the `version 22` block at the foot of this
+/// file for why it appends at all, when no other added type does.
+///
+/// One constant rather than the same two strings in five assertions: those five are all testing
+/// that an upgrade keeps what the user chose, and a literal tail in each would turn the next
+/// migration into five unrelated-looking failures.
+const MEDIA_ADDED = ["video", "audio"];
+
 describe("SettingsSchema", () => {
   it("accepts the defaults it ships with", () => {
     expect(() => SettingsSchema.parse(DEFAULT_SETTINGS)).not.toThrow();
@@ -491,10 +499,14 @@ describe("the file types a settings file names", () => {
     editor: { defaultViewMode: "live" as const },
   };
 
-  // Adding a setting must not change what an existing installation does. Somebody who upgrades sees
-  // exactly the tree they saw yesterday until they go and turn something on.
-  it("seeds an upgraded file with markdown alone", () => {
-    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown"]);
+  // Adding a SETTING must not change what an existing installation does. Somebody who upgrades sees
+  // the tree they saw yesterday until they go and turn something on.
+  //
+  // Version 22 is the one deliberate exception, and it is a narrow one: it appends the two media
+  // rows, because a type with no checkbox was never a choice anybody made. Everything the user
+  // actually chose is still here, in the order they had it.
+  it("seeds an upgraded file with markdown, and whatever later versions append", () => {
+    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED]);
   });
 
   it("leaves everything else version 10 stored", () => {
@@ -519,12 +531,12 @@ describe("the file types a settings file names", () => {
   });
 
   it("leaves an upgraded installation on the list it already had", () => {
-    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown"]);
+    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED]);
   });
 
   it("keeps a list the user has chosen", () => {
     const chosen = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "text"] } };
-    expect(loadSettings(chosen).fileTypes.enabled).toEqual(["markdown", "text"]);
+    expect(loadSettings(chosen).fileTypes.enabled).toEqual(["markdown", "text", ...MEDIA_ADDED]);
   });
 
   // Strings rather than an enum, on purpose. A file written by a NEWER build names types this one
@@ -533,7 +545,7 @@ describe("the file types a settings file names", () => {
   // trip and is ignored where it is read.
   it("loads a file naming a type it does not know", () => {
     const newer = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "klingon"] } };
-    expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon"]);
+    expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon", ...MEDIA_ADDED]);
     // And the rest of the file survived the migration to a list of workspaces alongside it.
     expect(loadSettings(newer).workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
   });
@@ -618,7 +630,7 @@ describe("thinking on a profile", () => {
   it("keeps everything version 11 stored", () => {
     const migrated = loadSettings(v11);
     expect(migrated.chat.profiles[0]?.label).toBe("Local model");
-    expect(migrated.fileTypes.enabled).toEqual(["markdown"]);
+    expect(migrated.fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED]);
     expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
   });
 
@@ -949,5 +961,37 @@ describe("the vault graph settings", () => {
   it("refuses a local depth outside one to three", () => {
     const deep = { ...DEFAULT_SETTINGS, graph: { ...DEFAULT_SETTINGS.graph, localDepth: 4 } };
     expect(SettingsSchema.safeParse(deep).success).toBe(false);
+  });
+});
+
+describe("version 22", () => {
+  // A type that did not exist when a list was written was never a choice. `file-types.md` says not
+  // to migrate when a type is added, and that rule protects a choice somebody MADE - nobody chose
+  // to exclude a row that had no checkbox. Without this, the feature ships switched off for every
+  // existing installation, discoverable only by finding a settings page.
+  const upgraded = (enabled: string[]) =>
+    loadSettings({ ...DEFAULT_SETTINGS, schemaVersion: 21, fileTypes: { enabled } });
+
+  it("gives an existing installation the video and audio rows", () => {
+    const loaded = upgraded(["markdown", "json"]);
+    expect(loaded.fileTypes.enabled).toContain("video");
+    expect(loaded.fileTypes.enabled).toContain("audio");
+  });
+
+  it("keeps every other type the user had", () => {
+    const loaded = upgraded(["markdown", "json"]);
+    expect(loaded.fileTypes.enabled).toContain("markdown");
+    expect(loaded.fileTypes.enabled).toContain("json");
+  });
+
+  it("does not list a type twice when the file already has it", () => {
+    const loaded = upgraded(["markdown", "video"]);
+    expect(loaded.fileTypes.enabled.filter((id) => id === "video")).toHaveLength(1);
+  });
+
+  it("leaves everything outside the file types alone", () => {
+    const loaded = upgraded(["markdown"]);
+    expect(loaded.panels).toEqual(DEFAULT_SETTINGS.panels);
+    expect(loaded.graph).toEqual(DEFAULT_SETTINGS.graph);
   });
 });
