@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.93.0",
+    date: "2026-10-05",
+    pr: 209,
+    headline: "The File types page is a table, one row per type",
+    summary:
+      "The File types page of Settings listed its types as a stack of names, each with the extensions it matches written on a second line underneath, so thirty-odd types took a couple of screens of scrolling and the only thing you could click was a small box. Every type is now a row of its own: the box, the name, and everything it matches on the same line, in columns that line up across the groups so the whole page reads as one list. Clicking anywhere on a row - the name, the space beside it - turns that type on or off, and the box still works as it always did. What the setting does is unchanged: the same types, the same groups, and markdown still always on.",
+    changed: [
+      "The File types page of Settings is a table with one row per type, its extensions beside its name rather than under it.",
+      "Clicking anywhere on a type's row turns it on or off, not only the box.",
+    ],
+  },
+  {
     version: "0.92.0",
     date: "2026-09-27",
     pr: 204,
