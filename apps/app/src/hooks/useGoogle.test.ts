@@ -120,6 +120,22 @@ describe("useGoogle", () => {
     });
     const { result } = renderHook(() => useGoogle(bridge));
     await waitFor(() => expect(result.current.checking).toBe(false));
-    expect(result.current.errorKey).toBe("errors.notConnected");
+    expect(result.current.errorKey).toBe("errors.googleNotConnected");
+  });
+
+  it("keeps the account connected and says why when Google cannot be told to disconnect", async () => {
+    const bridge = fakeBridge({
+      googleStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: true, email: "ada@example.com", reason: null })),
+      disconnectGoogle: vi.fn(async () => ({ ok: false as const, reason: "unknown" })),
+    });
+    const { result } = renderHook(() => useGoogle(bridge));
+    await waitFor(() => expect(result.current.connected).toBe(true));
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+    expect(result.current.errorKey).toBe("errors.unknown");
+    expect(result.current.connected).toBe(true);
+    expect(result.current.email).toBe("ada@example.com");
   });
 });

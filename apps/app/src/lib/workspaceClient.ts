@@ -316,7 +316,7 @@ export interface GoogleBridge {
   googleStatus(): Promise<GoogleStatus>;
   connectGoogle(): Promise<GoogleConnectResult>;
   cancelGoogleConnect(): Promise<{ ok: boolean }>;
-  disconnectGoogle(): Promise<{ ok: boolean }>;
+  disconnectGoogle(): Promise<{ ok: boolean; reason?: string }>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge, GoogleBridge {

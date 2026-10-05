@@ -846,7 +846,7 @@ and a message is per-commit, which is why only the first is held in the provider
 
 ### Google Drive (sign-in)
 
-`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `google` module holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). This PR is sign-in only: no Drive folder can be opened yet.
+`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `packages/domain/src/googleAuth.ts` holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). As of 0.96.0 this is sign-in only: no Drive folder can be opened yet.
 
 - **Loopback plus PKCE, in the main process.** Google refuses OAuth inside an embedded webview, so Connect opens the system browser at Google's consent page. The redirect goes to a listener on 127.0.0.1 on a port the OS chose, and the code is exchanged with a PKCE verifier the renderer never sees. The `state` is checked before the code is used. The browser tab then shows a short English "return to Trypthos" page, hard-coded like the shell's menus.
 - **One sign-in at a time.** A second Connect, or Cancel, stops a waiting one. A Disconnect that lands while a sign-in is in flight wins: when the sign-in finishes, nothing is stored. A sign-in nobody completes ends on a five-minute timeout and answers `timed-out`.
