@@ -345,6 +345,8 @@
     "python": "Python",
     "shell": "Shell",
     "image": "Images",
+    "video": "Video",
+    "audio": "Audio",
     "powershell": "PowerShell",
     "batch": "Batch",
     "sql": "SQL",
@@ -495,7 +497,7 @@
       "group": {
         "documents": "Documents",
         "data": "Markup and data",
-        "images": "Images",
+        "media": "Pictures, video and audio",
         "languages": "Programming languages",
         "utility": "Utility"
       }

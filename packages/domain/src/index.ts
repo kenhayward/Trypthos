@@ -201,6 +201,14 @@ export {
   imageMediaType,
   isImageName,
 } from "./imageFiles";
+export {
+  AUDIO_TYPE_ID,
+  VIDEO_TYPE_ID,
+  isMediaName,
+  mediaKindFor,
+  mediaTypeFor,
+} from "./mediaFiles";
+export type { MediaKind } from "./mediaFiles";
 export { MAX_ENTRY_NAME_LENGTH, RENAME_PROBLEMS, renameTarget } from "./entryName";
 export type { RenameProblem, RenameTarget } from "./entryName";
 export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes, newFolderName } from "./newFile";
