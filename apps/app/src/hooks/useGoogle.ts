@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { GoogleBridge } from "../lib/workspaceClient";
 import { attempt } from "./useGitHub";
-import { failureKey } from "./useWorkspace";
+import { providerFailureKey } from "./useWorkspace";
 
 /// The Google account, as the interface sees it.
 ///
@@ -31,21 +31,6 @@ export interface GoogleActions {
   dismissError(): void;
 }
 
-/// The shared `failureKey` words offline, rate-limited and not-connected for GitHub, which is the
-/// wrong provider to name in a Google failure. Everything else is provider-neutral and falls through.
-function googleFailureKey(reason: string): string | null {
-  switch (reason) {
-    case "offline":
-      return "errors.googleOffline";
-    case "rate-limited":
-      return "errors.googleRateLimited";
-    case "not-connected":
-      return "errors.googleNotConnected";
-    default:
-      return failureKey(reason);
-  }
-}
-
 export function useGoogle(bridge: GoogleBridge | null): GoogleState & GoogleActions {
   const [state, setState] = useState<GoogleState>({
     supported: bridge !== null,
@@ -66,7 +51,7 @@ export function useGoogle(bridge: GoogleBridge | null): GoogleState & GoogleActi
       if (!live) return;
 
       if (!status.ok) {
-        setState((prev) => ({ ...prev, checking: false, connected: false, email: null, errorKey: googleFailureKey(status.reason) }));
+        setState((prev) => ({ ...prev, checking: false, connected: false, email: null, errorKey: providerFailureKey("google-drive", status.reason) }));
         return;
       }
 
@@ -76,7 +61,7 @@ export function useGoogle(bridge: GoogleBridge | null): GoogleState & GoogleActi
         configured: status.configured,
         connected: status.connected,
         email: status.email,
-        errorKey: status.reason === null ? null : googleFailureKey(status.reason),
+        errorKey: status.reason === null ? null : providerFailureKey("google-drive", status.reason),
       }));
     })();
 
@@ -93,7 +78,7 @@ export function useGoogle(bridge: GoogleBridge | null): GoogleState & GoogleActi
 
     if (!result.ok) {
       // `failureKey("cancelled")` is null: closing the browser is not an error.
-      setState((prev) => ({ ...prev, connecting: false, errorKey: googleFailureKey(result.reason) }));
+      setState((prev) => ({ ...prev, connecting: false, errorKey: providerFailureKey("google-drive", result.reason) }));
       return false;
     }
 
@@ -111,7 +96,7 @@ export function useGoogle(bridge: GoogleBridge | null): GoogleState & GoogleActi
 
     const result = await attempt(() => bridge.disconnectGoogle().then((answer) => ({ ...answer })));
     if (!result.ok) {
-      setState((prev) => ({ ...prev, errorKey: googleFailureKey(result.reason ?? "unknown") }));
+      setState((prev) => ({ ...prev, errorKey: providerFailureKey("google-drive", result.reason ?? "unknown") }));
       return;
     }
     setState((prev) => ({ ...prev, connected: false, email: null, errorKey: null }));
