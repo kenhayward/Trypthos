@@ -392,6 +392,9 @@
     "branchExists": "That branch already exists. Choose another name, or commit to the branch that is already there.",
     "readOnlyToken": "Your GitHub token can read but not write. Create one at github.com/settings/tokens with write access to your repositories, then reconnect from the Accounts page of Settings.",
     "encryptionUnavailable": "This machine could not encrypt the token, so it was not saved. Trypthos never stores a credential in plain text.",
+    "scopeDenied": "Google Drive access was not allowed, so Trypthos cannot open your folders. Connect again and leave the Google Drive box ticked.",
+    "timedOut": "Google's sign-in page did not answer in time. Connect again to try once more.",
+    "notConfigured": "This build of Trypthos was made without Google Drive support.",
     "windowFailed": "The new window did not open, so the tab is still here with your changes.",
     "unknown": "Something went wrong."
   },

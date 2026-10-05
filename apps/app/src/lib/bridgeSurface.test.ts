@@ -21,7 +21,7 @@ const PRELOAD = repoPath("apps", "desktop", "src", "preload.js");
 /// One entry per group of calls the renderer makes on the shell. A new provider adds a group here
 /// rather than a second copy of this test - which is the point: the guard has to grow with the
 /// surface, or it goes on checking only the half of it that was written first.
-const SURFACES = ["WorkspaceClient", "GitHubBridge"];
+const SURFACES = ["WorkspaceClient", "GitHubBridge", "GoogleBridge"];
 
 /// The member names of one interface in the client's source.
 ///
@@ -57,6 +57,7 @@ describe("the preload bridge", () => {
   it("covers the GitHub calls as well as the workspace ones", () => {
     const source = readFileSync(CLIENT, "utf8");
     expect(interfaceMethods(source, "GitHubBridge")).toContain("connectGitHub");
+    expect(interfaceMethods(source, "GoogleBridge")).toContain("connectGoogle");
     expect(interfaceMethods(source, "WorkspaceClient")).toContain("openWorkspaceRef");
   });
 });

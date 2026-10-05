@@ -58,7 +58,7 @@ export interface GitHubActions {
 ///
 /// The reason is deliberately generic. There is nothing to say about a failure the other side did
 /// not name, and inventing a specific one would send the user somewhere on the strength of a guess.
-async function attempt<T extends { ok: boolean }>(
+export async function attempt<T extends { ok: boolean }>(
   call: () => Promise<T>,
   logger: Pick<Console, "error"> = console,
 ): Promise<T | { ok: false; reason: string }> {
