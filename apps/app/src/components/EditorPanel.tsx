@@ -20,11 +20,12 @@ import DocumentEditor, {
 } from "./DocumentEditor";
 import MarkdownPreview from "./MarkdownPreview";
 import ImageViewer from "./ImageViewer";
+import MediaPlayer from "./MediaPlayer";
 import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
-import type { FindMatch } from "@trypthos/domain";
+import type { FindMatch, MediaSource } from "@trypthos/domain";
 import { previewVisibleText } from "../lib/findInPreview";
 import { renderMarkdown } from "../lib/markdown";
 import type { FindHighlightSurface, FindSurfaceKind } from "../hooks/useFind";
@@ -55,9 +56,10 @@ interface Props {
   /// Reads the clipboard for Paste as markdown. Injected so a test can say what was copied; the
   /// system clipboard otherwise.
   readClipboard?: () => Promise<ClipboardContent>;
-  /// A data URL when the document is looked at rather than read - an image. Null otherwise, which
-  /// is nearly always, and which is what makes every branch below read as "unless it is a picture".
-  media?: string | null;
+  /// Set when the document is shown rather than read - a picture, a video or a sound. Null
+  /// otherwise, which is nearly always, and which is what makes every branch below read as "unless
+  /// it is something to look at".
+  media?: MediaSource | null;
   /// A document that is a PAGE rather than a file - a repository's own page.
   ///
   /// A slot rather than data, so this component stays ignorant of what is in it: the alternative is
@@ -472,15 +474,24 @@ export default function EditorPanel({
         {page !== null ? (
           page
         ) : media !== null ? (
-          // A picture, drawn rather than edited. It scrolls within the panel at its own size rather
-          // than being scaled to fit, because a screenshot shrunk to a panel is a screenshot you
-          // cannot read - and Shift and the wheel are how you get it back.
-          <ImageViewer
-            source={media}
-            name={activePath ?? ""}
-            zoom={zoom}
-            onZoom={stepZoom}
-          />
+          media.kind === "image" ? (
+            // A picture, drawn rather than edited. It scrolls within the panel at its own size
+            // rather than being scaled to fit, because a screenshot shrunk to a panel is a
+            // screenshot you cannot read - and Shift and the wheel are how you get it back.
+            <ImageViewer source={media.source} name={activePath ?? ""} zoom={zoom} onZoom={stepZoom} />
+          ) : (
+            // A recording, played. No zoom: a video is watched at the panel's size, and the way to
+            // make it bigger is the control bar's fullscreen button.
+            //
+            // `key` matters. Without it React reuses one media element across two recording tabs,
+            // and the previous file's playback state arrives in the next one.
+            <MediaPlayer
+              key={activePath}
+              source={media.source}
+              kind={media.kind}
+              name={activePath ?? ""}
+            />
+          )
         ) : isEditable(mode) ? (
           <DocumentEditor
             documentId={activePath}

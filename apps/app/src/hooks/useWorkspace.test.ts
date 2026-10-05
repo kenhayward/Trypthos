@@ -2172,7 +2172,12 @@ describe("opening an image", () => {
       await result.current.actions.openFile(PNG);
     });
 
-    expect(result.current.state.media).toBe("data:image/png;base64,shot.png");
+    // The kind travels with the source: a picture is drawn and a recording is played, and a bare
+    // URL cannot say which.
+    expect(result.current.state.media).toEqual({
+      source: "data:image/png;base64,shot.png",
+      kind: "image",
+    });
     expect(result.current.state.file?.path).toBe("shot.png");
   });
 
@@ -2998,5 +3003,89 @@ describe("the conversation log", () => {
 
     expect(saved).toBe(false);
     expect(writes).toEqual([]);
+  });
+});
+
+/// Opening a recording, which is read by nothing at all.
+///
+/// The main process serves it in ranges over its own protocol, so the renderer needs only a URL -
+/// and that URL is derivable from the qualified path it already has.
+describe("opening a recording", () => {
+  async function withWorkspace(overrides: Partial<WorkspaceClient> = {}) {
+    const made = fakeClient(overrides);
+    const hook = renderHook(() => useWorkspace(made.client));
+    await act(async () => {
+      await hook.result.current.actions.open();
+    });
+    return { ...made, result: hook.result };
+  }
+
+  it("points the player at the protocol without reading the file", async () => {
+    const { result, reads } = await withWorkspace();
+
+    await act(async () => {
+      await result.current.actions.openPath("ws/clip.mp4");
+    });
+
+    expect(result.current.state.media).toEqual({
+      source: "tp-media://workspace/ws%2Fclip.mp4",
+      kind: "video",
+    });
+    // Neither read was made. A recording is far too large to cross IPC, which is the whole reason
+    // the protocol exists.
+    expect(reads).toEqual([]);
+  });
+
+  it("opens a sound the same way", async () => {
+    const { result } = await withWorkspace();
+
+    await act(async () => {
+      await result.current.actions.openPath("ws/song.mp3");
+    });
+
+    expect(result.current.state.media?.kind).toBe("audio");
+  });
+
+  // `content` is what chat sends and what the editor holds. A recording's bytes belong in neither.
+  it("keeps the bytes out of the document content", async () => {
+    const { result } = await withWorkspace();
+
+    await act(async () => {
+      await result.current.actions.openPath("ws/clip.mp4");
+    });
+
+    expect(result.current.state.content).toBe("");
+    expect(result.current.state.readOnly).toBe(true);
+  });
+
+  it("still holds a picture's data URL, with its kind alongside", async () => {
+    const { result } = await withWorkspace();
+
+    await act(async () => {
+      await result.current.actions.openPath("ws/shot.png");
+    });
+
+    expect(result.current.state.media).toEqual({
+      source: "data:image/png;base64,ws/shot.png",
+      kind: "image",
+    });
+  });
+
+  // A repository's blobs arrive base64 over an API with no ranges, so a tab opened here could only
+  // ever show a failure. Said where the user clicked instead.
+  it("says plainly that a repository cannot play a recording", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef({ kind: "github", owner: "ada", repo: "Repo" });
+    });
+
+    await act(async () => {
+      await result.current.actions.openPath("Repo/clip.mp4");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.mediaNotLocal");
+    expect(result.current.state.media).toBeNull();
+    expect(result.current.state.documents).toHaveLength(0);
   });
 });

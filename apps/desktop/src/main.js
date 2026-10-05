@@ -9,6 +9,7 @@ const {
   dialog,
   ipcMain,
   net,
+  protocol,
   safeStorage,
   shell,
 } = require("electron");
@@ -27,9 +28,11 @@ const { nextRetryDelayMs, shouldRetryLoad } = require("./devReload");
 const { WINDOW_STATE_CHANNEL } = require("@trypthos/domain");
 const {
   registerIpcHandlers,
+  locateMedia,
   pasteMarkdownLabelFor,
   forgetPasteMarkdownContext,
 } = require("./ipcHandlers");
+const { MEDIA_SCHEME_PRIVILEGES, createMediaHandler } = require("./mediaProtocol");
 const { createSecretStore } = require("./secretStore");
 const { createAccountStore } = require("./accountStore");
 const { createGitHubApi } = require("./githubApi");
@@ -47,6 +50,12 @@ const { revealWindow } = require("./revealWindow");
 const { createExplorerIntegration } = require("./explorerIntegration");
 const { pathFromArgv, resolveTarget } = require("./launchTarget");
 const { readCloseToTray, onSettingsWritten, readSettings } = require("./settingsStore");
+
+/// Before app-ready, deliberately, and at module scope rather than inside `whenReady`: a scheme's
+/// privileges are fixed once the first page has loaded, and granting them late fails silently. The
+/// symptom would be a video that plays from the beginning and refuses to seek, which looks like a
+/// bug in the range handler rather than in the registration.
+protocol.registerSchemesAsPrivileged([MEDIA_SCHEME_PRIVILEGES]);
 
 let mainWindow = null;
 /// Each document-only window needs its own dirty bit and close permission. Holding them by window
@@ -444,6 +453,11 @@ if (!gotLock) {
         }
       },
     });
+    // Video and audio, streamed in ranges. After the handlers rather than beside them, because the
+    // locator it is given reads the same open-workspace registry those handlers fill - see
+    // `mediaProtocol.js` for why this is a protocol and not another IPC channel.
+    protocol.handle(MEDIA_SCHEME_PRIVILEGES.scheme, createMediaHandler({ locate: locateMedia }));
+
     registerWindowHandlers({
       ipcMain,
       getWindow: () => mainWindow,

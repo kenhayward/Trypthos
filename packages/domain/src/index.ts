@@ -156,7 +156,13 @@ export {
   tabsToClose,
   updateContent,
 } from "./openDocuments";
-export type { DocumentSet, DocumentSource, OpenDocument, TabCloseAction } from "./openDocuments";
+export type {
+  DocumentSet,
+  DocumentSource,
+  MediaSource,
+  OpenDocument,
+  TabCloseAction,
+} from "./openDocuments";
 
 export {
   RECENT_FILES_LIMIT,
@@ -201,6 +207,17 @@ export {
   imageMediaType,
   isImageName,
 } from "./imageFiles";
+export {
+  AUDIO_TYPE_ID,
+  MEDIA_SCHEME,
+  VIDEO_TYPE_ID,
+  isMediaName,
+  mediaKindFor,
+  mediaPathFromUrl,
+  mediaTypeFor,
+  mediaUrl,
+} from "./mediaFiles";
+export type { MediaKind } from "./mediaFiles";
 export { MAX_ENTRY_NAME_LENGTH, RENAME_PROBLEMS, renameTarget } from "./entryName";
 export type { RenameProblem, RenameTarget } from "./entryName";
 export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes, newFolderName } from "./newFile";

@@ -174,8 +174,13 @@ describe("the catalogue", () => {
   // not drawn by the editor at all. An image has nothing to switch between: Live and Preview are
   // markdown constructs and Source is text, and a photograph is none of the three.
   it("gives every type at least one view, unless it is not text", () => {
+    // Live and Preview are markdown constructs and Source is text, so a type with no views is
+    // exactly a type that is not text: a picture, a video, a sound. A header offering three views
+    // of one of those would be three buttons that do nothing.
+    const notText = new Set(["image", "video", "audio"]);
     const viewless = FILE_TYPES.filter((type) => type.modes.length === 0);
-    expect(viewless.every((type) => type.kind === "image")).toBe(true);
+    expect(viewless.every((type) => notText.has(type.kind))).toBe(true);
+    expect(FILE_TYPES.filter((type) => notText.has(type.kind)).every((type) => type.modes.length === 0)).toBe(true);
     expect(FILE_TYPES.filter((type) => type.modes.length === 3).map((type) => type.id)).toEqual([
       "markdown",
     ]);

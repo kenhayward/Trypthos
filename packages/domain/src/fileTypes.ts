@@ -31,6 +31,8 @@ export type FileTypeId =
   | "powershell"
   | "batch"
   | "image"
+  | "video"
+  | "audio"
   | "sql"
   | "rust"
   | "go"
@@ -52,7 +54,7 @@ export type FileTypeId =
 
 /// How the settings page arranges its rows. Groups are added as types arrive rather than declared
 /// ahead of them: a heading with nothing under it is a page that looks broken.
-export type FileTypeGroup = "documents" | "data" | "images" | "languages" | "utility";
+export type FileTypeGroup = "documents" | "data" | "media" | "languages" | "utility";
 
 /// What editing a file of this type is like, and therefore how the surface behaves.
 ///
@@ -64,7 +66,11 @@ export type FileTypeGroup = "documents" | "data" | "images" | "languages" | "uti
 /// editing. A file of this kind never reaches CodeMirror, is never written, and takes a different
 /// route out of the shell - the read boundary refuses binary, which is right for a document and
 /// wrong for a picture.
-export type FileTypeKind = "prose" | "plain" | "code" | "image";
+///
+/// `video` and `audio` are the same absence, by a different route again: a recording is served over
+/// a streaming protocol rather than crossing IPC at all, because a data URL cannot be seeked and
+/// seeking is the whole of a scrub bar.
+export type FileTypeKind = "prose" | "plain" | "code" | "image" | "video" | "audio";
 
 export interface FileType {
   /// Also the key of the renderer's language loader, and what a settings file stores.
@@ -95,7 +101,7 @@ export interface FileType {
 export const FILE_TYPE_GROUPS: readonly FileTypeGroup[] = [
   "documents",
   "data",
-  "images",
+  "media",
   "languages",
   "utility",
 ];
@@ -126,7 +132,7 @@ export const FILE_TYPES: readonly FileType[] = [
   {
     id: "image",
     labelKey: "fileTypes.image",
-    group: "images",
+    group: "media",
     // The formats a window can draw without help. Deliberately NOT svg: that is a picture and a text
     // file both, and the catalogue cannot let two rows claim one extension - so it stays with XML,
     // where it can be edited, which is the more useful of the two answers.
@@ -136,6 +142,31 @@ export const FILE_TYPES: readonly FileType[] = [
     // photograph is none of the three, and a header offering them would be buttons that do nothing.
     modes: [],
     kind: "image",
+    pinned: false,
+  },
+  {
+    id: "video",
+    labelKey: "fileTypes.video",
+    group: "media",
+    // Measured against Electron 44.1.0 - see mediaFiles.ts. No `ogv`: Theora is gone from Chromium.
+    // No `avi`, `wmv`, `mpg` or `flv` either, for which there is no demuxer at all - a row for one
+    // of those would list a file in the tree and then fail to play it.
+    extensions: ["mp4", "m4v", "mov", "webm", "mkv", "3gp"],
+    filenames: [],
+    // Nothing to switch between, as with a picture. Live and Preview are markdown constructs and
+    // Source is text; a recording is none of the three.
+    modes: [],
+    kind: "video",
+    pinned: false,
+  },
+  {
+    id: "audio",
+    labelKey: "fileTypes.audio",
+    group: "media",
+    extensions: ["mp3", "m4a", "aac", "wav", "flac", "ogg", "oga", "opus", "weba"],
+    filenames: [],
+    modes: [],
+    kind: "audio",
     pinned: false,
   },
   {

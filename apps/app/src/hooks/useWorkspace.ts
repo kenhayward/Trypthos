@@ -16,6 +16,8 @@ import {
   homePagePath,
   isImageName,
   isOpen,
+  mediaKindFor,
+  mediaUrl,
   markSaved,
   movedPath,
   movePaths,
@@ -27,6 +29,7 @@ import {
   splitQualified,
   updateContent,
 } from "@trypthos/domain";
+import type { MediaSource } from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
 import type { FolderState } from "../lib/treeRows";
 
@@ -83,9 +86,9 @@ export interface WorkspaceState {
   dirty: boolean;
   /// True when the document on screen has no file behind it, and so cannot be edited or saved.
   readOnly: boolean;
-  /// A data URL when the document on screen is looked at rather than read - an image. Null
-  /// otherwise, which is nearly always.
-  media: string | null;
+  /// Set when the document on screen is shown rather than read - a picture, a video or a sound.
+  /// Null otherwise, which is nearly always.
+  media: MediaSource | null;
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
   errorKey: string | null;
@@ -288,6 +291,10 @@ export function failureKey(reason: string): string | null {
       return "errors.notText";
     case "unsupported-encoding":
       return "errors.unsupportedEncoding";
+    // Not "permission denied" and not "unsupported": the file is fine and so is the user. What is
+    // missing is a way to stream from a repository, which has no mutable path and no byte ranges.
+    case "media-not-local":
+      return "errors.mediaNotLocal";
     // The cloud providers' own refusals. Each is its own key because each sends the user somewhere
     // different: wait an hour, check the connection, connect an account, or accept that this is not
     // something Trypthos can do to a repository yet.
@@ -358,6 +365,23 @@ function reportIfLocal(
   const root = rootOf(workspaces, qualified);
   const relative = splitQualified(qualified)?.path;
   if (root !== null && relative !== undefined) report?.({ root, path: relative });
+}
+
+/// Whether a path is in a workspace we KNOW is not a folder on this computer.
+///
+/// Note the shape of the question. It is not "is this local" but "is this positively known not to
+/// be", and the two differ for a path whose workspace is not open: that answers false here and the
+/// open proceeds, failing for whatever the real reason turns out to be.
+///
+/// This is not a second boundary check, and it must not become one. Whether a recording CAN be
+/// streamed is decided in the main process, by the provider that either has `locateFile` or does
+/// not. What this buys is only a better sentence: a repository's blobs arrive base64 over an API
+/// with no range support, so the tab could only ever show a failure, and saying so where the user
+/// clicked beats opening a player that cannot play.
+function isKnownNonLocal(workspaces: readonly WorkspaceInfo[], qualified: string): boolean {
+  const workspaceId = splitQualified(qualified)?.workspaceId;
+  const workspace = workspaces.find((candidate) => candidate.id === workspaceId);
+  return workspace !== undefined && workspace.ref.kind !== "local";
 }
 
 /// Whether an open document can be moved into a window of its own.
@@ -1027,7 +1051,33 @@ export function useWorkspace(
             content: "",
             revision: { id: "image" },
             readOnly: true,
-            media: image.dataUrl,
+            media: { source: image.dataUrl, kind: "image" },
+          }),
+          busy: false,
+        }));
+
+        reportIfLocal(reportOpened, stateRef.current.workspaces, path);
+        return;
+      }
+
+      // A recording is read by nothing at all. The main process serves it in ranges over its own
+      // protocol, so all the renderer needs is where to point the element - and that is derivable
+      // from the qualified path it already has. No IPC, and no size limit either: a data URL is
+      // what forces one, and there is no data URL here.
+      const mediaKind = mediaKindFor(path);
+      if (mediaKind !== null) {
+        if (isKnownNonLocal(stateRef.current.workspaces, path)) {
+          return fail({ reason: "media-not-local" });
+        }
+
+        setInternal((prev) => ({
+          ...prev,
+          documents: openDocument(prev.documents, {
+            path,
+            content: "",
+            revision: { id: "media" },
+            readOnly: true,
+            media: { source: mediaUrl(path), kind: mediaKind },
           }),
           busy: false,
         }));

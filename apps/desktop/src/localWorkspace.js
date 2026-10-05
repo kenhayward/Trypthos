@@ -208,6 +208,41 @@ function createLocalWorkspace({ root, guard }) {
       }
     },
 
+    /// Where a FILE is, and how big, for the one caller that must stream rather than read.
+    ///
+    /// The media protocol serves byte ranges out of a file that may be gigabytes, so it cannot go
+    /// through `readBytes` - that answers with the whole thing in memory, which is the very thing
+    /// a streaming transport exists to avoid. What it needs is a path it is allowed to open, and
+    /// granting that permission is this function's whole purpose.
+    ///
+    /// Its own method rather than a flag on `locate` above, because the two answer different
+    /// questions: `locate` is for showing an entry in the operating system's file manager, so a
+    /// FOLDER is a perfectly good answer there and is refused here. One function returning either
+    /// shape would make every caller check which it got.
+    ///
+    /// **The boundary is unchanged.** Same `resolve`, so the same lexical guard and the same
+    /// realpath check that stops a symlink out of the workspace. A streaming caller gets no cheaper
+    /// check than a reading one - which matters more here than anywhere, because this is a second
+    /// route out of the shell.
+    ///
+    /// The size comes back with the path because a range response needs both, and asking twice is
+    /// two answers about a file that can change in between.
+    ///
+    /// Deliberately absent from the GitHub provider: a repository's blobs arrive base64 over an API
+    /// with no ranges, so playback is local-only and this absence is the one place that says so.
+    async locateFile(relativePath) {
+      const resolved = await resolve(relativePath, { mustExist: true });
+      if (!resolved.ok) return resolved;
+
+      try {
+        const stats = await fs.stat(resolved.path);
+        if (!stats.isFile()) return failure("not-found");
+        return { ok: true, path: resolved.path, size: stats.size };
+      } catch (error) {
+        return mapError(error);
+      }
+    },
+
     /// Reads a file, or refuses it.
     ///
     /// Three refusals live here rather than in the renderer, because the renderer only ever sees

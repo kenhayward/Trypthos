@@ -95,6 +95,10 @@
       "saved": "Close Saved"
     },
     "imageAlt": "{{name}}",
+    "videoLabel": "{{name}}",
+    "audioLabel": "{{name}}",
+    "mediaUndecodable": "This file opened, but this computer cannot play its video or audio coding.",
+    "mediaUnreadable": "This file could not be read.",
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
     "encoding": "UTF-8",
@@ -346,6 +350,8 @@
     "python": "Python",
     "shell": "Shell",
     "image": "Images",
+    "video": "Video",
+    "audio": "Audio",
     "powershell": "PowerShell",
     "batch": "Batch",
     "sql": "SQL",
@@ -377,6 +383,7 @@
     "tooLarge": "That file is {{size}}, and Trypthos opens files up to {{limit}}. It has been left alone.",
     "notText": "That file is not text, so Trypthos has not opened it. Editing and saving it here would write over what is inside it.",
     "unsupportedEncoding": "Trypthos reads UTF-8 text, and that file is in another encoding. Opening it would replace every character Trypthos could not read, so it has been left alone.",
+    "mediaNotLocal": "Video and audio play from a folder on this computer. Trypthos cannot play them from a GitHub repository yet.",
     "rateLimited": "GitHub has had as many requests as it allows for now. Trypthos will work again shortly - usually within the hour.",
     "offline": "Trypthos could not reach GitHub. Check your connection and try again.",
     "notConnected": "No GitHub account is connected. Connect one from the Accounts page of Settings.",
@@ -496,7 +503,7 @@
       "group": {
         "documents": "Documents",
         "data": "Markup and data",
-        "images": "Images",
+        "media": "Pictures, video and audio",
         "languages": "Programming languages",
         "utility": "Utility"
       }

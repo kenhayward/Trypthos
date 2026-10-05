@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 21;
+export const SETTINGS_VERSION = 22;
 
 export const SettingsSchema = z
   .object({
@@ -175,6 +175,25 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 22,
+    // Version 22 added video and audio. Unlike every other type added since version 11, these are
+    // APPENDED to an existing list rather than left for the user to find. `file-types.md` says not
+    // to migrate when a type is added, and that rule protects a choice somebody made - nobody chose
+    // to exclude a type that had no row to leave unticked, so the absence is an artefact of when
+    // they installed rather than a preference. Without this the feature ships switched off for
+    // everybody who already has the app.
+    //
+    // Written out rather than read from DEFAULT_FILE_TYPES, for the reason version 11 gives: a
+    // migration is a record of what a version DID, and reading a constant would silently change
+    // what old files become the day that constant changes.
+    migrate: (input) => {
+      const fileTypes = (input as { fileTypes?: { enabled?: unknown } }).fileTypes ?? {};
+      const enabled = Array.isArray(fileTypes.enabled) ? fileTypes.enabled : [];
+      const added = ["video", "audio"].filter((id) => !enabled.includes(id));
+      return { ...input, fileTypes: { ...fileTypes, enabled: [...enabled, ...added] } };
+    },
+  },
   {
     to: 21,
     // Version 21 adds the vault graph's filters and local pane. Written out rather than read from

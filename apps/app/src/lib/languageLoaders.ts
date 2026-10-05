@@ -76,6 +76,12 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
   // nothing here for it to load. `text` above is null for the other reason - plain text needs no
   // highlighting, and CodeMirror's default is already exactly that.
   image: null,
+  // Same absence as an image, one step further away: a recording never reaches CodeMirror either,
+  // and it does not even cross IPC - it is streamed to a media element. Null rather than missing,
+  // because `fenceLanguages` leaves out a type whose loader is null and would try to CALL one that
+  // is merely absent.
+  video: null,
+  audio: null,
   json: () => import("@codemirror/lang-json").then((m) => m.json()),
   yaml: () => import("@codemirror/lang-yaml").then((m) => m.yaml()),
   xml: () => import("@codemirror/lang-xml").then((m) => m.xml()),

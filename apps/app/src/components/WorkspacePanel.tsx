@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { enabledFileTypes, iconFor, isImageName, splitQualified, workspaceRefLabel, workspaceRefMark } from "@trypthos/domain";
+import {
+  enabledFileTypes,
+  iconFor,
+  isImageName,
+  isMediaName,
+  splitQualified,
+  workspaceRefLabel,
+  workspaceRefMark,
+} from "@trypthos/domain";
 import type { IconAssignment, IconMap, Platform, WorkspaceMark, WorkspaceRef } from "@trypthos/domain";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
@@ -200,10 +208,15 @@ export default function WorkspacePanel({
   // one entry that can be shown but not renamed.
   const revealTarget = local ? (menu?.target ?? null) : null;
   const renameTargetPath = revealTarget !== null && revealTarget !== menuWorkspace?.id ? revealTarget : null;
-  // Any workspace, unlike a new window: a repository file reads like any other. Not a picture,
-  // which has no text to send and would only ever be refused.
+  // Any workspace, unlike a new window: a repository file reads like any other. Not a picture and
+  // not a recording, neither of which has any text to send and both of which would only ever be
+  // refused.
   const chatFile =
-    onAddToChat !== undefined && menu?.file != null && menu.openable && !isImageName(menu.file)
+    onAddToChat !== undefined &&
+    menu?.file != null &&
+    menu.openable &&
+    !isImageName(menu.file) &&
+    !isMediaName(menu.file)
       ? menu.file
       : null;
   /// Which of the two things this panel is right now: the tree, or the answer to a filter.

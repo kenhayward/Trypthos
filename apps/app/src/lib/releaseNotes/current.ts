@@ -5,6 +5,23 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.94.0",
+    date: "2026-10-05",
+    pr: 210,
+    headline: "Play video and audio from your folders",
+    summary:
+      "A folder of notes often has recordings in it, and until now Trypthos could not see them. Video and audio files now appear in the folder browser and open in the centre panel with the usual controls: play and pause, a scrub bar you can drag, volume, playback speed, picture in picture, and a fullscreen button. Nothing is loaded up front, so a long recording opens as quickly as a short one, and dragging the scrub bar jumps straight to that point however large the file - there is no size limit. The formats were chosen by testing what this app can actually decode rather than by listing what exists, so a file that appears in the tree is one it can play. Where a file turns out to use a coding this computer has no decoder for, which happens most often with .mkv, it says so plainly instead of showing a black rectangle. Playback works for folders on this computer; a GitHub repository is not supported yet, and says so rather than failing quietly.",
+    added: [
+      "Video files open and play in the centre panel: mp4, m4v, mov, webm, mkv and 3gp.",
+      "Audio files play too: mp3, m4a, aac, wav, flac, ogg, oga, opus and weba.",
+      "Transport controls, playback speed, picture in picture and fullscreen, all reachable from the keyboard.",
+      "Dragging the scrub bar seeks straight to that point, however large the file.",
+    ],
+    changed: [
+      "The Images group in File types is now Pictures, video and audio, and the two new rows are switched on for you. Turn either off there if a folder of recordings should stay out of the folder browser.",
+    ],
+  },
+  {
     version: "0.93.0",
     date: "2026-10-05",
     pr: 209,
