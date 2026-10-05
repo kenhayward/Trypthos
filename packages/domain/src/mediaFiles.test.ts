@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_FILE_TYPES, FILE_TYPES, fileTypeFor } from "./fileTypes";
-import { AUDIO_TYPE_ID, VIDEO_TYPE_ID, isMediaName, mediaKindFor, mediaTypeFor } from "./mediaFiles";
+import {
+  AUDIO_TYPE_ID,
+  VIDEO_TYPE_ID,
+  isMediaName,
+  mediaKindFor,
+  mediaPathFromUrl,
+  mediaTypeFor,
+  mediaUrl,
+} from "./mediaFiles";
 
 /// What this app will play, measured rather than assumed.
 ///
@@ -74,5 +82,48 @@ describe("mediaKindFor", () => {
 
   it("answers null rather than guessing a type it does not know", () => {
     expect(mediaTypeFor("movie.rmvb")).toBe(null);
+  });
+});
+
+describe("the media URL", () => {
+  it("round-trips an ordinary path", () => {
+    const qualified = "Notes/recordings/standup.mp4";
+    expect(mediaPathFromUrl(mediaUrl(qualified))).toBe(qualified);
+  });
+
+  // A workspace id is a folder's name, so it can hold spaces, accents and anything else a disk
+  // allows. Encoding the whole qualified path as ONE segment is what stops a slash in it becoming
+  // a path of its own, and a `#` or `?` from being read as a fragment or a query.
+  it("round-trips a path with characters a URL cares about", () => {
+    for (const qualified of [
+      "Ada's Notes/a b/clip.mp4",
+      "Grace/100% done/clip.mp4",
+      "Alice/café/sound.mp3",
+      "Notes/a#b/clip.mp4",
+      "Notes/a?b/clip.mp4",
+      "Notes/a&b=c/clip.mp4",
+    ]) {
+      expect(mediaPathFromUrl(mediaUrl(qualified))).toBe(qualified);
+    }
+  });
+
+  it("uses a fixed host, because a hostname cannot carry a workspace name", () => {
+    expect(mediaUrl("Notes/clip.mp4").startsWith("tp-media://workspace/")).toBe(true);
+  });
+
+  it("refuses a URL of another scheme or another host", () => {
+    expect(mediaPathFromUrl("https://workspace/Notes%2Fclip.mp4")).toBe(null);
+    expect(mediaPathFromUrl("tp-media://elsewhere/Notes%2Fclip.mp4")).toBe(null);
+  });
+
+  it("refuses a URL with more than one segment, so no path can be built out of parts", () => {
+    expect(mediaPathFromUrl("tp-media://workspace/Notes/clip.mp4")).toBe(null);
+  });
+
+  it("refuses an empty path and malformed encoding rather than throwing", () => {
+    expect(mediaPathFromUrl("tp-media://workspace/")).toBe(null);
+    expect(mediaPathFromUrl("tp-media://workspace/%E0%A4%A")).toBe(null);
+    expect(mediaPathFromUrl("not a url at all")).toBe(null);
+    expect(mediaPathFromUrl("")).toBe(null);
   });
 });

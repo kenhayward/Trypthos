@@ -203,10 +203,13 @@ export {
 } from "./imageFiles";
 export {
   AUDIO_TYPE_ID,
+  MEDIA_SCHEME,
   VIDEO_TYPE_ID,
   isMediaName,
   mediaKindFor,
+  mediaPathFromUrl,
   mediaTypeFor,
+  mediaUrl,
 } from "./mediaFiles";
 export type { MediaKind } from "./mediaFiles";
 export { MAX_ENTRY_NAME_LENGTH, RENAME_PROBLEMS, renameTarget } from "./entryName";

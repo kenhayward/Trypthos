@@ -75,3 +75,50 @@ export function mediaTypeFor(name: string): string | null {
 export function isMediaName(name: string): boolean {
   return mediaKindFor(name) !== null;
 }
+
+/// The scheme the main process serves media on.
+///
+/// Its own scheme rather than `file:`, which the renderer cannot reach and should not: `file:` would
+/// be the whole disk, and this is one open workspace.
+export const MEDIA_SCHEME = "tp-media";
+
+/// Where the window fetches a file from, given its qualified workspace path.
+///
+/// A FIXED host, with the whole qualified path as a single encoded segment. A hostname is lowercased
+/// and character-restricted by the URL parser, and a workspace id is a folder's name - so putting
+/// the id in the host would quietly mangle it. One encoded segment also means a slash inside the
+/// path cannot become a path separator in the URL, and a `#` or `?` in a filename cannot be read as
+/// a fragment or a query. That is the shape of mistake that turns a boundary check into a formality.
+export function mediaUrl(qualifiedPath: string): string {
+  return `${MEDIA_SCHEME}://workspace/${encodeURIComponent(qualifiedPath)}`;
+}
+
+/// The qualified path a URL names, or null when it is not one of ours.
+///
+/// Total: a malformed URL, a foreign scheme, a wrong host, an empty path or broken percent-encoding
+/// all answer null rather than throwing. This runs in the main process on a string the renderer
+/// chose, so it is parsing untrusted input and must not have an exceptional path at all.
+export function mediaPathFromUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== `${MEDIA_SCHEME}:`) return null;
+  if (parsed.hostname !== "workspace") return null;
+
+  // One segment. `pathname` always starts with a slash, and anything after the first segment means
+  // the URL was built some other way than by `mediaUrl` - which is not a thing to go along with.
+  const segments = parsed.pathname.slice(1).split("/");
+  const only = segments.length === 1 ? segments[0] : undefined;
+  if (only === undefined || only === "") return null;
+
+  try {
+    const decoded = decodeURIComponent(only);
+    return decoded === "" ? null : decoded;
+  } catch {
+    return null;
+  }
+}
