@@ -94,6 +94,10 @@
       "saved": "Close Saved"
     },
     "imageAlt": "{{name}}",
+    "videoLabel": "{{name}}",
+    "audioLabel": "{{name}}",
+    "mediaUndecodable": "This file opened, but this computer cannot play its video or audio coding.",
+    "mediaUnreadable": "This file could not be read.",
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
     "encoding": "UTF-8",
