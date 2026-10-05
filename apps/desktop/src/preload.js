@@ -170,6 +170,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   connectGoogle: () => ipcRenderer.invoke("google:connect"),
   cancelGoogleConnect: () => ipcRenderer.invoke("google:cancelConnect"),
   disconnectGoogle: () => ipcRenderer.invoke("google:disconnect"),
+  /// The folders inside one Drive folder, or the top level when `parentId` is null. Ids and names
+  /// only - the picker chooses a folder, and opening it goes through `openWorkspaceRef`.
+  listDriveFolders: (parentId) => ipcRenderer.invoke("google:folders", { parentId }),
   /// The repositories the connected account owns. Fetched in the main process, where the token is,
   /// and held for the session - `refresh` is for a user who has just made one.
   listRepositories: (refresh = false) => ipcRenderer.invoke("github:repos", { refresh }),

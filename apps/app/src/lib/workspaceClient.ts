@@ -310,6 +310,10 @@ export interface GoogleStatus {
 
 export type GoogleConnectResult = { ok: true; email: string } | { ok: false; reason: string };
 
+export type DriveFoldersResult =
+  | { ok: true; folders: { id: string; name: string }[]; drives: { id: string; name: string }[] }
+  | { ok: false; reason: string };
+
 /// The Google half of the bridge. Connecting takes no argument: the sign-in happens in the user's
 /// browser and the main process, and there is deliberately no `getToken`.
 export interface GoogleBridge {
@@ -317,6 +321,7 @@ export interface GoogleBridge {
   connectGoogle(): Promise<GoogleConnectResult>;
   cancelGoogleConnect(): Promise<{ ok: boolean }>;
   disconnectGoogle(): Promise<{ ok: boolean; reason?: string }>;
+  listDriveFolders(parentId: string | null): Promise<DriveFoldersResult>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge, GoogleBridge {
@@ -422,6 +427,7 @@ export function googleBridge(): GoogleBridge | null {
     connectGoogle: bridge.connectGoogle,
     cancelGoogleConnect: bridge.cancelGoogleConnect,
     disconnectGoogle: bridge.disconnectGoogle,
+    listDriveFolders: bridge.listDriveFolders,
   };
 }
 

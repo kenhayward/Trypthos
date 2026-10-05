@@ -29,6 +29,7 @@ import RenameDialog from "./components/RenameDialog";
 import SaveChatDialog from "./components/SaveChatDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
+import OpenDriveDialog from "./components/OpenDriveDialog";
 import ObsidianVaultDialog from "./components/ObsidianVaultDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
 import WorkspaceHome from "./components/WorkspaceHome";
@@ -152,6 +153,7 @@ export default function App() {
   /// True while the repository picker is open. Its own flag rather than a settings page: choosing a
   /// repository is an act like opening a folder, not a preference.
   const [pickingRepo, setPickingRepo] = useState(false);
+  const [pickingDrive, setPickingDrive] = useState(false);
   /// True while the Obsidian vault picker is open.
   const [pickingVault, setPickingVault] = useState(false);
   /// Whether Obsidian is installed, which is whether its button is in the browser's header at all.
@@ -811,6 +813,7 @@ export default function App() {
           dirtyPaths={state.dirtyPaths}
           onOpenWorkspace={() => void actions.open()}
           onOpenRepo={() => setPickingRepo(true)}
+          onOpenDrive={() => setPickingDrive(true)}
           onOpenVault={obsidianInstalled ? () => setPickingVault(true) : undefined}
           onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
@@ -1124,6 +1127,17 @@ export default function App() {
             // Closed first: opening a repository fetches its whole tree, and a dialog sitting over
             // the panel while that happens hides the thing the user just asked to see.
             setPickingRepo(false);
+            void actions.openRef(ref);
+          }}
+        />
+      )}
+
+      {pickingDrive && (
+        <OpenDriveDialog
+          bridge={google}
+          onCancel={() => setPickingDrive(false)}
+          onOpen={(ref) => {
+            setPickingDrive(false);
             void actions.openRef(ref);
           }}
         />

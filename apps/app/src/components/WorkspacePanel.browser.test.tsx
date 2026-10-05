@@ -44,6 +44,7 @@ function panel() {
     dirtyPaths: [] as readonly string[],
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
+    onOpenDrive: vi.fn(),
     onOpenHomePage: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),

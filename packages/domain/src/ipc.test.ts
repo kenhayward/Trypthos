@@ -12,6 +12,7 @@ import {
   IconMapSchema,
   IconsRequest,
   GraphRequest,
+  GoogleFoldersRequest,
   GraphSnapshotSchema,
   GraphStateSchema,
   IPC_CHANNELS,
@@ -88,6 +89,7 @@ describe("IPC_CHANNELS", () => {
       "google:connect",
       "google:cancelConnect",
       "google:disconnect",
+      "google:folders",
     ]);
   });
 
@@ -635,5 +637,18 @@ describe("the icons channel", () => {
     expect(IconMapSchema.safeParse({ Projects: { icon: "lucide-folder", colour: "blue" } }).success).toBe(true);
     expect(IconMapSchema.safeParse({ Projects: { icon: "", colour: null } }).success).toBe(false);
     expect(IconMapSchema.safeParse({ Projects: { icon: "lucide-folder" } }).success).toBe(false);
+  });
+});
+
+describe("GoogleFoldersRequest", () => {
+  it("names a parent folder by Drive id, or null for the top level", () => {
+    expect(GoogleFoldersRequest.parse({ parentId: null })).toEqual({ parentId: null });
+    expect(GoogleFoldersRequest.parse({ parentId: "1H60yEnI5d4" })).toEqual({ parentId: "1H60yEnI5d4" });
+  });
+
+  it("refuses an id that is not a Drive id, and anything extra", () => {
+    expect(GoogleFoldersRequest.safeParse({ parentId: "a' or 'b" }).success).toBe(false);
+    expect(GoogleFoldersRequest.safeParse({ parentId: null, extra: 1 }).success).toBe(false);
+    expect(GoogleFoldersRequest.safeParse({}).success).toBe(false);
   });
 });

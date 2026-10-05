@@ -4,6 +4,7 @@ import { ChatContextSchema } from "./chatContext";
 import { SessionAttachmentSchema, SessionTurnSchema } from "./chatSession";
 import { SettingsSchema } from "./settings";
 import { WorkspaceRefSchema } from "./workspaceRef";
+import { DriveIdSchema } from "./googleDrive";
 import { isExternalUrl } from "./markdownLink";
 import { renameTarget } from "./entryName";
 import { ObsidianVaultIdSchema } from "./obsidianVaults";
@@ -75,6 +76,7 @@ export const IPC_CHANNELS = [
   "google:connect",
   "google:cancelConnect",
   "google:disconnect",
+  "google:folders",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -275,6 +277,14 @@ export type ConnectGitHubRequest = z.infer<typeof ConnectGitHubRequest>;
 /// several requests over a slow connection and the picker is opened far more often than a
 /// repository is created - but a user who has just made one needs a way to see it without restarting
 /// the app.
+/// The Drive folder picker asking what is inside a folder. Folders only, ids and names only.
+///
+/// Null is the top level: My Drive's folders and the Shared Drives. The id is a Drive id or nothing -
+/// it reaches a Drive query string, so the schema is what keeps it one.
+export const GoogleFoldersRequest = z.object({ parentId: DriveIdSchema.nullable() }).strict();
+
+export type GoogleFoldersRequest = z.infer<typeof GoogleFoldersRequest>;
+
 export const ListReposRequest = z.object({ refresh: z.boolean().default(false) }).strict();
 
 export type ListReposRequest = z.infer<typeof ListReposRequest>;

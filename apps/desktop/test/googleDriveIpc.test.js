@@ -103,3 +103,52 @@ test("a build without Google cannot open a Drive folder", async () => {
     { google: null },
   );
 });
+
+test("google:folders lists My Drive's folders and the Shared Drives at the top level", async () => {
+  const calls = [];
+  const factory = () => ({
+    listChildren: async (id, options) => {
+      calls.push([id, options]);
+      return { ok: true, files: [
+        { id: "dirBBB", name: "Projects", mimeType: "application/vnd.google-apps.folder" },
+        { id: "mdCCC", name: "Plan.md", mimeType: "text/markdown" },
+      ] };
+    },
+    sharedDrives: async () => ({ ok: true, drives: [{ id: "sharedDDD", name: "Team" }] }),
+  });
+
+  await withHandlers(async ({ ipcMain }) => {
+    assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: null }), {
+      ok: true,
+      folders: [{ id: "dirBBB", name: "Projects" }],
+      drives: [{ id: "sharedDDD", name: "Team" }],
+    });
+    assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: "dirBBB" }), {
+      ok: true,
+      folders: [{ id: "dirBBB", name: "Projects" }],
+      drives: [],
+    });
+    assert.deepEqual(calls, [["root", { foldersOnly: true }], ["dirBBB", { foldersOnly: true }]]);
+  }, { createGoogleDrive: factory });
+});
+
+test("google:folders refuses a malformed request and answers not configured without Google", async () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    await withHandlers(async ({ ipcMain }) => {
+      assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: "a' or 'b" }), { ok: false, reason: "bad-request" });
+    });
+  } finally {
+    console.error = original;
+  }
+  assert.equal(logged.length, 1);
+
+  await withHandlers(
+    async ({ ipcMain }) => {
+      assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: null }), { ok: false, reason: "not-configured" });
+    },
+    { google: null },
+  );
+});

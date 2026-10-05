@@ -45,6 +45,7 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     dirtyPaths: [] as readonly string[],
     onOpenWorkspace: vi.fn(),
     onOpenRepo: vi.fn(),
+    onOpenDrive: vi.fn(),
     onOpenHomePage: vi.fn(),
     onFilterChange: vi.fn(),
     onToggleFolder: vi.fn(),
@@ -533,6 +534,16 @@ describe("the sources a workspace can be opened from", () => {
     expect(props.onOpenWorkspace).not.toHaveBeenCalled();
   });
 
+  it("asks for the Drive folder picker when the Drive button is pressed", async () => {
+    const props = panel();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Open Google Drive folder" }));
+
+    expect(props.onOpenDrive).toHaveBeenCalledTimes(1);
+    expect(props.onOpenRepo).not.toHaveBeenCalled();
+    expect(props.onOpenWorkspace).not.toHaveBeenCalled();
+  });
+
   // Offered only where Obsidian is installed, which the panel is told by being given somewhere to
   // send the press. A button that opened an empty picker on a machine without it would be noise.
   it("offers Obsidian's vaults only when there is a picker to open", () => {
@@ -993,7 +1004,7 @@ describe("the menu for the empty panel", () => {
     await rightClick(screen.getByTestId("workspace-body"));
 
     expect(screen.getByRole("menu", { name: "Workspace" })).toBeDefined();
-    expect(items()).toEqual(["Open Obsidian vault", "Open GitHub repository", "Open folder"]);
+    expect(items()).toEqual(["Open Obsidian vault", "Open GitHub repository", "Open Google Drive folder", "Open folder"]);
   });
 
   // Obsidian's entry is there only when its button is.
@@ -1001,7 +1012,7 @@ describe("the menu for the empty panel", () => {
     panel({ workspaces: [] });
     await rightClick(screen.getByTestId("workspace-body"));
 
-    expect(items()).toEqual(["Open GitHub repository", "Open folder"]);
+    expect(items()).toEqual(["Open GitHub repository", "Open Google Drive folder", "Open folder"]);
   });
 
   it("does what the chosen entry says, and closes", async () => {
@@ -1019,6 +1030,10 @@ describe("the menu for the empty panel", () => {
     expect(props.onOpenRepo).toHaveBeenCalledTimes(1);
 
     user = await rightClick(body);
+    await user.click(screen.getByRole("menuitem", { name: "Open Google Drive folder" }));
+    expect(props.onOpenDrive).toHaveBeenCalledTimes(1);
+
+    user = await rightClick(body);
     await user.click(screen.getByRole("menuitem", { name: "Open folder" }));
     expect(props.onOpenWorkspace).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
@@ -1030,7 +1045,7 @@ describe("the menu for the empty panel", () => {
     await rightClick(screen.getByTestId("workspace-body"));
 
     expect(screen.getByRole("menu", { name: "Workspace" })).toBeDefined();
-    expect(items()).toEqual(["Open GitHub repository", "Open folder"]);
+    expect(items()).toEqual(["Open GitHub repository", "Open Google Drive folder", "Open folder"]);
   });
 
   // A row is something to be about, so its own menu wins.

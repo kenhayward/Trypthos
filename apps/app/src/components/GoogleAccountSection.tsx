@@ -5,6 +5,9 @@ import type { GoogleBridge } from "../lib/workspaceClient";
 interface Props {
   /// The Google half of the shell, or null in the browser preview.
   bridge: GoogleBridge | null;
+  /// Told when a Connect succeeds, so a picker that showed this because nothing was connected can
+  /// carry on. Not told about a cancelled or refused sign-in.
+  onConnected?: () => void;
 }
 
 /// Connecting a Google account: status, Connect (and Cancel while the browser is open), Disconnect.
@@ -12,7 +15,7 @@ interface Props {
 /// A component of its own rather than inline in Settings, because the Drive open-folder dialog shows
 /// the same control when no account is connected yet. Nothing here displays a credential: the
 /// connected account is named by the email the shell got from Google.
-export default function GoogleAccountSection({ bridge }: Props) {
+export default function GoogleAccountSection({ bridge, onConnected }: Props) {
   const { t } = useTranslation();
   const google = useGoogle(bridge);
 
@@ -67,7 +70,11 @@ export default function GoogleAccountSection({ bridge }: Props) {
           <p className="mt-2 text-xs text-ink-3">{t("google.connectBlurb")}</p>
           <button
             type="button"
-            onClick={() => void google.connect()}
+            onClick={() =>
+              void google.connect().then((connected) => {
+                if (connected) onConnected?.();
+              })
+            }
             className="mt-3 rounded bg-accent px-3 py-1 text-ui text-on-accent"
           >
             {t("google.connect")}
