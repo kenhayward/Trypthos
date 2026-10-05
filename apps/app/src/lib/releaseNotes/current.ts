@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.95.4",
+    date: "2026-10-05",
+    pr: 218,
+    headline: "The last library Dependabot flagged, brought up to date",
+    summary:
+      "One advisory was left open against this repository's dependencies, and it is in a library the app never loads. http-cache-semantics parses HTTP cache headers, and here it is reached only through the tool that builds the installer, which downloads the Electron binaries behind it. Through 4.2.0 it did not check a cache entry that had been zeroed for security reasons when a request asked to be served stale through max-stale, so an unauthenticated attacker asking for the same URL could be handed another user's session cookie from a shared cache. The library is now at 4.3.0, which checks those entries. Nothing about how Trypthos looks or behaves changes.",
+    fixed: [
+      "http-cache-semantics 4.2.0 to 4.3.0 - a security-zeroed shared-cache entry could be served to an unauthenticated request carrying a large max-stale, disclosing another user's Set-Cookie session credentials (GHSA-ch52-4w7c-c8xp, CVE-2026-93748).",
+    ],
+  },
+  {
     version: "0.95.3",
     date: "2026-10-05",
     pr: 217,
