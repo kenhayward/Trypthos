@@ -251,6 +251,11 @@ function registerIpcHandlers({
   /// token, and connecting builds a throwaway over the token being offered - so a token is VERIFIED
   /// before it is written, and a rejected one never reaches disk.
   createGitHub = null,
+  /// The Google account - `googleAuth.js` - or null in a build without a Google OAuth client.
+  ///
+  /// An instance rather than a factory, unlike GitHub: there is no token to verify before storing,
+  /// because the sign-in itself is the verification and happens entirely in the main process.
+  google = null,
   chat,
   openExternal = async () => {},
   /// Shows an absolute path in the operating system's file manager: a folder opened, a file shown
@@ -708,6 +713,26 @@ function registerIpcHandlers({
     repositories = null;
     return { ok: true };
   });
+
+  /// Google, as an account. Same rule as GitHub: answers carry an email, never a token, and there is
+  /// no channel that returns one. None of these takes a payload - the renderer cannot name a client,
+  /// a scope or a redirect, so there is nothing of its to validate.
+  ipcMain.handle("google:status", async () =>
+    google === null
+      ? { ok: true, configured: false, connected: false, email: null, reason: null }
+      : google.status(),
+  );
+
+  ipcMain.handle("google:connect", async () =>
+    google === null ? { ok: false, reason: "not-configured" } : google.connect(),
+  );
+
+  ipcMain.handle("google:cancelConnect", async () => {
+    google?.cancelConnect();
+    return { ok: true };
+  });
+
+  ipcMain.handle("google:disconnect", async () => (google === null ? { ok: true } : google.disconnect()));
 
   ipcMain.handle("github:repos", async (_event, payload) => {
     const parsed = ListReposRequest.safeParse(payload ?? {});

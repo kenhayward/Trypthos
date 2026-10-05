@@ -122,3 +122,26 @@ test("an unforced close from the title bar still asks about unsaved work", async
   assert.equal(window.asked, 1);
   assert.equal(window.closed, false);
 });
+
+test("the Google account calls reach their handlers, carrying nothing from the renderer", async () => {
+  const { bridge, ipcMain } = loadBridge();
+  const received = [];
+  for (const channel of ["google:status", "google:connect", "google:cancelConnect", "google:disconnect"]) {
+    ipcMain.handle(channel, async (_event, payload) => {
+      received.push([channel, payload]);
+      return { ok: true };
+    });
+  }
+
+  await bridge.googleStatus();
+  await bridge.connectGoogle();
+  await bridge.cancelGoogleConnect();
+  await bridge.disconnectGoogle();
+
+  assert.deepEqual(received, [
+    ["google:status", undefined],
+    ["google:connect", undefined],
+    ["google:cancelConnect", undefined],
+    ["google:disconnect", undefined],
+  ]);
+});
