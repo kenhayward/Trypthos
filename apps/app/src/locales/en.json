@@ -394,7 +394,10 @@
     "encryptionUnavailable": "This machine could not encrypt the token, so it was not saved. Trypthos never stores a credential in plain text.",
     "scopeDenied": "Google Drive access was not allowed, so Trypthos cannot open your folders. Connect again and leave the Google Drive box ticked.",
     "timedOut": "Google's sign-in page did not answer in time. Connect again to try once more.",
-    "notConfigured": "This build of Trypthos was made without Google Drive support.",
+    "googleOffline": "Trypthos could not reach Google. Check your connection and try again.",
+    "googleRateLimited": "Google has had as many requests as it allows for now. Wait a few minutes and try again.",
+    "googleNotConnected": "Trypthos is no longer signed in to Google. Connect again from the Accounts page of Settings.",
+    "notConfigured": "Google did not accept this build's sign-in setup, so Google Drive cannot be connected. Updating Trypthos may fix it.",
     "windowFailed": "The new window did not open, so the tab is still here with your changes.",
     "unknown": "Something went wrong."
   },

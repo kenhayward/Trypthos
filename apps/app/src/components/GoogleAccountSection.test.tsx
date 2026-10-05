@@ -81,4 +81,17 @@ describe("GoogleAccountSection", () => {
     expect(screen.getByRole("button", { name: "Connect Google Drive" })).toBeDefined();
     expect(screen.queryByText("This build of Trypthos was made without Google Drive support.")).toBeNull();
   });
+
+  it("names Google, not GitHub, when it cannot be reached", async () => {
+    const bridge = fakeBridge({
+      connectGoogle: vi.fn(async (): Promise<GoogleConnectResult> => ({ ok: false, reason: "offline" })),
+    });
+    render(<GoogleAccountSection bridge={bridge} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Google");
+    expect(alert.textContent).not.toContain("GitHub");
+  });
 });
