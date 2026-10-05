@@ -84,6 +84,10 @@ describe("IPC_CHANNELS", () => {
       "graph:snapshot",
       "graph:refresh",
       "icons:map",
+      "google:status",
+      "google:connect",
+      "google:cancelConnect",
+      "google:disconnect",
     ]);
   });
 

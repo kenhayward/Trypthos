@@ -401,6 +401,26 @@ export { ObsidianVaultIdSchema, obsidianVaultsFrom } from "./obsidianVaults";
 export type { ObsidianVault } from "./obsidianVaults";
 
 export {
+  DRIVE_SCOPE,
+  GOOGLE_AUTH_URL,
+  GOOGLE_REVOKE_URL,
+  GOOGLE_SCOPES,
+  GOOGLE_TOKEN_URL,
+  GOOGLE_USERINFO_URL,
+  GoogleClientConfigSchema,
+  GoogleTokenSchema,
+  GoogleUserInfoSchema,
+  authorizationUrl,
+  googleAuthErrorFor,
+  grantsDrive,
+  readRedirect,
+  refreshRequestBody,
+  revokeRequestBody,
+  tokenRequestBody,
+} from "./googleAuth";
+export type { GoogleAuthFailure, GoogleClientConfig, GoogleToken, GoogleUserInfo, RedirectResult } from "./googleAuth";
+
+export {
   API_VERSION,
   GITHUB_API,
   GitHubBlobSchema,
