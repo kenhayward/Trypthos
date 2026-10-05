@@ -500,6 +500,8 @@
     "fileTypes": {
       "intro": "Which files Trypthos shows you. A type that is turned off does not appear in the folder browser, cannot be opened, and is not offered to chat. Turning one on in a folder full of them will make the list on the left a great deal longer.",
       "always": "Always on",
+      "enableAll": "Enable all",
+      "disableAll": "Disable all",
       "group": {
         "documents": "Documents",
         "data": "Markup and data",

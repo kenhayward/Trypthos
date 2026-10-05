@@ -343,6 +343,11 @@ the whole page is one list to run your eye down. Clicking anywhere on a row - th
 its right - is the same as clicking its box. Markdown's row says **Always on** and does not answer to
 clicks, because it is what the app is.
 
+**Enable all and Disable all sit across the top of the page**, for the two settings that are the whole
+point of the page: every type on, so a source repository reads the way your file manager shows it, and
+nothing but markdown, so the left panel is your notes and nothing else. Disable all leaves markdown on -
+it cannot be turned off - and each button is greyed out when it would change nothing.
+
 Some rows carry more than one language, where the difference is not one you would want to tick a box
 about. **JavaScript and TypeScript** is one choice covering `.js`, `.ts`, `.jsx` and `.tsx`;
 **CSS and preprocessors** covers SCSS, Sass and LESS; **Java and Kotlin** and **C and C++** each
