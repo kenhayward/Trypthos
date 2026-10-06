@@ -62,7 +62,11 @@ function fakeApi(overrides = {}) {
     },
     uploadContent: async (id, content, mimeType) => {
       calls.upload.push({ id, bytes: Buffer.from(content), mimeType });
-      return { ok: true, file: { id, name: meta[id]?.name ?? id, mimeType, headRevisionId: "rev-new" } };
+      // Each upload moves the file on to a new revision, which `fileMeta` then answers.
+      const headRevisionId = calls.upload.length === 1 ? "rev-new" : `rev-new-${calls.upload.length}`;
+      if (meta[id] !== undefined) meta[id].headRevisionId = headRevisionId;
+      bytes[id] = Buffer.from(content);
+      return { ok: true, file: { id, name: meta[id]?.name ?? id, mimeType, headRevisionId } };
     },
     createFile: async (parentId, name, content, mimeType) => {
       calls.create.push({ parentId, name, bytes: Buffer.from(content), mimeType });
@@ -244,6 +248,31 @@ test("a save keeps the byte-order mark the file was read with", async () => {
   assert.equal(calls.upload[0].bytes.subarray(3).toString("utf8"), "edited");
 });
 
+// Refresh forgets paths and listings, but not what a file's bytes began with: the editor still holds
+// the text it read, and saving it must not drop a mark it never showed.
+test("a save after a refresh keeps the byte-order mark the file was read with", async () => {
+  const { provider, calls } = await open({
+    download: async () => ({ ok: true, bytes: Buffer.from([0xef, 0xbb, 0xbf, ...Buffer.from("hello")]) }),
+  });
+  const read = await provider.read("Plan.md");
+  await provider.refresh();
+  assert.equal((await provider.write("Plan.md", "edited", read.revision)).ok, true);
+  assert.deepEqual([...calls.upload[0].bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+});
+
+test("a second save in a row keeps the byte-order mark too", async () => {
+  const { provider, calls } = await open({
+    download: async () => ({ ok: true, bytes: Buffer.from([0xef, 0xbb, 0xbf, ...Buffer.from("hello")]) }),
+  });
+  const read = await provider.read("Plan.md");
+  const first = await provider.write("Plan.md", "one", read.revision);
+  assert.deepEqual(first, { ok: true, revision: { id: "rev-new" } });
+  const second = await provider.write("Plan.md", "two", first.revision);
+  assert.deepEqual(second, { ok: true, revision: { id: "rev-new-2" } });
+  for (const upload of calls.upload) assert.deepEqual([...upload.bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+  assert.equal(calls.upload[1].bytes.subarray(3).toString("utf8"), "two");
+});
+
 test("a save without a mark read does not add one", async () => {
   const { provider, calls } = await open();
   const read = await provider.read("Plan.md");
@@ -292,24 +321,38 @@ test("a failed upload passes through", async () => {
   assert.deepEqual(await provider.write("Plan.md", "changed", read.revision), { ok: false, reason: "offline" });
 });
 
-// The content landed, but a made-up revision would let the next save overwrite blindly.
-test("a write whose answer has no revision asks Drive for it, and never guesses one", async () => {
-  // The upload's answer leaves the revision out; what Drive then says about the file is what counts.
-  async function saveWhere(afterUpload) {
-    let meta = null;
-    const opened = await open({
-      uploadContent: async (id) => {
-        afterUpload(meta.mdCCC);
-        return { ok: true, file: { id, name: "Plan.md", mimeType: "text/markdown" } };
-      },
-    });
-    meta = opened.meta;
-    const read = await opened.provider.read("Plan.md");
-    return opened.provider.write("Plan.md", "changed", read.revision);
-  }
+// The content landed, but a made-up revision would let the next save overwrite blindly. Asking Drive
+// afterwards is a guess too: it could answer a concurrent writer's revision.
+test("a write whose answer has no revision answers unknown, and does not ask Drive again", async () => {
+  let meta = null;
+  const opened = await open({
+    uploadContent: async (id) => {
+      meta.mdCCC.headRevisionId = "rev-somebody-else";
+      return { ok: true, file: { id, name: "Plan.md", mimeType: "text/markdown" } };
+    },
+  });
+  meta = opened.meta;
+  const read = await opened.provider.read("Plan.md");
+  const asked = opened.calls.meta.length;
+  assert.deepEqual(await opened.provider.write("Plan.md", "changed", read.revision), { ok: false, reason: "unknown" });
+  // One request: the check. None after the upload.
+  assert.equal(opened.calls.meta.length, asked + 1);
+});
 
-  assert.deepEqual(await saveWhere((file) => (file.headRevisionId = "rev-after")), { ok: true, revision: { id: "rev-after" } });
-  assert.deepEqual(await saveWhere((file) => delete file.headRevisionId), { ok: false, reason: "unknown" });
+test("a create whose answer has no revision answers unknown, never the file's id", async () => {
+  const { provider } = await open({
+    createFile: async (parentId, name, content, mimeType) => ({ ok: true, file: { id: "newABC", name, mimeType } }),
+  });
+  assert.deepEqual(await provider.write("new.md", "x", null), { ok: false, reason: "unknown" });
+});
+
+// A listed file can carry no revision at all; its conflict then has nothing of theirs to name.
+test("a conflict over a file with no revision says nothing of theirs, not an empty one", async () => {
+  const { provider, drive } = await open();
+  // Listed first, so the file arrives through a create's fresh re-listing rather than the check.
+  await provider.list("");
+  drive.rootAAA.push({ id: "bareIII", name: "bare.md", mimeType: "text/markdown", size: "1" });
+  assert.deepEqual(await provider.write("bare.md", "x", null), { ok: false, reason: "conflict", theirs: null });
 });
 
 test("a Google Doc refuses a save, without asking Drive anything", async () => {

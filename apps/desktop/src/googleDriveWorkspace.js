@@ -70,8 +70,12 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
   /// Bumped by `refresh()`. A listing that started under an older generation is never cached, never
   /// joined, and `listInto` asks again - so a Refresh pressed mid-listing cannot be undone by it.
   let generation = 0;
-  /// Drive file id -> whether its text began with a byte-order mark when last read, so a save keeps it.
+  /// `<file id>@<revision>` -> whether those bytes began with a byte-order mark, so a save keeps it.
+  /// Keyed by revision because a save proceeds only when Drive's current revision is the one the
+  /// editor expects - so the record looked up is about exactly the bytes being replaced. Not cleared
+  /// by `refresh()`: the editor still holds the text it read, and must not lose a mark it never showed.
   const boms = new Map();
+  const bomKey = (fileId, revision) => `${fileId}@${revision}`;
 
   /// The files of one folder: from the cache while it is fresh, else from Drive. A failure is passed
   /// on and never remembered.
@@ -180,8 +184,9 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     return found.entry.kind === "directory" ? { ok: true, id: found.entry.fileId } : failure("not-found");
   }
 
+  /// A conflict, naming their revision when there is one - never `{ id: undefined }`.
   function conflict(current) {
-    return { ok: false, reason: "conflict", theirs: current === null ? null : { id: current } };
+    return { ok: false, reason: "conflict", theirs: typeof current === "string" ? { id: current } : null };
   }
 
   /// A new file at a path nobody has: created in its folder, under exactly the name the path gives.
@@ -211,7 +216,10 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     listings.delete(folder.id);
     // Re-listed so the new file has its path in the map; the file landed whatever this answers.
     await listInto(parent, folder.id);
-    return { ok: true, revision: { id: created.file.headRevisionId ?? created.file.id } };
+    // The file landed, but without Drive's revision for it there is nothing honest to hand the
+    // editor: its id is not a revision, and the next save's check would fail against it or worse.
+    if (created.file.headRevisionId === undefined) return failure("unknown");
+    return { ok: true, revision: { id: created.file.headRevisionId } };
   }
 
   return {
@@ -270,7 +278,7 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (!fetched.ok) return fetched;
       const decoded = decodeTextFile(fetched.bytes);
       if (!decoded.ok) return failure(decoded.reason);
-      boms.set(entry.fileId, decoded.bom);
+      boms.set(bomKey(entry.fileId, revision), decoded.bom);
       return {
         ok: true,
         content: decoded.content,
@@ -310,19 +318,17 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (expected === null || current === null || current !== expected.id) return conflict(current);
 
       // 2. Write.
-      const bytes = encodeTextFile(content, { bom: boms.get(entry.fileId) === true });
+      const bom = boms.get(bomKey(entry.fileId, expected.id)) === true;
+      const bytes = encodeTextFile(content, { bom });
       const uploaded = await api.uploadContent(entry.fileId, bytes, entry.mimeType);
       if (!uploaded.ok) return uploaded;
 
-      // 3. Confirm: the revision is Drive's answer to the write, never a guess.
-      let revision = uploaded.file.headRevisionId;
-      if (revision === undefined) {
-        const after = await api.fileMeta(entry.fileId);
-        revision = after.ok ? after.file.headRevisionId : undefined;
-      }
-      // The content landed but Drive will not say as what; reporting success with a made-up revision
-      // would let the next save overwrite blindly, so it is reported as unknown instead.
+      // 3. Confirm: the revision is Drive's answer to the write, never a guess. Asking again would be
+      // one too - by then it could be a concurrent writer's revision, and the next save would
+      // overwrite them. The content landed, but as what Drive will not say, so it is unknown.
+      const revision = uploaded.file.headRevisionId;
       if (revision === undefined) return failure("unknown");
+      boms.set(bomKey(entry.fileId, revision), bom);
 
       entries.set(path, { ...entry, revision, sizeBytes: bytes.length });
       const parent = await folderIdAt(parentOf(path));
@@ -332,7 +338,6 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
     async refresh() {
       generation += 1;
-      boms.clear();
       entries.clear();
       listings.clear();
       listedPaths.clear();
