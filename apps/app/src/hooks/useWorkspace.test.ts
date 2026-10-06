@@ -1,6 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CONVERSATION_LOG_PATH, GUIDE_PATH, MAX_TEXT_FILE_BYTES, homePagePath } from "@trypthos/domain";
+import {
+  CONVERSATION_LOG_PATH,
+  GUIDE_PATH,
+  MAX_TEXT_FILE_BYTES,
+  homePagePath,
+  mediaUrl,
+} from "@trypthos/domain";
 import {
   canOpenInNewWindow,
   failureKey,
@@ -213,8 +219,8 @@ describe("providerFailureKey", () => {
     expect(providerFailureKey("google-drive", "not-found")).toBe("errors.notFound");
   });
 
-  it("says media cannot play from Drive without naming GitHub", () => {
-    expect(providerFailureKey("google-drive", "media-not-local")).toBe("errors.driveMediaNotLocal");
+  it("words media-not-local the one way, since only GitHub can answer it", () => {
+    expect(providerFailureKey("google-drive", "media-not-local")).toBe("errors.mediaNotLocal");
     expect(providerFailureKey("github", "media-not-local")).toBe("errors.mediaNotLocal");
   });
 
@@ -452,7 +458,7 @@ describe("a Google Drive workspace", () => {
     expect(result.current.state.dirty).toBe(true);
   });
 
-  it("says a Drive video cannot play, without naming GitHub", async () => {
+  it("opens a Drive video and audio in the player, pointed at the protocol", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -463,7 +469,20 @@ describe("a Google Drive workspace", () => {
       await result.current.actions.openPath("Notes/clip.mp4");
     });
 
-    expect(result.current.state.errorKey).toBe("errors.driveMediaNotLocal");
+    expect(result.current.state.errorKey).toBeNull();
+    expect(result.current.state.media).toEqual({
+      source: mediaUrl("Notes/clip.mp4"),
+      kind: "video",
+    });
+
+    await act(async () => {
+      await result.current.actions.openPath("Notes/song.mp3");
+    });
+
+    expect(result.current.state.media).toEqual({
+      source: mediaUrl("Notes/song.mp3"),
+      kind: "audio",
+    });
   });
 
   it("says a Drive image could not be read in Google's words", async () => {

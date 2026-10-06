@@ -390,7 +390,6 @@
     "notText": "That file is not text, so Trypthos has not opened it. Editing and saving it here would write over what is inside it.",
     "unsupportedEncoding": "Trypthos reads UTF-8 text, and that file is in another encoding. Opening it would replace every character Trypthos could not read, so it has been left alone.",
     "mediaNotLocal": "Video and audio play from a folder on this computer. Trypthos cannot play them from a GitHub repository yet.",
-    "driveMediaNotLocal": "Video and audio play from a folder on this computer. Trypthos cannot play them from Google Drive yet.",
     "readOnly": "Trypthos cannot save this file there yet.",
     "driveReadOnly": "Google Docs open read-only in Trypthos, so this one cannot be saved.",
     "driveOtherAccount": "This My Drive belongs to a different Google account from the one connected now. Connect that account, or open My Drive again.",
