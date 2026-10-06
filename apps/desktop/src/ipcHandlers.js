@@ -1214,7 +1214,7 @@ function registerIpcHandlers({
 /// The same registry and the same guard as every IPC handler, which is the entire point: the
 /// protocol is a second way to reach a file and must not be a second set of rules.
 ///
-/// Answers a **byte source** - `{ ok: true, size, open(start, end) }`, `end` inclusive, `open`
+/// Answers a **byte source** - `{ ok: true, size, open(start, end, signal) }`, `end` inclusive, `open`
 /// answering `{ ok: true, body }` or `{ ok: false, reason }` - so the protocol does not care whether
 /// the bytes are on disk or in a cloud drive. A provider says how it can stream in one of two ways:
 /// a `mediaSource` (Google Drive: ranged requests, the token held in the provider's client and never
@@ -1239,6 +1239,8 @@ async function locateMedia(qualifiedPath) {
 
   const located = await provider.locateFile(relativePath);
   if (!located.ok) return located;
+  // The signal is not needed here: a read from disk has no request in flight to stop, and an
+  // abandoned body is cancelled - closing the file - by the protocol's Response.
   return {
     ok: true,
     size: located.size,

@@ -309,17 +309,33 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     /// A file with no listed size - a Google Doc, or anything Drive did not size - cannot be ranged, so
     /// it is `not-found` rather than a stream of unknown length. The token stays in the api; what leaves
     /// here is a body.
+    ///
+    /// The parent is listed again through the TTL'd cache before the size is read. An entry on its own
+    /// lives until its folder is next listed, which could be an hour; this makes the listing's TTL the
+    /// limit on how stale a size can be, so a clip replaced in Drive is served at its new size within
+    /// that, and one removed is `not-found`. Inside the TTL it costs nothing.
     async mediaSource(candidate) {
       const found = await fileAt(candidate);
       if (!found.ok) return found;
-      const entry = found.entry;
+      const path = found.entry.path;
+      const parent = parentOf(path);
+      const folder = await folderIdAt(parent);
+      if (!folder.ok) return folder;
+      const fresh = await listInto(parent, folder.id);
+      if (!fresh.ok) return fresh;
+
+      const entry = entries.get(path);
+      if (entry === undefined || entry.kind !== "file") return failure("not-found");
       if (entry.googleDoc || entry.sizeBytes === null) return failure("not-found");
 
       return {
         ok: true,
         size: entry.sizeBytes,
-        open: async (start, end) => {
-          const ranged = await api.downloadRange(entry.fileId, start, end);
+        /// `signal` is the window's request: when the player gives up on a range - a fast seek, a
+        /// closed tab - the Drive request behind it stops too, rather than running on to hand a body
+        /// to nobody.
+        open: async (start, end, signal) => {
+          const ranged = await api.downloadRange(entry.fileId, start, end, { signal });
           if (!ranged.ok) return ranged;
           // Drive ignoring the Range answers 200 with the whole file. That is only a correct answer
           // to a range that IS the whole file; for any other, the protocol would label the full body
