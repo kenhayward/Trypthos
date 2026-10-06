@@ -274,7 +274,12 @@ export default function ImageViewer({ source, name, view, onView, onFit }: Props
             <path d="M5 12h14" />
           </Glyph>
         </button>
-        <span role="status" className="min-w-10 text-center text-xs text-ink-3 tabular-nums">
+        {/* Read when reached, never announced: a pinch is dozens of wheel events, and a live region
+            would speak the level after every one. */}
+        <span
+          aria-label={t("editor.picture.zoomLevel", { percent })}
+          className="min-w-10 text-center text-xs text-ink-3 tabular-nums"
+        >
           {t("editor.picture.zoomLevel", { percent })}
         </span>
         <button
