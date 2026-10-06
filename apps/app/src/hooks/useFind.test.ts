@@ -322,6 +322,18 @@ describe("useFind: the files under a folder", () => {
     expect(result.current.status).toEqual({ kind: "failed" });
   });
 
+  it("carries a partial Drive search through to what the dialog shows", async () => {
+    const { result } = await searchFiles({
+      findInFiles: async () => ({ ...HITS, partial: true }),
+    });
+    expect(result.current.status).toMatchObject({ partial: true });
+  });
+
+  it("leaves partial off for a complete search", async () => {
+    const { result } = await searchFiles({ findInFiles: async () => ({ ...HITS }) });
+    expect(result.current.status).not.toHaveProperty("partial");
+  });
+
   // An answer that was cut short has to say so, or it is a wrong answer given confidently.
   it("carries the cap through to what the dialog shows", async () => {
     const { result } = await searchFiles({

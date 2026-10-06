@@ -28,6 +28,8 @@ export type FindStatus =
       current: number;
       /// True when the search stopped at its budget. An answer cut short has to say so.
       capped: boolean;
+      /// True when a Google Drive folder was searched only where it has been opened. Absent otherwise.
+      partial?: boolean;
     };
 
 /// Which view a document's find offsets were measured against.
@@ -133,8 +135,8 @@ export function useFind(where: FindSurroundings) {
     activePath: where.activePath,
   });
 
-  const report = (total: number, current: number, capped: boolean) =>
-    setStatus({ kind: "results", total, current: current + 1, capped });
+  const report = (total: number, current: number, capped: boolean, partial = false) =>
+    setStatus({ kind: "results", total, current: current + 1, capped, ...(partial ? { partial } : {}) });
 
   /// Puts the reader on one of the results.
   ///
@@ -217,12 +219,12 @@ export function useFind(where: FindSurroundings) {
     if (result.hits.length === 0) {
       setHighlight(NOTHING);
       at.current = -1;
-      report(0, -1, result.capped);
+      report(0, -1, result.capped, result.partial === true);
       return;
     }
 
     await goTo(0);
-    report(result.hits.length, 0, result.capped);
+    report(result.hits.length, 0, result.capped, result.partial === true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [where.findInFiles, where.fileTypes, scope, query, regex, caseSensitive, goTo]);
 

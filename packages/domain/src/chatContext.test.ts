@@ -282,6 +282,13 @@ describe("ChatContextSchema", () => {
     expect(ChatContextSchema.safeParse(withAttachment(CONTEXT_CHARACTER_LIMIT + 1)).success).toBe(true);
   });
 
+  it("accepts an outline that says it is partial, and one that does not", () => {
+    const outline = { path: "", paths: [], folders: [], truncated: false };
+    for (const folder of [outline, { ...outline, partial: true }]) {
+      expect(ChatContextSchema.safeParse({ document: { kind: "none" }, attachments: [], folder }).success).toBe(true);
+    }
+  });
+
   it("refuses text past the ceiling", () => {
     expect(ChatContextSchema.safeParse(withAttachment(MAX_CONTEXT_CHARACTER_LIMIT + 1)).success).toBe(
       false,
@@ -405,6 +412,16 @@ describe("the folder outline", () => {
   it("says when the folder holds more than could be listed", () => {
     const [outline] = turns({ selection: "", file, folder: { ...folder, truncated: true } });
     expect(outline?.content).toMatch(/more files than are listed/i);
+  });
+
+  it("says when a Google Drive folder was outlined only as far as it has been opened", () => {
+    const [outline] = turns({ selection: "", file, folder: { ...folder, partial: true } });
+    expect(outline?.content).toMatch(/only as far as the user has opened/i);
+  });
+
+  it("does not say it for a complete outline", () => {
+    const [outline] = turns({ selection: "", file, folder });
+    expect(outline?.content).not.toMatch(/has opened/i);
   });
 
   it("is absent unless it was asked for", () => {

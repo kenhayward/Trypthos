@@ -22,6 +22,8 @@ export type FilterStatus =
       paths: readonly string[];
       /// True when a search stopped at its budget. An answer cut short has to say so.
       truncated: boolean;
+      /// True when a Google Drive folder was searched only where it has been opened. Absent otherwise.
+      partial?: boolean;
     };
 
 export interface FilterSurroundings {
@@ -111,6 +113,7 @@ export function useFileFilter(where: FilterSurroundings) {
   } else if (answer !== null && answer.query === query && answer.slots.some((slot) => slot !== undefined)) {
     const paths: string[] = [];
     let truncated = false;
+    let partial = false;
     for (const slot of answer.slots) {
       // A folder that has gone since it was opened is skipped rather than failing the filter:
       // its own row in the tree is where a folder that cannot be listed says so, and taking the
@@ -118,8 +121,9 @@ export function useFileFilter(where: FilterSurroundings) {
       if (slot === undefined || !slot.ok) continue;
       paths.push(...slot.paths);
       truncated = truncated || slot.truncated;
+      partial = partial || slot.partial === true;
     }
-    status = { kind: "results", paths, truncated };
+    status = { kind: "results", paths, truncated, ...(partial ? { partial } : {}) };
   }
 
   return { filter, setFilter, status };

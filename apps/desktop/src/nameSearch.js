@@ -8,6 +8,7 @@ const {
   matchesName,
   sortNodes,
 } = require("@trypthos/domain");
+const { listForSearch } = require("./searchListing");
 
 /// The browser's filter box: the walk behind it.
 ///
@@ -37,7 +38,7 @@ async function searchNames(provider, { path: start, filter }, limits = {}) {
 
   // Asked before the walk, so a folder outside the workspace is refused without reading anything at
   // all. The guard lives in the provider; this is where its answer is turned into a refusal.
-  const opened = await provider.list(start);
+  const opened = await listForSearch(provider, start);
   if (!opened.ok) return { ok: false, reason: opened.reason ?? "not-found" };
 
   const paths = [];
@@ -45,6 +46,8 @@ async function searchNames(provider, { path: start, filter }, limits = {}) {
   let listed = 0;
   /// True when the walk ran out of budget, which is a different thing from having found everything.
   let truncated = false;
+  /// True when a folder was only partly known - Drive folders nobody has opened.
+  let partial = false;
 
   while (queue.length > 0 && paths.length < matchLimit && listed < folderLimit) {
     const next = [];
@@ -55,11 +58,12 @@ async function searchNames(provider, { path: start, filter }, limits = {}) {
         break;
       }
 
-      const result = await provider.list(directory);
+      const result = await listForSearch(provider, directory);
       listed += 1;
       // A folder that cannot be listed is skipped rather than failing the whole filter: one
       // unreadable folder deep in a tree must not take the answer away from every other.
       if (!result.ok) continue;
+      if (result.complete === false) partial = true;
 
       for (const node of sortNodes(result.nodes)) {
         // The browser does not list these, so the filter must not find inside them - `.git` alone is
@@ -81,7 +85,7 @@ async function searchNames(provider, { path: start, filter }, limits = {}) {
     queue = next;
   }
 
-  return { ok: true, paths, truncated: truncated || queue.length > 0 };
+  return { ok: true, paths, truncated: truncated || queue.length > 0, ...(partial ? { partial: true } : {}) };
 }
 
 module.exports = { searchNames };

@@ -14,6 +14,7 @@
     "filterHint": "Searches every open folder by name. * matches any characters, ? matches one.",
     "searching": "Searching...",
     "matchesCapped": "Stopped early - there may be more matches.",
+    "searchPartialDrive": "Google Drive folders are searched only where you have opened them.",
     "loading": "Loading...",
     "opening": "Opening...",
     "listFailed": "Couldn't list this folder.",

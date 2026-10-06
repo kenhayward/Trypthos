@@ -311,3 +311,74 @@ test("a failed listing is not cached", async () => {
   assert.equal((await provider.list("")).ok, true);
   assert.deepEqual(asked, ["rootAAA", "rootAAA"]);
 });
+
+// The filter, Find in Files and the chat outline search only what has been opened: `listKnown` answers
+// from the map and never asks Drive.
+test("listKnown answers a listed folder from the map without asking Drive", async () => {
+  const { provider, calls } = await open();
+  await provider.list("");
+  const asked = calls.list.length;
+  const known = await provider.listKnown("");
+  assert.equal(known.ok, true);
+  assert.equal(known.complete, true);
+  assert.deepEqual(known.nodes.map((node) => node.name).sort(), ["Archive", "Meeting.md", "Plan.md", "chart.png", "huge.md"]);
+  assert.equal(calls.list.length, asked);
+});
+
+test("listKnown says a folder never listed is incomplete, and does not ask Drive", async () => {
+  const { provider, calls } = await open();
+  await provider.list("");
+  const asked = calls.list.length;
+  assert.deepEqual(await provider.listKnown("Archive"), { ok: true, nodes: [], complete: false });
+  assert.deepEqual(await provider.listKnown(""), { ok: true, nodes: (await provider.listKnown("")).nodes, complete: true });
+  assert.equal(calls.list.length, asked);
+});
+
+test("listKnown on the root before anything is listed is incomplete", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.listKnown(""), { ok: true, nodes: [], complete: false });
+  assert.equal(calls.list.length, 0);
+});
+
+test("listKnown treats a folder as listed once its listing has succeeded", async () => {
+  const { provider } = await open();
+  await provider.list("Archive");
+  const known = await provider.listKnown("Archive");
+  assert.equal(known.complete, true);
+  assert.deepEqual(known.nodes.map((node) => node.id), ["Archive/Old.md"]);
+});
+
+test("a failed listing does not count as listed", async () => {
+  const { provider } = await open({ listChildren: async () => ({ ok: false, reason: "offline" }) });
+  await provider.list("");
+  assert.equal((await provider.listKnown("")).complete, false);
+});
+
+test("refresh forgets which folders were listed", async () => {
+  const { provider } = await open();
+  await provider.list("");
+  await provider.refresh();
+  assert.equal((await provider.listKnown("")).complete, false);
+});
+
+test("a folder that has gone is no longer known as listed", async () => {
+  let gone = false;
+  const { provider } = await open({
+    listChildren: async (id) =>
+      id === "rootAAA"
+        ? { ok: true, files: gone ? DRIVE.rootAAA.filter((file) => file.id !== "dirBBB") : DRIVE.rootAAA }
+        : { ok: true, files: DRIVE[id] ?? [] },
+  });
+  await provider.list("Archive");
+  assert.equal((await provider.listKnown("Archive")).complete, true);
+  gone = true;
+  await provider.refresh();
+  await provider.list("");
+  assert.equal((await provider.listKnown("Archive")).complete, false);
+});
+
+test("listKnown refuses a path outside the workspace", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.listKnown("../x"), { ok: false, reason: "permission-denied" });
+  assert.equal(calls.list.length, 0);
+});

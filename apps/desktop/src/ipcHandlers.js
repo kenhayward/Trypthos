@@ -1094,6 +1094,7 @@ function registerIpcHandlers({
         ok: true,
         paths: result.paths.map((found) => qualifyPath(workspace.id, found)),
         truncated: result.truncated,
+        ...(result.partial === true ? { partial: true } : {}),
       };
     }),
   );

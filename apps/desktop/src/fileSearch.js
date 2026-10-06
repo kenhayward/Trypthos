@@ -7,6 +7,7 @@ const {
   fileHits,
   isOpenable,
 } = require("@trypthos/domain");
+const { listForSearch } = require("./searchListing");
 
 /// Find in Files: the walk, and the matching.
 ///
@@ -32,14 +33,17 @@ async function filesUnder(provider, start, fileTypes) {
   /// True when the walk itself ran out of budget, which is a different thing from the MATCHES
   /// running out - one means "there may be more files", the other "there are more matches".
   let truncated = false;
+  /// True when a folder was only partly known - Drive folders nobody has opened.
+  let partial = false;
 
   while (queue.length > 0 && found.length < FIND_FILE_LIMIT) {
     const next = [];
     for (const { path: directory, depth } of queue) {
-      const result = await provider.list(directory);
+      const result = await listForSearch(provider, directory);
       // A directory that cannot be listed is skipped rather than failing the whole search: one
       // unreadable folder deep in a tree must not take the answer away from every other.
       if (!result.ok) continue;
+      if (result.complete === false) partial = true;
 
       for (const node of [...result.nodes].sort((a, b) => a.name.localeCompare(b.name))) {
         if (node.kind === "directory") {
@@ -54,7 +58,7 @@ async function filesUnder(provider, start, fileTypes) {
     queue = next;
   }
 
-  return { files: found, truncated: truncated || found.length >= FIND_FILE_LIMIT };
+  return { files: found, truncated: truncated || found.length >= FIND_FILE_LIMIT, partial };
 }
 
 /// Searches the files under `start` for `pattern`.
@@ -65,10 +69,10 @@ async function filesUnder(provider, start, fileTypes) {
 async function searchFiles(provider, { path: start, pattern, regex, caseSensitive, fileTypes }) {
   // Asked before the walk, so a folder outside the workspace is refused without reading anything at
   // all. The guard lives in the provider; this is where its answer is turned into a refusal.
-  const opened = await provider.list(start);
+  const opened = await listForSearch(provider, start);
   if (!opened.ok) return { ok: false, reason: opened.reason ?? "not-found" };
 
-  const { files, truncated } = await filesUnder(provider, start, fileTypes);
+  const { files, truncated, partial } = await filesUnder(provider, start, fileTypes);
 
   const hits = [];
   let capped = truncated;
@@ -98,7 +102,7 @@ async function searchFiles(provider, { path: start, pattern, regex, caseSensitiv
     hits.push(...found);
   }
 
-  return { ok: true, hits, capped: capped || hits.length >= FIND_MATCH_LIMIT };
+  return { ok: true, hits, capped: capped || hits.length >= FIND_MATCH_LIMIT, ...(partial ? { partial: true } : {}) };
 }
 
 module.exports = { searchFiles, filesUnder };

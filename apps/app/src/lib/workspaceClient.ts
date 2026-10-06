@@ -124,7 +124,7 @@ export type SaveAsResult = { ok: true; path: string; revision: Revision } | Fail
 /// confidently. `bad-pattern` is its own refusal for the same reason: "that is not an expression"
 /// and "nothing matched" send the user in opposite directions.
 export type FindResult =
-  | { ok: true; hits: FileHit[]; capped: boolean }
+  | { ok: true; hits: FileHit[]; capped: boolean; partial?: boolean }
   | { ok: false; reason: "bad-pattern" }
   | Failure;
 
@@ -133,7 +133,10 @@ export type FindResult =
 /// Qualified paths, so a row can be drawn and a file opened from one without working out which
 /// folder it came from. `truncated` is part of the answer rather than a detail, for the same reason
 /// `capped` is part of a find: a walk that stopped at its budget has to say so.
-export type FilterResult = { ok: true; paths: string[]; truncated: boolean } | Failure;
+///
+/// `partial` is a different thing from `truncated`: a Google Drive folder is searched only where it
+/// has been opened, so the answer is complete for what was seen and says nothing of the rest.
+export type FilterResult = { ok: true; paths: string[]; truncated: boolean; partial?: boolean } | Failure;
 
 export type GraphStateResult = { ok: true; state: GraphState } | Failure;
 export type RefreshGraphResult = { ok: true } | Failure;
