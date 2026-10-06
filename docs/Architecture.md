@@ -280,8 +280,9 @@ round-trip and nothing that can reformat a user's file behind their back.
   - **Case sensitivity is required on `FindOptions`, not defaulted.** It changes which lines come
     back, and an option like that left to a default is how a caller quietly asks a different question
     from the one it meant. The DIALOG defaults it to off, which is where a default belongs.
-- **Zoom and pan are one hook and one variable.** `hooks/useZoomPan.ts` reads Shift+wheel and
-  Shift+drag on a surface; `lib/zoom.ts` holds the pure parts (the ladder of levels, which way a
+- **Zoom and pan are one hook and one variable.** `hooks/useZoomPan.ts` reads Ctrl+wheel (Cmd on
+  macOS), which is also how a trackpad pinch arrives, and Shift+drag on a surface (a plain drag pans a
+  picture); Shift+wheel is left alone and scrolls sideways; `lib/zoom.ts` holds the pure parts (the ladder of levels, which way a
   wheel notch means, where a drag puts the scroll offset). `EditorPanel` holds the level **per
   document**, keyed by path like the view mode beside it, and each surface receives it as the CSS
   variable `--tp-zoom`. The sizes are then derived from that variable in CSS - `calc(13px *
@@ -290,8 +291,9 @@ round-trip and nothing that can reformat a user's file behind their back.
   code font in proportion at every level, and is why the assertions live in the **browser** suite:
   jsdom resolves neither a custom property through a cascade nor a `calc` into a layout.
   Four details are load-bearing and each is silent when wrong:
-  - **A shifted wheel is reported on the HORIZONTAL axis.** A handler reading `deltaY` alone sees
-    zero on every notch of the one gesture this is bound to.
+  - **A pinch is a wheel event with `ctrlKey` set**, which is why one listener serves both gestures; it
+    is continuous (a factor per event) rather than a step, and the page must not zoom as well, so the
+    listener cancels it.
   - **The wheel listener is attached by hand, not through `onWheel`.** React attaches its wheel
     listener passively at the root, so `preventDefault` from a React handler does nothing and the
     browser scrolls the surface sideways while it zooms.
@@ -310,7 +312,13 @@ round-trip and nothing that can reformat a user's file behind their back.
   zoom roles.
 - `components/ImageViewer.tsx` draws a picture - the one document kind with no modes, no status bar
   and nothing written back. It reads the natural size on load rather than guessing one, so 100% means
-  the picture's own pixels.
+  the picture's own pixels. Its zoom is the **picture view model**, `lib/pictureZoom.ts`: a `PictureView`
+  is `fit` or `scale`, held per path in `EditorPanel` and not persisted. Fit is computed from the panel and
+  never enlarges, so a small picture opens at 100%; the panel refits on resize while in Fit; scale runs
+  from 10% (lower if Fit is lower) to 800%, zooming about the pointer. `ImageViewer` applies the view
+  and draws the bottom-right toolbar (Fit, 100%, zoom out, percentage, zoom in); double-click toggles
+  Fit and 100%, a press on the scrollbar is left to the scrollbar, and Ctrl/Cmd+0 and +1 go to Fit and
+  100%.
 - `lib/editorTheme.ts` holds the Source palette. In Source mode colour **stands in for** formatting
   rather than applying it - a heading is blue, not big - which is what keeps Source a faithful view
   of the bytes.
@@ -846,7 +854,7 @@ and a message is per-commit, which is why only the first is held in the provider
 
 ### Google Drive (sign-in and folders)
 
-`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `packages/domain/src/googleAuth.ts` holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). As of 0.98.0 a Drive folder can be opened as a workspace and its files edited and saved, Google Docs excepted (see "Drive folders as workspaces" below).
+`googleAuth.js` signs in and holds the session, `googleClient.js` finds the OAuth client, and the domain's `packages/domain/src/googleAuth.ts` holds what is not the fetch (addresses, the schemas Google's JSON is checked against, what a failing status means). As of 0.99.0 a Drive folder can be opened as a workspace, its files edited and saved (Google Docs excepted), and its video and audio played (see "Drive folders as workspaces" below).
 
 - **Loopback plus PKCE, in the main process.** Google refuses OAuth inside an embedded webview, so Connect opens the system browser at Google's consent page. The redirect goes to a listener on 127.0.0.1 on a port the OS chose, and the code is exchanged with a PKCE verifier the renderer never sees. The `state` is checked before the code is used. The browser tab then shows a short English "return to Trypthos" page, hard-coded like the shell's menus.
 - **One sign-in at a time.** A second Connect, or Cancel, stops a waiting one. A Disconnect that lands while a sign-in is in flight wins: when the sign-in finishes, nothing is stored. A sign-in nobody completes ends on a five-minute timeout and answers `timed-out`.
@@ -859,6 +867,7 @@ and a message is per-commit, which is why only the first is held in the provider
 #### Drive folders as workspaces
 
 - **`googleDriveApi.js` is the only thing that speaks to Drive.** It takes the access token from `googleAuth.accessToken` on every call, so a token is never held here. Every id is checked with `isDriveId` before it reaches a URL and a failing one answers `not-found`: an id arrives from settings or the renderer and goes into a query string, so the check is what keeps it an id. One deadline covers the fetch and the body read, because a connection that stalls mid-body would otherwise hang a listing forever. A 401 gets one refresh of the token and one retry; a rate limit gets one backoff retry; anything further is answered, not looped. Writes go through `uploadContent` (a `PATCH` media upload to the file id) and `createFile` (a multipart `POST`); a 401 or rate-limit retry resends the same body, because both mean the request was not processed. **A timeout is not retried and answers `offline`**: a timed-out write may have landed, so a resend could write twice, and the next save's check reports the conflict honestly instead. Log lines carry the step and `error.code ?? error.name` only, never a URL, since a URL holds a folder id.
+- **Media from Drive is a ranged download, and the body streams.** `downloadRange(fileId, start, end)` in `googleDriveApi.js` races only the **headers** against the 30 second deadline: once they have arrived the body is handed back as a stream, because a deadline over the whole body would cut off a long recording mid-play. The retry rules of the other calls apply: a 401 gets one token refresh and one retry, and a rate limit one backoff retry. A 206 is the normal answer; **a 200 is accepted only for a whole-file range**, since a 200 to a partial range means the server ignored the range and the bytes would be wrong. The provider's `mediaSource(path)` answers `{ ok, size, open(start, end) }`: the size comes from the folder listing (so it is as old as the 60 second cache), `open` calls `downloadRange` with the token read inside main, and the media protocol maps an `open` failure to 416, 403, 404 or 502. The token never reaches the window: the renderer only holds a `tp-media://` URL.
 - **`googleDriveWorkspace.js` is the provider object, with paths over ids.** Every seam in the app is path-shaped (path guard, qualified ids, recent files, wiki-link resolution), so the workspace keeps a path-to-Drive-id map filled from listings by `childrenToEntries`, which is also where display names are made: a Google Doc is `<title>.md` (its path; the list and `listKnown` nodes also carry `googleDoc: true`, which the renderer's `lib/googleDocs.ts` uses to show the title without `.md`, with a Docs mark, in the tree, filter results and tab), slash, backslash, colon and control characters become `_`, and a duplicate sibling gets `~<6 id chars>`. A path the map has not seen is found by an on-demand walk from the root rather than refused. Listings are cached for 60 seconds per Drive folder id (`LISTING_TTL_MS`), a concurrent request for a folder already being listed joins the one in flight, and a failed listing is never cached; `refresh()` clears the path map, the listing cache and the listed-folder set together. Re-listing a folder replaces that folder's direct children and drops the descendants of any child that vanished or came back under a different id or kind, so a stale id can never be read through a reused path; a refresh clears the map. The guard root is the fake `/drive`, as GitHub's is `/repo`, so the one shared boundary module serves both.
 - **A generation counter makes Refresh win.** `refresh()` bumps a generation; a listing that started before it is never cached, never joined by a later request, and is asked again by `listInto`, so a slow listing already in flight cannot put the old tree back after the user pressed Refresh.
 - **My Drive is pinned by `rootId`.** The `google-drive` ref gains an optional `rootId`, My Drive's real id, filled at the first open. A later open whose real root differs answers `other-account` (`errors.driveOtherAccount`), so a My Drive workspace never silently follows a different connected account. Only at launch does the renderer's `reopen` surface this reason (every other reopen failure stays silent): the workspace is closed and the normal banner says to connect that account or open My Drive again. `folderId` stays `"root"`, so the workspace key and de-duplication are unchanged.
@@ -869,7 +878,7 @@ and a message is per-commit, which is why only the first is held in the provider
 - **A Drive workspace carries a variant, and a shared drive is named by `drives.get`.** `openGoogleDriveWorkspace` answers `variant`: `my-drive` for `root`, `shared-drive` when the ref's `driveId` equals its `folderId`, `shared-folder` when `files.get` says `shared`, else `folder`. `providers.js` puts it on the workspace record as `driveVariant`, `described()` includes it only for a Drive workspace, and the row's mark follows it. A shared drive's root answers the generic name "Drive" to `files.get`, so its real name is read with `drives.get` (`sharedDrive`), falling back to the name it was chosen under if that call fails rather than failing the open.
 - **A Drive workspace is a `google-drive` ref.** The ref (folder id, optional shared drive id, display name) is part of settings, which moved to schema v23 with a migration; a 0.96 build refuses a settings file holding one rather than discarding every workspace. Schema v24 (0.98.0, a no-op migration) adds the optional `rootId`; the ref is strict, so an older build refuses the file rather than dropping every workspace.
 - **`google:folders` is the picker's only view of Drive.** It returns folders only, ids and names, for a place named by a strict `in` union: `drives` (the shared drives, each answered as shared), `shared-with-me` (the folders other people shared, found by query) or `folder` with a Drive id (My Drive is `root`), each folder carrying Drive's `shared` flag; `OpenDriveDialog` walks it with a breadcrumb. It validates its argument in the main process and answers a result, never a throw.
-- **Read-only is per file, and enforced twice.** The renderer opens a Drive file editable unless the read answered `readOnly` (a Google Doc); chat Apply refuses a read-only document before the editor is touched, and the shell refuses a write to a Google Doc regardless (`read-only`). Drive failures are worded for Google through `providerFailureKey` (`driveConflict`, `driveSaveUnknown`, `driveOtherAccount`, `driveReadOnly`). Drive videos cannot play, because the player needs a local file (`errors.driveMediaNotLocal`).
+- **Read-only is per file, and enforced twice.** The renderer opens a Drive file editable unless the read answered `readOnly` (a Google Doc); chat Apply refuses a read-only document before the editor is touched, and the shell refuses a write to a Google Doc regardless (`read-only`). Drive failures are worded for Google through `providerFailureKey` (`driveConflict`, `driveSaveUnknown`, `driveOtherAccount`, `driveReadOnly`). Drive video and audio play through the media protocol's byte source (see "Video and audio, served rather than read" below); only GitHub media still cannot play (`errors.driveMediaNotLocal` is kept for that case).
 - **Drive is excluded from the vault graph.** The graph walks a whole tree, and a walk of a Drive is a request per folder; it is for local vaults only.
 
 ### Local
