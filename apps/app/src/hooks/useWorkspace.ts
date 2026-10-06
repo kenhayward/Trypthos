@@ -795,7 +795,8 @@ export function useWorkspace(
       // what leaves their work intact for them to decide about.
       setInternal((prev) => ({
         ...prev,
-        documents: markSaved(prev.documents, open.path, result.revision),
+        // The text that went out, so an edit made while the write was pending keeps its flag.
+        documents: markSaved(prev.documents, open.path, result.revision, open.content),
         busy: false,
       }));
       return true;

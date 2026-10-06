@@ -264,8 +264,22 @@ export function updateContent(set: DocumentSet, path: string, content: string): 
 ///
 /// Only the flag and the revision change. The text is deliberately not replaced with anything: a
 /// save writes the buffer out, it does not read it back.
-export function markSaved(set: DocumentSet, path: string, revision: Revision): DocumentSet {
-  return mapDocument(set, path, (document) => ({ ...document, revision, dirty: false }));
+///
+/// `savedContent` is the text that was written. A write takes time, and the user keeps typing while
+/// it is in flight: if the buffer no longer equals what went out, the newer text is not on disk, so
+/// the document stays dirty - but it still takes the new revision, because the next save must check
+/// against what was actually written. Left out, the flag is cleared unconditionally.
+export function markSaved(
+  set: DocumentSet,
+  path: string,
+  revision: Revision,
+  savedContent?: string,
+): DocumentSet {
+  return mapDocument(set, path, (document) => ({
+    ...document,
+    revision,
+    dirty: savedContent !== undefined && document.content !== savedContent,
+  }));
 }
 
 function mapDocument(

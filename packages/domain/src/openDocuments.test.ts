@@ -182,6 +182,21 @@ describe("markSaved", () => {
 
     expect(activeDocument(set)?.content).toBe("# mine\n");
   });
+
+  it("clears the flag when the text is still what was written", () => {
+    const edited = updateContent(withFiles("a.md"), "a.md", "# mine\n");
+
+    expect(dirtyPaths(markSaved(edited, "a.md", rev("r2"), "# mine\n"))).toEqual([]);
+  });
+
+  it("stays dirty, at the new revision, when the text changed while the write was in flight", () => {
+    const edited = updateContent(withFiles("a.md"), "a.md", "# mine, and more\n");
+    const set = markSaved(edited, "a.md", rev("r2"), "# mine\n");
+
+    expect(dirtyPaths(set)).toEqual(["a.md"]);
+    expect(set.documents[0]?.revision.id).toBe("r2");
+    expect(set.documents[0]?.content).toBe("# mine, and more\n");
+  });
 });
 
 describe("isOpen", () => {
