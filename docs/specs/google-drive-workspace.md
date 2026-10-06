@@ -231,7 +231,7 @@ calls, so a refactor cannot silently widen it (for example by moving the check b
 Drive keeps revision history, so the overwritten version is recoverable from Drive's own UI - the
 help article says so.
 
-A write to a path not in the map (a new file) is a **create** in the parent folder (PR 4). A Google
+A write to a path not in the map (a new file) is a **create** in the parent folder (shipped in PR 3, 0.98.0). A Google
 Doc answers `read-only`.
 
 ### Renderer (`apps/app/src`)
@@ -281,7 +281,7 @@ These settle details the sections above left open. Where they differ from the te
 | Drive scope unticked at consent | `errors.scopeDenied`: explains that Trypthos needs Drive access to open folders. |
 | Grant revoked in the Google account | Status shows not connected with the reason; opening a Drive workspace answers `not-connected`. |
 | Offline / rate-limited while listing | On the folder row (`folders[path].status = "error"`), as GitHub. |
-| Conflict on save | Existing `errors.conflict` banner; the user's text is kept and the revision is not advanced. |
+| Conflict on save | Existing `errors.conflict` banner; the user's text is kept and the revision is not advanced. **Superseded in PR 3:** worded for Google as `errors.driveConflict`. |
 | Google Doc save attempted | `errors.readOnly`. The editor should not offer it; the shell refuses regardless. **Superseded in PR 3:** worded for Google as `errors.driveReadOnly`. |
 
 ## Testing
