@@ -745,7 +745,8 @@ function registerIpcHandlers({
 
   ipcMain.handle("google:disconnect", async () => (google === null ? { ok: true } : google.disconnect()));
 
-  /// The Drive folder picker's only window onto Drive: the folders inside one folder, by id and name.
+  /// The Drive folder picker's only window onto Drive: the shared drives, the folders shared with the
+  /// user, or the folders inside one folder (My Drive is `root`), by id and name.
   /// Opening one goes through `workspace:openRef` like every other workspace.
   ipcMain.handle("google:folders", async (_event, payload) => {
     const parsed = GoogleFoldersRequest.safeParse(payload);
@@ -755,14 +756,18 @@ function registerIpcHandlers({
     }
     if (drive === null) return { ok: false, reason: "not-configured" };
 
-    const { parentId } = parsed.data;
-    const listed = await drive.listChildren(parentId ?? "root", { foldersOnly: true });
+    const place = parsed.data;
+    if (place.in === "drives") {
+      const shared = await drive.sharedDrives();
+      if (!shared.ok) return shared;
+      return { ok: true, folders: shared.drives.map((entry) => ({ id: entry.id, name: entry.name, shared: true })) };
+    }
+    const listed =
+      place.in === "shared-with-me"
+        ? await drive.sharedWithMeFolders()
+        : await drive.listChildren(place.id, { foldersOnly: true });
     if (!listed.ok) return listed;
-    if (parentId !== null) return { ok: true, folders: foldersOf(listed.files), drives: [] };
-
-    const shared = await drive.sharedDrives();
-    if (!shared.ok) return shared;
-    return { ok: true, folders: foldersOf(listed.files), drives: shared.drives };
+    return { ok: true, folders: foldersOf(listed.files) };
   });
 
   ipcMain.handle("github:repos", async (_event, payload) => {

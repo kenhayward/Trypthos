@@ -34,6 +34,7 @@ function fakeDriveFactory(seen = {}) {
       download: async () => ({ ok: true, bytes: Buffer.from("hello") }),
       exportMarkdown: async () => ({ ok: false, reason: "not-found" }),
       sharedDrives: async () => ({ ok: true, drives: [] }),
+      sharedWithMeFolders: async () => ({ ok: true, files: [] }),
     };
   };
 }
@@ -104,31 +105,58 @@ test("a build without Google cannot open a Drive folder", async () => {
   );
 });
 
-test("google:folders lists My Drive's folders and the Shared Drives at the top level", async () => {
+test("google:folders routes each place to the right Drive call", async () => {
   const calls = [];
+  const FOLDER = "application/vnd.google-apps.folder";
   const factory = () => ({
     listChildren: async (id, options) => {
-      calls.push([id, options]);
+      calls.push(["children", id, options]);
       return { ok: true, files: [
-        { id: "dirBBB", name: "Projects", mimeType: "application/vnd.google-apps.folder" },
+        { id: "dirBBB", name: "Projects", mimeType: FOLDER, shared: true },
+        { id: "dirFFF", name: "Archive", mimeType: FOLDER },
         { id: "mdCCC", name: "Plan.md", mimeType: "text/markdown" },
       ] };
     },
-    sharedDrives: async () => ({ ok: true, drives: [{ id: "sharedDDD", name: "Team" }] }),
+    sharedWithMeFolders: async () => {
+      calls.push(["shared-with-me"]);
+      return { ok: true, files: [{ id: "dirGGG", name: "Handbook", mimeType: FOLDER }] };
+    },
+    sharedDrives: async () => {
+      calls.push(["drives"]);
+      return { ok: true, drives: [{ id: "sharedDDD", name: "Team" }] };
+    },
   });
 
   await withHandlers(async ({ ipcMain }) => {
-    assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: null }), {
+    assert.deepEqual(await ipcMain.invoke("google:folders", { in: "drives" }), {
       ok: true,
-      folders: [{ id: "dirBBB", name: "Projects" }],
-      drives: [{ id: "sharedDDD", name: "Team" }],
+      folders: [{ id: "sharedDDD", name: "Team", shared: true }],
     });
-    assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: "dirBBB" }), {
+    assert.deepEqual(await ipcMain.invoke("google:folders", { in: "shared-with-me" }), {
       ok: true,
-      folders: [{ id: "dirBBB", name: "Projects" }],
-      drives: [],
+      folders: [{ id: "dirGGG", name: "Handbook", shared: false }],
     });
-    assert.deepEqual(calls, [["root", { foldersOnly: true }], ["dirBBB", { foldersOnly: true }]]);
+    assert.deepEqual(await ipcMain.invoke("google:folders", { in: "folder", id: "root" }), {
+      ok: true,
+      folders: [
+        { id: "dirBBB", name: "Projects", shared: true },
+        { id: "dirFFF", name: "Archive", shared: false },
+      ],
+    });
+    assert.deepEqual(calls, [["drives"], ["shared-with-me"], ["children", "root", { foldersOnly: true }]]);
+  }, { createGoogleDrive: factory });
+});
+
+test("google:folders passes a failed listing on as its reason", async () => {
+  const factory = () => ({
+    listChildren: async () => ({ ok: false, reason: "offline" }),
+    sharedWithMeFolders: async () => ({ ok: false, reason: "rate-limited" }),
+    sharedDrives: async () => ({ ok: false, reason: "not-connected" }),
+  });
+  await withHandlers(async ({ ipcMain }) => {
+    assert.deepEqual(await ipcMain.invoke("google:folders", { in: "folder", id: "dirBBB" }), { ok: false, reason: "offline" });
+    assert.deepEqual(await ipcMain.invoke("google:folders", { in: "shared-with-me" }), { ok: false, reason: "rate-limited" });
+    assert.deepEqual(await ipcMain.invoke("google:folders", { in: "drives" }), { ok: false, reason: "not-connected" });
   }, { createGoogleDrive: factory });
 });
 
@@ -138,7 +166,7 @@ test("google:folders refuses a malformed request and answers not configured with
   console.error = (...args) => logged.push(args);
   try {
     await withHandlers(async ({ ipcMain }) => {
-      assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: "a' or 'b" }), { ok: false, reason: "bad-request" });
+      assert.deepEqual(await ipcMain.invoke("google:folders", { in: "folder", id: "a' or 'b" }), { ok: false, reason: "bad-request" });
     });
   } finally {
     console.error = original;
@@ -147,7 +175,7 @@ test("google:folders refuses a malformed request and answers not configured with
 
   await withHandlers(
     async ({ ipcMain }) => {
-      assert.deepEqual(await ipcMain.invoke("google:folders", { parentId: null }), { ok: false, reason: "not-configured" });
+      assert.deepEqual(await ipcMain.invoke("google:folders", { in: "drives" }), { ok: false, reason: "not-configured" });
     },
     { google: null },
   );

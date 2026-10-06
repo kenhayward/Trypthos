@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkspaceRef } from "@trypthos/domain";
+import DriveGlyph, { type DriveGlyphKind } from "./DriveGlyph";
 import GoogleAccountSection from "./GoogleAccountSection";
+import SourceGlyph from "./SourceGlyph";
 import Spinner from "./Spinner";
 import { attempt } from "../hooks/useGitHub";
 import { providerFailureKey } from "../hooks/useWorkspace";
-import type { DriveFoldersResult, GoogleBridge } from "../lib/workspaceClient";
+import type { DriveFoldersResult, DriveLocation, GoogleBridge } from "../lib/workspaceClient";
 
 interface Props {
   /// The Google half of the shell, or null in the browser preview.
@@ -15,44 +17,70 @@ interface Props {
   onOpen: (ref: WorkspaceRef) => void;
 }
 
-/// One step of the breadcrumb: a folder the user went into, and the Shared Drive it is in.
+/// One step of the breadcrumb: where the user went. `id` is the Drive id to list and open - My Drive
+/// is `root`, and Shared with me has none, being a place of its own rather than a folder.
 interface Place {
-  id: string;
+  kind: "my-drive" | "shared-with-me" | "shared-drive" | "folder";
+  id: string | null;
   name: string;
+  /// The Shared Drive this place is in, when the trail went through one.
   driveId: string | null;
+  /// Whether Drive calls it shared, or the trail reached it through Shared with me.
+  shared: boolean;
 }
+
+type Folder = { id: string; name: string; shared: boolean };
 
 /// What a request came back with. "Loading" is not stored: it is whatever is left when the answer on
 /// hand was for a different request than the one now wanted, which spares the effect a synchronous
 /// `setState` on every step.
-type Listing =
-  | { state: "connect" }
-  | { state: "failed"; errorKey: string }
-  | { state: "loaded"; folders: { id: string; name: string }[]; drives: { id: string; name: string }[] };
+type Listing = { state: "connect" } | { state: "failed"; errorKey: string } | { state: "loaded"; folders: Folder[] };
+
+/// What to ask the shell to list for a place. The top level, which is no place, lists the Shared
+/// Drives - My Drive and Shared with me are fixed rows that need no listing.
+function locationOf(place: Place | null): DriveLocation {
+  if (place === null) return { in: "drives" };
+  if (place.kind === "shared-with-me" || place.id === null) return { in: "shared-with-me" };
+  return { in: "folder", id: place.id };
+}
+
+function glyphKindOf(place: Place): DriveGlyphKind {
+  switch (place.kind) {
+    case "my-drive":
+      return "my-drive";
+    case "shared-with-me":
+      return "shared-with-me";
+    case "shared-drive":
+      return "shared-drive";
+    case "folder":
+      return place.shared ? "shared-folder" : "folder";
+  }
+}
 
 /// Choosing a Google Drive folder to open as a workspace.
 ///
-/// Browses folders only, through `google:folders`, from the top level (My Drive's folders, then the
-/// Shared Drives) down. "Open this folder" is offered inside any folder - the top level is not a
-/// folder, and a whole-My-Drive workspace is deferred. With no account connected, it shows the same
-/// connect control as Settings, and carries on once one is.
+/// The top level is three kinds of entry - My Drive, Shared with me, and a row per Shared Drive -
+/// each with its own icon. Below it the picker browses folders only, through `google:folders`.
+/// "Open this folder" is offered anywhere but the top level and Shared with me, neither of which is
+/// a folder. With no account connected, it shows the same connect control as Settings, and carries
+/// on once one is.
 export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
   const { t } = useTranslation();
   const [trail, setTrail] = useState<Place[]>([]);
   const [answer, setAnswer] = useState<{ request: string; listing: Listing } | null>(null);
   const [reloads, setReloads] = useState(0);
   const here = trail.at(-1) ?? null;
-  const request = `${here?.id ?? ""}#${reloads}`;
+  const request = `${here === null ? "top" : `${here.kind}:${here.id ?? ""}`}#${reloads}`;
   const listing: Listing | { state: "loading" } = answer !== null && answer.request === request ? answer.listing : { state: "loading" };
 
   useEffect(() => {
     if (bridge === null) return;
     let live = true;
     void (async () => {
-      const result: DriveFoldersResult = await attempt(() => bridge.listDriveFolders(here?.id ?? null));
+      const result: DriveFoldersResult = await attempt(() => bridge.listDriveFolders(locationOf(here)));
       if (!live) return;
       if (result.ok) {
-        setAnswer({ request, listing: { state: "loaded", folders: result.folders, drives: result.drives } });
+        setAnswer({ request, listing: { state: "loaded", folders: result.folders } });
       } else if (result.reason === "not-connected" || result.reason === "not-configured") {
         setAnswer({ request, listing: { state: "connect" } });
       } else {
@@ -75,8 +103,12 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
 
   const enter = useCallback((place: Place) => setTrail((previous) => [...previous, place]), []);
 
+  const canOpen = here !== null && here.kind !== "shared-with-me";
+  // A folder shows as shared when Drive says so, or when it sits under something that is.
+  const underShared = here !== null && (here.kind === "shared-with-me" || here.shared);
+
   const open = () => {
-    if (here === null) return;
+    if (here === null || here.kind === "shared-with-me" || here.id === null) return;
     onOpen({
       kind: "google-drive",
       folderId: here.id,
@@ -85,7 +117,7 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
     });
   };
 
-  const rowClass = "w-full truncate px-2 py-1 text-left text-ui text-ink hover:bg-hover";
+  const rowClass = "flex w-full items-center gap-2 truncate px-2 py-1 text-left text-ui text-ink hover:bg-hover";
 
   return (
     <div
@@ -99,8 +131,11 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
         if (event.target === event.currentTarget) onCancel();
       }}
     >
-      <div className="flex max-h-[min(32rem,100%)] w-full max-w-[30rem] flex-col rounded-lg border border-rule bg-app p-4 shadow-menu">
-        <h2 className="text-sm font-semibold text-ink">{t("drive.title")}</h2>
+      <div className="flex max-h-full w-[56rem] max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-rule bg-app p-4 shadow-menu">
+        <div className="flex items-center gap-2">
+          <SourceGlyph mark="google-drive" className="size-5 text-drive" />
+          <h2 className="text-sm font-semibold text-ink">{t("drive.title")}</h2>
+        </div>
 
         {bridge === null || listing.state === "connect" ? (
           <GoogleAccountSection bridge={bridge} onConnected={() => setReloads((count) => count + 1)} />
@@ -111,20 +146,21 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
                 {t("drive.root")}
               </button>
               {trail.map((place, index) => (
-                <span key={place.id} className="flex items-center gap-1">
+                <span key={`${place.kind}:${place.id ?? ""}`} className="flex items-center gap-1">
                   <span aria-hidden="true">/</span>
                   <button
                     type="button"
-                    className="rounded px-1 hover:bg-hover"
+                    className="flex items-center gap-1 rounded px-1 hover:bg-hover"
                     onClick={() => setTrail((previous) => previous.slice(0, index + 1))}
                   >
+                    {index === 0 && <DriveGlyph kind={glyphKindOf(place)} className="size-3.5 text-drive" />}
                     {place.name}
                   </button>
                 </span>
               ))}
             </nav>
 
-            <div className="mt-2 min-h-32 flex-1 overflow-y-auto rounded border border-rule">
+            <div className="mt-2 h-[32rem] max-h-[70vh] overflow-y-auto rounded border border-rule">
               {listing.state === "loading" && (
                 <p className="flex items-center gap-2 p-2 text-xs text-ink-3">
                   <Spinner label={t("drive.loading")} />
@@ -138,41 +174,64 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
               )}
               {listing.state === "loaded" && (
                 <>
-                  {here === null && listing.folders.length > 0 && (
-                    <h3 className="px-2 pt-2 text-xs font-medium text-ink-4">{t("drive.myDrive")}</h3>
-                  )}
-                  <ul>
-                    {listing.folders.map((folder) => (
-                      <li key={folder.id}>
+                  {here === null && (
+                    <ul>
+                      <li>
                         <button
                           type="button"
                           className={rowClass}
-                          onClick={() => enter({ id: folder.id, name: folder.name, driveId: here?.driveId ?? null })}
+                          onClick={() =>
+                            enter({ kind: "my-drive", id: "root", name: t("drive.myDrive"), driveId: null, shared: false })
+                          }
                         >
-                          {folder.name}
+                          <DriveGlyph kind="my-drive" className="size-4 shrink-0 text-drive" />
+                          {t("drive.myDrive")}
                         </button>
                       </li>
-                    ))}
-                  </ul>
-                  {listing.drives.length > 0 && (
-                    <>
-                      <h3 className="px-2 pt-2 text-xs font-medium text-ink-4">{t("drive.sharedDrives")}</h3>
-                      <ul>
-                        {listing.drives.map((drive) => (
-                          <li key={drive.id}>
-                            <button
-                              type="button"
-                              className={rowClass}
-                              onClick={() => enter({ id: drive.id, name: drive.name, driveId: drive.id })}
-                            >
-                              {drive.name}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
+                      <li>
+                        <button
+                          type="button"
+                          className={rowClass}
+                          onClick={() =>
+                            enter({ kind: "shared-with-me", id: null, name: t("drive.sharedWithMe"), driveId: null, shared: true })
+                          }
+                        >
+                          <DriveGlyph kind="shared-with-me" className="size-4 shrink-0 text-drive" />
+                          {t("drive.sharedWithMe")}
+                        </button>
+                      </li>
+                    </ul>
                   )}
-                  {listing.folders.length === 0 && listing.drives.length === 0 && (
+                  {here === null && listing.folders.length > 0 && (
+                    <h3 className="px-2 pt-2 text-xs font-medium text-ink-4">{t("drive.sharedDrives")}</h3>
+                  )}
+                  <ul>
+                    {listing.folders.map((folder) => {
+                      const shared = folder.shared || underShared;
+                      return (
+                        <li key={folder.id}>
+                          <button
+                            type="button"
+                            className={rowClass}
+                            onClick={() =>
+                              enter(
+                                here === null
+                                  ? { kind: "shared-drive", id: folder.id, name: folder.name, driveId: folder.id, shared: false }
+                                  : { kind: "folder", id: folder.id, name: folder.name, driveId: here.driveId, shared },
+                              )
+                            }
+                          >
+                            <DriveGlyph
+                              kind={here === null ? "shared-drive" : shared ? "shared-folder" : "folder"}
+                              className={`size-4 shrink-0 ${here === null ? "text-drive" : "text-ink-3"}`}
+                            />
+                            {folder.name}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {here !== null && listing.folders.length === 0 && (
                     <p className="p-2 text-xs text-ink-3">{t("drive.empty")}</p>
                   )}
                 </>
@@ -187,7 +246,7 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
           <button type="button" onClick={onCancel} className="rounded border border-rule px-3 py-1 text-ui text-ink hover:bg-hover">
             {t("drive.cancel")}
           </button>
-          {here !== null && listing.state !== "connect" && (
+          {canOpen && listing.state !== "connect" && (
             <button type="button" onClick={open} className="rounded bg-accent px-3 py-1 text-ui text-on-accent">
               {t("drive.openThis")}
             </button>

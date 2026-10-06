@@ -15,6 +15,7 @@ import {
   foldersOf,
   isDriveId,
   sharedDrivesUrl,
+  sharedWithMeUrl,
   type DriveFile,
 } from "./googleDrive";
 
@@ -69,6 +70,23 @@ describe("URLs", () => {
     expect(new URL(exportUrl("f1")).pathname).toBe("/drive/v3/files/f1/export");
     expect(new URL(sharedDrivesUrl(null)).pathname).toBe("/drive/v3/drives");
     expect(new URL(sharedDrivesUrl("p2")).searchParams.get("pageToken")).toBe("p2");
+  });
+
+  it("lists the folders shared with the user, across Shared Drives", () => {
+    const url = new URL(sharedWithMeUrl(null));
+    expect(url.pathname).toBe("/drive/v3/files");
+    expect(url.searchParams.get("q")).toBe(`sharedWithMe = true and mimeType = '${FOLDER_MIME}' and trashed = false`);
+    expect(url.searchParams.get("pageSize")).toBe("1000");
+    expect(url.searchParams.get("orderBy")).toBe("name");
+    expect(url.searchParams.get("supportsAllDrives")).toBe("true");
+    expect(url.searchParams.get("includeItemsFromAllDrives")).toBe("true");
+    expect(url.searchParams.get("fields")).toContain("shared");
+    expect(url.searchParams.has("pageToken")).toBe(false);
+    expect(new URL(sharedWithMeUrl("p2")).searchParams.get("pageToken")).toBe("p2");
+  });
+
+  it("asks Drive whether a file is shared", () => {
+    expect(new URL(childrenUrl("folder1", null)).searchParams.get("fields")).toContain("shared");
   });
 });
 
@@ -195,6 +213,22 @@ describe("foldersOf", () => {
         file({ id: "d2", name: "Old", mimeType: FOLDER_MIME, trashed: true }),
         file({ id: "f1", name: "a.md" }),
       ]),
-    ).toEqual([{ id: "d1", name: "Work/2026" }]);
+    ).toEqual([{ id: "d1", name: "Work/2026", shared: false }]);
+  });
+
+  it("carries whether Drive says a folder is shared", () => {
+    expect(
+      foldersOf([
+        file({ id: "d1", name: "A", mimeType: FOLDER_MIME, shared: true }),
+        file({ id: "d2", name: "B", mimeType: FOLDER_MIME, shared: false }),
+      ]),
+    ).toEqual([
+      { id: "d1", name: "A", shared: true },
+      { id: "d2", name: "B", shared: false },
+    ]);
+  });
+
+  it("reads the shared flag off a listing", () => {
+    expect(DriveFileListSchema.parse({ files: [{ id: "a", name: "A", mimeType: FOLDER_MIME, shared: true }] }).files[0]?.shared).toBe(true);
   });
 });

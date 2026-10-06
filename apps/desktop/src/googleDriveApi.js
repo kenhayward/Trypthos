@@ -11,6 +11,7 @@ const {
   fileUrl,
   isDriveId,
   sharedDrivesUrl,
+  sharedWithMeUrl,
 } = require("@trypthos/domain");
 
 /// The calls to Google Drive, and nothing else.
@@ -170,7 +171,20 @@ function createGoogleDriveApi({
     return { ok: true, drives };
   }
 
-  return { listChildren, fileMeta, download, exportMarkdown, sharedDrives };
+  async function sharedWithMeFolders() {
+    const files = [];
+    let pageToken = null;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const answer = await getJson(sharedWithMeUrl(pageToken), DriveFileListSchema);
+      if (!answer.ok) return answer;
+      files.push(...answer.value.files);
+      pageToken = answer.value.nextPageToken ?? null;
+      if (pageToken === null) break;
+    }
+    return { ok: true, files };
+  }
+
+  return { listChildren, fileMeta, download, exportMarkdown, sharedDrives, sharedWithMeFolders };
 }
 
 module.exports = { createGoogleDriveApi };

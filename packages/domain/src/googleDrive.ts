@@ -21,7 +21,7 @@ export function isDriveId(value: string): boolean {
 
 export const DriveIdSchema = z.string().regex(DRIVE_ID_PATTERN);
 
-const FILE_FIELDS = "id,name,mimeType,size,headRevisionId,modifiedTime,createdTime,trashed";
+const FILE_FIELDS = "id,name,mimeType,size,headRevisionId,modifiedTime,createdTime,trashed,shared";
 
 export const DriveFileSchema = z.object({
   id: z.string().min(1),
@@ -33,6 +33,8 @@ export const DriveFileSchema = z.object({
   modifiedTime: z.string().optional(),
   createdTime: z.string().optional(),
   trashed: z.boolean().optional(),
+  /// Drive says so for a file that has been shared with anyone, or that was shared with the user.
+  shared: z.boolean().optional(),
 });
 
 export type DriveFile = z.infer<typeof DriveFileSchema>;
@@ -78,6 +80,21 @@ export function sharedDrivesUrl(pageToken: string | null): string {
   const params = new URLSearchParams({ pageSize: "100", fields: "nextPageToken,drives(id,name)" });
   if (pageToken !== null) params.set("pageToken", pageToken);
   return `${DRIVE_API}/drives?${params.toString()}`;
+}
+
+/// The folders other people have shared with the user: a place of its own, not a folder, so there is
+/// no id to list and it is found by query.
+export function sharedWithMeUrl(pageToken: string | null): string {
+  const params = new URLSearchParams({
+    q: `sharedWithMe = true and mimeType = '${FOLDER_MIME}' and trashed = false`,
+    fields: `nextPageToken,files(${FILE_FIELDS})`,
+    pageSize: "1000",
+    orderBy: "name",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true",
+  });
+  if (pageToken !== null) params.set("pageToken", pageToken);
+  return `${DRIVE_API}/files?${params.toString()}`;
 }
 
 const DriveErrorBodySchema = z.object({
@@ -190,8 +207,8 @@ export function childrenToEntries(parentPath: string, files: readonly DriveFile[
 }
 
 /// The folders in a listing, by their real names, for the folder picker.
-export function foldersOf(files: readonly DriveFile[]): { id: string; name: string }[] {
+export function foldersOf(files: readonly DriveFile[]): { id: string; name: string; shared: boolean }[] {
   return files
     .filter((listed) => listed.mimeType === FOLDER_MIME && listed.trashed !== true)
-    .map((listed) => ({ id: listed.id, name: listed.name }));
+    .map((listed) => ({ id: listed.id, name: listed.name, shared: listed.shared === true }));
 }
