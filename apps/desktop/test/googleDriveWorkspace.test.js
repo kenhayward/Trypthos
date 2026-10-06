@@ -634,6 +634,88 @@ test("webAddress of My Drive's root is My Drive", async () => {
   assert.deepEqual(await provider.webAddress(""), { ok: true, url: "https://drive.google.com/drive/my-drive" });
 });
 
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+/// A Drive whose listings are snapshots taken when asked, and which can hold the next listing - or a
+/// rename - until the test lets it go: what a walk of the tree (the filter, Find in Files, the outline)
+/// looks like when it is in flight across a rename.
+async function racingDrive({ holdRename = false } = {}) {
+  const state = { clock: 0, holdNextListing: false, held: [], releaseRename: null, drive: null };
+  const opened = await open(
+    {
+      listChildren: async (id) => {
+        const files = [...(state.drive[id] ?? [])];
+        if (state.holdNextListing) {
+          state.holdNextListing = false;
+          await new Promise((resolve) => state.held.push(resolve));
+        }
+        return { ok: true, files };
+      },
+      renameFile: async (id, name) => {
+        if (holdRename) await new Promise((resolve) => (state.releaseRename = resolve));
+        for (const folder of Object.keys(state.drive)) {
+          state.drive[folder] = state.drive[folder].map((file) => (file.id === id ? { ...file, name } : file));
+        }
+        return { ok: true, file: { id, name, mimeType: FOLDER } };
+      },
+    },
+    { now: () => state.clock },
+  );
+  state.drive = opened.drive;
+  return { ...opened, state };
+}
+
+// A walk of the parent asked for while the rename was in Drive's hands answers the folder as it was.
+// Joined by the rename's own re-listing, or applied after it, it would put `Archive` back and take
+// everything known under `Old` with it - after the rename had answered that it landed.
+test("a listing of the parent in flight across a rename does not undo it", async () => {
+  const { provider, state } = await racingDrive({ holdRename: true });
+  await provider.list("");
+  await provider.list("Archive");
+
+  const renaming = provider.rename("Archive", "Old");
+  while (state.releaseRename === null) await tick();
+  state.clock += 120_000;
+  state.holdNextListing = true;
+  const walking = provider.list("");
+  await tick();
+  assert.equal(state.held.length, 1);
+  state.releaseRename();
+  await tick();
+  await tick();
+  state.held[0]();
+
+  assert.deepEqual(await renaming, { ok: true, path: "Old" });
+  assert.equal((await walking).ok, true);
+  const top = (await provider.list("")).nodes.map((node) => node.id);
+  assert.equal(top.includes("Old"), true);
+  assert.equal(top.includes("Archive"), false);
+  assert.equal((await provider.listKnown("Old")).complete, true);
+  assert.equal((await provider.read("Old/Old.md")).content, "old");
+});
+
+// A folder being opened under its old name when the rename lands: what that listing brings back is
+// filed under a path that no longer names the folder, so it is dropped rather than left as a second
+// set of paths to the same files.
+test("a listing of the renamed folder in flight under its old path is not kept", async () => {
+  const { provider, state } = await racingDrive();
+  await provider.list("");
+  await provider.list("Archive");
+
+  state.clock += 120_000;
+  state.holdNextListing = true;
+  const expanding = provider.list("Archive");
+  await tick();
+  assert.equal(state.held.length, 1);
+  assert.deepEqual(await provider.rename("Archive", "Old"), { ok: true, path: "Old" });
+  state.held[0]();
+
+  assert.deepEqual(await expanding, { ok: false, reason: "not-found" });
+  assert.equal((await provider.listKnown("Archive")).complete, false);
+  assert.equal((await provider.listKnown("Old")).complete, true);
+  assert.deepEqual(await provider.read("Archive/Old.md"), { ok: false, reason: "not-found" });
+});
+
 test("rekeyKnown moves an entry and everything known beneath it, and nothing else", () => {
   const entry = (path, extra = {}) => ({ path, name: path.split("/").pop(), kind: "file", fileId: "x", ...extra });
   const entries = new Map(
