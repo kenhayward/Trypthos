@@ -7,10 +7,10 @@ export const RECENT: Release[] = [
   {
     version: "0.100.0",
     date: "2026-10-06",
-    pr: 226,
+    pr: 227,
     headline: "New files, new folders, rename and Open in Google Drive",
     summary:
-      "A Google Drive workspace now offers the same tree editing as a local folder. Right-click a folder to make a New File or a New Folder in it, and both appear in Drive. Rename works on files and folders, though not on the workspace itself: a renamed folder keeps the folders you had expanded inside it, open tabs follow the rename, a name already used in that folder is refused whatever its capitals, and a rename that changes only the capitals is allowed. A Google Doc is renamed by its title: the box shows the title without .md and Drive receives the new title. Open in Google Drive opens a file, a folder or the whole workspace on drive.google.com, a Doc in Google Docs, in your default browser, where local folders offer Show in Explorer or Finder. Save As still cannot save into a Drive folder, so a new document from File > New is saved to a local folder; Open in New Window stays local only and Recent files list local files only. A GitHub repository is unchanged, none of these items appear there.",
+      "A Google Drive workspace now offers the same tree editing as a local folder. Right-click a folder to make a New File or a New Folder in it, and both appear in Drive. Rename works on files and folders, though not on the workspace itself: a renamed folder keeps the folders you had expanded inside it, open tabs follow the rename, a name already used in that folder is refused whatever its capitals, and a rename that changes only the capitals is allowed. A Google Doc is renamed by its title: the box shows the title without .md and Drive receives the new title. Open in Google Drive opens a file, a folder or the whole workspace on drive.google.com, a Doc in Google Docs, in your default browser, where local folders offer Open in Explorer (Open in Finder on macOS). Save As still cannot save into a Drive folder, so a new document from File > New is saved to a local folder; Open in New Window stays local only and Recent files list local files only. A GitHub repository is unchanged, none of these items appear there.",
     added: [
       "New File and New Folder in a Google Drive workspace, from the right-click menu.",
       "Rename a file or folder in Drive; a Google Doc is renamed by its title.",
@@ -21,7 +21,7 @@ export const RECENT: Release[] = [
       "A name already used in a Drive folder is refused whatever its capitals; a case-only rename is allowed.",
     ],
     fixed: [
-      "A new file made in a Drive folder while a listing of it was already on its way could be missing from the tree afterwards; the folder is now asked again.",
+      "A new file made in a Drive folder while a listing of it was already on its way could be missing from the tree afterwards; the folder is now asked again (#226).",
     ],
   },
   {
