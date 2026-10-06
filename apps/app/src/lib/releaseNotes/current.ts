@@ -5,6 +5,25 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.99.0",
+    date: "2026-10-06",
+    pr: 225,
+    headline: "Play video and audio from Google Drive, and zoom pictures properly",
+    summary:
+      "Videos and audio in a Google Drive folder now open in the player and can be seeked. They stream in ranges from Drive through the main process, so the sign-in token never reaches the window, and the size comes from the folder listing, which is kept for up to a minute. Video and audio in a GitHub repository are still not playable. Pictures, in every source, have been reworked: a picture opens at Fit and is never enlarged, so one smaller than the panel shows at 100%, and a toolbar in the bottom right has Fit, 100%, zoom out, the percentage and zoom in. Ctrl+wheel (Cmd+wheel on macOS) and a trackpad pinch zoom about the pointer, continuously, from 10% (lower if Fit is lower) to 800%. A plain drag pans when the picture is larger than the panel, though a press on the scrollbar is left to the scrollbar, and double-click toggles between Fit and 100%. Ctrl/Cmd+0 returns to Fit, Ctrl/Cmd+1 goes to 100%, and Ctrl/Cmd with plus or minus steps. The panel refits on resize while in Fit. For text in the editor and Preview the zoom gesture changed from Shift+wheel to Ctrl+wheel (Cmd on macOS) and pinch, so Shift+wheel scrolls sideways again; Shift+drag still pans text, and Ctrl/Cmd with plus, minus and 0 are unchanged.",
+    added: [
+      "Video and audio in a Google Drive folder play and can be seeked, streamed from Drive in ranges.",
+      "Pictures open at Fit, never enlarged, with a toolbar for Fit, 100%, zoom out, the percentage and zoom in.",
+      "Ctrl/Cmd+wheel and trackpad pinch zoom a picture about the pointer, from 10% to 800%; a drag pans and double-click toggles Fit and 100%.",
+      "Ctrl/Cmd+0 returns a picture to Fit, Ctrl/Cmd+1 goes to 100%, and Ctrl/Cmd with plus or minus steps.",
+    ],
+    changed: [
+      "Zooming text in the editor and Preview now uses Ctrl+wheel (Cmd on macOS) and pinch instead of Shift+wheel.",
+      "Shift+wheel scrolls sideways again.",
+      "A picture smaller than the panel is no longer stretched: Fit never enlarges it.",
+    ],
+  },
+  {
     version: "0.98.0",
     date: "2026-10-06",
     pr: 223,

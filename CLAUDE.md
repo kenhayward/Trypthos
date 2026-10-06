@@ -14,7 +14,7 @@ Trypthos is a **cross-platform desktop (Windows + macOS) markdown editor**, laid
 
 > **Status: the left two panels work.** Open a local folder, browse it, edit markdown in Live, Source
 > or Preview, and save with conflict detection. Installers ship for Windows and macOS. The chat panel
-> is still a placeholder, and Google Drive sign-in is built and its folders are in progress; the other cloud backends are not written.
+> is still a placeholder, and Google Drive folders open, save and play media; the other cloud backends are not written.
 
 ## Architecture & data flow
 

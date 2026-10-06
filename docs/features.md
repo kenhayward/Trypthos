@@ -278,7 +278,7 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 **Trypthos does not pretend to be connected.** If you untick Google Drive on Google's page, Trypthos says so and stays disconnected. Cancel stops a sign-in you did not finish, and Disconnect signs out and asks Google to forget the permission.
 
-**Open a Drive folder beside your other folders.** With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive with Drive-style icons for My Drive, Shared with me and each shared drive, and a breadcrumb to go back up. Open My Drive itself, a folder shared with you, or any folder inside them. Choose a folder and it opens as another tree beside your local folders and repositories, marked as My Drive, a shared drive, a shared folder or a folder, and comes back the next time you start Trypthos. A shared drive opens under its own name. Markdown and text files open as they do anywhere else, Google Docs are listed under their own title with a Docs mark and open as markdown, and pictures a note embeds are shown. Folders are read as you open them and show a spinner while they load, so a large Drive is not read all at once; a listing is kept for a minute, and right-click Refresh asks Drive again. The filter box and Find in Files search only the Drive folders you have opened, and say so beneath the results. A link or embed that names a note, such as `[[Note]]`, finds the note by searching names, so in a Drive folder it finds it only in folders you have already opened. Drive files are editable and save back to Drive. While a save is on its way the file's row and the editor header show a spinner and say Saving, and the file counts as saved only once Drive has confirmed it. Before writing, Trypthos checks that the file has not changed in Drive since you opened it; if it has, nothing is written, your text stays in the editor and you are told. The check and the write are two requests, so another person saving in between can still be overwritten, but Drive's own version history keeps the version that was replaced and you can restore it there. Google Docs stay read-only, because writing markdown back would turn a Doc into something else. The chat can create a file in a Drive folder. My Drive is tied to the account that opened it, so a workspace never silently follows a different connected account: a My Drive workspace opened under a different account is closed at launch with a message saying so, and you can connect that account or open My Drive again. Right-click Refresh is no longer undone by a listing already in flight. Shortcuts, Sheets and Slides are not listed.
+**Open a Drive folder beside your other folders.** With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive with Drive-style icons for My Drive, Shared with me and each shared drive, and a breadcrumb to go back up. Open My Drive itself, a folder shared with you, or any folder inside them. Choose a folder and it opens as another tree beside your local folders and repositories, marked as My Drive, a shared drive, a shared folder or a folder, and comes back the next time you start Trypthos. A shared drive opens under its own name. Markdown and text files open as they do anywhere else, Google Docs are listed under their own title with a Docs mark and open as markdown, and pictures a note embeds are shown. Folders are read as you open them and show a spinner while they load, so a large Drive is not read all at once; a listing is kept for a minute, and right-click Refresh asks Drive again. The filter box and Find in Files search only the Drive folders you have opened, and say so beneath the results. A link or embed that names a note, such as `[[Note]]`, finds the note by searching names, so in a Drive folder it finds it only in folders you have already opened. Drive files are editable and save back to Drive. While a save is on its way the file's row and the editor header show a spinner and say Saving, and the file counts as saved only once Drive has confirmed it. Before writing, Trypthos checks that the file has not changed in Drive since you opened it; if it has, nothing is written, your text stays in the editor and you are told. The check and the write are two requests, so another person saving in between can still be overwritten, but Drive's own version history keeps the version that was replaced and you can restore it there. Google Docs stay read-only, because writing markdown back would turn a Doc into something else. Videos and audio in a Drive folder open in the player and can be seeked: they stream in ranges from Drive through the main process, so the sign-in token never reaches the window, and the size comes from the folder listing, which is kept for up to a minute. The chat can create a file in a Drive folder. My Drive is tied to the account that opened it, so a workspace never silently follows a different connected account: a My Drive workspace opened under a different account is closed at launch with a message saying so, and you can connect that account or open My Drive again. Right-click Refresh is no longer undone by a listing already in flight. Shortcuts, Sheets and Slides are not listed.
 
 **A spinner shows while things load.** A file you have clicked shows a spinner at the end of its row until it opens, a folder shows one while it lists, and the Drive folder picker shows one beside "Loading folders...". It does the same for local folders and repositories, and holds still if your system asks for reduced motion.
 
@@ -371,10 +371,10 @@ Trypthos writes itself: no batch grammar exists to use, so there is one in the a
 spellings, labels, `%VAR%` and `!VAR!` expansion, the control-flow words and the commands `cmd.exe`
 carries.
 
-**An image is the one type Trypthos does not edit.** Click a picture and it opens in a tab, drawn at
-its own size and scrolling within the panel rather than shrunk to fit - a screenshot scaled down to a
-side panel is a screenshot you cannot read. Hold Shift and turn the wheel to zoom it, and Shift and
-drag to move around it (see **Zoom and pan** below). There are no view buttons, no word count and no
+**An image is the one type Trypthos does not edit.** Click a picture and it opens in a tab, opened at
+Fit and never enlarged, so one smaller than the panel shows at 100%. A toolbar in the bottom right has Fit,
+100%, zoom out, the percentage and zoom in; Ctrl+wheel (Cmd on macOS) or a pinch zooms about the pointer,
+and a drag pans (see **Zoom and pan** below). There are no view buttons, no word count and no
 editing surface, because all three are questions about text, and nothing is ever written back.
 
 **SVG is deliberately not an image here.** It is a picture and a text file both, and the catalogue
@@ -390,7 +390,8 @@ controls, since there is no picture to fill the panel with. Nothing plays until 
 nothing is loaded up front - so a long recording opens as quickly as a short one, and there is no
 size limit at all: dragging the scrub bar jumps straight to that point whether the file is four
 megabytes or four gigabytes. Unlike a picture there is no zoom, because a recording is watched at
-the panel's size, and the way to make it bigger is fullscreen.
+the panel's size, and the way to make it bigger is fullscreen. This works for folders on this computer and
+in Google Drive; GitHub repositories do not play video or audio.
 
 **The formats are the ones Trypthos can really decode**, chosen by testing rather than by listing
 what exists. That is why some familiar names are missing: AVI, WMV, MPEG and FLV cannot be decoded
@@ -625,7 +626,8 @@ Find in Files always opens its hits in an editable view, since their offsets are
 
 ## Zoom and pan
 
-**Hold Shift and turn the wheel to zoom, hold Shift and drag to pan.** The same two gestures work
+**Hold Ctrl (Cmd on macOS) and turn the wheel, or pinch on a trackpad, to zoom; drag to pan a picture, or hold Shift and drag to pan text.**
+Shift and the wheel scrolls sideways, as it does everywhere else. The same gestures work
 wherever the pointer is - the editing surface, rendered prose, or a picture - and what they do
 underneath is what each of those needs:
 
@@ -636,9 +638,16 @@ underneath is what each of those needs:
   it and there is something to pan around. That is the difference between a zoom and a magnifying
   glass: a picture painted larger inside a box that stayed the same size could not be moved.
 
-The wheel steps through a ladder of levels rather than multiplying by a fraction each notch, and 100%
+In text the wheel steps through a ladder of levels rather than multiplying by a fraction each notch, and 100%
 is on it - so turning the wheel back the way you came puts a document back at exactly the size it
 opened at rather than near it.
+
+**A picture zooms continuously, and starts at Fit.** It opens fitted to the panel and is never enlarged, so a
+small one shows at 100%. Ctrl/Cmd+wheel and pinch zoom about the pointer from 10% (lower if Fit is lower)
+to 800%. A plain drag pans when the picture is larger than the panel, though a press on the scrollbar is left
+to the scrollbar. Double-click toggles between Fit and 100%, the toolbar in the bottom right has Fit, 100%,
+zoom out, the percentage and zoom in, and the panel refits when it is resized while in Fit. Ctrl/Cmd+0 returns
+to Fit and Ctrl/Cmd+1 goes to 100%; Ctrl/Cmd with plus or minus steps.
 
 **The level belongs to the document, not to the window.** Zooming one file does not resize the one in
 the tab beside it, and switching between Live, Source and Preview keeps the level you were reading
@@ -646,7 +655,7 @@ at - a view of a document, in both senses. It is not saved: a zoom is how you ar
 now rather than a setting, so a file opens at its own size every time.
 
 **The keyboard does the same three things.** **Ctrl and plus** and **Ctrl and minus** step the same
-ladder the wheel does, and **Ctrl and 0** goes straight back to 100% from wherever you are on it -
+ladder the wheel does, and **Ctrl and 0** goes straight back to 100% from wherever you are on it (for a picture, back to Fit) -
 the one thing the wheel cannot do in a press. On macOS they are Cmd. They act on the document on
 screen wherever the cursor is, so you do not have to put the pointer over anything first.
 
