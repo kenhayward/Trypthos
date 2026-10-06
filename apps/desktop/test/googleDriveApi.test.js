@@ -321,6 +321,91 @@ test("a write that times out is not repeated, and answers offline", async () => 
   assert.equal(calls.length, 1);
 });
 
+const FOLDER_META = { id: "n2", name: "Notes", mimeType: "application/vnd.google-apps.folder" };
+
+test("creates a folder with one JSON POST to the metadata endpoint", async () => {
+  const { api, calls } = setup({ routes: [answer(200, FOLDER_META)] });
+
+  assert.deepEqual(await api.createFolder(FOLDER, "Notes"), { ok: true, file: FOLDER_META });
+  assert.equal(calls[0].method, "POST");
+  const url = new URL(calls[0].url);
+  assert.equal(`${url.origin}${url.pathname}`, "https://www.googleapis.com/drive/v3/files");
+  assert.equal(url.searchParams.get("supportsAllDrives"), "true");
+  assert.equal(calls[0].headers["Content-Type"], "application/json");
+  assert.equal(calls[0].headers.Authorization, `Bearer ${ACCESS}`);
+  assert.deepEqual(JSON.parse(calls[0].body), { name: "Notes", mimeType: "application/vnd.google-apps.folder", parents: [FOLDER] });
+});
+
+test("renames a file with a JSON PATCH of its name alone", async () => {
+  const renamed = { id: "f1", name: "b.md", mimeType: "text/markdown", headRevisionId: "r2" };
+  const { api, calls } = setup({ routes: [answer(200, renamed)] });
+
+  assert.deepEqual(await api.renameFile("f1", "b.md"), { ok: true, file: renamed });
+  assert.equal(calls[0].method, "PATCH");
+  const url = new URL(calls[0].url);
+  assert.equal(`${url.origin}${url.pathname}`, "https://www.googleapis.com/drive/v3/files/f1");
+  assert.equal(url.searchParams.get("supportsAllDrives"), "true");
+  assert.equal(calls[0].headers["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(calls[0].body), { name: "b.md" });
+});
+
+test("refuses a folder or rename on an id that is not a Drive id, without a request", async () => {
+  const { api, calls } = setup();
+  assert.deepEqual(await api.createFolder("../x", "Notes"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await api.renameFile("a' or 'b", "b.md"), { ok: false, reason: "not-found" });
+  assert.equal(calls.length, 0);
+});
+
+test("a folder or rename is repeated after an expired token or a rate limit, with the same body", async () => {
+  const folder = setup({
+    tokens: [{ ok: true, token: "stale" }, { ok: true, token: ACCESS }],
+    routes: [answer(401, {}), answer(200, FOLDER_META)],
+  });
+  assert.equal((await folder.api.createFolder(FOLDER, "Notes")).ok, true);
+  assert.equal(folder.calls.length, 2);
+  assert.equal(folder.calls[1].body, folder.calls[0].body);
+  assert.equal(folder.calls[1].authorization, `Bearer ${ACCESS}`);
+
+  const rename = setup({
+    routes: [answer(429, { error: { errors: [{ reason: "rateLimitExceeded" }] } }), answer(200, { id: "f1", name: "b.md", mimeType: "text/markdown" })],
+  });
+  assert.equal((await rename.api.renameFile("f1", "b.md")).ok, true);
+  assert.equal(rename.calls.length, 2);
+  assert.equal(rename.calls[1].body, rename.calls[0].body);
+  assert.equal(rename.slept.length, 1);
+});
+
+test("a folder or rename Drive forbids answers permission-denied", async () => {
+  const forbidden = { error: { errors: [{ reason: "insufficientFilePermissions" }] } };
+  const { api } = setup({ routes: [answer(403, forbidden), answer(403, forbidden)] });
+  assert.deepEqual(await api.createFolder(FOLDER, "Notes"), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(await api.renameFile("f1", "b.md"), { ok: false, reason: "permission-denied" });
+});
+
+// Like an upload: a timed-out write may have landed, so it is not repeated.
+test("a folder or rename that times out is not repeated, and answers offline", async () => {
+  const folder = setup({ routes: [() => new Promise(() => {})], timeoutMs: 20 });
+  assert.deepEqual(await folder.api.createFolder(FOLDER, "Notes"), { ok: false, reason: "offline" });
+  assert.equal(folder.calls.length, 1);
+
+  const rename = setup({ routes: [() => new Promise(() => {})], timeoutMs: 20 });
+  assert.deepEqual(await rename.api.renameFile("f1", "b.md"), { ok: false, reason: "offline" });
+  assert.equal(rename.calls.length, 1);
+});
+
+test("no log line from a folder or rename holds the address, the name or the token", async () => {
+  const { api, logs } = setup({
+    routes: [() => new Promise(() => {}), answer(200, { nope: true })],
+    timeoutMs: 20,
+  });
+  await api.createFolder(FOLDER, "Secret Plans");
+  await api.renameFile("f1", "Secret Plans");
+  assert.ok(logs.length > 0);
+  for (const line of logs) {
+    assert.doesNotMatch(line, /Secret Plans|googleapis|folderAAA111|f1|access-invented/);
+  }
+});
+
 // A ranged read hands the body back unread: the player pulls it as it plays.
 function streamed(status, { pulls = { count: 0 }, cancelled = { value: false }, stall = false } = {}) {
   const body = new ReadableStream({

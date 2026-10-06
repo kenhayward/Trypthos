@@ -13,8 +13,11 @@ import {
   displayNameFor,
   driveErrorFor,
   driveMediaUrl,
+  driveRootWebUrl,
+  driveWebUrl,
   exportUrl,
   fileUrl,
+  folderCreateUrl,
   foldersOf,
   isDriveId,
   multipartRelated,
@@ -272,6 +275,36 @@ describe("upload addresses", () => {
     expect(`${url.origin}${url.pathname}`).toBe(`${DRIVE_UPLOAD_API}/files`);
     expect(url.searchParams.get("uploadType")).toBe("multipart");
     expect(url.searchParams.get("fields")).toContain("headRevisionId");
+  });
+});
+
+describe("folder and rename addresses", () => {
+  it("creates a folder at the metadata endpoint, not the upload one", () => {
+    const url = new URL(folderCreateUrl());
+    expect(`${url.origin}${url.pathname}`).toBe(`${DRIVE_API}/files`);
+    expect(url.searchParams.get("supportsAllDrives")).toBe("true");
+    expect(url.searchParams.get("uploadType")).toBeNull();
+    expect(url.searchParams.get("fields")).toContain("headRevisionId");
+  });
+
+  it("renames through the file's own address, which answers its fields and covers shared drives", () => {
+    const url = new URL(fileUrl("f1"));
+    expect(`${url.origin}${url.pathname}`).toBe(`${DRIVE_API}/files/f1`);
+    expect(url.searchParams.get("supportsAllDrives")).toBe("true");
+    expect(url.searchParams.get("fields")).toContain("modifiedTime");
+  });
+});
+
+describe("web addresses", () => {
+  it("opens a folder, a Google Doc and any other file at their own pages", () => {
+    expect(driveWebUrl({ kind: "directory", fileId: "d1", googleDoc: false })).toBe("https://drive.google.com/drive/folders/d1");
+    expect(driveWebUrl({ kind: "file", fileId: "g1", googleDoc: true })).toBe("https://docs.google.com/document/d/g1/edit");
+    expect(driveWebUrl({ kind: "file", fileId: "m1", googleDoc: false })).toBe("https://drive.google.com/file/d/m1/view");
+  });
+
+  it("opens My Drive for the root alias and the folder page for any other root", () => {
+    expect(driveRootWebUrl("root")).toBe("https://drive.google.com/drive/my-drive");
+    expect(driveRootWebUrl("sharedDrive_9")).toBe("https://drive.google.com/drive/folders/sharedDrive_9");
   });
 });
 

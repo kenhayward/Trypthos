@@ -235,6 +235,31 @@ export function createUrl(): string {
   return `${DRIVE_UPLOAD_API}/files?${params.toString()}`;
 }
 
+/// A new folder: metadata only, so the metadata endpoint rather than the upload one. Drive answers
+/// the folder's fields, like every other write here.
+export function folderCreateUrl(): string {
+  const params = new URLSearchParams({ fields: FILE_FIELDS, supportsAllDrives: "true" });
+  return `${DRIVE_API}/files?${params.toString()}`;
+}
+
+// A rename is a PATCH of `fileUrl(id)`: that address already answers FILE_FIELDS and sets
+// supportsAllDrives, so it has no name of its own.
+
+/// Where a file or folder lives on the web. The ids are spliced in unencoded: every caller has
+/// passed them through `isDriveId` first, so they are the URL-safe alphabet and nothing else.
+export function driveWebUrl({ kind, fileId, googleDoc }: { kind: "file" | "directory"; fileId: string; googleDoc: boolean }): string {
+  if (kind === "directory") return `https://drive.google.com/drive/folders/${fileId}`;
+  if (googleDoc) return `https://docs.google.com/document/d/${fileId}/edit`;
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/// The workspace root on the web: My Drive for the `root` alias, otherwise the folder page of the
+/// id (a shared drive's root id is its drive id, which the same page opens). The id has passed
+/// `isDriveId`, as above.
+export function driveRootWebUrl(folderId: string): string {
+  return folderId === "root" ? "https://drive.google.com/drive/my-drive" : `https://drive.google.com/drive/folders/${folderId}`;
+}
+
 /// The body of a `multipart/related` upload: the metadata as JSON, then the content's bytes as they
 /// are - a byte-order mark included. The caller chooses a boundary that cannot occur in either.
 export function multipartRelated(
