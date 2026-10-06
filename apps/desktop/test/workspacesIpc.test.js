@@ -23,6 +23,24 @@ function fakeIpcMain() {
 }
 
 /// Two real folders on disk, opened one after the other through the dialog.
+/// A refused payload is reported on the console (see `guarded`). Tests that send one on purpose
+/// collect that line here, so it is asserted rather than printed into an otherwise clean run.
+async function collectingErrors(body) {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return logged;
+}
+
+function assertRejectionLogged(logged, times = 1) {
+  assert.equal(logged.filter((line) => line.includes("Rejected malformed IPC payload")).length, times);
+}
+
 async function withTwoWorkspaces(first, second, body, dependencies = {}) {
   const roots = [];
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-multi-data-"));
@@ -137,15 +155,18 @@ test("renames an entry in the workspace the path names, and answers with its qua
 });
 
 test("refuses a rename to a name Windows cannot hold, before touching the disk", async () => {
-  await withTwoWorkspaces({ "a.md": "one" }, { "b.md": null }, async ({ ipcMain, one, roots }) => {
-    for (const name of ["CON", "sub/b.md", "b?.md"]) {
-      assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${one.id}/a.md`, name }), {
-        ok: false,
-        reason: "bad-request",
-      });
-    }
-    assert.equal(await fs.readFile(path.join(roots[0], "a.md"), "utf8"), "one");
-  });
+  const logged = await collectingErrors(() =>
+    withTwoWorkspaces({ "a.md": "one" }, { "b.md": null }, async ({ ipcMain, one, roots }) => {
+      for (const name of ["CON", "sub/b.md", "b?.md"]) {
+        assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${one.id}/a.md`, name }), {
+          ok: false,
+          reason: "bad-request",
+        });
+      }
+      assert.equal(await fs.readFile(path.join(roots[0], "a.md"), "utf8"), "one");
+    }),
+  );
+  assertRejectionLogged(logged, 3);
 });
 
 /// A repository has no folder to make, nothing to rename without a commit, and no place on disk to
@@ -285,13 +306,16 @@ test("opens a local file in a separate window with its workspace root", async ()
     ]);
 
     // A draft that is not the right shape never reaches a window.
-    assert.deepEqual(
-      await ipcMain.invoke("file:openInNewWindow", {
-        path: `${workspace.id}/a.md`,
-        draft: { content: "x" },
-      }),
-      { ok: false, reason: "bad-request" },
-    );
+    const logged = await collectingErrors(async () => {
+      assert.deepEqual(
+        await ipcMain.invoke("file:openInNewWindow", {
+          path: `${workspace.id}/a.md`,
+          draft: { content: "x" },
+        }),
+        { ok: false, reason: "bad-request" },
+      );
+    });
+    assertRejectionLogged(logged);
     assert.equal(opened.length, 2);
   } finally {
     await fs.rm(root, { recursive: true, force: true });

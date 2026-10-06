@@ -113,8 +113,17 @@ test("survives a session that refuses the list", () => {
     },
   });
 
-  const result = enableSpellChecker(ses, { platform: "win32", locale: "en-GB" });
+  const logged = [];
+  const logger = { error: (...args) => logged.push(args.map(String).join(" ")) };
+
+  const result = enableSpellChecker(ses, { platform: "win32", locale: "en-GB", logger });
   assert.equal(result.checking, false);
+  // Said once, naming the kind of failure only: an error's message can carry whatever the
+  // platform put in it, and the log is not the place for that.
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /spellchecker/);
+  assert.ok(logged[0].includes("(Error)"));
+  assert.equal(logged[0].includes("unsupported language"), false);
 });
 
 test("reports when there is nothing to check with", () => {

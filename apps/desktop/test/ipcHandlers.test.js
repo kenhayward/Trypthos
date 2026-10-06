@@ -11,6 +11,24 @@ const { guarded } = require("../src/ipcHandlers");
 
 const workspace = { root: "/ws" };
 
+/// A refused payload is reported on the console. Tests that send one on purpose collect that line
+/// here, so it is asserted rather than printed into an otherwise clean run.
+async function collectingErrors(body) {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return logged;
+}
+
+function assertRejectionLogged(logged, times = 1) {
+  assert.equal(logged.filter((line) => line.includes("Rejected malformed IPC payload")).length, times);
+}
+
 /// The locator `guarded` takes: it is handed the PARSED request and answers which workspace it is
 /// about, together with the path within that workspace. Several folders are open at once, so which
 /// one a request is for is part of the request rather than part of the app's state.
@@ -36,26 +54,38 @@ test("passes a valid payload through to the handler", async () => {
 
 test("refuses a malformed payload without calling the handler", async () => {
   const { calls, handler } = spyHandler();
-  const result = await guarded(open, ListRequest, handler)(null, { path: 42 });
+  let result;
+  const logged = await collectingErrors(async () => {
+    result = await guarded(open, ListRequest, handler)(null, { path: 42 });
+  });
 
   assert.deepEqual(result, { ok: false, reason: "bad-request" });
   assert.equal(calls.length, 0, "the handler must not run for a rejected payload");
+  assertRejectionLogged(logged);
 });
 
 test("refuses a payload carrying unexpected fields", async () => {
   const { calls, handler } = spyHandler();
-  const result = await guarded(open, ListRequest, handler)(null, { path: "notes", root: "/etc" });
+  let result;
+  const logged = await collectingErrors(async () => {
+    result = await guarded(open, ListRequest, handler)(null, { path: "notes", root: "/etc" });
+  });
 
   assert.deepEqual(result, { ok: false, reason: "bad-request" });
   assert.equal(calls.length, 0);
+  assertRejectionLogged(logged);
 });
 
 test("refuses a write that omits the revision entirely", async () => {
   const { calls, handler } = spyHandler();
-  const result = await guarded(open, WriteRequest, handler)(null, { path: "a.md", content: "x" });
+  let result;
+  const logged = await collectingErrors(async () => {
+    result = await guarded(open, WriteRequest, handler)(null, { path: "a.md", content: "x" });
+  });
 
   assert.deepEqual(result, { ok: false, reason: "bad-request" });
   assert.equal(calls.length, 0, "a write with no stated revision must never reach the filesystem");
+  assertRejectionLogged(logged);
 });
 
 test("refuses a valid request when it names no workspace that is open", async () => {
@@ -88,15 +118,23 @@ test("hands the handler the path inside the workspace it resolved", async () => 
 // "no workspace" would send whoever is debugging it looking in the wrong place entirely.
 test("reports a malformed payload as such even with no workspace open", async () => {
   const { handler } = spyHandler();
-  const result = await guarded(none, ListRequest, handler)(null, { path: 42 });
+  let result;
+  const logged = await collectingErrors(async () => {
+    result = await guarded(none, ListRequest, handler)(null, { path: 42 });
+  });
 
   assert.deepEqual(result, { ok: false, reason: "bad-request" });
+  assertRejectionLogged(logged);
 });
 
 test("does not throw when the payload is not an object at all", async () => {
   const { handler } = spyHandler();
-  for (const payload of [null, undefined, "string", 7, []]) {
-    const result = await guarded(open, ListRequest, handler)(null, payload);
-    assert.equal(result.ok, false);
-  }
+  const payloads = [null, undefined, "string", 7, []];
+  const logged = await collectingErrors(async () => {
+    for (const payload of payloads) {
+      const result = await guarded(open, ListRequest, handler)(null, payload);
+      assert.equal(result.ok, false);
+    }
+  });
+  assertRejectionLogged(logged, payloads.length);
 });

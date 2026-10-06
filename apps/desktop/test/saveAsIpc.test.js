@@ -22,6 +22,24 @@ function fakeIpcMain() {
   };
 }
 
+/// A refused payload is reported on the console (see `guarded`). Tests that send one on purpose
+/// collect that line here, so it is asserted rather than printed into an otherwise clean run.
+async function collectingErrors(body) {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return logged;
+}
+
+function assertRejectionLogged(logged, times = 1) {
+  assert.equal(logged.filter((line) => line.includes("Rejected malformed IPC payload")).length, times);
+}
+
 /// A workspace on disk, opened through the real handlers, with a save dialog that answers whatever
 /// the test tells it to.
 async function withWorkspace(files, body) {
@@ -166,14 +184,17 @@ test("opens the dialog at the workspace root for a document that has never been 
 // The renderer cannot name a destination. Trying is a protocol error, refused before a dialog is
 // ever shown.
 test("refuses a request that tries to name where the file should go", async () => {
-  await withWorkspace({}, async ({ ipcMain, outside, dialogState }) => {
-    const result = await ipcMain.invoke("file:saveAs", {
-      path: null,
-      content: "x",
-      target: path.join(outside, "planted.md"),
-    });
+  const logged = await collectingErrors(() =>
+    withWorkspace({}, async ({ ipcMain, outside, dialogState }) => {
+      const result = await ipcMain.invoke("file:saveAs", {
+        path: null,
+        content: "x",
+        target: path.join(outside, "planted.md"),
+      });
 
-    assert.deepEqual(result, { ok: false, reason: "bad-request" });
-    assert.equal(dialogState.seen.length, 0, "no dialog may open for a malformed request");
-  });
+      assert.deepEqual(result, { ok: false, reason: "bad-request" });
+      assert.equal(dialogState.seen.length, 0, "no dialog may open for a malformed request");
+    }),
+  );
+  assertRejectionLogged(logged);
 });

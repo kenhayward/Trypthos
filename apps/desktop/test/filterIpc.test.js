@@ -23,6 +23,24 @@ function fakeIpcMain() {
   };
 }
 
+/// A refused payload is reported on the console (see `guarded`). Tests that send one on purpose
+/// collect that line here, so it is asserted rather than printed into an otherwise clean run.
+async function collectingErrors(body) {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return logged;
+}
+
+function assertRejectionLogged(logged, times = 1) {
+  assert.equal(logged.filter((line) => line.includes("Rejected malformed IPC payload")).length, times);
+}
+
 async function withWorkspace(files, body) {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-filter-ipc-"));
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-filter-data-"));
@@ -131,11 +149,14 @@ test("matches files whose type is turned off, as the tree lists them", async () 
 });
 
 test("refuses an empty filter rather than walking the tree for it", async () => {
-  await withWorkspace({ "notes.md": null }, async ({ ipcMain, q }) => {
-    const result = await filter(ipcMain, q, { filter: "" });
-    assert.equal(result.ok, false);
-    assert.equal(result.reason, "bad-request");
-  });
+  const logged = await collectingErrors(() =>
+    withWorkspace({ "notes.md": null }, async ({ ipcMain, q }) => {
+      const result = await filter(ipcMain, q, { filter: "" });
+      assert.equal(result.ok, false);
+      assert.equal(result.reason, "bad-request");
+    }),
+  );
+  assertRejectionLogged(logged);
 });
 
 test("refuses a folder in no open workspace", async () => {

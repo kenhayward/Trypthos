@@ -245,6 +245,10 @@ describe("Opening a different file, rendered", () => {
 
   it("opens the new file at the top, not where the last one was left", async () => {
     render(<TwoFiles />);
+    // Scrolled only once CodeMirror has measured the document, as a reader's scroll always is.
+    // Before that its line heights are estimates, and a 900 pixel jump keeps moving the viewport on
+    // every pass until CodeMirror gives up and warns "Measure loop restarted".
+    await settled();
 
     const scroller = document.querySelector(".cm-scroller") as HTMLElement;
     scroller.scrollTop = 900;
