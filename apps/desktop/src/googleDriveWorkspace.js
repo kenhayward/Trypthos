@@ -216,11 +216,28 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
 /// Opens a Drive folder: it must exist, be a folder, and not be in the trash. Answers its CURRENT
 /// name - the one in the reference is what it was called when it was chosen.
+///
+/// A shared drive's root answers the generic name "Drive" to `files.get`; its real name is only in
+/// `drives.get`, so that is asked, and the name it was chosen under stands in if the ask fails - a
+/// name is not worth failing the open over. Also answers `variant`, what kind of place this is.
 async function openGoogleDriveWorkspace({ ref, api, now, ttlMs }) {
   const meta = await api.fileMeta(ref.folderId);
   if (!meta.ok) return meta;
   if (meta.file.mimeType !== FOLDER_MIME || meta.file.trashed === true) return failure("not-found");
-  return { ok: true, name: meta.file.name, provider: createGoogleDriveProvider({ ref, api, now, ttlMs }) };
+
+  const sharedDriveRoot = ref.driveId !== undefined && ref.driveId === ref.folderId;
+  let name = meta.file.name;
+  if (sharedDriveRoot) {
+    const drive = await api.sharedDrive(ref.driveId);
+    name = drive.ok ? drive.drive.name : ref.name;
+  }
+
+  let variant = "folder";
+  if (ref.folderId === "root") variant = "my-drive";
+  else if (sharedDriveRoot) variant = "shared-drive";
+  else if (meta.file.shared === true) variant = "shared-folder";
+
+  return { ok: true, name, variant, provider: createGoogleDriveProvider({ ref, api, now, ttlMs }) };
 }
 
 module.exports = { openGoogleDriveWorkspace, GUARD_ROOT };

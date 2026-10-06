@@ -4,12 +4,14 @@ const {
   DriveFileListSchema,
   DriveFileSchema,
   SharedDriveListSchema,
+  SharedDriveSchema,
   childrenUrl,
   driveErrorFor,
   driveMediaUrl,
   exportUrl,
   fileUrl,
   isDriveId,
+  sharedDriveUrl,
   sharedDrivesUrl,
   sharedWithMeUrl,
 } = require("@trypthos/domain");
@@ -158,6 +160,12 @@ function createGoogleDriveApi({
     return getBytes(exportUrl(id));
   }
 
+  async function sharedDrive(id) {
+    if (!isDriveId(id)) return failure("not-found");
+    const answer = await getJson(sharedDriveUrl(id), SharedDriveSchema);
+    return answer.ok ? { ok: true, drive: { id: answer.value.id, name: answer.value.name } } : answer;
+  }
+
   async function sharedDrives() {
     const drives = [];
     let pageToken = null;
@@ -184,7 +192,7 @@ function createGoogleDriveApi({
     return { ok: true, files };
   }
 
-  return { listChildren, fileMeta, download, exportMarkdown, sharedDrives, sharedWithMeFolders };
+  return { listChildren, fileMeta, download, exportMarkdown, sharedDrive, sharedDrives, sharedWithMeFolders };
 }
 
 module.exports = { createGoogleDriveApi };

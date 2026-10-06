@@ -5,6 +5,7 @@ import {
   DriveIdSchema,
   FOLDER_MIME,
   GOOGLE_DOC_MIME,
+  SharedDriveSchema,
   childrenToEntries,
   childrenUrl,
   displayNameFor,
@@ -14,6 +15,7 @@ import {
   fileUrl,
   foldersOf,
   isDriveId,
+  sharedDriveUrl,
   sharedDrivesUrl,
   sharedWithMeUrl,
   type DriveFile,
@@ -230,5 +232,21 @@ describe("foldersOf", () => {
 
   it("reads the shared flag off a listing", () => {
     expect(DriveFileListSchema.parse({ files: [{ id: "a", name: "A", mimeType: FOLDER_MIME, shared: true }] }).files[0]?.shared).toBe(true);
+  });
+});
+
+describe("one shared drive", () => {
+  it("is asked for by id, with just its id and name", () => {
+    const url = new URL(sharedDriveUrl("0AbcDEF"));
+    expect(url.pathname).toBe("/drive/v3/drives/0AbcDEF");
+    expect(url.searchParams.get("fields")).toBe("id,name");
+  });
+
+  it("is read as an id and a name", () => {
+    expect(SharedDriveSchema.parse({ id: "0AbcDEF", name: "Team Drive Now", kind: "drive#drive" })).toEqual({
+      id: "0AbcDEF",
+      name: "Team Drive Now",
+    });
+    expect(SharedDriveSchema.safeParse({ id: "", name: "x" }).success).toBe(false);
   });
 });

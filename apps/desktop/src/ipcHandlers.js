@@ -129,6 +129,8 @@ function described(workspace) {
     /// True when the workspace is in an Obsidian vault - see `providers.js`. Carried so the editor
     /// can render its markdown as Obsidian's without having to find a marker in every note.
     vault: workspace.vault === true,
+    /// Which kind of Google Drive place this is - only a Drive workspace has one.
+    ...(workspace.driveVariant === undefined ? {} : { driveVariant: workspace.driveVariant }),
   };
 }
 

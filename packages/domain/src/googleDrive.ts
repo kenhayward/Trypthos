@@ -49,6 +49,14 @@ export const SharedDriveListSchema = z.object({
   nextPageToken: z.string().optional(),
 });
 
+/// One shared drive's own name. `files.get` on a shared drive's root id answers the generic name
+/// "Drive"; only `drives.get` knows what the drive is called.
+export const SharedDriveSchema = z.object({ id: z.string().min(1), name: z.string() });
+
+export function sharedDriveUrl(id: string): string {
+  return `${DRIVE_API}/drives/${id}?fields=id,name`;
+}
+
 export function childrenUrl(folderId: string, pageToken: string | null, foldersOnly = false): string {
   const clauses = [`'${folderId}' in parents`, "trashed = false"];
   if (foldersOnly) clauses.push(`mimeType = '${FOLDER_MIME}'`);

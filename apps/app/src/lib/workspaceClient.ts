@@ -50,6 +50,8 @@ export interface WorkspaceInfo {
   /// True when the workspace is in an Obsidian vault - an `.obsidian` folder at or above it - so its
   /// markdown is rendered as Obsidian's. Optional: a shell that predates it says nothing, which is no.
   vault?: boolean;
+  /// Which kind of Google Drive place this is, for the mark on its row. Only a Drive workspace has one.
+  driveVariant?: "my-drive" | "shared-drive" | "shared-folder" | "folder";
 }
 
 export interface RemoteNode {

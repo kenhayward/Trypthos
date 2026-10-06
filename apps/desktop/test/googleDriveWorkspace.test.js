@@ -382,3 +382,66 @@ test("listKnown refuses a path outside the workspace", async () => {
   assert.deepEqual(await provider.listKnown("../x"), { ok: false, reason: "permission-denied" });
   assert.equal(calls.list.length, 0);
 });
+
+const SHARED_ROOT = { kind: "google-drive", folderId: "0AbcDEF", driveId: "0AbcDEF", name: "Test Drive" };
+
+async function openRef(ref, overrides) {
+  const { api } = fakeApi(overrides);
+  return openGoogleDriveWorkspace({ ref, api });
+}
+
+test("a shared drive's root opens under the drive's own name, not Drive's generic one", async () => {
+  const asked = [];
+  const opened = await openRef(SHARED_ROOT, {
+    fileMeta: async (id) => ({ ok: true, file: { id, name: "Drive", mimeType: FOLDER } }),
+    sharedDrive: async (id) => {
+      asked.push(id);
+      return { ok: true, drive: { id, name: "Team Drive Now" } };
+    },
+  });
+  assert.equal(opened.name, "Team Drive Now");
+  assert.equal(opened.variant, "shared-drive");
+  assert.deepEqual(asked, ["0AbcDEF"]);
+});
+
+test("a shared drive whose name cannot be read opens as the name it was chosen under", async () => {
+  const opened = await openRef(SHARED_ROOT, {
+    fileMeta: async (id) => ({ ok: true, file: { id, name: "Drive", mimeType: FOLDER } }),
+    sharedDrive: async () => ({ ok: false, reason: "offline" }),
+  });
+  assert.equal(opened.ok, true);
+  assert.equal(opened.name, "Test Drive");
+  assert.equal(opened.variant, "shared-drive");
+});
+
+test("a folder inside a shared drive is named by its own metadata and does not ask for the drive", async () => {
+  let asked = false;
+  const opened = await openRef(
+    { kind: "google-drive", folderId: "rootAAA", driveId: "0AbcDEF", name: "Notes" },
+    {
+      sharedDrive: async () => {
+        asked = true;
+        return { ok: false, reason: "offline" };
+      },
+    },
+  );
+  assert.equal(opened.name, "Notes (renamed)");
+  assert.equal(opened.variant, "folder");
+  assert.equal(asked, false);
+});
+
+test("says what kind of place was opened", async () => {
+  const myDrive = await openRef(
+    { kind: "google-drive", folderId: "root", name: "My Drive" },
+    { fileMeta: async () => ({ ok: true, file: { id: "realRootId", name: "My Drive", mimeType: FOLDER } }) },
+  );
+  assert.equal(myDrive.variant, "my-drive");
+
+  const shared = await openRef(REF, {
+    fileMeta: async (id) => ({ ok: true, file: { id, name: "Projects", mimeType: FOLDER, shared: true } }),
+  });
+  assert.equal(shared.variant, "shared-folder");
+
+  const plain = await openRef(REF, {});
+  assert.equal(plain.variant, "folder");
+});
