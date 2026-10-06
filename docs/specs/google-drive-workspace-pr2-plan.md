@@ -2578,3 +2578,53 @@ git commit -m "release: 0.97.0 - open a Google Drive folder"
 ```
 
 The controller then runs the manual check with the user, repairs line endings against `main`, pushes and opens the PR.
+
+---
+
+## Additions after the first manual check (user-approved)
+
+Task 8 (a spinner while things load) was added and done; its brief lives in the plan workspace. Tasks 9 and 10 follow from the second round of feedback: a folder shared from another account did not appear, the user wants My Drive itself openable, the picker should carry Drive-style icons and be larger, and - once My Drive can be a workspace - the filter and Find must not walk the whole Drive.
+
+### Task 9: The picker reaches My Drive, Shared with me and Shared drives, with icons
+
+**Design (approved):**
+- The picker's top level is three kinds of entry, each with its own icon: **My Drive** (Drive id `root`), **Shared with me** (a virtual place - folders whose owner shared them with the user; not itself openable), and a **Shared drives** heading with one row per shared drive (hidden when there are none).
+- Inside My Drive, a shared drive or any folder, the user can go deeper or **Open this folder**. My Drive opens as `{ kind: "google-drive", folderId: "root", name: "My Drive" }` (the opener's `fileMeta("root")` answers Drive's real name for it). Inside Shared with me, the list is the shared folders; each can be entered and opened like any folder; "Shared with me" itself offers no Open.
+- Icons are drawn in the app's own outline style with `Glyph` (24 viewBox, stroke currentColor) - not copies of Google's artwork: My Drive (a drive), Shared with me (two people), Shared drive (a drive with people), Folder, Shared folder (a folder with a person). A folder row shows the shared-folder icon when Drive says the folder is shared (`shared: true`) or it was reached through Shared with me.
+- The dialog is about twice its previous size: width `w-[56rem]` capped at the viewport (`max-w-[calc(100vw-2rem)]`), and the list area about twice as tall (e.g. `h-[32rem] max-h-[70vh]`).
+- The Drive mark (`SourceGlyph mark="google-drive"`) sits at the top left of the dialog beside the title. Move `SourceGlyph` and `sourceColour` out of `WorkspacePanel.tsx` into `components/SourceGlyph.tsx` (exported) so both use one copy.
+- The breadcrumb's first crumb after "Google Drive" carries its category icon (My Drive, Shared with me, or the shared drive); deeper crumbs are text only.
+
+**Domain (`googleDrive.ts`):**
+- Add `shared` to the requested file fields and `shared: z.boolean().optional()` to `DriveFileSchema`.
+- `sharedWithMeUrl(pageToken: string | null): string` - `files` with `q = "sharedWithMe = true and mimeType = '<FOLDER_MIME>' and trashed = false"`, the same fields, `pageSize=1000`, `orderBy=name`, `supportsAllDrives=true`, `includeItemsFromAllDrives=true`.
+- `foldersOf` keeps returning `{ id, name }` and adds `shared: boolean` (`file.shared === true`).
+
+**Shell:**
+- `googleDriveApi.js`: `sharedWithMeFolders()` - pages `sharedWithMeUrl` like `listChildren` (no id) and answers `{ ok, files }`.
+- `ipc.ts`: replace `GoogleFoldersRequest` with a strict discriminated union on `in`: `{ in: "drives" }` (the shared drives), `{ in: "shared-with-me" }`, `{ in: "folder", id: DriveIdSchema }`. Answer `{ ok: true, folders: { id, name, shared }[] }` for all three (a shared drive's row is `{ id, name, shared: true }`).
+- `ipcHandlers.js` `google:folders`: route by `in` - drives -> `drive.sharedDrives()`, shared-with-me -> `drive.sharedWithMeFolders()` then `foldersOf`, folder -> `drive.listChildren(id, { foldersOnly: true })` then `foldersOf`. Malformed -> `bad-request` (stub `console.error` in the test as before); no drive -> `not-configured`.
+- `preload.js`: `listDriveFolders(location)` sends the location object as the payload; `GoogleBridge.listDriveFolders(location: DriveLocation): Promise<DriveFoldersResult>` with `DriveLocation = { in: "drives" } | { in: "shared-with-me" } | { in: "folder"; id: string }` and `DriveFoldersResult = { ok: true; folders: { id: string; name: string; shared: boolean }[] } | { ok: false; reason: string }`. Update every fake that `satisfies GoogleBridge`.
+
+**Renderer (`OpenDriveDialog.tsx`):** a trail of places `{ kind: "my-drive" | "shared-with-me" | "shared-drive" | "folder"; id: string | null; name: string; driveId: string | null; shared: boolean }`. At the top level the static My Drive and Shared with me rows plus the fetched shared drives (`{ in: "drives" }`); entering My Drive lists `{ in: "folder", id: "root" }`; Shared with me lists `{ in: "shared-with-me" }`; a shared drive lists `{ in: "folder", id: driveId }`; a folder lists `{ in: "folder", id }`. Open is offered when the current place is not the top level and not Shared with me. The ref carries `driveId` when the trail went through a shared drive. Keep the spinner, the connect path, Esc/backdrop, and the stale-response guard.
+
+**Tests (first, seen failing):** domain - `sharedWithMeUrl`'s query and params, `shared` parsed, `foldersOf` carries `shared`; api - `sharedWithMeFolders` pages; IPC - each `in` routes to the right client call with the right answer, malformed and not-configured cases; preload - the location object is forwarded; dialog - the three top-level entries and their icons (assert `data-mark` / a test id on each icon), entering My Drive lists `{ in: "folder", id: "root" }` and Open yields `{ kind: "google-drive", folderId: "root", name: "My Drive" }`, Shared with me has no Open but a folder inside it does, a shared folder row shows the shared-folder icon, the first crumb carries its category icon, the Drive mark is in the header; WorkspacePanel still renders its marks after `SourceGlyph` moves.
+
+**Docs:** release notes 0.97.0 (`added`: "Open My Drive itself, or a folder shared with you, from the Google Drive picker, which now shows Drive-style icons for My Drive, Shared with me and shared drives."; one sentence in the summary), README/features/About Google Drive rows mention My Drive and Shared with me, `docs/features.md`. Plain hyphens only.
+
+Commit: "app: the Drive picker reaches My Drive, Shared with me and shared drives".
+
+### Task 10: The filter and Find search only the Drive folders already opened
+
+**Design (approved):** a Drive workspace can now be all of My Drive, and the filter box, Find in Files and the chat's folder outline walk a tree one listing per folder. For Drive they must not reach the network: they search only folders whose listing has already been fetched this session (i.e. opened in the tree, or walked to by a read), and say so.
+
+- `googleDriveWorkspace.js`: keep a set of folder paths whose listing has succeeded since the last `refresh()` (the root counts once listed). Add an optional provider method `listKnown(path)` - for a listed folder, answer `{ ok: true, nodes, complete: true }` from the map with **no** api call; for a folder never listed, answer `{ ok: true, nodes: [], complete: false }`; escapes are `permission-denied` as in `list`. `refresh()` clears the set.
+- `nameSearch.js`, `fileSearch.js`, `workspaceOutline.js`: list through `provider.listKnown ?? provider.list` (one small helper shared by the three, e.g. `apps/desktop/src/searchListing.js`), and when any listing answers `complete: false`, report it - extend each result with `partial: true` (keep `truncated` meaning what it means now). Local and GitHub providers have no `listKnown`, so nothing changes for them (tests prove it).
+- The chat's folder tools (`folderToolRunner.js`) keep using `list` - a tool call is a deliberate request for one folder.
+- Renderer: where the filter results and the Find in Files results are shown, when the answer is `partial`, show a one-line note: "Google Drive folders are searched only where you have opened them." (new key, e.g. `workspace.searchPartialDrive`; plain hyphens). Find where `truncated` reaches the UI for each and follow that path; carry `partial` through the IPC answer schemas and renderer types the same way.
+
+**Tests (first, seen failing):** provider - `listKnown` answers from the map without an api call for a listed folder, `complete: false` and no api call for an unlisted one, cleared by refresh, escape refused; each walker - with a fake provider that has `listKnown`, it never calls `list`, and reports `partial` when a folder was unknown; without `listKnown` (local), behaviour and output are unchanged; renderer - the note shows for a partial answer and not otherwise.
+
+**Docs:** release notes 0.97.0 summary sentence ("The filter box and Find in Files search the Drive folders you have opened, so a large Drive is never read all at once."), `docs/features.md`, `docs/Architecture.md` (the `listKnown` contract and why).
+
+Commit: "Search Drive folders only where they have been opened".
