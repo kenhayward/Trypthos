@@ -349,6 +349,60 @@ describe("a Google Drive workspace", () => {
     expect(result.current.state.content).toBe("# Two, and more\n");
   });
 
+  // A Drive save takes seconds. What the tree and the header put a spinner on.
+  describe("savingPaths, while a save is in flight", () => {
+    async function pendingSave() {
+      const settle: ((value: WriteResult) => void)[] = [];
+      const { client } = fakeClient({
+        readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
+        writeFile: () => new Promise<WriteResult>((resolve) => settle.push(resolve)),
+      });
+      const hook = renderHook(() => useWorkspace(client));
+      await act(async () => {
+        await hook.result.current.actions.openRef(driveRef);
+      });
+      await act(async () => {
+        await hook.result.current.actions.openPath("Notes/Plan.md");
+      });
+      act(() => {
+        hook.result.current.actions.edit("# Two\n");
+      });
+      return { result: hook.result, settle };
+    }
+
+    it("holds the path until Drive answers, then lets it go", async () => {
+      const { result, settle } = await pendingSave();
+      expect(result.current.state.savingPaths).toEqual([]);
+
+      let saving: Promise<boolean> = Promise.resolve(false);
+      act(() => {
+        saving = result.current.actions.save();
+      });
+      const path = result.current.state.activePath;
+      expect(result.current.state.savingPaths).toEqual([path]);
+
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "h2" } });
+        await saving;
+      });
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+
+    it("lets it go when the save fails, too", async () => {
+      const { result, settle } = await pendingSave();
+
+      let saving: Promise<boolean> = Promise.resolve(false);
+      act(() => {
+        saving = result.current.actions.save();
+      });
+      await act(async () => {
+        settle[0]?.({ ok: false, reason: "offline" });
+        await saving;
+      });
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+  });
+
   it("keeps the edit, stays dirty and says conflict when Drive moved on", async () => {
     const { client } = fakeClient({
       readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),

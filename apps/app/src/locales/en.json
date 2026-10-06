@@ -17,6 +17,7 @@
     "searchPartialDrive": "Google Drive folders are searched only where you have opened them.",
     "loading": "Loading...",
     "opening": "Opening...",
+    "saving": "Saving...",
     "listFailed": "Couldn't list this folder.",
     "retry": "Retry",
     "unsavedDot": "Unsaved changes",
@@ -104,6 +105,7 @@
     "mediaUnreadable": "This file could not be read.",
     "scratch": "Scratch buffer",
     "unsavedPill": "Unsaved",
+    "savingPill": "Saving...",
     "encoding": "UTF-8",
     "flavour": {
       "label": "Markdown flavour",

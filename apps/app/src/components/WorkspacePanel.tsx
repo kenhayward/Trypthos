@@ -46,6 +46,8 @@ interface Props {
   dirtyPaths: readonly string[];
   /// The qualified path of the file being read, or null. Its row shows a spinner.
   opening: string | null;
+  /// The qualified paths whose save has not been answered yet. Their rows show a spinner too.
+  savingPaths?: readonly string[];
   onOpenWorkspace: () => void;
   /// Opens the repository picker. A separate act from `onOpenWorkspace` because it asks a different
   /// question - the folder picker is the operating system's, and this one is ours.
@@ -127,6 +129,7 @@ export default function WorkspacePanel({
   openPaths,
   dirtyPaths,
   opening,
+  savingPaths = [],
   onOpenWorkspace,
   onOpenRepo,
   onOpenDrive,
@@ -463,6 +466,7 @@ export default function WorkspacePanel({
                       open={openPaths.includes(row.node.id)}
                       dirty={dirtyPaths.includes(row.node.id)}
                       opening={row.node.id === opening}
+                      saving={savingPaths.includes(row.node.id)}
                       onOpen={() => onOpenFile(row.node)}
                       assignment={assigned(row.node.id)}
                       draggable={onAddToChat !== undefined}
@@ -878,6 +882,7 @@ function FileRow({
   open,
   dirty,
   opening,
+  saving,
   onOpen,
   assignment,
   draggable,
@@ -888,6 +893,7 @@ function FileRow({
   open: boolean;
   dirty: boolean;
   opening: boolean;
+  saving: boolean;
   onOpen: () => void;
   /// What Obsidian draws on this file, or null to keep the app's own glyph.
   assignment: IconAssignment | null;
@@ -951,7 +957,10 @@ function FileRow({
       {assignment === null ? fileGlyph() : <AssignedIcon assignment={assignment} className="size-3.5" fallback={fileGlyph()} />}
       <span className="min-w-0 truncate">{row.node.name}</span>
       {opening && <Spinner label={t("workspace.opening")} className="ml-auto" />}
-      {dirty && (
+      {/* In place of the dot while it lasts: the file is still unsaved, and the spinner says that
+          is being dealt with. */}
+      {saving && !opening && <Spinner label={t("workspace.saving")} className="ml-auto" />}
+      {dirty && !saving && (
         <span
           title={t("workspace.unsavedDot")}
           aria-label={t("workspace.unsavedDot")}

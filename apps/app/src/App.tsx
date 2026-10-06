@@ -806,6 +806,7 @@ export default function App() {
           openPaths={openPaths}
           dirtyPaths={state.dirtyPaths}
           opening={state.opening}
+          savingPaths={state.savingPaths}
           onOpenWorkspace={() => void actions.open()}
           onOpenRepo={() => setPickingRepo(true)}
           onOpenDrive={() => setPickingDrive(true)}
@@ -889,6 +890,7 @@ export default function App() {
           activePath={state.activePath}
           dirtyPaths={state.dirtyPaths}
           dirty={state.dirty}
+          saving={state.activePath !== null && state.savingPaths.includes(state.activePath)}
           value={state.content}
           readOnly={state.readOnly}
           media={state.media}

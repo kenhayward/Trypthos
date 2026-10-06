@@ -1,8 +1,12 @@
 import { useTranslation } from "react-i18next";
+import Spinner from "./Spinner";
 import { MODE_HINT_KEYS, MODE_LABEL_KEYS, type EditorMode } from "../lib/editorMode";
 
 interface Props {
   dirty: boolean;
+  /// Whether the save of what is on screen is on its way. Takes the place of Unsaved until it lands:
+  /// the document is not saved yet, and green-on-dispatch is the lie the save model exists to avoid.
+  saving?: boolean;
   mode: EditorMode;
   /// The views THIS document offers, from its file type. Three for markdown, one for everything
   /// else - Live hides markdown punctuation and Preview renders markdown, so neither means anything
@@ -17,12 +21,17 @@ interface Props {
 /// It used to name the document as well. The tabs beside it do that now, and they do it better -
 /// they name every open document rather than only this one. So the split is identity on the left,
 /// STATE on the right, and neither repeats the other.
-export default function EditorHeader({ dirty, mode, modes, onModeChange }: Props) {
+export default function EditorHeader({ dirty, saving = false, mode, modes, onModeChange }: Props) {
   const { t } = useTranslation();
 
   return (
     <div className="flex shrink-0 items-center gap-2 px-2 py-1.5">
-      {dirty && (
+      {saving ? (
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-sunken px-1.5 py-px text-2xs font-semibold text-ink-3">
+          <Spinner label={t("editor.savingPill")} />
+          <span aria-hidden="true">{t("editor.savingPill")}</span>
+        </span>
+      ) : dirty && (
         <span className="shrink-0 rounded-full bg-selected px-1.5 py-px text-2xs font-semibold text-selected-ink">
           {t("editor.unsavedPill")}
         </span>
