@@ -1235,6 +1235,76 @@ describe("making a new file", () => {
     await waitFor(() => expect(renamed).toEqual([["Notes/Meeting.md", "Agenda.md"]]));
   });
 
+  function driveShell(nodes: unknown[], renamed: [string, string][]) {
+    shell();
+    Object.assign(window.trypthos!, {
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          workspaces: [{ kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" }],
+        },
+      }),
+      listDirectory: async () => ({ ok: true as const, nodes }),
+      renameEntry: async (path: string, name: string) => {
+        renamed.push([path, name]);
+        return { ok: true as const, path: `Notes/${name}` };
+      },
+    });
+  }
+  const DOC = { id: "Notes/Meeting.md", name: "Meeting.md", kind: "file" as const, googleDoc: true };
+
+  async function openRename(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name }) });
+    await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+    const field = screen.getByLabelText("Name") as HTMLInputElement;
+    await user.clear(field);
+    return field;
+  }
+
+  it("does not double a .md typed into a Google Doc's title", async () => {
+    const user = userEvent.setup();
+    const renamed: [string, string][] = [];
+    driveShell([DOC], renamed);
+    render(<App />);
+
+    const field = await openRename(user, "Meeting");
+    await user.type(field, "Agenda.md");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renamed).toEqual([["Notes/Meeting.md", "Agenda.md"]]));
+  });
+
+  it("refuses a Google Doc title that a plain .md sibling already has", async () => {
+    const user = userEvent.setup();
+    driveShell([DOC, { id: "Notes/Minutes.md", name: "Minutes.md", kind: "file" as const }], []);
+    render(<App />);
+
+    const field = await openRename(user, "Meeting");
+    await user.type(field, "Minutes");
+
+    expect(screen.getByRole("alert").textContent).toBe("Something in this folder is already called that.");
+  });
+
+  it("keeps a Drive file's extension in the dialog and sends the name as typed", async () => {
+    const user = userEvent.setup();
+    const renamed: [string, string][] = [];
+    driveShell([{ id: "Notes/data.txt", name: "data.txt", kind: "file" as const }], renamed);
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: "data.txt" }) });
+    await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+    const field = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(field.value).toBe("data.txt");
+    await user.clear(field);
+    await user.type(field, "info.txt");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renamed).toEqual([["Notes/data.txt", "info.txt"]]));
+  });
+
   it("shows a folder in the file manager from its context menu", async () => {
     const user = userEvent.setup();
     shell();

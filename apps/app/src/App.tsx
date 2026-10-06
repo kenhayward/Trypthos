@@ -1251,15 +1251,21 @@ export default function App() {
           current={googleDocTitle(renaming, googleDocs) ?? renaming.slice(renaming.lastIndexOf("/") + 1)}
           // What the tree already knows is in the same folder, so a clash is said while typing. A folder
           // that has not been listed offers nothing, and the shell still refuses the clash.
+          // Renaming a Doc compares titles against every sibling with its `.md` taken off, so a plain
+          // `Minutes.md` blocks the title `Minutes` as the shell will.
           siblings={(state.folders[renaming.slice(0, renaming.lastIndexOf("/"))]?.children ?? []).map(
-            (node) => googleDocTitle(node.id, googleDocs) ?? node.name,
+            (node) =>
+              googleDocs.has(renaming)
+                ? node.name.replace(/\.md$/i, "")
+                : (googleDocTitle(node.id, googleDocs) ?? node.name),
           )}
           onCancel={() => setRenaming(false)}
           onRename={async (name) => {
-            // The path keeps one meaning everywhere, so a Doc goes to the shell as `Title.md`.
+            // The path keeps one meaning everywhere, so a Doc goes to the shell as `Title.md`. One
+            // typed `.md` is absorbed rather than doubled.
             const problem = await actions.renameEntry(
               renaming,
-              googleDocs.has(renaming) ? `${name}.md` : name,
+              googleDocs.has(renaming) ? `${name.replace(/\.md$/i, "")}.md` : name,
             );
             if (problem === null) setRenaming(false);
             return problem;
