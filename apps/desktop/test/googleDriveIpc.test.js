@@ -42,7 +42,10 @@ function fakeDriveFactory(seen = {}) {
   };
 }
 
-async function withHandlers(body, { google = { accessToken: async () => ({ ok: true, token: "t" }) }, createGoogleDrive = fakeDriveFactory() } = {}) {
+async function withHandlers(
+  body,
+  { google = { accessToken: async () => ({ ok: true, token: "t" }) }, createGoogleDrive = fakeDriveFactory(), openExternal, revealPath } = {},
+) {
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-drive-ipc-"));
   try {
     const ipcMain = fakeIpcMain();
@@ -55,6 +58,8 @@ async function withHandlers(body, { google = { accessToken: async () => ({ ok: t
       accounts: null,
       google,
       createGoogleDrive,
+      openExternal,
+      revealPath,
       explorerIntegration: { supported: () => false, isRegistered: async () => false },
     });
     await body({ ipcMain });
@@ -129,6 +134,95 @@ test("a Drive file saves through file:write with the revision its read gave, and
     const doc = await ipcMain.invoke("file:read", { path: `${opened.workspace.id}/Minutes.md` });
     assert.deepEqual(doc, { ok: true, content: "# Minutes", revision: { id: "modified:2026-10-01T00:00:00Z" }, readOnly: true });
   }, { createGoogleDrive: savingDriveFactory(uploads) });
+});
+
+/// A Drive that can make folders and rename entries, recording each. Each test names its own root:
+/// open workspaces outlive a test, so a second test opening the same one would see the first's edits.
+function editingDriveFactory(log, root) {
+  const drive = {
+    [root]: [
+      { id: "dirEDT", name: "Archive", mimeType: FOLDER },
+      { id: "mdEDT", name: "Plan.md", mimeType: "text/markdown", size: "5", headRevisionId: "rev1" },
+      { id: "docEDT", name: "Minutes", mimeType: "application/vnd.google-apps.document", modifiedTime: "2026-10-01T00:00:00Z" },
+    ],
+    dirEDT: [],
+  };
+  return () => ({
+    fileMeta: async (id) => ({ ok: true, file: { id, name: "Edited", mimeType: FOLDER } }),
+    listChildren: async (id) => (drive[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, files: [...drive[id]] }),
+    createFolder: async (parentId, name) => {
+      log.push({ createFolder: { parentId, name } });
+      const file = { id: "newEDT", name, mimeType: FOLDER };
+      drive[parentId].push(file);
+      drive.newEDT = [];
+      return { ok: true, file };
+    },
+    renameFile: async (id, name) => {
+      log.push({ renameFile: { id, name } });
+      for (const folder of Object.keys(drive)) drive[folder] = drive[folder].map((file) => (file.id === id ? { ...file, name } : file));
+      return { ok: true, file: { id, name, mimeType: "text/markdown" } };
+    },
+  });
+}
+
+test("a Drive folder makes folders and renames entries through the same channels as a local one", async () => {
+  const log = [];
+  await withHandlers(async ({ ipcMain }) => {
+    const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "google-drive", folderId: "rootEDT", name: "Edited" } });
+    assert.equal(opened.ok, true);
+    const id = opened.workspace.id;
+
+    assert.deepEqual(await ipcMain.invoke("workspace:createDirectory", { path: `${id}/Archive/New` }), { ok: true });
+    assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${id}/Plan.md`, name: "Roadmap.md" }), {
+      ok: true,
+      path: `${id}/Roadmap.md`,
+    });
+    // A Google Doc is renamed by its path name; Drive is given its title.
+    assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${id}/Minutes.md`, name: "Notes.md" }), {
+      ok: true,
+      path: `${id}/Notes.md`,
+    });
+    assert.deepEqual(log, [
+      { createFolder: { parentId: "dirEDT", name: "New" } },
+      { renameFile: { id: "mdEDT", name: "Roadmap.md" } },
+      { renameFile: { id: "docEDT", name: "Notes" } },
+    ]);
+
+    const listed = await ipcMain.invoke("workspace:list", { path: id });
+    assert.deepEqual(listed.nodes.map((node) => node.id), [`${id}/Archive`, `${id}/Notes.md`, `${id}/Roadmap.md`]);
+  }, { createGoogleDrive: editingDriveFactory(log, "rootEDT") });
+});
+
+test("revealing a Drive entry opens its page in the browser, and the address is neither answered nor logged", async () => {
+  const opened = [];
+  const revealed = [];
+  const logged = [];
+  const record = (...args) => logged.push(args);
+  const originals = { error: console.error, warn: console.warn, log: console.log };
+  for (const name of Object.keys(originals)) console[name] = record;
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        const workspace = (await ipcMain.invoke("workspace:openRef", { ref: { kind: "google-drive", folderId: "rootREV", name: "Edited" } })).workspace;
+        assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${workspace.id}/Archive` }), { ok: true });
+        assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${workspace.id}/Minutes.md` }), { ok: true });
+        assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: workspace.id }), { ok: true });
+        assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${workspace.id}/Missing.md` }), { ok: false, reason: "not-found" });
+      },
+      { createGoogleDrive: editingDriveFactory([], "rootREV"), openExternal: async (url) => opened.push(url), revealPath: async (target) => revealed.push(target) },
+    );
+  } finally {
+    Object.assign(console, originals);
+  }
+  assert.deepEqual(opened, [
+    "https://drive.google.com/drive/folders/dirEDT",
+    "https://docs.google.com/document/d/docEDT/edit",
+    "https://drive.google.com/drive/folders/rootREV",
+  ]);
+  // Nothing on disk to show: the file manager is never asked.
+  assert.deepEqual(revealed, []);
+  const text = JSON.stringify(logged);
+  for (const url of opened) assert.equal(text.includes(url), false);
 });
 
 test("a shared drive opens under its own name and says it is one", async () => {

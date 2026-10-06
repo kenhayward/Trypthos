@@ -2,12 +2,16 @@
 
 const {
   FOLDER_MIME,
+  GOOGLE_DOC_MIME,
   MAX_TEXT_FILE_BYTES,
   childrenToEntries,
   createPathGuard,
   decodeTextFile,
   displayNameFor,
+  driveRootWebUrl,
+  driveWebUrl,
   encodeTextFile,
+  isDriveId,
   textMimeFor,
 } = require("@trypthos/domain");
 
@@ -46,6 +50,26 @@ function treeNode(entry) {
 function parentOf(path) {
   const slash = path.lastIndexOf("/");
   return slash < 0 ? "" : path.slice(0, slash);
+}
+
+/// What is known about the workspace after one entry is renamed: the entry, and every path known
+/// beneath it, moved from `from` to `to` - entries and listed folders alike, in the order they were.
+///
+/// A rename's own re-listing cannot do this: the parent's new listing no longer shows the old name, so
+/// `listInto` would drop everything learned beneath it and collapse what the user had expanded. Pure,
+/// over copies, so it is tested on its own.
+function rekeyKnown(entries, listedPaths, from, to) {
+  const moved = (path) => (path === from ? to : path.startsWith(from + "/") ? to + path.slice(from.length) : null);
+
+  const nextEntries = new Map();
+  for (const [path, entry] of entries) {
+    const next = moved(path);
+    if (next === null) nextEntries.set(path, entry);
+    else if (path === from) nextEntries.set(next, { ...entry, path: next, name: next.slice(next.lastIndexOf("/") + 1) });
+    else nextEntries.set(next, { ...entry, path: next });
+  }
+  const nextListed = new Set([...listedPaths].map((path) => moved(path) ?? path));
+  return { entries: nextEntries, listedPaths: nextListed };
 }
 
 /// How long a folder's listing is trusted. The filter, Find in Files and the chat's outline all walk
@@ -229,6 +253,36 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     return { ok: true, revision: { id: created.file.headRevisionId } };
   }
 
+  /// A folder listed afresh, its cached listing dropped first: Drive allows two entries of one name
+  /// and the app does not, so whether a name is free is never answered from a listing that could
+  /// predate it.
+  async function relist(parent, folderId) {
+    listings.delete(folderId);
+    return listInto(parent, folderId);
+  }
+
+  /// Whether another entry in a folder already has this name. Case-insensitive, as a folder on
+  /// Windows or a default macOS volume is - with the entry being renamed excepted, so a change of
+  /// case alone is allowed.
+  function nameTaken(parent, name, except) {
+    const wanted = name.toLowerCase();
+    for (const entry of entries.values()) {
+      if (parentOf(entry.path) !== parent || entry.fileId === except) continue;
+      if (entry.name.toLowerCase() === wanted) return true;
+    }
+    return false;
+  }
+
+  /// The name Drive is to hold for an entry the tree will show as `requested`, or null when no Drive
+  /// name gives exactly that path. A Google Doc's path carries `.md` and its title does not; anything
+  /// `displayNameFor` would show differently - a separator, a control character - would land the entry
+  /// under another path than the one asked for.
+  function driveNameFor(requested, mimeType) {
+    const name = mimeType === GOOGLE_DOC_MIME ? (requested.endsWith(".md") ? requested.slice(0, -3) : null) : requested;
+    if (name === null || displayNameFor({ name, mimeType }) !== requested) return null;
+    return name;
+  }
+
   return {
     id: ref.folderId,
     kind: "google-drive",
@@ -390,6 +444,85 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       return { ok: true, revision: { id: revision } };
     },
 
+    /// A new folder, made the way `create` makes a file: its parent asked for afresh so a name Drive
+    /// already has is seen, and listed again after so the new folder has its path. It is not counted
+    /// as listed until somebody opens it.
+    async createDirectory(candidate) {
+      const path = drivePath(candidate);
+      if (path === null || path === "") return failure("permission-denied");
+      const parent = parentOf(path);
+      const folder = await folderIdAt(parent);
+      if (!folder.ok) return folder;
+
+      const name = parent === "" ? path : path.slice(parent.length + 1);
+      if (driveNameFor(name, FOLDER_MIME) === null) return failure("bad-request");
+
+      const fresh = await relist(parent, folder.id);
+      if (!fresh.ok) return fresh;
+      if (nameTaken(parent, name, null)) return failure("conflict");
+
+      const created = await api.createFolder(folder.id, name);
+      if (!created.ok) return created;
+      // The folder landed whatever this answers; it only teaches the map its id.
+      await relist(parent, folder.id);
+      return { ok: true };
+    },
+
+    /// A new name for a file or folder, in the folder it is already in. Answers its new
+    /// workspace-relative path - for a Google Doc, `<title>.md`, the path it is opened by.
+    ///
+    /// What was known beneath a renamed folder moves with it (`rekeyKnown`), so what the user had
+    /// expanded stays expanded and a known path under it is still found without asking Drive.
+    async rename(candidate, requested) {
+      const path = drivePath(candidate);
+      // The workspace's own folder is what was opened; renaming it would pull the root out from under
+      // every open path, exactly as on disk.
+      if (path === null || path === "") return failure("permission-denied");
+      const found = await ensure(path);
+      if (!found.ok) return found;
+
+      const driveName = driveNameFor(requested, found.entry.mimeType);
+      if (driveName === null) return failure("bad-request");
+
+      const parent = parentOf(path);
+      const folder = await folderIdAt(parent);
+      if (!folder.ok) return folder;
+      const fresh = await relist(parent, folder.id);
+      if (!fresh.ok) return fresh;
+      const entry = entries.get(path);
+      if (entry === undefined || entry.fileId !== found.entry.fileId) return failure("not-found");
+      if (nameTaken(parent, requested, entry.fileId)) return failure("conflict");
+
+      const renamed = await api.renameFile(entry.fileId, driveName);
+      if (!renamed.ok) return renamed;
+
+      const target = parent === "" ? requested : `${parent}/${requested}`;
+      const moved = rekeyKnown(entries, listedPaths, path, target);
+      entries.clear();
+      for (const [key, value] of moved.entries) entries.set(key, value);
+      listedPaths.clear();
+      for (const key of moved.listedPaths) listedPaths.add(key);
+      // The rename landed whatever this answers; it brings the parent's listing up to date.
+      await relist(parent, folder.id);
+      return { ok: true, path: target };
+    },
+
+    /// Where an entry lives on the web, for Open in Google Drive. Built from ids that have passed
+    /// `isDriveId`, so nothing but Drive's own alphabet is spliced into the address. The address stays
+    /// in the main process: the shell opens it, the renderer never sees it.
+    async webAddress(candidate) {
+      const path = drivePath(candidate);
+      if (path === null) return failure("permission-denied");
+      if (path === "") {
+        return isDriveId(ref.folderId) ? { ok: true, url: driveRootWebUrl(ref.folderId) } : failure("not-found");
+      }
+      const found = await ensure(path);
+      if (!found.ok) return found;
+      const { kind, fileId, googleDoc } = found.entry;
+      if (!isDriveId(fileId)) return failure("not-found");
+      return { ok: true, url: driveWebUrl({ kind, fileId, googleDoc }) };
+    },
+
     async refresh() {
       generation += 1;
       entries.clear();
@@ -440,4 +573,4 @@ async function openGoogleDriveWorkspace({ ref, api, now, ttlMs }) {
   };
 }
 
-module.exports = { openGoogleDriveWorkspace, GUARD_ROOT };
+module.exports = { openGoogleDriveWorkspace, rekeyKnown, GUARD_ROOT };

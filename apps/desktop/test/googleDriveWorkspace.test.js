@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { openGoogleDriveWorkspace } = require("../src/googleDriveWorkspace");
+const { openGoogleDriveWorkspace, rekeyKnown } = require("../src/googleDriveWorkspace");
 
 /// A Drive folder as a workspace, over a fake Drive client.
 ///
@@ -39,7 +39,7 @@ const META = {
 };
 
 function fakeApi(overrides = {}) {
-  const calls = { list: [], download: [], export: [], meta: [], upload: [], create: [], order: [] };
+  const calls = { list: [], download: [], export: [], meta: [], upload: [], create: [], folder: [], rename: [], order: [] };
   const drive = Object.fromEntries(Object.entries(DRIVE).map(([id, files]) => [id, [...files]]));
   const meta = Object.fromEntries(Object.entries(META).map(([id, file]) => [id, { ...file }]));
   const bytes = { ...BYTES };
@@ -79,20 +79,39 @@ function fakeApi(overrides = {}) {
       bytes[file.id] = Buffer.from(content);
       return { ok: true, file };
     },
+    createFolder: async (parentId, name) => {
+      calls.folder.push({ parentId, name });
+      created += 1;
+      const file = { id: `fold${created}XYZ`, name, mimeType: FOLDER };
+      drive[parentId] = [...(drive[parentId] ?? []), file];
+      drive[file.id] = [];
+      meta[file.id] = { ...file };
+      return { ok: true, file };
+    },
+    /// Renames the file wherever it is listed, as Drive would: the next listing of its folder shows
+    /// the new name.
+    renameFile: async (id, name) => {
+      calls.rename.push({ id, name });
+      for (const folder of Object.keys(drive)) {
+        drive[folder] = drive[folder].map((file) => (file.id === id ? { ...file, name } : file));
+      }
+      if (meta[id] !== undefined) meta[id].name = name;
+      return { ok: true, file: { id, name, mimeType: meta[id]?.mimeType ?? "text/markdown" } };
+    },
     exportMarkdown: async (id) => {
       calls.export.push(id);
       return { ok: true, bytes: Buffer.from("# Meeting") };
     },
     ...overrides,
   };
-  return { api, calls, meta, drive };
+  return { api, calls, meta, drive, bytes };
 }
 
 async function open(overrides, options = {}) {
-  const { api, calls, meta, drive } = fakeApi(overrides);
-  const opened = await openGoogleDriveWorkspace({ ref: REF, api, ...options });
+  const { api, calls, meta, drive, bytes } = fakeApi(overrides);
+  const opened = await openGoogleDriveWorkspace({ ref: options.ref ?? REF, api, ...options });
   assert.equal(opened.ok, true);
-  return { provider: opened.provider, name: opened.name, calls, meta, drive };
+  return { provider: opened.provider, name: opened.name, calls, meta, drive, bytes };
 }
 
 test("opens a folder under its current name", async () => {
@@ -449,6 +468,188 @@ test("a create is refused when the path does not describe a new file honestly", 
 test("a failed create passes through", async () => {
   const { provider } = await open({ createFile: async () => ({ ok: false, reason: "rate-limited" }) });
   assert.deepEqual(await provider.write("new.md", "x", null), { ok: false, reason: "rate-limited" });
+});
+
+test("a new folder is made in its parent, asked for afresh first, and is listed afterwards", async () => {
+  const { provider, calls } = await open();
+  await provider.list("Archive");
+  const before = calls.list.filter((id) => id === "dirBBB").length;
+
+  assert.deepEqual(await provider.createDirectory("Archive/New"), { ok: true });
+  assert.deepEqual(calls.folder, [{ parentId: "dirBBB", name: "New" }]);
+  // Once before the write, to see the name is free; once after, to learn the new folder's id.
+  assert.equal(calls.list.filter((id) => id === "dirBBB").length, before + 2);
+
+  const listed = await provider.list("Archive");
+  assert.deepEqual(
+    listed.nodes.find((node) => node.id === "Archive/New"),
+    { id: "Archive/New", name: "New", kind: "directory" },
+  );
+});
+
+test("a new folder at the workspace's own folder is made there", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.createDirectory("Drafts"), { ok: true });
+  assert.deepEqual(calls.folder, [{ parentId: "rootAAA", name: "Drafts" }]);
+});
+
+test("a new folder whose name is taken, in any case, is a conflict and nothing is made", async () => {
+  const { provider, calls, drive } = await open();
+  await provider.list("");
+  // Added behind the cached listing: only a fresh one sees it.
+  drive.rootAAA.push({ id: "lateHHH", name: "Late", mimeType: FOLDER });
+  for (const name of ["Archive", "plan.md", "Late"]) {
+    assert.deepEqual(await provider.createDirectory(name), { ok: false, reason: "conflict" });
+  }
+  assert.deepEqual(calls.folder, []);
+});
+
+test("a new folder is refused when its name, its parent or its place is wrong, before Drive makes anything", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.createDirectory("Archive/a:b"), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await provider.createDirectory("Archive/tab\there"), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await provider.createDirectory("Nowhere/New"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await provider.createDirectory("Plan.md/New"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await provider.createDirectory(""), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(calls.folder, []);
+
+  const outside = await open();
+  assert.deepEqual(await outside.provider.createDirectory("../New"), { ok: false, reason: "permission-denied" });
+  assert.equal(outside.calls.list.length, 0);
+  assert.deepEqual(outside.calls.folder, []);
+});
+
+test("a failed new folder passes through", async () => {
+  const { provider } = await open({ createFolder: async () => ({ ok: false, reason: "permission-denied" }) });
+  assert.deepEqual(await provider.createDirectory("New"), { ok: false, reason: "permission-denied" });
+});
+
+test("a rename gives Drive the new name and answers the new path", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.rename("Plan.md", "Roadmap.md"), { ok: true, path: "Roadmap.md" });
+  assert.deepEqual(calls.rename, [{ id: "mdCCC", name: "Roadmap.md" }]);
+  assert.equal((await provider.read("Roadmap.md")).content, "hello");
+  assert.deepEqual(await provider.read("Plan.md"), { ok: false, reason: "not-found" });
+});
+
+// Re-listing alone would lose it: the parent's listing no longer shows `Archive`, so everything
+// learned beneath it would go, collapsing what the user had open.
+test("a renamed folder keeps what was known beneath it, under its new path", async () => {
+  const { provider, calls, drive, meta, bytes } = await open();
+  drive.dirBBB.push({ id: "subKKK", name: "Sub", mimeType: FOLDER });
+  drive.subKKK = [{ id: "deepLLL", name: "Deep.md", mimeType: "text/markdown", size: "4", headRevisionId: "revD" }];
+  meta.deepLLL = { id: "deepLLL", name: "Deep.md", mimeType: "text/markdown", headRevisionId: "revD" };
+  bytes.deepLLL = Buffer.from("deep");
+  await provider.list("");
+  await provider.list("Archive");
+  await provider.list("Archive/Sub");
+
+  assert.deepEqual(await provider.rename("Archive", "Old"), { ok: true, path: "Old" });
+  assert.deepEqual(calls.rename, [{ id: "dirBBB", name: "Old" }]);
+  const listings = calls.list.length;
+
+  const known = await provider.listKnown("Old");
+  assert.equal(known.complete, true);
+  assert.deepEqual(
+    known.nodes.sort((one, other) => (one.id < other.id ? -1 : 1)),
+    [
+      { id: "Old/Old.md", name: "Old.md", kind: "file" },
+      { id: "Old/Sub", name: "Sub", kind: "directory" },
+    ],
+  );
+  assert.equal((await provider.listKnown("Old/Sub")).complete, true);
+  assert.equal((await provider.listKnown("Archive")).complete, false);
+  assert.equal((await provider.read("Old/Sub/Deep.md")).content, "deep");
+  assert.equal(calls.list.length, listings);
+});
+
+test("a rename to a name taken in any case is a conflict, but a change of case alone is not", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.rename("Plan.md", "HUGE.md"), { ok: false, reason: "conflict" });
+  assert.deepEqual(await provider.rename("Plan.md", "Archive"), { ok: false, reason: "conflict" });
+  assert.deepEqual(calls.rename, []);
+
+  assert.deepEqual(await provider.rename("Plan.md", "plan.md"), { ok: true, path: "plan.md" });
+  assert.deepEqual(calls.rename, [{ id: "mdCCC", name: "plan.md" }]);
+});
+
+test("a rename asks Drive for the folder afresh, so a name taken since the last listing is seen", async () => {
+  const { provider, calls, drive } = await open();
+  await provider.list("");
+  drive.rootAAA.push({ id: "lateHHH", name: "Late.md", mimeType: "text/markdown", size: "1", headRevisionId: "revLate" });
+  assert.deepEqual(await provider.rename("Plan.md", "Late.md"), { ok: false, reason: "conflict" });
+  assert.deepEqual(calls.rename, []);
+});
+
+// The renderer names a Doc by its path, `Title.md`; Drive names it by its title.
+test("a Google Doc is renamed to the title its new path gives, and must keep its .md", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.rename("Meeting.md", "Minutes.txt"), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await provider.rename("Meeting.md", "Minutes.md.md"), { ok: false, reason: "bad-request" });
+  assert.deepEqual(calls.rename, []);
+
+  assert.deepEqual(await provider.rename("Meeting.md", "Minutes.md"), { ok: true, path: "Minutes.md" });
+  assert.deepEqual(calls.rename, [{ id: "docDDD", name: "Minutes" }]);
+  assert.equal((await provider.read("Minutes.md")).content, "# Meeting");
+});
+
+test("a rename to a name the tree would show differently is refused", async () => {
+  const { provider, calls } = await open();
+  for (const name of ["a:b.md", "tab\there.md", "..", " "]) {
+    assert.deepEqual(await provider.rename("Plan.md", name), { ok: false, reason: "bad-request" }, name);
+  }
+  assert.deepEqual(calls.rename, []);
+});
+
+test("a rename of the root, an unknown path or a path outside is refused", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.rename("", "Other"), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(await provider.rename("../x.md", "y.md"), { ok: false, reason: "permission-denied" });
+  assert.equal(calls.list.length, 0);
+  assert.deepEqual(await provider.rename("Missing.md", "y.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(calls.rename, []);
+});
+
+test("a rename Drive refuses passes through, and the old path still names the file", async () => {
+  const { provider } = await open({ renameFile: async () => ({ ok: false, reason: "permission-denied" }) });
+  assert.deepEqual(await provider.rename("Plan.md", "Roadmap.md"), { ok: false, reason: "permission-denied" });
+  assert.equal((await provider.read("Plan.md")).content, "hello");
+});
+
+test("webAddress answers where an entry lives on the web", async () => {
+  const { provider } = await open();
+  assert.deepEqual(await provider.webAddress("Plan.md"), { ok: true, url: "https://drive.google.com/file/d/mdCCC/view" });
+  assert.deepEqual(await provider.webAddress("Archive"), { ok: true, url: "https://drive.google.com/drive/folders/dirBBB" });
+  assert.deepEqual(await provider.webAddress("Meeting.md"), { ok: true, url: "https://docs.google.com/document/d/docDDD/edit" });
+  assert.deepEqual(await provider.webAddress(""), { ok: true, url: "https://drive.google.com/drive/folders/rootAAA" });
+  assert.deepEqual(await provider.webAddress("Missing.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await provider.webAddress("../x.md"), { ok: false, reason: "permission-denied" });
+});
+
+test("webAddress of My Drive's root is My Drive", async () => {
+  const { provider } = await open(
+    { fileMeta: async () => ({ ok: true, file: { id: "0ARealRootId", name: "My Drive", mimeType: FOLDER } }) },
+    { ref: { kind: "google-drive", folderId: "root", name: "My Drive" } },
+  );
+  assert.deepEqual(await provider.webAddress(""), { ok: true, url: "https://drive.google.com/drive/my-drive" });
+});
+
+test("rekeyKnown moves an entry and everything known beneath it, and nothing else", () => {
+  const entry = (path, extra = {}) => ({ path, name: path.split("/").pop(), kind: "file", fileId: "x", ...extra });
+  const entries = new Map(
+    ["Archive", "Archive/a.md", "Archive/Sub", "Archive/Sub/b.md", "Archived.md", "Other/Archive"].map((path) => [path, entry(path)]),
+  );
+  const listed = new Set(["", "Archive", "Archive/Sub", "Other"]);
+
+  const moved = rekeyKnown(entries, listed, "Archive", "Old");
+  assert.deepEqual([...moved.entries.keys()], ["Old", "Old/a.md", "Old/Sub", "Old/Sub/b.md", "Archived.md", "Other/Archive"]);
+  assert.deepEqual(moved.entries.get("Old"), entry("Old"));
+  assert.deepEqual(moved.entries.get("Old/Sub/b.md"), entry("Old/Sub/b.md"));
+  assert.deepEqual(moved.entries.get("Archived.md"), entry("Archived.md"));
+  assert.deepEqual([...moved.listedPaths], ["", "Old", "Old/Sub", "Other"]);
+  // Pure: what it was given is untouched.
+  assert.equal(entries.has("Archive"), true);
+  assert.equal(listed.has("Archive"), true);
 });
 
 // Refresh pressed while a listing is in flight: what that listing brings back predates the refresh,

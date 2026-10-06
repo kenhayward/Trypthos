@@ -1019,13 +1019,14 @@ function registerIpcHandlers({
     }),
   );
 
-  /// A folder is a filesystem feature, not a GitHub commit. The provider has the path guard and
-  /// performs the creation; this boundary only makes the operation unavailable where no folder is
-  /// present, rather than presenting a question whose every answer would be refused.
+  /// A folder on disk or in Drive; not a GitHub commit. The provider has the path guard and performs
+  /// the creation, and having the method is what says it can: this boundary only makes the operation
+  /// unavailable where it cannot, rather than presenting a question whose every answer would be
+  /// refused.
   ipcMain.handle(
     "workspace:createDirectory",
     guarded(locateQualified, CreateDirectoryRequest, (request, workspace) => {
-      if (workspace.root === null || typeof workspace.provider.createDirectory !== "function") {
+      if (typeof workspace.provider.createDirectory !== "function") {
         return { ok: false, reason: "unsupported" };
       }
       return workspace.provider.createDirectory(request.path);
@@ -1034,11 +1035,12 @@ function registerIpcHandlers({
 
   /// Renaming, like making a folder, is a filesystem feature: in a repository it would be a commit
   /// that deletes one path and adds another, which needs a branch and a message. The name was checked
-  /// by the schema; the provider checks the folder it lands in and whether the name is free.
+  /// by the schema; the provider checks the folder it lands in and whether the name is free. The
+  /// vault index only exists for a local vault, so for Drive `renamed` finds nothing and returns.
   ipcMain.handle(
     "workspace:rename",
     guarded(locateQualified, RenameRequest, async (request, workspace) => {
-      if (workspace.root === null || typeof workspace.provider.rename !== "function") {
+      if (typeof workspace.provider.rename !== "function") {
         return { ok: false, reason: "unsupported" };
       }
       const result = await workspace.provider.rename(request.path, request.name);
@@ -1050,16 +1052,26 @@ function registerIpcHandlers({
   /// Open in Explorer. The renderer names an entry; the absolute path it becomes is worked out HERE,
   /// through the provider's guard, and never sent back - the renderer has no use for where a
   /// workspace is on disk beyond what its reference already says.
+  ///
+  /// An entry with no place on disk but a page on the web - a Drive file or folder - is shown THERE,
+  /// in the browser: one channel, one meaning, "show me this where it lives". The address is the
+  /// provider's, built from checked ids, and like the path it never goes back to the renderer.
   ipcMain.handle(
     "workspace:reveal",
     guarded(locateQualified, RevealRequest, async (request, workspace) => {
-      if (workspace.root === null || typeof workspace.provider.locate !== "function") {
-        return { ok: false, reason: "unsupported" };
+      if (workspace.root !== null && typeof workspace.provider.locate === "function") {
+        const located = await workspace.provider.locate(request.path);
+        if (!located.ok) return located;
+        await revealPath({ path: located.path, kind: located.kind });
+        return { ok: true };
       }
-      const located = await workspace.provider.locate(request.path);
-      if (!located.ok) return located;
-      await revealPath({ path: located.path, kind: located.kind });
-      return { ok: true };
+      if (typeof workspace.provider.webAddress === "function") {
+        const address = await workspace.provider.webAddress(request.path);
+        if (!address.ok) return address;
+        await openExternal(address.url);
+        return { ok: true };
+      }
+      return { ok: false, reason: "unsupported" };
     }),
   );
 
