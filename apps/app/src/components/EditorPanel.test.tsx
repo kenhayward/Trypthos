@@ -973,7 +973,7 @@ describe("EditorPanel: zooming an image", () => {
     );
 
   const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
-  const level = () => screen.getByRole("status").textContent;
+  const level = () => screen.getByLabelText(/^\d+%$/).textContent;
   const press = (key: string) => {
     const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ctrlKey: true });
     act(() => void window.dispatchEvent(event));
@@ -985,6 +985,13 @@ describe("EditorPanel: zooming an image", () => {
   it("opens in Fit", () => {
     withImage();
     expect(pressed("Fit")).toBe("true");
+    expect(level()).toBe("100%");
+  });
+
+  // A pinch is dozens of wheel events, and a live region would announce every one of them.
+  it("shows the zoom level without announcing it", () => {
+    withImage();
+    expect(screen.queryByRole("status")).toBeNull();
     expect(level()).toBe("100%");
   });
 
