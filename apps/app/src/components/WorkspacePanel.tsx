@@ -8,6 +8,8 @@ import {
   splitQualified,
   workspaceRefLabel,
   workspaceRefMark,
+  workspaceRefKey,
+  workspaceRefName,
 } from "@trypthos/domain";
 import type { IconAssignment, IconMap, Platform, WorkspaceRef } from "@trypthos/domain";
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
@@ -99,6 +101,13 @@ interface Props {
   onSelectFolder: (path: string) => void;
   /// Closes one folder, and the documents that came from it. The asking happens above.
   onCloseWorkspace: (workspaceId: string) => void;
+  /// Remembered workspaces that could not be opened at launch - a drive that is not plugged in, a
+  /// Drive or GitHub workspace while offline. Listed greyed out below the ones that did open.
+  unavailable: readonly WorkspaceRef[];
+  /// Tries to open one of those again.
+  onRetryUnavailable: (ref: WorkspaceRef) => void;
+  /// Forgets one of those, so it is not tried again at the next launch.
+  onForgetUnavailable: (ref: WorkspaceRef) => void;
   /// Opens a workspace's home page - its heading, its counts, its README and its graph. Every kind of
   /// workspace has one now, so the row that opens it no longer asks which kind it is.
   onOpenHomePage: (workspaceId: string) => void;
@@ -152,6 +161,9 @@ export default function WorkspacePanel({
   selectedFolder,
   onSelectFolder,
   onCloseWorkspace,
+  unavailable,
+  onRetryUnavailable,
+  onForgetUnavailable,
   onOpenHomePage,
   icons,
   bottomPane,
@@ -357,6 +369,16 @@ export default function WorkspacePanel({
       {workspaces.length === 0 ? (
         <div data-testid="workspace-body" className="min-h-0 grow" onContextMenu={openSourceMenu}>
           <p className="p-3 text-sm text-ink-3">{t("workspace.noFolder")}</p>
+          <div className="px-1">
+            {unavailable.map((ref) => (
+              <UnavailableRow
+                key={workspaceRefKey(ref)}
+                workspaceRef={ref}
+                onRetry={() => onRetryUnavailable(ref)}
+                onForget={() => onForgetUnavailable(ref)}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <>
@@ -492,6 +514,17 @@ export default function WorkspacePanel({
               </div>
               );
             })}
+
+            {/* Not while filtering: there is nothing in them to have matched. */}
+            {!filtering &&
+              unavailable.map((ref) => (
+                <UnavailableRow
+                  key={workspaceRefKey(ref)}
+                  workspaceRef={ref}
+                  onRetry={() => onRetryUnavailable(ref)}
+                  onForget={() => onForgetUnavailable(ref)}
+                />
+              ))}
           </div>
 
           {bottomPane}
@@ -792,6 +825,53 @@ function WorkspaceRow({
         </p>
       )}
     </>
+  );
+}
+
+/// A remembered workspace that could not be opened, greyed out.
+///
+/// Kept on screen rather than dropped, because the usual causes - a drive that is not plugged in, no
+/// network for Drive or GitHub - are temporary, and a workspace that vanished from the list would
+/// have to be found and opened all over again. Kept until the user removes it, because only they
+/// can say one is gone for good: retrying it at every launch is cheap, forgetting it is not.
+/// Clicking the row tries again, so plugging the drive back in needs no restart.
+function UnavailableRow({
+  workspaceRef,
+  onRetry,
+  onForget,
+}: {
+  workspaceRef: WorkspaceRef;
+  onRetry: () => void;
+  onForget: () => void;
+}) {
+  const { t } = useTranslation();
+  const name = workspaceRefName(workspaceRef);
+
+  return (
+    <div className="relative flex items-center gap-1 rounded-md pr-1 opacity-60 hover:bg-hover hover:opacity-100">
+      <button
+        type="button"
+        onClick={onRetry}
+        title={t("workspace.unavailableHint", { where: workspaceRefLabel(workspaceRef) })}
+        style={indent(0)}
+        className="flex min-w-0 grow items-center gap-1.5 py-1 text-left text-base font-semibold text-ink-3"
+      >
+        <SourceGlyph mark={workspaceRefMark(workspaceRef)} className="size-3.5 text-ink-4" />
+        <span className="min-w-0 truncate">{name}</span>
+        <span className="ml-auto shrink-0 text-xs font-normal text-ink-4">{t("workspace.unavailable")}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onForget}
+        aria-label={t("workspace.forgetFolder", { name })}
+        title={t("workspace.forgetFolder", { name })}
+        className="shrink-0 rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+      >
+        <Glyph className="size-3.5">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </Glyph>
+      </button>
+    </div>
   );
 }
 

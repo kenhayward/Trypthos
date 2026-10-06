@@ -18,11 +18,9 @@ import {
   resolveEdit,
   resolvePanelWidths,
   identicalWorkspaceRefs,
-  sameWorkspaceRef,
   splitQualified,
   type FindMatch,
   type ProposedEdit,
-  type WorkspaceRef,
 } from "@trypthos/domain";
 import ChatPanel from "./components/ChatPanel";
 import NewFileDialog from "./components/NewFileDialog";
@@ -540,18 +538,13 @@ export default function App() {
   // been read - before that `workspaces` is the default, which is empty.
   //
   // Until it has finished, the list on screen is not the list to remember: it starts empty and
-  // fills one workspace at a time. `missed` is what did not open - offline, signed out, a drive not
-  // plugged in - and it stays remembered, because a temporary failure is not the user forgetting.
+  // fills one workspace at a time.
   const reopened = useRef(false);
   const [restored, setRestored] = useState(false);
-  const missed = useRef<readonly WorkspaceRef[]>([]);
   useEffect(() => {
     if (!loaded || reopened.current) return;
     reopened.current = true;
-    void actions.reopen(settings.workspaces).then((notOpened) => {
-      missed.current = notOpened;
-      setRestored(true);
-    });
+    void actions.reopen(settings.workspaces).then(() => setRestored(true));
   }, [loaded, settings.workspaces, actions]);
 
   /// What to reopen next time: every workspace that is open, in the order they are on screen.
@@ -564,16 +557,13 @@ export default function App() {
   /// file on each one. Compared field by field, NOT by `sameWorkspaceRef`: that is "the same place"
   /// and ignores `rootId`, so a My Drive ref that was pinned at open would never be written.
   ///
-  /// Not before the launch reopen has finished, and the ones it could not open are kept after the
-  /// ones it could. One the user then opens by hand stops being kept: it is an ordinary open
-  /// workspace from then on, and closing it has to forget it like any other.
+  /// Not before the launch reopen has finished. The ones it could not open are remembered too, after
+  /// the ones it could - they are on screen, greyed out, until they open or the user removes them.
   useEffect(() => {
     if (!loaded || !restored) return;
-    const open = state.workspaces.map((workspace) => workspace.ref);
-    missed.current = missed.current.filter((ref) => !open.some((other) => sameWorkspaceRef(ref, other)));
-    const refs = [...open, ...missed.current];
+    const refs = [...state.workspaces.map((workspace) => workspace.ref), ...state.unavailable];
     if (!identicalWorkspaceRefs(refs, settings.workspaces)) update({ workspaces: refs });
-  }, [loaded, restored, state.workspaces, settings.workspaces, update]);
+  }, [loaded, restored, state.workspaces, state.unavailable, settings.workspaces, update]);
 
   // The shell keeps its own copy of the dirty flag, so that a window with nothing to lose closes
   // without asking the renderer anything at all.
@@ -857,6 +847,9 @@ export default function App() {
           selectedFolder={state.selectedFolder}
           onSelectFolder={actions.selectFolder}
           onCloseWorkspace={(workspaceId) => void actions.closeWorkspace(workspaceId)}
+          unavailable={state.unavailable}
+          onRetryUnavailable={(ref) => void actions.retryUnavailable(ref)}
+          onForgetUnavailable={actions.forgetUnavailable}
           onOpenHomePage={actions.openHomePage}
           icons={workspaceIcons}
           bottomPane={

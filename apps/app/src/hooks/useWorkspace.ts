@@ -4,6 +4,7 @@ import type { DocumentSet, OpenDocument, ProviderKind, Revision, WorkspaceRef } 
 import {
   CONVERSATION_LOG_PATH,
   GUIDE_PATH,
+  sameWorkspaceRef,
   MAX_TEXT_FILE_BYTES,
   activateDocument,
   activeDocument,
@@ -58,6 +59,11 @@ export interface WorkspaceState {
   /// A list rather than one, and the id on each is what every path in that folder carries on its
   /// front - which is how two files both called `notes.md` stay two files.
   workspaces: readonly WorkspaceInfo[];
+  /// Remembered workspaces that could not be opened at launch, in the order they were remembered.
+  ///
+  /// Shown greyed out and still remembered, because the usual causes - a drive not plugged in, no
+  /// network - are temporary. They leave this list when they open, or when the user removes them.
+  unavailable: readonly WorkspaceRef[];
   /// What is known about each folder, keyed by workspace-relative path. "" is the root.
   ///
   /// Absent means collapsed and never opened. Status is per folder rather than per panel because one
@@ -125,9 +131,14 @@ export interface WorkspaceActions {
   /// Opens remembered workspaces on launch, without asking. Each is opened in turn, and one that has
   /// since been deleted - or a repository that can no longer be seen - is skipped in silence.
   ///
-  /// Answers the ones it could not open, in the order given, so the caller can go on remembering
-  /// them: a workspace that is offline today is not one the user has forgotten.
-  reopen(refs: readonly WorkspaceRef[]): Promise<readonly WorkspaceRef[]>;
+  /// One that could not be opened is listed in `unavailable` rather than forgotten: a workspace that
+  /// is offline today is not one the user has forgotten.
+  reopen(refs: readonly WorkspaceRef[]): Promise<void>;
+  /// Tries an unavailable workspace again. It opens and leaves the list, or stays and says why -
+  /// asked for by a click, so a failure is the user's to hear about.
+  retryUnavailable(ref: WorkspaceRef): Promise<void>;
+  /// Removes an unavailable workspace from the list, so it is not tried again.
+  forgetUnavailable(ref: WorkspaceRef): void;
   /// Closes one folder, and every document that came from it.
   ///
   /// The documents go with it, asking about unsaved work one at a time and stopping at the first
@@ -231,6 +242,7 @@ export interface WorkspaceActions {
 /// so a document's text, its dirty flag and the tab that shows it cannot drift apart.
 interface Internal {
   workspaces: readonly WorkspaceInfo[];
+  unavailable: readonly WorkspaceRef[];
   folders: Record<string, FolderState>;
   documents: DocumentSet;
   selectedFolder: string;
@@ -256,6 +268,7 @@ function withoutOne(paths: readonly string[], path: string): readonly string[] {
 
 const INITIAL: Internal = {
   workspaces: [],
+  unavailable: [],
   folders: {},
   selectedFolder: "",
   documents: emptyDocumentSet(),
@@ -1059,6 +1072,9 @@ export function useWorkspace(
         workspaces: prev.workspaces.some((open) => open.id === workspace.id)
           ? prev.workspaces
           : [...prev.workspaces, workspace],
+        // However it was opened - a click on its greyed-out row, or the dialog - it is one place,
+        // and now it is open.
+        unavailable: prev.unavailable.filter((ref) => !sameWorkspaceRef(ref, workspace.ref)),
         busy: false,
       }));
       // Listing a workspace is what expands it - absent from the folder map IS collapsed. Somebody
@@ -1318,7 +1334,6 @@ export function useWorkspace(
     async (refs: readonly WorkspaceRef[]) => {
       // In turn rather than at once, so the order on screen is the order they were opened in - and
       // so one workspace that has since gone cannot take the rest with it.
-      const missed: WorkspaceRef[] = [];
       for (const ref of refs) {
         const result = await client.openWorkspaceRef(ref);
         // Silent on failure: a remembered folder that has since gone, or a repository behind a
@@ -1334,11 +1349,25 @@ export function useWorkspace(
         // provider also means nothing is fetched for a workspace nobody has looked at yet.
         if (result.ok) await addWorkspace(result.workspace, { expand: false });
         else {
-          missed.push(ref);
+          setInternal((prev) =>
+            prev.unavailable.some((known) => sameWorkspaceRef(known, ref))
+              ? prev
+              : { ...prev, unavailable: [...prev.unavailable, ref] },
+          );
           if (result.reason === "other-account") fail(result, ref.kind);
         }
       }
-      return missed;
+    },
+    [addWorkspace, client, fail],
+  );
+
+  const retryUnavailable = useCallback(
+    async (ref: WorkspaceRef) => {
+      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      const result = await client.openWorkspaceRef(ref);
+      if (!result.ok) return fail(result, ref.kind);
+
+      await addWorkspace(result.workspace);
     },
     [addWorkspace, client, fail],
   );
@@ -1417,6 +1446,7 @@ export function useWorkspace(
   const state: WorkspaceState = useMemo(
     () => ({
       workspaces: internal.workspaces,
+      unavailable: internal.unavailable,
       folders: internal.folders,
       selectedFolder: internal.selectedFolder,
       documents: internal.documents.documents,
@@ -1445,6 +1475,12 @@ export function useWorkspace(
     openVault,
     closeWorkspace,
     reopen,
+    retryUnavailable,
+    forgetUnavailable: (ref: WorkspaceRef) =>
+      setInternal((prev) => ({
+        ...prev,
+        unavailable: prev.unavailable.filter((known) => !sameWorkspaceRef(known, ref)),
+      })),
     toggleFolder,
     retryFolder: loadFolder,
     refreshWorkspace,

@@ -63,6 +63,9 @@ function panel(overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> =
     selectedFolder: "",
     onSelectFolder: vi.fn(),
     onCloseWorkspace: vi.fn(),
+    unavailable: [] as readonly WorkspaceRef[],
+    onRetryUnavailable: vi.fn(),
+    onForgetUnavailable: vi.fn(),
     onOpenFileTypes: vi.fn(),
     ...overrides,
   };
@@ -1190,6 +1193,43 @@ describe("a workspace the provider could not list in full", () => {
   it("says nothing about a workspace that was listed in full", () => {
     panel({ workspaces: [{ ...HUGE, truncated: false }] });
     expect(screen.queryByText(/Too large to list in full/)).toBeNull();
+  });
+});
+
+/// A remembered workspace that could not be opened at launch. Shown rather than dropped, so a
+/// folder on a drive that is not plugged in comes back when the drive does - and removed only when
+/// the user says so, so one that is gone for good is not tried again at every launch.
+describe("a workspace that could not be opened", () => {
+  const USB = { kind: "local" as const, root: "E:/Photos" };
+
+  it("is listed under the open workspaces, marked as not available", () => {
+    panel({ unavailable: [USB] });
+    const row = screen.getByRole("button", { name: /^Photos/ });
+    expect(row.textContent).toContain("Not available");
+    // Below the workspaces that did open.
+    expect(
+      folderRow("Diariz").compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("is listed even when nothing else is open", () => {
+    panel({ workspaces: [], unavailable: [USB] });
+    expect(screen.getByRole("button", { name: /^Photos/ })).toBeTruthy();
+  });
+
+  it("tries again when its row is clicked", async () => {
+    const user = userEvent.setup();
+    const props = panel({ unavailable: [USB] });
+    await user.click(screen.getByRole("button", { name: /^Photos/ }));
+    expect(props.onRetryUnavailable).toHaveBeenCalledWith(USB);
+  });
+
+  it("is forgotten by its remove button", async () => {
+    const user = userEvent.setup();
+    const props = panel({ unavailable: [USB] });
+    await user.click(screen.getByRole("button", { name: "Remove Photos" }));
+    expect(props.onForgetUnavailable).toHaveBeenCalledWith(USB);
+    expect(props.onRetryUnavailable).not.toHaveBeenCalled();
   });
 });
 

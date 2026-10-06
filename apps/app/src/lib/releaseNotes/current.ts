@@ -5,14 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
-    version: "0.100.1",
+    version: "0.101.0",
     date: "2026-10-06",
     pr: 229,
-    headline: "Remembered folders survive an offline start",
+    headline: "Folders that cannot be opened stay in the list, greyed out",
     summary:
-      "The folders you leave open are reopened the next time you start, and until now one that could not be reopened was forgotten for good. A Google Drive or GitHub workspace started without a network, or a folder on a drive that was not plugged in, simply vanished from the list. It is now skipped for that launch and tried again the next time, and it is forgotten only once you open it again and close it. The list is also no longer written while the folders are still being reopened, so quitting or a crash during start-up can no longer forget them all. Also in this release, three test runs that printed warnings on a passing run are quiet again, and a spellchecker failure is logged by its kind only.",
+      "The folders you leave open are reopened the next time you start, and until now one that could not be reopened was forgotten for good: a Google Drive or GitHub workspace started without a network, or a folder on a drive that was not plugged in, simply vanished. It now stays in the folder browser, greyed out and marked Not available, below the folders that did open. Click it to try again once the drive or the network is back, which opens it without a restart, or use its cross to remove it, so a folder that is gone for good is not tried again at every start. Opening the same place from the dialog also takes it off the list. The list of folders is also no longer written while they are still being reopened, so quitting or a crash during start-up can no longer forget them all. Also in this release, test runs that printed warnings on a passing run are quiet again, and a spellchecker failure is logged by its kind only.",
+    added: [
+      "A remembered folder that cannot be opened at start-up is shown greyed out as Not available; click it to try again, or remove it with its cross.",
+    ],
     fixed: [
-      "A workspace that could not be reopened at start-up, offline or on a drive that was not plugged in, was forgotten; it is now tried again the next time (#228).",
+      "A folder that could not be reopened at start-up, offline or on a drive that was not plugged in, was forgotten (#228).",
       "Quitting or a crash while the remembered folders were reopening could forget all of them (#228).",
       "A spellchecker that could not be configured is logged by the kind of failure only, without its message.",
     ],

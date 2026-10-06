@@ -482,6 +482,30 @@ describe("App", () => {
       await waitFor(() => expect(written.at(-1)?.workspaces).toEqual([local, offline]), { timeout: 2000 });
     });
 
+    // Greyed out on the panel until the user decides. Removing it is what forgets it - so a folder
+    // on a drive that is never coming back is not tried again at every launch.
+    it("forgets a workspace that could not reopen once it is removed", async () => {
+      const user = userEvent.setup();
+      const offline = { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Shared" };
+      const local = { kind: "local" as const, root: "D:/Notes" };
+      const { written } = shellWithFiles({
+        readSettings: async () => ({
+          ok: true as const,
+          settings: { ...DEFAULT_SETTINGS, workspaces: [offline, local] },
+        }),
+        openWorkspaceRef: async (ref: WorkspaceRef) =>
+          ref.kind === "google-drive"
+            ? { ok: false as const, reason: "network" }
+            : { ok: true as const, workspace: { id: "Notes", name: "Notes", ref } },
+      });
+      render(<App />);
+
+      await user.click(await screen.findByRole("button", { name: "Remove Shared" }));
+
+      await waitFor(() => expect(written.at(-1)?.workspaces).toEqual([local]), { timeout: 2000 });
+      expect(screen.queryByRole("button", { name: "Remove Shared" })).toBeNull();
+    });
+
     // Kept only until the user opens it themselves. From then on it is an ordinary workspace, and
     // closing it forgets it like any other.
     it("forgets a kept workspace once it is opened by hand and closed", async () => {

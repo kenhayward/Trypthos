@@ -135,6 +135,13 @@ label until two files differ, which is exactly the case this feature creates.
   replaced each path with a `WorkspaceRef`, because a GitHub repository has no path; the migration
   reads every remembered string as a local reference, in order, so an existing installation comes back
   exactly as it was left.
+- **The list is the open workspaces plus the unavailable ones, and is not written during launch.**
+  `useWorkspace.reopen` puts a ref that fails to open in `state.unavailable` instead of dropping it;
+  the panel draws it greyed out, a click calls `retryUnavailable`, and its cross calls
+  `forgetUnavailable`. Opening the same place any other way also takes it off the list. `App` writes
+  `settings.workspaces` as the open refs followed by `state.unavailable`, and only once the launch
+  reopen has finished - before that the open list is still filling, and writing it would forget
+  everything not yet reopened. The stored shape is unchanged.
 
 ## The editor
 
