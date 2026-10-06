@@ -62,6 +62,9 @@ function panel() {
     selectedFolder: "",
     onSelectFolder: vi.fn(),
     onCloseWorkspace: vi.fn(),
+    unavailable: [],
+    onRetryUnavailable: vi.fn(),
+    onForgetUnavailable: vi.fn(),
     onOpenFileTypes: vi.fn(),
   };
   const view = render(<WorkspacePanel {...props} />);

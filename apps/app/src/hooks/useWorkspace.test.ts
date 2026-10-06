@@ -968,8 +968,9 @@ describe("useWorkspace", () => {
     expect(result.current.state.errorKey).toBeNull();
   });
 
-  // The caller keeps remembering what could not open, so it has to be told which ones those were.
-  it("answers the remembered workspaces it could not reopen", async () => {
+  // Shown rather than dropped: a folder on a drive that is not plugged in, or a Drive workspace
+  // while offline, is still one the user chose - and only they can say it is gone for good.
+  it("lists a remembered workspace it could not reopen as unavailable", async () => {
     const { client } = fakeClient({
       openWorkspaceRef: async (ref: WorkspaceRef) =>
         ref.kind === "local" && ref.root === "D:/Gone"
@@ -978,15 +979,97 @@ describe("useWorkspace", () => {
     });
     const { result } = renderHook(() => useWorkspace(client));
 
-    let missed: readonly WorkspaceRef[] = [];
     await act(async () => {
-      missed = await result.current.actions.reopen([
+      await result.current.actions.reopen([
         { kind: "local", root: "D:/Gone" },
         { kind: "local", root: "D:/Notes" },
       ]);
     });
 
-    expect(missed).toEqual([{ kind: "local", root: "D:/Gone" }]);
+    expect(result.current.state.unavailable).toEqual([{ kind: "local", root: "D:/Gone" }]);
+    expect(result.current.state.workspaces.map((workspace) => workspace.id)).toEqual(["Notes"]);
+  });
+
+  it("opens an unavailable workspace when asked again, and stops listing it", async () => {
+    let online = false;
+    const { client } = fakeClient({
+      openWorkspaceRef: async (ref: WorkspaceRef) =>
+        online
+          ? { ok: true as const, workspace: { id: "USB", name: "USB", ref, truncated: false } }
+          : { ok: false as const, reason: "not-found" as const },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    const usb = { kind: "local" as const, root: "E:/USB" };
+
+    await act(async () => {
+      await result.current.actions.reopen([usb]);
+    });
+    online = true;
+    await act(async () => {
+      await result.current.actions.retryUnavailable(usb);
+    });
+
+    expect(result.current.state.unavailable).toEqual([]);
+    expect(result.current.state.workspaces.map((workspace) => workspace.id)).toEqual(["USB"]);
+  });
+
+  // Asked for by a click this time, so a failure is the user's to hear about.
+  it("keeps it listed, and says why, when it still cannot open", async () => {
+    const { client } = fakeClient({
+      openWorkspaceRef: async () => ({ ok: false as const, reason: "not-found" as const }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    const usb = { kind: "local" as const, root: "E:/USB" };
+
+    await act(async () => {
+      await result.current.actions.reopen([usb]);
+    });
+    expect(result.current.state.errorKey).toBeNull();
+    await act(async () => {
+      await result.current.actions.retryUnavailable(usb);
+    });
+
+    expect(result.current.state.unavailable).toEqual([usb]);
+    expect(result.current.state.errorKey).not.toBeNull();
+  });
+
+  it("forgets an unavailable workspace when it is removed", async () => {
+    const { client } = fakeClient({
+      openWorkspaceRef: async () => ({ ok: false as const, reason: "not-found" as const }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    const usb = { kind: "local" as const, root: "E:/USB" };
+
+    await act(async () => {
+      await result.current.actions.reopen([usb]);
+    });
+    act(() => result.current.actions.forgetUnavailable(usb));
+
+    expect(result.current.state.unavailable).toEqual([]);
+  });
+
+  // Opened from the dialog instead - one place, so one row.
+  it("stops listing an unavailable workspace once it is opened some other way", async () => {
+    let online = false;
+    const usb = { kind: "local" as const, root: "E:/USB" };
+    const { client } = fakeClient({
+      openWorkspaceRef: async () => ({ ok: false as const, reason: "not-found" as const }),
+      openWorkspace: async () =>
+        online
+          ? { ok: true as const, workspace: { id: "USB", name: "USB", ref: usb, truncated: false } }
+          : { ok: false as const, reason: "cancelled" as const },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen([usb]);
+    });
+    online = true;
+    await act(async () => {
+      await result.current.actions.open();
+    });
+
+    expect(result.current.state.unavailable).toEqual([]);
   });
 
   // The one reopen failure the user did not cause by forgetting: the account connected now is not
