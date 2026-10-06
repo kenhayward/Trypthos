@@ -483,7 +483,7 @@ export default function EditorPanel({
           media.kind === "image" ? (
             // A picture, drawn rather than edited. It scrolls within the panel at its own size
             // rather than being scaled to fit, because a screenshot shrunk to a panel is a
-            // screenshot you cannot read - and Shift and the wheel are how you get it back.
+            // screenshot you cannot read - and Ctrl (Cmd on macOS) and the wheel, or a pinch, get it back.
             <ImageViewer source={media.source} name={activePath ?? ""} zoom={zoom} onZoom={stepZoom} />
           ) : (
             // A recording, played. No zoom: a video is watched at the panel's size, and the way to
