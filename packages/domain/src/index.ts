@@ -504,6 +504,7 @@ export {
   FOLDER_MIME,
   GOOGLE_DOC_MIME,
   SharedDriveListSchema,
+  SharedDriveSchema,
   childrenToEntries,
   childrenUrl,
   displayNameFor,
@@ -513,6 +514,7 @@ export {
   fileUrl,
   foldersOf,
   isDriveId,
+  sharedDriveUrl,
   sharedDrivesUrl,
   sharedWithMeUrl,
 } from "./googleDrive";

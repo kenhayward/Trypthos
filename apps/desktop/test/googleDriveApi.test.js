@@ -158,6 +158,19 @@ test("lists every Shared Drive", async () => {
   assert.deepEqual(await api.sharedDrives(), { ok: true, drives: [{ id: "d1", name: "Team" }, { id: "d2", name: "Ops" }] });
 });
 
+test("reads one shared drive by id, with the token", async () => {
+  const { api, calls } = setup({ routes: [answer(200, { id: "0AbcDEF", name: "Team Drive Now" })] });
+  assert.deepEqual(await api.sharedDrive("0AbcDEF"), { ok: true, drive: { id: "0AbcDEF", name: "Team Drive Now" } });
+  assert.equal(new URL(calls[0].url).pathname, "/drive/v3/drives/0AbcDEF");
+  assert.equal(calls[0].authorization, `Bearer ${ACCESS}`);
+});
+
+test("a shared drive id that is not a Drive id is refused without a request", async () => {
+  const { api, calls } = setup();
+  assert.deepEqual(await api.sharedDrive("a/../b"), { ok: false, reason: "not-found" });
+  assert.equal(calls.length, 0);
+});
+
 test("lists every folder shared with the user, across pages", async () => {
   const { api, calls } = setup({
     routes: [

@@ -676,6 +676,24 @@ describe("the sources a workspace can be opened from", () => {
     expect(mark?.getAttribute("class") ?? "").toContain("text-drive");
   });
 
+  it("marks each Drive workspace with the kind of place it is", () => {
+    const variants = ["my-drive", "shared-drive", "shared-folder", "folder"] as const;
+    panel({
+      workspaces: variants.map((driveVariant) => ({
+        id: driveVariant,
+        name: `Place ${driveVariant}`,
+        ref: { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Place" },
+        truncated: false,
+        driveVariant,
+      })),
+    });
+    for (const variant of variants) {
+      const mark = [...screen.getByRole("button", { name: `Place ${variant}` }).querySelectorAll("svg")].at(-1);
+      expect(mark?.getAttribute("data-mark")).toBe(`drive-${variant}`);
+      expect(mark?.getAttribute("class") ?? "").toContain("text-drive");
+    }
+  });
+
   // A folder and a repository sit in the same tree and behave very differently - one can be saved
   // into and the other cannot - so the row says which it is rather than looking alike.
   it("draws a repository's row differently from a folder's", () => {

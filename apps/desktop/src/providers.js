@@ -125,7 +125,16 @@ async function openGoogleDrive(ref, { drive }) {
   if (!opened.ok) return opened;
   return {
     ok: true,
-    workspace: { ref, name: opened.name, root: null, guard: null, provider: opened.provider, vault: false },
+    workspace: {
+      ref,
+      name: opened.name,
+      root: null,
+      guard: null,
+      provider: opened.provider,
+      vault: false,
+      /// What kind of Drive place this is, for the mark on its row.
+      driveVariant: opened.variant,
+    },
   };
 }
 

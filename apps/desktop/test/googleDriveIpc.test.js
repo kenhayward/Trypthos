@@ -83,6 +83,35 @@ test("opens a Drive folder by reference and reads it like any other workspace", 
   });
 });
 
+test("a shared drive opens under its own name and says it is one", async () => {
+  const factory = () => ({
+    fileMeta: async (id) => ({ ok: true, file: { id, name: "Drive", mimeType: FOLDER } }),
+    sharedDrive: async (id) => ({ ok: true, drive: { id, name: "Team Drive Now" } }),
+    listChildren: async () => ({ ok: true, files: [] }),
+  });
+  await withHandlers(async ({ ipcMain }) => {
+    const opened = await ipcMain.invoke("workspace:openRef", {
+      ref: { kind: "google-drive", folderId: "0AbcDEF", driveId: "0AbcDEF", name: "Test Drive" },
+    });
+    assert.equal(opened.ok, true);
+    assert.equal(opened.workspace.name, "Team Drive Now");
+    assert.equal(opened.workspace.driveVariant, "shared-drive");
+  }, { createGoogleDrive: factory });
+});
+
+test("a local workspace's answer carries no Drive variant", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-drive-local-"));
+  try {
+    await withHandlers(async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "local", root: dir } });
+      assert.equal(opened.ok, true);
+      assert.equal("driveVariant" in opened.workspace, false);
+    });
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("the Drive client is built over the Google account's access token", async () => {
   const seen = {};
   const google = { accessToken: async (options) => ({ ok: true, token: options?.force ? "forced" : "plain" }) };

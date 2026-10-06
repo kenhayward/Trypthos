@@ -13,10 +13,11 @@ import type { IconAssignment, IconMap, Platform, WorkspaceRef } from "@trypthos/
 import { TREE_FILE_TYPE } from "../lib/treeDrag";
 import { matchRows, treeRows, visibleFileCount, type FolderState, type TreeRow } from "../lib/treeRows";
 import type { FilterStatus } from "../hooks/useFileFilter";
-import type { RemoteNode } from "../lib/workspaceClient";
+import type { RemoteNode, WorkspaceInfo } from "../lib/workspaceClient";
 import AssignedIcon from "./AssignedIcon";
 import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 import Glyph from "./Glyph";
+import DriveGlyph from "./DriveGlyph";
 import SourceGlyph, { sourceColour } from "./SourceGlyph";
 import Spinner from "./Spinner";
 
@@ -28,7 +29,7 @@ interface Props {
   ///
   /// The reference is what says which provider it came from, which is what draws its icon - a folder
   /// and a repository look alike in a tree and are very different things to save into.
-  workspaces: readonly { id: string; name: string; ref: WorkspaceRef; truncated: boolean; vault?: boolean }[];
+  workspaces: readonly { id: string; name: string; ref: WorkspaceRef; truncated: boolean; vault?: boolean; driveVariant?: WorkspaceInfo["driveVariant"] }[];
   folders: Record<string, FolderState>;
   filter: string;
   /// What the search behind the filter box is doing, and what it found.
@@ -650,7 +651,7 @@ function WorkspaceRow({
   onToggle,
   onRetry,
 }: {
-  workspace: { id: string; name: string; ref: WorkspaceRef; truncated: boolean; vault?: boolean };
+  workspace: { id: string; name: string; ref: WorkspaceRef; truncated: boolean; vault?: boolean; driveVariant?: WorkspaceInfo["driveVariant"] };
   /// What is known about the root's own listing, or null when it has never been asked for.
   status: FolderState["status"] | null;
   expanded: boolean;
@@ -717,14 +718,21 @@ function WorkspaceRow({
 
               A failing workspace overrides both, because what is wrong with it matters more than
               where it came from. */}
-          <SourceGlyph
-            mark={workspaceRefMark(workspace.ref)}
-            className={
-              status === "error"
-                ? "size-3.5 text-danger"
-                : `size-3.5 ${sourceColour(workspaceRefMark(workspace.ref))}`
-            }
-          />
+          {workspace.ref.kind === "google-drive" && workspace.driveVariant !== undefined ? (
+            <DriveGlyph
+              kind={workspace.driveVariant}
+              className={status === "error" ? "size-3.5 text-danger" : `size-3.5 ${sourceColour("google-drive")}`}
+            />
+          ) : (
+            <SourceGlyph
+              mark={workspaceRefMark(workspace.ref)}
+              className={
+                status === "error"
+                  ? "size-3.5 text-danger"
+                  : `size-3.5 ${sourceColour(workspaceRefMark(workspace.ref))}`
+              }
+            />
+          )}
           <span className="min-w-0 truncate">{workspace.name}</span>
           {status === "loading" && (
             <Spinner label={t("workspace.loading")} className="ml-auto" />
