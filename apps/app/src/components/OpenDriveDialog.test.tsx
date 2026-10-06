@@ -160,19 +160,86 @@ describe("OpenDriveDialog", () => {
 
     const crumbs = within(screen.getByRole("navigation"));
     expect(markOf(crumbs.getByRole("button", { name: "Team" }))).toBe("drive-shared-drive");
-    expect(markOf(crumbs.getByRole("button", { name: "2026" }))).toBeUndefined();
+    expect(markOf(crumbs.getByText("2026"))).toBeUndefined();
   });
 
   it("gives My Drive and Shared with me their icons on the first crumb", async () => {
     render(<OpenDriveDialog bridge={fakeBridge()} onCancel={() => {}} onOpen={() => {}} />);
     await userEvent.click(await screen.findByRole("button", { name: "My Drive" }));
     await screen.findByRole("button", { name: "Projects" });
-    expect(markOf(within(screen.getByRole("navigation")).getByRole("button", { name: "My Drive" }))).toBe("drive-my-drive");
+    expect(markOf(within(screen.getByRole("navigation")).getByText("My Drive"))).toBe("drive-my-drive");
 
     await userEvent.click(within(screen.getByRole("navigation")).getByRole("button", { name: "Google Drive" }));
     await userEvent.click(await screen.findByRole("button", { name: "Shared with me" }));
     await screen.findByRole("button", { name: "Handbook" });
-    expect(markOf(within(screen.getByRole("navigation")).getByRole("button", { name: "Shared with me" }))).toBe("drive-shared-with-me");
+    expect(markOf(within(screen.getByRole("navigation")).getByText("Shared with me"))).toBe("drive-shared-with-me");
+  });
+
+  it("draws the crumbs above where you are as links, and where you are as plain text", async () => {
+    render(<OpenDriveDialog bridge={fakeBridge()} onCancel={() => {}} onOpen={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "My Drive" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Projects" }));
+    await screen.findByRole("button", { name: "2026" });
+
+    const crumbs = within(screen.getByRole("navigation"));
+    for (const name of ["Google Drive", "My Drive"]) {
+      const link = crumbs.getByRole("button", { name });
+      expect(link.className).toContain("text-accent");
+      expect(link.className).toContain("underline");
+      expect(link.className).toContain("cursor-pointer");
+      expect(link.className).toContain("focus-visible:ring-2");
+      expect(link.getAttribute("aria-current")).toBeNull();
+    }
+    expect(crumbs.queryByRole("button", { name: "Projects" })).toBeNull();
+    expect(crumbs.getByText("Projects").getAttribute("aria-current")).toBe("page");
+  });
+
+  it("does not make the current place a link", async () => {
+    render(<OpenDriveDialog bridge={fakeBridge()} onCancel={() => {}} onOpen={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "My Drive" }));
+    await screen.findByRole("button", { name: "Projects" });
+
+    const crumbs = within(screen.getByRole("navigation"));
+    expect(crumbs.queryByRole("button", { name: "My Drive" })).toBeNull();
+    expect(crumbs.getByText("My Drive").getAttribute("aria-current")).toBe("page");
+    expect(crumbs.getByRole("button", { name: "Google Drive" })).toBeDefined();
+  });
+
+  it("keeps My Drive and Shared with me reachable when the shared drives cannot be listed", async () => {
+    const bridge = fakeBridge({
+      listDriveFolders: vi.fn(async (location: DriveLocation): Promise<DriveFoldersResult> =>
+        location.in === "drives" ? { ok: false, reason: "offline" } : answerFor(location),
+      ),
+    });
+    render(<OpenDriveDialog bridge={bridge} onCancel={() => {}} onOpen={() => {}} />);
+
+    expect(await screen.findByRole("alert")).toBeDefined();
+    expect(screen.getByRole("button", { name: "My Drive" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Shared with me" })).toBeDefined();
+
+    await userEvent.click(screen.getByRole("button", { name: "My Drive" }));
+    expect(await screen.findByRole("button", { name: "Projects" })).toBeDefined();
+  });
+
+  it("ignores a slow shared drives answer that arrives after My Drive was entered", async () => {
+    let release: (result: DriveFoldersResult) => void = () => {};
+    const slow = new Promise<DriveFoldersResult>((resolve) => {
+      release = resolve;
+    });
+    const bridge = fakeBridge({
+      listDriveFolders: vi.fn((location: DriveLocation): Promise<DriveFoldersResult> =>
+        location.in === "drives" ? slow : Promise.resolve(answerFor(location)),
+      ),
+    });
+    render(<OpenDriveDialog bridge={bridge} onCancel={() => {}} onOpen={() => {}} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "My Drive" }));
+    expect(await screen.findByRole("button", { name: "Projects" })).toBeDefined();
+
+    release(DRIVES);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "Projects" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Team" })).toBeNull();
   });
 
   it("goes back up through the breadcrumb", async () => {
