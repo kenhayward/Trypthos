@@ -391,6 +391,7 @@ export {
   GoogleDriveWorkspaceRefSchema,
   LocalWorkspaceRefSchema,
   WorkspaceRefSchema,
+  identicalWorkspaceRefs,
   sameWorkspaceRef,
   workspaceRefKey,
   workspaceRefLabel,

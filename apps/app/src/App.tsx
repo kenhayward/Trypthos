@@ -17,7 +17,7 @@ import {
   parseChatCommand,
   resolveEdit,
   resolvePanelWidths,
-  sameWorkspaceRef,
+  identicalWorkspaceRefs,
   splitQualified,
   type FindMatch,
   type ProposedEdit,
@@ -549,18 +549,12 @@ export default function App() {
   ///
   /// Written only when the list actually differs, and compared by value rather than by reference:
   /// the state's array is rebuilt on every render, so an identity check would write the settings
-  /// file on each one. `sameWorkspaceRef` is the one rule for "the same place", so this comparison
-  /// and the shell's deduplication cannot disagree.
+  /// file on each one. Compared field by field, NOT by `sameWorkspaceRef`: that is "the same place"
+  /// and ignores `rootId`, so a My Drive ref that was pinned at open would never be written.
   useEffect(() => {
     if (!loaded) return;
     const refs = state.workspaces.map((workspace) => workspace.ref);
-    const same =
-      refs.length === settings.workspaces.length &&
-      refs.every((ref, at) => {
-        const stored = settings.workspaces[at];
-        return stored !== undefined && sameWorkspaceRef(ref, stored);
-      });
-    if (!same) update({ workspaces: refs });
+    if (!identicalWorkspaceRefs(refs, settings.workspaces)) update({ workspaces: refs });
   }, [loaded, state.workspaces, settings.workspaces, update]);
 
   // The shell keeps its own copy of the dirty flag, so that a window with nothing to lose closes

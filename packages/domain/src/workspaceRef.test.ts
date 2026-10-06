@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PROVIDER_KINDS,
   WorkspaceRefSchema,
+  identicalWorkspaceRefs,
   sameWorkspaceRef,
   workspaceRefKey,
   workspaceRefLabel,
@@ -192,5 +193,31 @@ describe("a Google Drive folder", () => {
     expect(WorkspaceRefSchema.parse(pinned)).toEqual(pinned);
     expect(WorkspaceRefSchema.safeParse({ ...pinned, rootId: "a' or 'b" }).success).toBe(false);
     expect(sameWorkspaceRef(pinned, { kind: "google-drive", folderId: "root", name: "My Drive" })).toBe(true);
+  });
+});
+
+// "The same place" is not "nothing to write": a ref that gained a field is the same place with
+// something new to remember, and a key comparison would never let it reach the settings file.
+describe("identicalWorkspaceRefs", () => {
+  const stored = { kind: "google-drive" as const, folderId: "root", name: "My Drive" };
+
+  it("is true for the same list, whatever order the fields were written in", () => {
+    expect(
+      identicalWorkspaceRefs(
+        [{ kind: "local", root: "D:/Notes" }, stored],
+        [{ root: "D:/Notes", kind: "local" }, { name: "My Drive", folderId: "root", kind: "google-drive" }],
+      ),
+    ).toBe(true);
+  });
+
+  it("is false when a ref gained a field the key ignores", () => {
+    expect(identicalWorkspaceRefs([stored], [{ ...stored, rootId: "0ARealRootId" }])).toBe(false);
+  });
+
+  it("is false when the name changed, or the lists differ in length or order", () => {
+    expect(identicalWorkspaceRefs([stored], [{ ...stored, name: "Renamed" }])).toBe(false);
+    expect(identicalWorkspaceRefs([stored], [])).toBe(false);
+    const local = { kind: "local" as const, root: "D:/Notes" };
+    expect(identicalWorkspaceRefs([local, stored], [stored, local])).toBe(false);
   });
 });

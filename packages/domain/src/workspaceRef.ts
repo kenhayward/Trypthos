@@ -140,6 +140,27 @@ export function sameWorkspaceRef(one: WorkspaceRef, other: WorkspaceRef): boolea
   return workspaceRefKey(one) === workspaceRefKey(other);
 }
 
+/// Whether two lists hold the same references down to every field, in the same order.
+///
+/// Not `sameWorkspaceRef`: that is "the same place", and ignores what a ref remembers beside its
+/// identity (a Drive name, My Drive's pinned `rootId`). Deciding whether the list needs writing to
+/// the settings file by it would drop a field that was learned after the ref was stored.
+export function identicalWorkspaceRefs(
+  one: readonly WorkspaceRef[],
+  other: readonly WorkspaceRef[],
+): boolean {
+  return (
+    one.length === other.length &&
+    one.every((ref, at) => {
+      const peer = other[at] as Record<string, unknown> | undefined;
+      if (peer === undefined) return false;
+      const left = ref as Record<string, unknown>;
+      const keys = new Set([...Object.keys(left), ...Object.keys(peer)]);
+      return [...keys].every((key) => left[key] === peer[key]);
+    })
+  );
+}
+
 /// The whole of what a workspace is, in one line.
 ///
 /// What the browser puts under - or beside - the name. The name alone is ambiguous by design: it is

@@ -291,6 +291,40 @@ test("cannot replace a file that already exists", async () => {
   });
 });
 
+/// Reasons a local folder never answers, so a stub stands in for the provider here: a Drive write
+/// can fail in ways where the file may or may not exist, and the model has to be told which.
+async function createAnswering(reason) {
+  const provider = { write: async () => ({ ok: false, reason }) };
+  const result = await createFolderToolRunner({
+    provider,
+    folder: "docs",
+    fileTypes: TYPES,
+    openInTab: null,
+  })("create_file", JSON.stringify({ path: "docs/new.md", content: "x" }));
+  return result.content;
+}
+
+for (const reason of ["unknown", "offline"]) {
+  test(`says the file may exist when the write answered ${reason}`, async () => {
+    const content = await createAnswering(reason);
+
+    assert.match(content, /may have been created/);
+    assert.match(content, /list the folder/i);
+    assert.doesNotMatch(content, /could not be created/);
+  });
+}
+
+test("says the name cannot be used when the write was a bad request", async () => {
+  const content = await createAnswering("bad-request");
+
+  assert.match(content, /cannot be used here/);
+  assert.match(content, /another name/i);
+});
+
+test("keeps the plain message for any other reason", async () => {
+  assert.match(await createAnswering("denied"), /could not be created/);
+});
+
 test("cannot create outside the attached folder", async () => {
   await withActing(TREE, async ({ run, root }) => {
     const result = await run("docs", "create_file", { path: "other/planted.md", content: "x" });

@@ -405,6 +405,27 @@ describe("App", () => {
       );
     });
 
+    // The shell pins a My Drive workspace to the account's real root id the first time it opens, and
+    // the pin only protects anything once it is in the settings file. `rootId` is not part of the
+    // ref's key, so a key comparison would call the stored ref and the pinned one the same place.
+    it("writes the pinned My Drive ref back to the settings", async () => {
+      const stored = { kind: "google-drive" as const, folderId: "root", name: "My Drive" };
+      const pinned = { ...stored, rootId: "0ADriveRootId" };
+      const { written } = shellWithFiles({
+        readSettings: async () => ({
+          ok: true as const,
+          settings: { ...DEFAULT_SETTINGS, workspaces: [stored] },
+        }),
+        openWorkspaceRef: async () => ({
+          ok: true as const,
+          workspace: { id: "My-Drive", name: "My Drive", ref: pinned },
+        }),
+      });
+      render(<App />);
+
+      await waitFor(() => expect(written.at(-1)?.workspaces).toEqual([pinned]));
+    });
+
     it("clears the list when the menu asks", async () => {
       const user = userEvent.setup();
       const { written, menu } = shellWithFiles();
