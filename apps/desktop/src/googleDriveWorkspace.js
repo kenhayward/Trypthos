@@ -101,6 +101,12 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
   /// Bumped by `refresh()`. A listing that started under an older generation is never cached, never
   /// joined, and `listInto` asks again - so a Refresh pressed mid-listing cannot be undone by it.
   let generation = 0;
+  /// Drive folder id -> how many times the app has written to that folder (a new entry, a rename) and
+  /// re-listed it. A listing that started before such a write is not applied: it is asked again.
+  const writes = new Map();
+  const writesTo = (folderId) => writes.get(folderId) ?? 0;
+  /// Bumped by every rename, whose re-keying moves paths out from under a listing in flight.
+  let moves = 0;
   /// `<file id>@<revision>` -> whether those bytes began with a byte-order mark, so a save keeps it.
   /// Keyed by revision because a save proceeds only when Drive's current revision is the one the
   /// editor expects - so the record looked up is about exactly the bytes being replaced. Not cleared
@@ -110,20 +116,24 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
   /// The files of one folder: from the cache while it is fresh, else from Drive. A failure is passed
   /// on and never remembered.
-  async function filesOf(folderId) {
+  ///
+  /// `fresh` neither reads the cache nor joins a request in flight: that request may have been asked
+  /// before a write to the folder, and would answer it as it was. A request superseded this way is
+  /// never cached either - only the newest one asked of a folder is.
+  async function filesOf(folderId, { fresh = false } = {}) {
     const cached = listings.get(folderId);
-    if (cached !== undefined && cached.generation === generation && now() - cached.at < ttlMs) {
+    if (!fresh && cached !== undefined && cached.generation === generation && now() - cached.at < ttlMs) {
       return { ok: true, files: cached.files };
     }
     const joined = inFlight.get(folderId);
-    if (joined !== undefined && joined.generation === generation) return joined.promise;
+    if (!fresh && joined !== undefined && joined.generation === generation) return joined.promise;
 
     const started = generation;
     const pending = { generation: started, promise: null };
     pending.promise = (async () => {
       try {
         const listed = await api.listChildren(folderId);
-        if (listed.ok && started === generation) {
+        if (listed.ok && started === generation && inFlight.get(folderId) === pending) {
           listings.set(folderId, { at: now(), files: listed.files, generation: started });
         }
         return listed;
@@ -137,12 +147,20 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
   /// Lists one folder and records its children, replacing only that folder's direct children - what
   /// is known about the folders below them stays.
-  async function listInto(path, folderId) {
+  async function listInto(path, folderId, { fresh = false } = {}) {
     const started = generation;
-    const listed = await filesOf(folderId);
+    const startedMoves = moves;
+    const startedWrites = writesTo(folderId);
+    const listed = await filesOf(folderId, { fresh });
     if (!listed.ok) return listed;
     // A refresh while this listing was in flight: what arrived predates it, so ask again.
     if (generation !== started) return listInto(path, folderId);
+    // A rename while it was in flight, and the path no longer names this folder: filing its children
+    // under it would give live files a second, dead path.
+    if (moves !== startedMoves && path !== "" && entries.get(path)?.fileId !== folderId) return failure("not-found");
+    // The app wrote to this folder while it was in flight: what arrived may predate the write - a
+    // rename it would undo, a new entry it would drop - so ask again, which finds the fresh listing.
+    if (writesTo(folderId) !== startedWrites) return listInto(path, folderId);
 
     const children = childrenToEntries(path, listed.files);
     const incoming = new Map(children.map((child) => [child.path, child]));
@@ -236,29 +254,30 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
     // The cached listing can predate a file Drive already has under this name. Creating a second one
     // would leave the path naming the older file, so the folder is asked for afresh first.
-    listings.delete(folder.id);
-    const fresh = await listInto(parent, folder.id);
+    const fresh = await relist(parent, folder.id);
     if (!fresh.ok) return fresh;
     const existing = entries.get(path);
     if (existing !== undefined) return existing.kind === "file" ? conflict(existing.revision) : failure("permission-denied");
 
     const created = await api.createFile(folder.id, name, encodeTextFile(content, { bom: false }), mimeType);
     if (!created.ok) return created;
-    listings.delete(folder.id);
     // Re-listed so the new file has its path in the map; the file landed whatever this answers.
-    await listInto(parent, folder.id);
+    await relist(parent, folder.id);
     // The file landed, but without Drive's revision for it there is nothing honest to hand the
     // editor: its id is not a revision, and the next save's check would fail against it or worse.
     if (created.file.headRevisionId === undefined) return failure("unknown");
     return { ok: true, revision: { id: created.file.headRevisionId } };
   }
 
-  /// A folder listed afresh, its cached listing dropped first: Drive allows two entries of one name
-  /// and the app does not, so whether a name is free is never answered from a listing that could
-  /// predate it.
+  /// A folder listed afresh, around a write to it: Drive allows two entries of one name and the app
+  /// does not, so whether a name is free is never answered from a listing that could predate it - and
+  /// after the write, the map must learn what it did. Neither the cache nor a request already in
+  /// flight will do, since either can predate the write; and a listing in flight is told the folder
+  /// was written to, so it asks again rather than applying what it brings back.
   async function relist(parent, folderId) {
     listings.delete(folderId);
-    return listInto(parent, folderId);
+    writes.set(folderId, writesTo(folderId) + 1);
+    return listInto(parent, folderId, { fresh: true });
   }
 
   /// Whether another entry in a folder already has this name. Case-insensitive, as a folder on
@@ -497,6 +516,7 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (!renamed.ok) return renamed;
 
       const target = parent === "" ? requested : `${parent}/${requested}`;
+      moves += 1;
       const moved = rekeyKnown(entries, listedPaths, path, target);
       entries.clear();
       for (const [key, value] of moved.entries) entries.set(key, value);

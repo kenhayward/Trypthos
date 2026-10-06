@@ -1049,6 +1049,19 @@ function registerIpcHandlers({
     }),
   );
 
+  /// Hands an entry to the operating system - its file manager or its browser - answering a failure
+  /// as a result rather than a throw through IPC. The log names the step and the error's code only:
+  /// the message can carry the path or the address, which belong to the user.
+  async function showing(step, show) {
+    try {
+      await show();
+      return { ok: true };
+    } catch (error) {
+      console.error(`Could not show the entry in the ${step}: ${error?.code ?? error?.name}`);
+      return { ok: false, reason: "unknown" };
+    }
+  }
+
   /// Open in Explorer. The renderer names an entry; the absolute path it becomes is worked out HERE,
   /// through the provider's guard, and never sent back - the renderer has no use for where a
   /// workspace is on disk beyond what its reference already says.
@@ -1062,14 +1075,12 @@ function registerIpcHandlers({
       if (workspace.root !== null && typeof workspace.provider.locate === "function") {
         const located = await workspace.provider.locate(request.path);
         if (!located.ok) return located;
-        await revealPath({ path: located.path, kind: located.kind });
-        return { ok: true };
+        return showing("file manager", () => revealPath({ path: located.path, kind: located.kind }));
       }
       if (typeof workspace.provider.webAddress === "function") {
         const address = await workspace.provider.webAddress(request.path);
         if (!address.ok) return address;
-        await openExternal(address.url);
-        return { ok: true };
+        return showing("browser", () => openExternal(address.url));
       }
       return { ok: false, reason: "unsupported" };
     }),

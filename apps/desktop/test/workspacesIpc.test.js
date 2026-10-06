@@ -183,6 +183,35 @@ test("a repository cannot make a folder, rename or reveal", async () => {
   assert.deepEqual(opened, []);
 });
 
+test("a file manager that will not open answers unknown rather than throwing, and logs no path", async () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    await withTwoWorkspaces(
+      { "docs/a.md": null },
+      { "b.md": null },
+      async ({ ipcMain, one }) => {
+        assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${one.id}/docs/a.md` }), {
+          ok: false,
+          reason: "unknown",
+        });
+      },
+      {
+        revealPath: async (target) => {
+          throw Object.assign(new Error(`cannot show ${target.path}`), { code: "ENOENT" });
+        },
+      },
+    );
+  } finally {
+    console.error = original;
+  }
+  assert.equal(logged.length, 1);
+  const text = JSON.stringify(logged);
+  assert.equal(text.includes("ENOENT"), true);
+  assert.equal(text.includes("a.md") || text.includes("cannot show"), false);
+});
+
 test("shows a file, a folder or the workspace itself in the file manager", async () => {
   const revealed = [];
   await withTwoWorkspaces(

@@ -225,6 +225,33 @@ test("revealing a Drive entry opens its page in the browser, and the address is 
   for (const url of opened) assert.equal(text.includes(url), false);
 });
 
+test("a browser that will not open answers unknown, and logs only the step and the error's code", async () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        const workspace = (await ipcMain.invoke("workspace:openRef", { ref: { kind: "google-drive", folderId: "rootREJ", name: "Edited" } })).workspace;
+        assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${workspace.id}/Archive` }), { ok: false, reason: "unknown" });
+      },
+      {
+        createGoogleDrive: editingDriveFactory([], "rootREJ"),
+        openExternal: async (url) => {
+          throw Object.assign(new Error(`could not open ${url}`), { code: "EACCES" });
+        },
+      },
+    );
+  } finally {
+    console.error = original;
+  }
+  assert.equal(logged.length, 1);
+  const text = JSON.stringify(logged);
+  assert.equal(text.includes("EACCES"), true);
+  // Neither the address nor the error's message, which carries it.
+  assert.equal(text.includes("drive.google.com") || text.includes("dirEDT") || text.includes("could not open"), false);
+});
+
 test("a shared drive opens under its own name and says it is one", async () => {
   const factory = () => ({
     fileMeta: async (id) => ({ ok: true, file: { id, name: "Drive", mimeType: FOLDER } }),
