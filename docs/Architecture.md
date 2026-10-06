@@ -280,28 +280,42 @@ round-trip and nothing that can reformat a user's file behind their back.
   - **Case sensitivity is required on `FindOptions`, not defaulted.** It changes which lines come
     back, and an option like that left to a default is how a caller quietly asks a different question
     from the one it meant. The DIALOG defaults it to off, which is where a default belongs.
-- **Zoom and pan are one hook and one variable.** `hooks/useZoomPan.ts` reads Ctrl+wheel (Cmd on
-  macOS), which is also how a trackpad pinch arrives, and Shift+drag on a surface (a plain drag pans a
-  picture); Shift+wheel is left alone and scrolls sideways; `lib/zoom.ts` holds the pure parts (the ladder of levels, which way a
-  wheel notch means, where a drag puts the scroll offset). `EditorPanel` holds the level **per
-  document**, keyed by path like the view mode beside it, and each surface receives it as the CSS
-  variable `--tp-zoom`. The sizes are then derived from that variable in CSS - `calc(13px *
-  var(--tp-zoom))` in `editorTheme`, `calc(1em * var(--tp-zoom))` on `.markdown-body`, the picture's
-  natural pixels in `ImageViewer` - which is what keeps the gutter, the Live heading scale and the
-  code font in proportion at every level, and is why the assertions live in the **browser** suite:
-  jsdom resolves neither a custom property through a cascade nor a `calc` into a layout.
-  Four details are load-bearing and each is silent when wrong:
-  - **A pinch is a wheel event with `ctrlKey` set**, which is why one listener serves both gestures; it
-    is continuous (a factor per event) rather than a step, and the page must not zoom as well, so the
-    listener cancels it.
-  - **The wheel listener is attached by hand, not through `onWheel`.** React attaches its wheel
+- **Zoom and pan: text and pictures work differently, and each has its own code.** Both read
+  Ctrl+wheel (Cmd on macOS), which is also how a trackpad pinch arrives - a pinch is a wheel event
+  with `ctrlKey` set, so one listener serves both gestures. Shift+wheel is left alone everywhere and
+  scrolls sideways. `wheelZoomTravel` in `lib/zoom.ts` turns an event into pixels of travel for both.
+  - **Text** (the editor and rendered prose) goes through `hooks/useZoomPan.ts`. `EditorPanel` holds
+    the level **per document**, keyed by path like the view mode beside it, and each surface
+    receives it as the CSS variable `--tp-zoom`. Sizes are derived from that variable in CSS -
+    `calc(13px * var(--tp-zoom))` in `editorTheme`, `calc(1em * var(--tp-zoom))` on `.markdown-body`
+    - which keeps the gutter, the Live heading scale and the code font in proportion at every level,
+    and is why the assertions live in the **browser** suite: jsdom resolves neither a custom property
+    through a cascade nor a `calc` into a layout. Text zooms in **steps** along the ladder in
+    `lib/zoom.ts`, because a font has sizes it renders well at. `stepWheelTravel` decides when a
+    gesture is a step: an event of 50 px or more (a mouse notch is 100 px) is exactly one rung and
+    clears what was pending; smaller events (a pinch's few pixels each) accumulate, step once per
+    50 px and keep the remainder; reversing direction discards what was pending. Pan is
+    **Shift+drag**, and the press is taken in the CAPTURE phase and stopped there, because
+    CodeMirror reads a shifted mousedown as "extend the selection to here". This is the one
+    behaviour the feature takes away, deliberately: Shift+click no longer extends the selection in
+    the editor.
+  - **Pictures** go through `ImageViewer`'s own listeners, not `useZoomPan`. The view is a
+    `PictureView` from `lib/pictureZoom.ts` - Fit, or a chosen scale - held in `EditorPanel` per path
+    and not persisted; Fit is a kind of its own rather than the number it works out to, so a picture
+    left in Fit stays fitted as the panel is resized. The wheel zooms **continuously** (a factor per
+    event, exponential in the travel) about the point under the pointer (`anchoredScroll`), because a
+    picture has no preferred sizes and a pinch that moved in rungs would feel broken; the toolbar
+    buttons and keys step along `PICTURE_ZOOM_LEVELS`, the text ladder extended at both ends. Fit and
+    100% are toolbar buttons, and a double-click toggles between them. Pan is a **plain drag**, with a
+    guard that leaves a press on the scrollbar to the scrollbar - taken as a pan it would fight the
+    thumb. A picture is scaled by its **width and height, not by `transform`**: a transform paints it
+    larger and leaves the layout box where it was, so a zoomed picture would have nothing to pan. The
+    level readout is plain text, not a live region: a pinch is dozens of wheel events, and a
+    `role="status"` would announce every one.
+  - **Both wheel listeners are attached by hand, not through `onWheel`.** React attaches its wheel
     listener passively at the root, so `preventDefault` from a React handler does nothing and the
-    browser scrolls the surface sideways while it zooms.
-  - **The press is taken in the CAPTURE phase and stopped there**, because CodeMirror reads a
-    shifted mousedown as "extend the selection to here". This is the one behaviour the feature
-    takes away, deliberately: Shift+click no longer extends the selection in the editor.
-  - **A picture is scaled by its width and height, not by `transform`.** A transform paints it
-    larger and leaves the layout box where it was, so a zoomed picture would have nothing to pan.
+    browser's own page zoom fires alongside the surface's. Silent when wrong, like the capture-phase
+    press above.
   The keyboard shortcuts (`zoomKeyCommand`) are bound on the **window**, not on a surface, and that
   asymmetry with the gestures is deliberate: a gesture is aimed by the pointer and a shortcut is not
   aimed at all, so it acts on the document on screen wherever the caret is. Two details: the plus and
@@ -1200,16 +1214,27 @@ not be seeked anyway, because seeking is byte ranges and a data URL has none. So
 - **`openWorkspaces.js` holds that shared registry**, extracted from `ipcHandlers.js` when the
   protocol arrived. Two copies of the open-workspace map and its lookup would be two boundary
   checks, and the day they differ is the day one of them is wrong with nothing failing.
-- **The handler reads a byte source, not a path.** `locate` answers `{ ok, size, open(start, end) }`
-  (inclusive `end`; `open` answers `{ ok, body }` or `{ ok: false, reason }`). The local backend's
-  `provider.locateFile` still answers `{ path, size }` and `locateMedia` adapts it with a
+- **The handler reads a byte source, not a path.** `locate` answers `{ ok, size, open(start, end,
+  signal) }` (inclusive `end`; `open` answers `{ ok, body }` or `{ ok: false, reason }`). The local
+  backend's `provider.locateFile` still answers `{ path, size }` and `locateMedia` adapts it with a
   `createReadStream`; Google Drive answers `provider.mediaSource`, which sizes from the listing and
-  opens a ranged `downloadRange` whose token never leaves the main process. A provider with neither
-  - GitHub, whose blobs arrive base64 over an API with no range support - answers `unsupported`, and
-  that absence is where playback is decided to be unavailable. An `open` that fails answers 416
-  with `Content-Range: bytes */size` for `unsatisfiable`, 403 / 404 for `permission-denied` /
-  `not-found`, and 502 otherwise. `locateFile` is a separate method from `locate` because that name
-  was already taken by reveal-in-file-manager, whose contract allows a folder and carries no size.
+  opens a ranged `downloadRange` whose token never leaves the main process. Before reading the size,
+  `mediaSource` lists the file's parent again through the TTL'd listing cache: free inside the TTL,
+  and it bounds how stale a size can be at the TTL rather than at whenever the folder is next opened.
+  A provider with neither - GitHub, whose blobs arrive base64 over an API with no range support -
+  answers `unsupported`, and that absence is where playback is decided to be unavailable. A `locate`
+  or an `open` that fails goes through one mapping, `refuseOpen`: 416 with `Content-Range: bytes
+  */size` for `unsatisfiable`, 403 for `permission-denied`, 404 for `not-found`, `no-workspace` and
+  `unsupported`, and 502 otherwise - so a Drive listing walk that fails `offline` or `rate-limited`
+  is not told to the player as a missing file. `locateFile` is a separate method from `locate`
+  because that name was already taken by reveal-in-file-manager, whose contract allows a folder and
+  carries no size.
+- **An abandoned range stops its Drive request.** The handler passes `request.signal` to `open`, and
+  `downloadRange` aborts its fetch when it fires - a fast seek or a closed tab otherwise leaves Drive
+  requests running to their 30 s deadline to hand a body to nobody. That is logged at info by code,
+  not as an error. The local adapter ignores the signal: there is no request in flight, and the
+  Response cancelling an abandoned body closes the file. The deadline covers the headers only; a
+  body that stalls after its headers is not bounded here, and the player's own retry handles it.
 - **There are no new IPC channels.** The URL is derivable from the qualified path, so the renderer
   builds it and reads nothing. `mediaUrl` and `mediaPathFromUrl` both live in the domain, because
   two implementations of one URL format is how a path arrives subtly different from how it left.
