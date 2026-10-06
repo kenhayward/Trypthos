@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DRIVE_API,
+  DRIVE_UPLOAD_API,
   DriveFileListSchema,
   DriveIdSchema,
   FOLDER_MIME,
@@ -8,6 +9,7 @@ import {
   SharedDriveSchema,
   childrenToEntries,
   childrenUrl,
+  createUrl,
   displayNameFor,
   driveErrorFor,
   driveMediaUrl,
@@ -15,9 +17,12 @@ import {
   fileUrl,
   foldersOf,
   isDriveId,
+  multipartRelated,
   sharedDriveUrl,
   sharedDrivesUrl,
   sharedWithMeUrl,
+  textMimeFor,
+  uploadUrl,
   type DriveFile,
 } from "./googleDrive";
 
@@ -250,5 +255,49 @@ describe("one shared drive", () => {
       name: "Team Drive Now",
     });
     expect(SharedDriveSchema.safeParse({ id: "", name: "x" }).success).toBe(false);
+  });
+});
+
+describe("upload addresses", () => {
+  it("uploads new content to one file, answering its fields", () => {
+    const url = new URL(uploadUrl("f1"));
+    expect(`${url.origin}${url.pathname}`).toBe(`${DRIVE_UPLOAD_API}/files/f1`);
+    expect(url.searchParams.get("uploadType")).toBe("media");
+    expect(url.searchParams.get("supportsAllDrives")).toBe("true");
+    expect(url.searchParams.get("fields")).toContain("headRevisionId");
+  });
+
+  it("creates a file with a multipart upload", () => {
+    const url = new URL(createUrl());
+    expect(`${url.origin}${url.pathname}`).toBe(`${DRIVE_UPLOAD_API}/files`);
+    expect(url.searchParams.get("uploadType")).toBe("multipart");
+    expect(url.searchParams.get("fields")).toContain("headRevisionId");
+  });
+});
+
+describe("multipartRelated", () => {
+  it("puts the metadata part first and the content bytes second, between the boundaries", () => {
+    const body = multipartRelated({ name: "a.md", parents: ["p1"] }, new TextEncoder().encode("# Hi"), "text/markdown", "B0UND");
+    const text = new TextDecoder().decode(body);
+    expect(text).toBe(
+      '--B0UND\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{"name":"a.md","parents":["p1"]}\r\n' +
+        "--B0UND\r\nContent-Type: text/markdown\r\n\r\n# Hi\r\n--B0UND--",
+    );
+  });
+
+  it("carries content bytes exactly, including a byte-order mark", () => {
+    const content = new Uint8Array([0xef, 0xbb, 0xbf, 0x41]);
+    const body = multipartRelated({}, content, "text/plain", "B");
+    const head = new TextEncoder().encode('--B\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{}\r\n--B\r\nContent-Type: text/plain\r\n\r\n');
+    expect([...body.slice(head.length, head.length + 4)]).toEqual([0xef, 0xbb, 0xbf, 0x41]);
+  });
+});
+
+describe("textMimeFor", () => {
+  it("names markdown as markdown and everything else as plain text", () => {
+    expect(textMimeFor("Notes.md")).toBe("text/markdown");
+    expect(textMimeFor("Notes.MARKDOWN")).toBe("text/markdown");
+    expect(textMimeFor("data.json")).toBe("text/plain");
+    expect(textMimeFor("README")).toBe("text/plain");
   });
 });

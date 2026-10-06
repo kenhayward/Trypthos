@@ -7,6 +7,7 @@ import { z } from "zod";
 /// docs/specs/google-drive-workspace.md ("PR 2 decisions taken while planning").
 
 export const DRIVE_API = "https://www.googleapis.com/drive/v3";
+export const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
 export const FOLDER_MIME = "application/vnd.google-apps.folder";
 export const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
 const GOOGLE_APPS_PREFIX = "application/vnd.google-apps.";
@@ -219,4 +220,44 @@ export function foldersOf(files: readonly DriveFile[]): { id: string; name: stri
   return files
     .filter((listed) => listed.mimeType === FOLDER_MIME && listed.trashed !== true)
     .map((listed) => ({ id: listed.id, name: listed.name, shared: listed.shared === true }));
+}
+
+/// New content for one existing file. Drive answers the file's fields, so the save learns its new
+/// revision from the same request that wrote it.
+export function uploadUrl(id: string): string {
+  const params = new URLSearchParams({ uploadType: "media", fields: FILE_FIELDS, supportsAllDrives: "true" });
+  return `${DRIVE_UPLOAD_API}/files/${id}?${params.toString()}`;
+}
+
+/// A new file, metadata and content in one multipart request.
+export function createUrl(): string {
+  const params = new URLSearchParams({ uploadType: "multipart", fields: FILE_FIELDS, supportsAllDrives: "true" });
+  return `${DRIVE_UPLOAD_API}/files?${params.toString()}`;
+}
+
+/// The body of a `multipart/related` upload: the metadata as JSON, then the content's bytes as they
+/// are - a byte-order mark included. The caller chooses a boundary that cannot occur in either.
+export function multipartRelated(
+  metadata: unknown,
+  content: Uint8Array,
+  contentType: string,
+  boundary: string,
+): Uint8Array {
+  const encoder = new TextEncoder();
+  const head = encoder.encode(
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`,
+  );
+  const tail = encoder.encode(`\r\n--${boundary}--`);
+  const body = new Uint8Array(head.length + content.length + tail.length);
+  body.set(head, 0);
+  body.set(content, head.length);
+  body.set(tail, head.length + content.length);
+  return body;
+}
+
+/// The type a new text file is created as. Drive shows `text/markdown` as markdown; everything else
+/// the app writes is text.
+export function textMimeFor(name: string): string {
+  return /\.(md|markdown)$/i.test(name) ? "text/markdown" : "text/plain";
 }

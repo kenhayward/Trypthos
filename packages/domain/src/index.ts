@@ -498,6 +498,7 @@ export type { IconAssignment, IconMap } from "./obsidianIcons";
 
 export {
   DRIVE_API,
+  DRIVE_UPLOAD_API,
   DriveFileListSchema,
   DriveFileSchema,
   DriveIdSchema,
@@ -507,6 +508,7 @@ export {
   SharedDriveSchema,
   childrenToEntries,
   childrenUrl,
+  createUrl,
   displayNameFor,
   driveErrorFor,
   driveMediaUrl,
@@ -514,8 +516,11 @@ export {
   fileUrl,
   foldersOf,
   isDriveId,
+  multipartRelated,
   sharedDriveUrl,
   sharedDrivesUrl,
   sharedWithMeUrl,
+  textMimeFor,
+  uploadUrl,
 } from "./googleDrive";
 export type { DriveEntry, DriveFailure, DriveFile } from "./googleDrive";
