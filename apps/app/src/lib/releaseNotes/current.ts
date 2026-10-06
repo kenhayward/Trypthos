@@ -7,19 +7,20 @@ export const RECENT: Release[] = [
   {
     version: "0.98.0",
     date: "2026-10-06",
-    pr: 222,
+    pr: 223,
     headline: "Save to Google Drive",
     summary:
-      "Files in a Google Drive folder now open for editing and save back to Drive. Before it writes, Trypthos checks that the file has not changed in Drive since you opened it: if it has, nothing is overwritten, your text stays in the editor and you are told, so you can decide what to do. The save indicator turns green only once Drive has confirmed the save. The check and the write are two requests, so another person saving in that instant could still be overwritten, but Drive keeps the version that was replaced in its own version history. Google Docs stay read-only, because writing markdown back would turn a Doc into something else. The chat can now create a file in a Drive folder. My Drive is tied to the account that opened it, so a My Drive workspace never silently follows a different connected account and tells you instead. Right-click Refresh is no longer undone by a folder listing that was already on its way, and failures when saving are worded in Google's terms.",
+      "Files in a Google Drive folder now open for editing and save back to Drive. Before it writes, Trypthos checks that the file has not changed in Drive since you opened it: if it has, nothing is overwritten, your text stays in the editor and you are told, so you can decide what to do. The save indicator turns green only once Drive has confirmed the save. The check and the write are two requests, so another person saving in that instant could still be overwritten, but Drive keeps the version that was replaced in its own version history. Google Docs stay read-only, because writing markdown back would turn a Doc into something else. The chat can now create a file in a Drive folder. My Drive is tied to the account that opened it, so a My Drive workspace never silently follows a different connected account: one opened under a different account is closed at launch with a message saying so, and you can connect that account or open My Drive again. Right-click Refresh is no longer undone by a folder listing that was already on its way, and failures when saving are worded in Google's terms.",
     added: [
       "Edit and save files in a Google Drive folder, with a check that the file has not changed in Drive since you opened it.",
-      "A file changed in Drive since you opened it is never overwritten: your text stays in the editor and you are told.",
+      "A file that changed in Drive before you save is not overwritten: your text stays in the editor and you are told.",
       "The chat can create a file in a Drive folder.",
       "Google Docs stay read-only, per file; every other Drive file is editable.",
-      "My Drive is tied to the account that opened it, and a different connected account is refused with a clear message.",
+      "My Drive is tied to the account that opened it, and a different connected account closes that workspace at launch with a clear message.",
     ],
     fixed: [
       "Right-click Refresh on a Drive folder is no longer undone by a listing that was already in flight.",
+      "Text typed while a save is still in progress is no longer marked as saved; the tab stays unsaved until that text is saved too (#222).",
     ],
   },
   {
