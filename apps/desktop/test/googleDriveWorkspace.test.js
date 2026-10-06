@@ -637,10 +637,24 @@ test("webAddress of My Drive's root is My Drive", async () => {
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 /// A Drive whose listings are snapshots taken when asked, and which can hold the next listing - or a
-/// rename - until the test lets it go: what a walk of the tree (the filter, Find in Files, the outline)
-/// looks like when it is in flight across a rename.
-async function racingDrive({ holdRename = false } = {}) {
-  const state = { clock: 0, holdNextListing: false, held: [], releaseRename: null, drive: null };
+/// rename, a new file or folder, an upload - until the test lets it go: what a walk of the tree (the
+/// filter, Find in Files, the outline) or a save looks like when it is in flight across a rename.
+async function racingDrive({ holdRename = false, holdCreate = false, holdUpload = false } = {}) {
+  const state = {
+    clock: 0,
+    holdNextListing: false,
+    held: [],
+    releaseRename: null,
+    releaseCreate: null,
+    releaseUpload: null,
+    created: 0,
+    drive: null,
+    meta: null,
+  };
+  const landed = (parentId, file) => {
+    state.drive[parentId] = [...(state.drive[parentId] ?? []), file];
+    return { ok: true, file };
+  };
   const opened = await open(
     {
       listChildren: async (id) => {
@@ -658,11 +672,35 @@ async function racingDrive({ holdRename = false } = {}) {
         }
         return { ok: true, file: { id, name, mimeType: FOLDER } };
       },
+      createFile: async (parentId, name, content, mimeType) => {
+        if (holdCreate) await new Promise((resolve) => (state.releaseCreate = resolve));
+        state.created += 1;
+        const headRevisionId = `rev-created-${state.created}`;
+        return landed(parentId, { id: `new${state.created}XYZ`, name, mimeType, size: String(content.length), headRevisionId });
+      },
+      createFolder: async (parentId, name) => {
+        if (holdCreate) await new Promise((resolve) => (state.releaseCreate = resolve));
+        state.created += 1;
+        const file = { id: `fold${state.created}XYZ`, name, mimeType: FOLDER };
+        state.drive[file.id] = [];
+        return landed(parentId, file);
+      },
+      uploadContent: async (id, content, mimeType) => {
+        if (holdUpload) await new Promise((resolve) => (state.releaseUpload = resolve));
+        state.meta[id].headRevisionId = "rev-uploaded";
+        return { ok: true, file: { id, name: state.meta[id].name, mimeType, headRevisionId: "rev-uploaded" } };
+      },
     },
     { now: () => state.clock },
   );
   state.drive = opened.drive;
+  state.meta = opened.meta;
   return { ...opened, state };
+}
+
+/// Waits until a held request has reached the fake Drive.
+async function until(condition) {
+  while (!condition()) await tick();
 }
 
 // A walk of the parent asked for while the rename was in Drive's hands answers the folder as it was.
@@ -714,6 +752,105 @@ test("a listing of the renamed folder in flight under its old path is not kept",
   assert.equal((await provider.listKnown("Archive")).complete, false);
   assert.equal((await provider.listKnown("Old")).complete, true);
   assert.deepEqual(await provider.read("Archive/Old.md"), { ok: false, reason: "not-found" });
+});
+
+// The file renamed while its save was uploading: the save must not file the entry back under the
+// name it had, or the old path would name the live file a second time.
+test("a save in flight across a rename of the file does not bring back its old path", async () => {
+  const { provider, state } = await racingDrive({ holdUpload: true });
+  const read = await provider.read("Plan.md");
+
+  const saving = provider.write("Plan.md", "changed", read.revision);
+  await until(() => state.releaseUpload !== null);
+  assert.deepEqual(await provider.rename("Plan.md", "Roadmap.md"), { ok: true, path: "Roadmap.md" });
+  state.releaseUpload();
+
+  assert.deepEqual(await saving, { ok: true, revision: { id: "rev-uploaded" } });
+  const top = (await provider.listKnown("")).nodes.map((node) => node.id);
+  assert.equal(top.includes("Roadmap.md"), true);
+  assert.equal(top.includes("Plan.md"), false);
+  assert.deepEqual(await provider.read("Plan.md"), { ok: false, reason: "not-found" });
+});
+
+// A new file or folder made in `Archive` while `Archive` is renamed: the re-listing after the write
+// asks for the folder by its id, which now answers for `Old`, so filing the answer under `Archive`
+// would bring the dead path back - listed, complete, and naming live files.
+test("a new file whose folder is renamed while it is made is not filed under the folder's old path", async () => {
+  const { provider, state } = await racingDrive({ holdCreate: true });
+  await provider.list("");
+  await provider.list("Archive");
+
+  const writing = provider.write("Archive/new.md", "# New", null);
+  await until(() => state.releaseCreate !== null);
+  assert.deepEqual(await provider.rename("Archive", "Old"), { ok: true, path: "Old" });
+  state.releaseCreate();
+  await writing;
+
+  assert.deepEqual(await provider.listKnown("Archive"), { ok: true, nodes: [], complete: false });
+  assert.deepEqual(await provider.read("Archive/new.md"), { ok: false, reason: "not-found" });
+  const under = (await provider.list("Old")).nodes.map((node) => node.id).sort();
+  assert.deepEqual(under, ["Old/Old.md", "Old/new.md"]);
+});
+
+test("a new folder whose parent is renamed while it is made is not filed under the parent's old path", async () => {
+  const { provider, state } = await racingDrive({ holdCreate: true });
+  await provider.list("");
+  await provider.list("Archive");
+
+  const making = provider.createDirectory("Archive/Sub");
+  await until(() => state.releaseCreate !== null);
+  assert.deepEqual(await provider.rename("Archive", "Old"), { ok: true, path: "Old" });
+  state.releaseCreate();
+  await making;
+
+  assert.deepEqual(await provider.listKnown("Archive"), { ok: true, nodes: [], complete: false });
+  const under = (await provider.list("Old")).nodes.map((node) => node.id).sort();
+  assert.deepEqual(under, ["Old/Old.md", "Old/Sub"]);
+});
+
+// A walk of the folder asked for while the new file was being made answers the folder without it.
+// Joined by the create's own re-listing, or cached, it would hide the file just made - and a later
+// save to that path would make a second one (#226).
+test("a listing of the folder in flight across a new file does not hide it", async () => {
+  const { provider, state } = await racingDrive({ holdCreate: true });
+  await provider.list("");
+
+  const writing = provider.write("new.md", "# New", null);
+  await until(() => state.releaseCreate !== null);
+  state.clock += 120_000;
+  state.holdNextListing = true;
+  const walking = provider.list("");
+  await until(() => state.held.length === 1);
+  state.releaseCreate();
+  await tick();
+  await tick();
+  state.held[0]();
+
+  assert.equal((await writing).ok, true);
+  assert.equal((await walking).ok, true);
+  assert.equal((await provider.listKnown("")).nodes.some((node) => node.id === "new.md"), true);
+  assert.equal((await provider.list("")).nodes.some((node) => node.id === "new.md"), true);
+});
+
+test("a listing of the folder in flight across a new folder does not hide it", async () => {
+  const { provider, state } = await racingDrive({ holdCreate: true });
+  await provider.list("");
+
+  const making = provider.createDirectory("Drafts");
+  await until(() => state.releaseCreate !== null);
+  state.clock += 120_000;
+  state.holdNextListing = true;
+  const walking = provider.list("");
+  await until(() => state.held.length === 1);
+  state.releaseCreate();
+  await tick();
+  await tick();
+  state.held[0]();
+
+  assert.deepEqual(await making, { ok: true });
+  assert.equal((await walking).ok, true);
+  assert.equal((await provider.listKnown("")).nodes.some((node) => node.id === "Drafts"), true);
+  assert.equal((await provider.list("")).nodes.some((node) => node.id === "Drafts"), true);
 });
 
 test("rekeyKnown moves an entry and everything known beneath it, and nothing else", () => {

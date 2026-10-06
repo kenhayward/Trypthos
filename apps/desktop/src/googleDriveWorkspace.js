@@ -147,12 +147,20 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
   /// Lists one folder and records its children, replacing only that folder's direct children - what
   /// is known about the folders below them stays.
-  async function listInto(path, folderId, { fresh = false } = {}) {
+  ///
+  /// `sinceMoves` is the rename count to check against when the caller resolved `folderId` earlier
+  /// than this call (see `relist`); by default it is the count now.
+  async function listInto(path, folderId, { fresh = false, sinceMoves = moves } = {}) {
     const started = generation;
-    const startedMoves = moves;
+    const startedMoves = sinceMoves;
     const startedWrites = writesTo(folderId);
     const listed = await filesOf(folderId, { fresh });
     if (!listed.ok) return listed;
+    // The re-asks below drop `fresh`. That is safe only because `relist` - the one place `writes` is
+    // bumped - also deletes the cache and starts a fresh request, which replaces any older one in
+    // `inFlight`: a plain ask here can only reach Drive or join that newer request. A write that bumped
+    // `writes` without deleting the cache, or without asking afresh, would break it - the re-ask would
+    // be answered by the very listing the write made stale.
     // A refresh while this listing was in flight: what arrived predates it, so ask again.
     if (generation !== started) return listInto(path, folderId);
     // A rename while it was in flight, and the path no longer names this folder: filing its children
@@ -243,6 +251,8 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     // A revision expected of a file that is not there: it was deleted, or never existed.
     if (expected !== null) return conflict(null);
     const parent = parentOf(path);
+    // Taken before `parent` is resolved to an id, so a rename of it while Drive is asked is seen.
+    const sinceMoves = moves;
     const folder = await folderIdAt(parent);
     if (!folder.ok) return folder;
 
@@ -254,15 +264,17 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
 
     // The cached listing can predate a file Drive already has under this name. Creating a second one
     // would leave the path naming the older file, so the folder is asked for afresh first.
-    const fresh = await relist(parent, folder.id);
+    const fresh = await relist(parent, folder.id, sinceMoves);
     if (!fresh.ok) return fresh;
     const existing = entries.get(path);
     if (existing !== undefined) return existing.kind === "file" ? conflict(existing.revision) : failure("permission-denied");
 
     const created = await api.createFile(folder.id, name, encodeTextFile(content, { bom: false }), mimeType);
     if (!created.ok) return created;
-    // Re-listed so the new file has its path in the map; the file landed whatever this answers.
-    await relist(parent, folder.id);
+    // Re-listed so the new file has its path in the map; the file landed whatever this answers. If
+    // `parent` was renamed meanwhile this answers not-found and files nothing, and the folder's
+    // listing, dropped from the cache, is asked for afresh under its new path.
+    await relist(parent, folder.id, sinceMoves);
     // The file landed, but without Drive's revision for it there is nothing honest to hand the
     // editor: its id is not a revision, and the next save's check would fail against it or worse.
     if (created.file.headRevisionId === undefined) return failure("unknown");
@@ -274,10 +286,14 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
   /// after the write, the map must learn what it did. Neither the cache nor a request already in
   /// flight will do, since either can predate the write; and a listing in flight is told the folder
   /// was written to, so it asks again rather than applying what it brings back.
-  async function relist(parent, folderId) {
+  ///
+  /// `sinceMoves` is `moves` as it was when the caller resolved `folderId` from `parent`. A rename
+  /// that lands while the caller awaits Drive can move `parent` before this listing starts, and the
+  /// listing's own count would then never see it - so the caller's is the one checked.
+  async function relist(parent, folderId, sinceMoves) {
     listings.delete(folderId);
     writes.set(folderId, writesTo(folderId) + 1);
-    return listInto(parent, folderId, { fresh: true });
+    return listInto(parent, folderId, { fresh: true, sinceMoves });
   }
 
   /// Whether another entry in a folder already has this name. Case-insensitive, as a folder on
@@ -437,6 +453,8 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       const entry = found.entry;
       if (entry.kind !== "file") return failure("permission-denied");
       if (entry.googleDoc) return failure("read-only");
+      // A rename while this save is in Drive's hands can move `path` off this file; see step 3.
+      const startedMoves = moves;
 
       // 1. Check.
       const meta = await api.fileMeta(entry.fileId);
@@ -457,7 +475,11 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (revision === undefined) return failure("unknown");
       boms.set(bomKey(entry.fileId, revision), bom);
 
-      entries.set(path, { ...entry, revision, sizeBytes: bytes.length });
+      // Only while `path` still names this file: renamed meanwhile - it, or a folder above it - the
+      // path is dead, and setting it would give the live file a second one.
+      if (moves === startedMoves || entries.get(path)?.fileId === entry.fileId) {
+        entries.set(path, { ...entry, revision, sizeBytes: bytes.length });
+      }
       const parent = await folderIdAt(parentOf(path));
       if (parent.ok) listings.delete(parent.id);
       return { ok: true, revision: { id: revision } };
@@ -470,20 +492,22 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       const path = drivePath(candidate);
       if (path === null || path === "") return failure("permission-denied");
       const parent = parentOf(path);
+      // As in `create`: taken before `parent` is resolved, so a rename of it mid-request is seen.
+      const sinceMoves = moves;
       const folder = await folderIdAt(parent);
       if (!folder.ok) return folder;
 
       const name = parent === "" ? path : path.slice(parent.length + 1);
       if (driveNameFor(name, FOLDER_MIME) === null) return failure("bad-request");
 
-      const fresh = await relist(parent, folder.id);
+      const fresh = await relist(parent, folder.id, sinceMoves);
       if (!fresh.ok) return fresh;
       if (nameTaken(parent, name, null)) return failure("conflict");
 
       const created = await api.createFolder(folder.id, name);
       if (!created.ok) return created;
       // The folder landed whatever this answers; it only teaches the map its id.
-      await relist(parent, folder.id);
+      await relist(parent, folder.id, sinceMoves);
       return { ok: true };
     },
 
@@ -504,9 +528,12 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (driveName === null) return failure("bad-request");
 
       const parent = parentOf(path);
+      // As in `create`: taken before `parent` is resolved, so a rename of it mid-request is seen. This
+      // rename's own bump below is harmless - `parent` still names `folder.id` after it.
+      const sinceMoves = moves;
       const folder = await folderIdAt(parent);
       if (!folder.ok) return folder;
-      const fresh = await relist(parent, folder.id);
+      const fresh = await relist(parent, folder.id, sinceMoves);
       if (!fresh.ok) return fresh;
       const entry = entries.get(path);
       if (entry === undefined || entry.fileId !== found.entry.fileId) return failure("not-found");
@@ -523,7 +550,7 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       listedPaths.clear();
       for (const key of moved.listedPaths) listedPaths.add(key);
       // The rename landed whatever this answers; it brings the parent's listing up to date.
-      await relist(parent, folder.id);
+      await relist(parent, folder.id, sinceMoves);
       return { ok: true, path: target };
     },
 
