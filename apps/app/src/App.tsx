@@ -58,6 +58,7 @@ import { useFileFilter } from "./hooks/useFileFilter";
 import { useFind, type FindSurfaceKind } from "./hooks/useFind";
 import { builtInTitleKey } from "./lib/builtInDocuments";
 import { conversationLog } from "./lib/conversationLog";
+import { googleDocIds, googleDocTitle } from "./lib/googleDocs";
 import { answerFor } from "./lib/commandAnswers";
 import { openExternal } from "./lib/externalLinks";
 import { MARKDOWN_GUIDE } from "./lib/markdownGuide";
@@ -705,6 +706,8 @@ export default function App() {
   /// repository's Refresh - or moving it to a newer commit - can throw both away at once.
   const repoPage = useRepoPage(homeWorkspace?.ref.kind === "github" ? homeWorkspace.id : null, github);
   const readme = useReadme(homeWorkspace?.id ?? null, client);
+  /// The Google Docs listed so far, so a Doc's tab carries its title rather than the `.md` it opens as.
+  const googleDocs = useMemo(() => googleDocIds(state.folders), [state.folders]);
   /// The workspace the document on screen came from. One lookup, two readers: whether the editor
   /// renders Obsidian's markdown, and which vault the local graph pane follows.
   const activeWorkspace = state.workspaces.find(
@@ -881,10 +884,12 @@ export default function App() {
             showChat && !panels.chatCollapsed ? () => updatePanels({ editorCollapsed: true }) : undefined
           }
           workspaceName={workspaceNameFor(state.workspaces, state.activePath)}
-          // A home page is named for its workspace, whose name is not the last segment of its path.
+          // A home page is named for its workspace, whose name is not the last segment of its path,
+          // and a Google Doc for its own title rather than the `.md` it opens as.
           pageName={(path) => {
             const id = homePageWorkspaceId(path);
-            return id === null ? null : (state.workspaces.find((workspace) => workspace.id === id)?.name ?? null);
+            if (id === null) return googleDocTitle(path, googleDocs);
+            return state.workspaces.find((workspace) => workspace.id === id)?.name ?? null;
           }}
           paths={openPaths}
           activePath={state.activePath}

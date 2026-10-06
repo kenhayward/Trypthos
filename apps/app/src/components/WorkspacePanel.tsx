@@ -18,6 +18,7 @@ import AssignedIcon from "./AssignedIcon";
 import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 import Glyph from "./Glyph";
 import DriveGlyph from "./DriveGlyph";
+import { googleDocIds } from "../lib/googleDocs";
 import SourceGlyph, { sourceColour } from "./SourceGlyph";
 import Spinner from "./Spinner";
 
@@ -244,6 +245,8 @@ export default function WorkspacePanel({
     [filterStatus],
   );
 
+  const googleDocs = useMemo(() => googleDocIds(folders), [folders]);
+
   /// One list of rows per open folder. Separate walks rather than one, because they are separate
   /// trees on screen - each with its own root row that can be collapsed and closed.
   const trees = useMemo(
@@ -467,6 +470,7 @@ export default function WorkspacePanel({
                       dirty={dirtyPaths.includes(row.node.id)}
                       opening={row.node.id === opening}
                       saving={savingPaths.includes(row.node.id)}
+                      googleDoc={googleDocs.has(row.node.id)}
                       onOpen={() => onOpenFile(row.node)}
                       assignment={assigned(row.node.id)}
                       draggable={onAddToChat !== undefined}
@@ -883,6 +887,7 @@ function FileRow({
   dirty,
   opening,
   saving,
+  googleDoc,
   onOpen,
   assignment,
   draggable,
@@ -894,6 +899,8 @@ function FileRow({
   dirty: boolean;
   opening: boolean;
   saving: boolean;
+  /// Whether this is a Google Doc: shown under its own title, with the Docs mark, not as `.md`.
+  googleDoc: boolean;
   onOpen: () => void;
   /// What Obsidian draws on this file, or null to keep the app's own glyph.
   assignment: IconAssignment | null;
@@ -929,6 +936,8 @@ function FileRow({
       type="button"
       onClick={onOpen}
       onContextMenu={onContextMenu}
+      // Says what the missing extension means: it opens as markdown, and only for reading.
+      title={googleDoc ? t("workspace.googleDoc") : undefined}
       // The qualified path, under the tree's own drag type - see `TREE_FILE_TYPE`. Copy, not move:
       // adding a file to a conversation leaves it exactly where it was.
       draggable={draggable || undefined}
@@ -954,8 +963,14 @@ function FileRow({
             : "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-base text-ink-3 hover:bg-hover"
       }
     >
-      {assignment === null ? fileGlyph() : <AssignedIcon assignment={assignment} className="size-3.5" fallback={fileGlyph()} />}
-      <span className="min-w-0 truncate">{row.node.name}</span>
+      {googleDoc ? (
+        <DriveGlyph kind="google-doc" className="size-3.5 shrink-0 text-drive" />
+      ) : assignment === null ? (
+        fileGlyph()
+      ) : (
+        <AssignedIcon assignment={assignment} className="size-3.5" fallback={fileGlyph()} />
+      )}
+      <span className="min-w-0 truncate">{googleDoc ? row.node.name.replace(/\.md$/i, "") : row.node.name}</span>
       {opening && <Spinner label={t("workspace.opening")} className="ml-auto" />}
       {/* In place of the dot while it lasts: the file is still unsaved, and the spinner says that
           is being dealt with. */}

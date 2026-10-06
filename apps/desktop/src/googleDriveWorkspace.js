@@ -36,6 +36,13 @@ function failure(reason) {
   return { ok: false, reason };
 }
 
+/// A listed entry as the tree receives it. A Google Doc says so, because the tree shows it under its
+/// own title rather than as the `.md` it opens as; nothing else about the entry crosses.
+function treeNode(entry) {
+  const node = { id: entry.path, name: entry.name, kind: entry.kind };
+  return entry.googleDoc ? { ...node, googleDoc: true } : node;
+}
+
 function parentOf(path) {
   const slash = path.lastIndexOf("/");
   return slash < 0 ? "" : path.slice(0, slash);
@@ -242,7 +249,7 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (!listed.ok) return listed;
       return {
         ok: true,
-        nodes: listed.children.map((child) => ({ id: child.path, name: child.name, kind: child.kind })),
+        nodes: listed.children.map(treeNode),
       };
     },
 
@@ -255,7 +262,7 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       if (!listedPaths.has(path)) return { ok: true, nodes: [], complete: false };
       const nodes = [...entries.values()]
         .filter((entry) => parentOf(entry.path) === path)
-        .map((entry) => ({ id: entry.path, name: entry.name, kind: entry.kind }));
+        .map(treeNode);
       return { ok: true, nodes, complete: true };
     },
 

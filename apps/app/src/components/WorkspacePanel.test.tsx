@@ -134,6 +134,44 @@ describe("WorkspacePanel", () => {
     expect(within(screen.getByRole("button", { name: /README\.md/ })).queryByRole("status")).toBeNull();
   });
 
+  // A Google Doc opens as markdown, so its path ends `.md` - but it is not a `.md` file in Drive, and
+  // naming it as one in the tree was confusing. The tree shows its own title, with a Docs mark.
+  describe("a Google Doc", () => {
+    const withDoc: Record<string, FolderState> = {
+      ...FOLDERS,
+      "Diariz/docs": {
+        status: "loaded",
+        children: [
+          { id: "Diariz/docs/plan.md", name: "plan.md", kind: "file" },
+          { id: "Diariz/docs/Meeting.md", name: "Meeting.md", kind: "file", googleDoc: true },
+        ],
+      },
+    };
+
+    it("is listed under its own title, with the Google Docs mark", () => {
+      panel({ folders: withDoc });
+
+      const row = screen.getByRole("button", { name: /^Meeting/ });
+      expect(row.textContent).not.toContain("Meeting.md");
+      expect(row.querySelector('[data-mark="drive-google-doc"]')).not.toBeNull();
+      expect(row.getAttribute("title")).toBe("Google Doc - opens read-only as markdown");
+      // An ordinary markdown file keeps its extension.
+      expect(screen.getByRole("button", { name: /plan\.md/ })).toBeDefined();
+    });
+
+    it("is listed the same way among filter results", () => {
+      panel({
+        folders: withDoc,
+        filter: "meet",
+        filterStatus: { kind: "results", paths: ["Diariz/docs/Meeting.md"], truncated: false, pending: false },
+      });
+
+      const row = screen.getByRole("button", { name: /^Meeting/ });
+      expect(row.textContent).not.toContain("Meeting.md");
+      expect(row.querySelector('[data-mark="drive-google-doc"]')).not.toBeNull();
+    });
+  });
+
   // A save to Drive takes seconds, and without a mark the click looks as if it did nothing.
   it("shows a spinner on a file being saved, labelled as saving", () => {
     panel({ openPaths: ["Diariz/docs/plan.md"], savingPaths: ["Diariz/docs/plan.md"] });
