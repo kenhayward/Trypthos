@@ -296,7 +296,8 @@ export default function EditorPanel({
   const reportFit = useCallback((fit: number) => {
     pictureFit.current = fit;
   }, []);
-  const picture = media?.kind === "image";
+  // A page is drawn in place of any media, so the picture path is only taken when no page is up.
+  const picture = page === null && media?.kind === "image";
 
   /// Ctrl and plus, minus or zero - Cmd on macOS.
   ///

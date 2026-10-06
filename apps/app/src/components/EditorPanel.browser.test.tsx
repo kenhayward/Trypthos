@@ -1234,6 +1234,27 @@ describe("Zooming a picture, in a real browser", () => {
     expect(scroller().scrollTop).toBe(280);
   });
 
+  // A press on a scrollbar reaches the scroller as a mousedown. Taken as a pan, it would fight the
+  // thumb being dragged - the pan moves the scroll the opposite way to the pointer - so it is left
+  // to the browser.
+  it("leaves a press on the scrollbar to the scrollbar", async () => {
+    await openLarge();
+    await userEvent.click(screen.getByRole("button", { name: "100%" }));
+    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(LARGE.width));
+
+    scroller().scrollLeft = 300;
+    const box = scroller().getBoundingClientRect();
+    const onBar = { x: box.left + scroller().clientLeft + scroller().clientWidth + 2, y: box.top + 100 };
+    const at = (x: number, y: number) => ({ bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+
+    const press = new MouseEvent("mousedown", at(onBar.x, onBar.y));
+    scroller().dispatchEvent(press);
+    window.dispatchEvent(new MouseEvent("mousemove", at(onBar.x - 150, onBar.y)));
+    window.dispatchEvent(new MouseEvent("mouseup", at(onBar.x - 150, onBar.y)));
+    expect(scroller().scrollLeft).toBe(300);
+    expect(press.defaultPrevented).toBe(false);
+  });
+
   it("toggles between Fit and 100% on a double-click", async () => {
     await openLarge();
 

@@ -172,6 +172,10 @@ export default function ImageViewer({ source, name, view, onView, onFit }: Props
     };
     const onMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return;
+      // A press on a scrollbar arrives here too, and is the scrollbar's: taken as a pan, it would
+      // fight the thumb, since a pan moves the scroll the opposite way to the pointer.
+      const local = pointerIn(event);
+      if (local.x >= element.clientWidth || local.y >= element.clientHeight) return;
       // Prevented whatever happens next: the browser's own response to a press on a picture is to
       // start dragging a copy of it out of the window, and on a double-click to select it.
       event.preventDefault();
