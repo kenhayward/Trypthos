@@ -5,7 +5,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { registerIpcHandlers } = require("../src/ipcHandlers");
+const { mediaUrl } = require("@trypthos/domain");
+const { registerIpcHandlers, locateMedia } = require("../src/ipcHandlers");
+const { createMediaHandler } = require("../src/mediaProtocol");
 
 /// A Drive folder through the real handlers: opened by reference, listed and read through the same
 /// channels as every other workspace, and saved through the same check-write-confirm a save expects.
@@ -253,4 +255,48 @@ test("google:folders refuses a malformed request and answers not configured with
     },
     { google: null },
   );
+});
+
+test("a Drive clip streams in ranges through locateMedia, and neither the token nor the URL is logged", async () => {
+  const logged = [];
+  const originals = { error: console.error, warn: console.warn, log: console.log };
+  for (const name of Object.keys(originals)) console[name] = (...args) => logged.push(args);
+  const asked = [];
+  const factory = () => ({
+    fileMeta: async () => ({ ok: true, file: { id: "rootMED", name: "Media", mimeType: FOLDER } }),
+    listChildren: async () => ({ ok: true, files: [{ id: "vidMED", name: "clip.mp4", mimeType: "video/mp4", size: "20" }] }),
+    downloadRange: async (id, start, end) => {
+      asked.push([id, start, end]);
+      return { ok: true, status: 206, body: new Blob([Buffer.from("0123456789ABCDEFGHIJ").subarray(start, end + 1)]).stream() };
+    },
+  });
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "google-drive", folderId: "rootMED", name: "Media" } });
+        assert.equal(opened.ok, true);
+
+        const found = await locateMedia(`${opened.workspace.id}/clip.mp4`);
+        assert.equal(found.ok, true);
+        assert.equal(found.size, 20);
+
+        const range = await found.open(5, 9);
+        assert.equal(range.ok, true);
+        assert.equal(await new Response(range.body).text(), "56789");
+        assert.deepEqual(asked, [["vidMED", 5, 9]]);
+
+        // Through the protocol too: the window sees bytes and headers, nothing of Drive.
+        const handle = createMediaHandler({ locate: locateMedia });
+        const response = await handle(new Request(mediaUrl(`${opened.workspace.id}/clip.mp4`), { headers: { Range: "bytes=0-3" } }));
+        assert.equal(response.status, 206);
+        assert.equal(await response.text(), "0123");
+      },
+      { google: { accessToken: async () => ({ ok: true, token: "SECRET-TOKEN-VALUE" }) }, createGoogleDrive: factory },
+    );
+  } finally {
+    Object.assign(console, originals);
+  }
+  const text = JSON.stringify(logged);
+  assert.equal(text.includes("SECRET-TOKEN-VALUE"), false);
+  assert.equal(text.includes("googleapis.com"), false);
 });

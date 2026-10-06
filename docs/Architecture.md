@@ -1191,11 +1191,16 @@ not be seeked anyway, because seeking is byte ranges and a data URL has none. So
 - **`openWorkspaces.js` holds that shared registry**, extracted from `ipcHandlers.js` when the
   protocol arrived. Two copies of the open-workspace map and its lookup would be two boundary
   checks, and the day they differ is the day one of them is wrong with nothing failing.
-- **`provider.locateFile` exists on the local backend only**, and that absence is the single place
-  playback is decided to be local-only. A repository's blobs arrive base64 over an API with no range
-  support, so there is nothing to stream from one; `locateMedia` answers `unsupported` for a
-  provider without the method. It is a separate method from `locate` because that name was already
-  taken by reveal-in-file-manager, whose contract allows a folder and carries no size.
+- **The handler reads a byte source, not a path.** `locate` answers `{ ok, size, open(start, end) }`
+  (inclusive `end`; `open` answers `{ ok, body }` or `{ ok: false, reason }`). The local backend's
+  `provider.locateFile` still answers `{ path, size }` and `locateMedia` adapts it with a
+  `createReadStream`; Google Drive answers `provider.mediaSource`, which sizes from the listing and
+  opens a ranged `downloadRange` whose token never leaves the main process. A provider with neither
+  - GitHub, whose blobs arrive base64 over an API with no range support - answers `unsupported`, and
+  that absence is where playback is decided to be unavailable. An `open` that fails answers 416
+  with `Content-Range: bytes */size` for `unsatisfiable`, 403 / 404 for `permission-denied` /
+  `not-found`, and 502 otherwise. `locateFile` is a separate method from `locate` because that name
+  was already taken by reveal-in-file-manager, whose contract allows a folder and carries no size.
 - **There are no new IPC channels.** The URL is derivable from the qualified path, so the renderer
   builds it and reads nothing. `mediaUrl` and `mediaPathFromUrl` both live in the domain, because
   two implementations of one URL format is how a path arrives subtly different from how it left.

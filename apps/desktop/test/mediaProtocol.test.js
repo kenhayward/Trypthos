@@ -2,9 +2,6 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs/promises");
-const os = require("node:os");
-const path = require("node:path");
 const { mediaUrl } = require("@trypthos/domain");
 const { createMediaHandler, MEDIA_SCHEME_PRIVILEGES } = require("../src/mediaProtocol");
 
@@ -23,26 +20,35 @@ const { createMediaHandler, MEDIA_SCHEME_PRIVILEGES } = require("../src/mediaPro
 /// the wrong length.
 const BODY = Buffer.from("0123456789ABCDEFGHIJ");
 
-async function withFile(body) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-media-"));
-  const file = path.join(dir, "clip.mp4");
-  await fs.writeFile(file, BODY);
-  const empty = path.join(dir, "empty.mp4");
-  await fs.writeFile(empty, Buffer.alloc(0));
+/// A byte source over an in-memory buffer, as `locate` answers one. `opened` records every
+/// `open(start, end)` so a test can assert what the handler asked for, not just what it returned.
+function sourceOf(buffer, opened, failure = null) {
+  return {
+    ok: true,
+    size: buffer.length,
+    open: async (start, end) => {
+      opened.push([start, end]);
+      if (failure !== null) return { ok: false, reason: failure };
+      return { ok: true, body: new Blob([buffer.subarray(start, end + 1)]).stream() };
+    },
+  };
+}
 
+async function withFile(body) {
+  const opened = [];
   const locate = async (qualified) => {
-    if (qualified === "Notes/clip.mp4") return { ok: true, path: file, size: BODY.length };
-    if (qualified === "Notes/empty.mp4") return { ok: true, path: empty, size: 0 };
+    if (qualified === "Notes/clip.mp4") return sourceOf(BODY, opened);
+    if (qualified === "Notes/empty.mp4") return sourceOf(Buffer.alloc(0), opened);
+    if (qualified === "Notes/denied.mp4") return sourceOf(BODY, opened, "permission-denied");
+    if (qualified === "Notes/gone.mp4") return sourceOf(BODY, opened, "not-found");
+    if (qualified === "Notes/offline.mp4") return sourceOf(BODY, opened, "offline");
+    if (qualified === "Notes/shrunk.mp4") return sourceOf(BODY, opened, "unsatisfiable");
     if (qualified === "Notes/secret.mp4") return { ok: false, reason: "permission-denied" };
     if (qualified === "Repo/clip.mp4") return { ok: false, reason: "unsupported" };
     return { ok: false, reason: "not-found" };
   };
 
-  try {
-    await body({ handle: createMediaHandler({ locate }) });
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
+  await body({ handle: createMediaHandler({ locate }), opened });
 }
 
 const get = (url, headers = {}) => new Request(url, { headers });
@@ -145,7 +151,7 @@ test("refuses a path that tries to leave the workspace", async () => {
   });
 });
 
-// A repository's blobs arrive base64 over an API with no ranges. The provider has no `locateFile`,
+// A repository's blobs arrive base64 over an API with no ranges. The provider has no byte source,
 // so this is refused by the same path everything else is.
 test("refuses a workspace that cannot stream", async () => {
   await withFile(async ({ handle }) => {
@@ -168,6 +174,52 @@ test("refuses a URL that is not one of ours", async () => {
 test("a refusal carries no body", async () => {
   await withFile(async ({ handle }) => {
     const response = await handle(get(mediaUrl("Notes/nothing.mp4")));
+    assert.equal((await response.arrayBuffer()).byteLength, 0);
+  });
+});
+
+test("asks the source for exactly the inclusive range parseRange gave, and the whole file otherwise", async () => {
+  await withFile(async ({ handle, opened }) => {
+    await (await handle(get(mediaUrl("Notes/clip.mp4"), { Range: "bytes=10-14" }))).arrayBuffer();
+    await (await handle(get(mediaUrl("Notes/clip.mp4"), { Range: "bytes=-4" }))).arrayBuffer();
+    await (await handle(get(mediaUrl("Notes/clip.mp4")))).arrayBuffer();
+    assert.deepEqual(opened, [
+      [10, 14],
+      [16, 19],
+      [0, 19],
+    ]);
+  });
+});
+
+test("an empty file is never opened", async () => {
+  await withFile(async ({ handle, opened }) => {
+    const response = await handle(get(mediaUrl("Notes/empty.mp4")));
+    assert.equal((await response.arrayBuffer()).byteLength, 0);
+    assert.deepEqual(opened, []);
+  });
+});
+
+test("a source that fails to open answers by its reason, with no body", async () => {
+  await withFile(async ({ handle }) => {
+    for (const [name, status] of [
+      ["denied", 403],
+      ["gone", 404],
+      ["offline", 502],
+    ]) {
+      const response = await handle(get(mediaUrl(`Notes/${name}.mp4`), { Range: "bytes=0-4" }));
+      assert.equal(response.status, status, name);
+      assert.equal((await response.arrayBuffer()).byteLength, 0, name);
+    }
+  });
+});
+
+// The file shrank under a player that still believed the old size: Drive's 416 is the answer, and it
+// carries the size the handler was told, so the player can see where the end is.
+test("a source that answers unsatisfiable is a 416 with the size, not a 502", async () => {
+  await withFile(async ({ handle }) => {
+    const response = await handle(get(mediaUrl("Notes/shrunk.mp4"), { Range: "bytes=0-4" }));
+    assert.equal(response.status, 416);
+    assert.equal(response.headers.get("Content-Range"), "bytes */20");
     assert.equal((await response.arrayBuffer()).byteLength, 0);
   });
 });

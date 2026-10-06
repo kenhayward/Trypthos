@@ -1,7 +1,5 @@
 "use strict";
 
-const { createReadStream } = require("node:fs");
-const { Readable } = require("node:stream");
 const { MEDIA_SCHEME, mediaPathFromUrl, mediaTypeFor } = require("@trypthos/domain");
 const { parseRange } = require("./mediaRange");
 
@@ -16,6 +14,11 @@ const { parseRange } = require("./mediaRange");
 /// touches a workspace root, and never decides whether a file may be read. It is handed a `locate`
 /// function and does what that says - the same locator the IPC handlers use, so there is one
 /// workspace boundary check in this app rather than two that could drift apart.
+///
+/// **Nor does it know where the bytes live.** `locate` answers a byte source - a size, and an
+/// `open(start, end)` for an inclusive range - so a file on disk and a file in a cloud drive are
+/// served by the same code. What a source's token or path looks like never reaches this module, and
+/// so never reaches the window.
 
 /// Registered BEFORE app-ready, because a scheme's privileges are fixed once a page has loaded.
 ///
@@ -49,15 +52,28 @@ function refuse(status, headers) {
   return new Response(null, { status, headers });
 }
 
-/// The bytes, as a web stream the Response can take.
+/// What an `open` that failed is told to the window as. Only the ones with a meaning to a player get
+/// one; anything else is a bad gateway, because the bytes live somewhere that did not answer.
+///
+/// `unsatisfiable` is the source saying the range lies past the end it now has - the file shrank
+/// under a player that still holds the old size - and carries the size, as any 416 must.
+function refuseOpen(reason, size) {
+  if (reason === "unsatisfiable") return refuse(416, { "Content-Range": `bytes */${size}` });
+  if (reason === "permission-denied") return refuse(403);
+  if (reason === "not-found") return refuse(404);
+  return refuse(502);
+}
+
+/// The bytes of one range, as a web stream the Response can take, or the refusal to send instead.
 ///
 /// A stream rather than a buffer is the entire reason this feature has a protocol: memory stays
-/// flat whether the file is four megabytes or four gigabytes. `createReadStream` takes an inclusive
-/// `end`, which is the convention `parseRange` answers in, so no arithmetic happens here.
-function streamOf(file, start, end) {
-  // An empty file has no byte to read, and asking for `0-(-1)` is not a range any reader accepts.
-  if (end < start) return new Blob([]).stream();
-  return Readable.toWeb(createReadStream(file, { start, end }));
+/// flat whether the file is four megabytes or four gigabytes. The range is inclusive, the convention
+/// `parseRange` answers in, so no arithmetic happens here.
+async function bodyOf(found, start, end) {
+  // An empty file has no byte to read, and asking for `0-(-1)` is not a range any source accepts.
+  if (end < start) return { body: new Blob([]).stream() };
+  const opened = await found.open(start, end);
+  return opened.ok ? { body: opened.body } : { refusal: refuseOpen(opened.reason, found.size) };
 }
 
 function createMediaHandler({ locate }) {
@@ -87,13 +103,17 @@ function createMediaHandler({ locate }) {
     const headers = { "Content-Type": mediaType, "Accept-Ranges": "bytes" };
 
     if (range === null) {
-      return new Response(streamOf(found.path, 0, found.size - 1), {
+      const whole = await bodyOf(found, 0, found.size - 1);
+      if (whole.refusal !== undefined) return whole.refusal;
+      return new Response(whole.body, {
         status: 200,
         headers: { ...headers, "Content-Length": String(found.size) },
       });
     }
 
-    return new Response(streamOf(found.path, range.start, range.end), {
+    const part = await bodyOf(found, range.start, range.end);
+    if (part.refusal !== undefined) return part.refusal;
+    return new Response(part.body, {
       status: 206,
       headers: {
         ...headers,
