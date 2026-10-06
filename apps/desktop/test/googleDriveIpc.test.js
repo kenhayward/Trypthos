@@ -316,6 +316,8 @@ test("a Drive clip streams in ranges through locateMedia, and neither the token 
   assert.ok(logged.length >= 1);
   const text = JSON.stringify(logged);
   assert.equal(text.includes(TOKEN), false);
-  assert.equal(text.includes("googleapis.com"), false);
+  // Every address the client actually asked for, rather than a host name: stronger, since a log
+  // could hold a URL's path without its host.
+  for (const request of seen) assert.equal(text.includes(request.url), false);
   assert.equal(text.includes("alt=media"), false);
 });
