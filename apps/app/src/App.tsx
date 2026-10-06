@@ -1252,12 +1252,10 @@ export default function App() {
           // What the tree already knows is in the same folder, so a clash is said while typing. A folder
           // that has not been listed offers nothing, and the shell still refuses the clash.
           // Renaming a Doc compares titles against every sibling with its `.md` taken off, so a plain
-          // `Minutes.md` blocks the title `Minutes` as the shell will.
+          // `Minutes.md` blocks the title `Minutes` as the shell will. Anything else compares path
+          // names, a Doc sibling's included: the shell holds it as `Minutes.md`, not `Minutes`.
           siblings={(state.folders[renaming.slice(0, renaming.lastIndexOf("/"))]?.children ?? []).map(
-            (node) =>
-              googleDocs.has(renaming)
-                ? node.name.replace(/\.md$/i, "")
-                : (googleDocTitle(node.id, googleDocs) ?? node.name),
+            (node) => (googleDocs.has(renaming) ? node.name.replace(/\.md$/i, "") : node.name),
           )}
           onCancel={() => setRenaming(false)}
           onRename={async (name) => {

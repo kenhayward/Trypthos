@@ -1287,6 +1287,43 @@ describe("making a new file", () => {
     expect(screen.getByRole("alert").textContent).toBe("Something in this folder is already called that.");
   });
 
+  it("allows changing only the case of a Google Doc's title", async () => {
+    const user = userEvent.setup();
+    const renamed: [string, string][] = [];
+    driveShell([DOC], renamed);
+    render(<App />);
+
+    const field = await openRename(user, "Meeting");
+    await user.type(field, "MEETING");
+    expect(screen.queryByRole("alert")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renamed).toEqual([["Notes/Meeting.md", "MEETING.md"]]));
+  });
+
+  // A file that is not a Doc is compared by path names: the shell holds a Doc sibling as
+  // `Minutes.md`, so that is what is taken, and its bare title `Minutes` is free.
+  it("compares a plain file's new name with a Doc sibling's path name, not its title", async () => {
+    const user = userEvent.setup();
+    const renamed: [string, string][] = [];
+    driveShell(
+      [{ id: "Notes/Plan.md", name: "Plan.md", kind: "file" as const }, { ...DOC, id: "Notes/Minutes.md", name: "Minutes.md" }],
+      renamed,
+    );
+    render(<App />);
+
+    const field = await openRename(user, "Plan.md");
+    await user.type(field, "Minutes.md");
+    expect(screen.getByRole("alert").textContent).toBe("Something in this folder is already called that.");
+
+    await user.clear(field);
+    await user.type(field, "Minutes");
+    expect(screen.queryByRole("alert")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renamed).toEqual([["Notes/Plan.md", "Minutes"]]));
+  });
+
   it("keeps a Drive file's extension in the dialog and sends the name as typed", async () => {
     const user = userEvent.setup();
     const renamed: [string, string][] = [];
