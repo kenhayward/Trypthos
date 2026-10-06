@@ -95,6 +95,8 @@ export interface FolderOutline {
   folders: string[];
   /// True when the folder holds more files or folders than the outline may name.
   truncated: boolean;
+  /// True when a Google Drive folder was outlined only as far as it has been opened. Absent otherwise.
+  partial?: boolean;
 }
 
 export interface ChatContext {
@@ -149,6 +151,7 @@ export const ChatContextSchema = z
         paths: z.array(z.string()).max(OUTLINE_PATH_LIMIT),
         folders: z.array(z.string()).max(OUTLINE_PATH_LIMIT),
         truncated: z.boolean(),
+        partial: z.boolean().optional(),
       })
       .strict()
       .nullable(),
@@ -336,9 +339,11 @@ export function contextTurns(
   // The outline first: it is the map, and the things it names come after it.
   if (context.folder !== null) {
     const { folders } = context.folder;
-    const note = context.folder.truncated
-      ? "\n\nThe folder holds more files than are listed here."
-      : "";
+    const note =
+      (context.folder.truncated ? "\n\nThe folder holds more files than are listed here." : "") +
+      (context.folder.partial === true
+        ? "\n\nThis Google Drive folder is listed only as far as the user has opened it, so there may be more."
+        : "");
     // The folders after the files, each marked with a slash, so a folder cannot be mistaken for a
     // file of the same name.
     const listing =

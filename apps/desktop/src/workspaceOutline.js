@@ -6,6 +6,7 @@ const {
   isOpenable,
   isSkippedWhenWalking,
 } = require("@trypthos/domain");
+const { listForSearch } = require("./searchListing");
 
 /// The files and folders chat is shown when a folder is attached - the model's map of it.
 ///
@@ -37,7 +38,7 @@ const {
 ///
 /// Total: it never throws.
 async function outlineWorkspace(provider, { path, fileTypes, limit = DEFAULT_OUTLINE_FILE_LIMIT }) {
-  const listing = await provider.list(path);
+  const listing = await listForSearch(provider, path);
   if (!listing.ok) return { path: "", paths: [], folders: [], truncated: false };
 
   // Sorted so the same folder produces the same menu twice running. Without it the order is the
@@ -59,6 +60,8 @@ async function outlineWorkspace(provider, { path, fileTypes, limit = DEFAULT_OUT
     // Reported rather than silently short: an outline that stopped without saying so would have the
     // model answering as though it had seen the whole folder.
     truncated: files.length > limit || folders.length > OUTLINE_PATH_LIMIT,
+    // A Drive folder nobody has opened: the outline is what has been seen, not the folder.
+    ...(listing.complete === false ? { partial: true } : {}),
   };
 }
 

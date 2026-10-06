@@ -51,6 +51,9 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
   const listings = new Map();
   /// Drive folder id -> the request in flight, so concurrent walks of one folder ask Drive once.
   const inFlight = new Map();
+  /// Workspace-relative paths of the folders whose listing has succeeded since the last `refresh()`.
+  /// What `listKnown` answers from: the root is in it once listed.
+  const listedPaths = new Set();
 
   /// The files of one folder: from the cache while it is fresh, else from Drive. A failure is passed
   /// on and never remembered.
@@ -91,9 +94,13 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
         for (const below of [...entries.keys()]) {
           if (below.startsWith(key + "/")) entries.delete(below);
         }
+        for (const below of [...listedPaths]) {
+          if (below === key || below.startsWith(key + "/")) listedPaths.delete(below);
+        }
       }
     }
     for (const child of children) entries.set(child.path, child);
+    listedPaths.add(path);
     return { ok: true, children };
   }
 
@@ -163,6 +170,19 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       };
     },
 
+    /// A folder as far as it is already known, with no request to Drive. The filter, Find in Files and
+    /// the chat outline search through this, so a large Drive is never read all at once; `complete` is
+    /// false for a folder nobody has opened, and they report the answer as partial.
+    async listKnown(candidate) {
+      const path = drivePath(candidate);
+      if (path === null) return failure("permission-denied");
+      if (!listedPaths.has(path)) return { ok: true, nodes: [], complete: false };
+      const nodes = [...entries.values()]
+        .filter((entry) => parentOf(entry.path) === path)
+        .map((entry) => ({ id: entry.path, name: entry.name, kind: entry.kind }));
+      return { ok: true, nodes, complete: true };
+    },
+
     async read(candidate) {
       const found = await fileAt(candidate);
       if (!found.ok) return found;
@@ -188,6 +208,7 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     async refresh() {
       entries.clear();
       listings.clear();
+      listedPaths.clear();
       return { ok: true, truncated: false };
     },
   };

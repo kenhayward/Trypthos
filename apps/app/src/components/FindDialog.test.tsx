@@ -138,6 +138,16 @@ describe("FindDialog", () => {
     expect(screen.getByText(/stopped early/)).toBeDefined();
   });
 
+  it("says when only the opened Google Drive folders were searched, even with no matches", () => {
+    show({ query: "cat", status: { kind: "results", total: 0, current: 0, capped: false, partial: true } });
+    expect(screen.getByText("Google Drive folders are searched only where you have opened them.")).toBeDefined();
+  });
+
+  it("does not say it for a complete search", () => {
+    show({ query: "cat", status: { kind: "results", total: 3, current: 1, capped: false } });
+    expect(screen.queryByText(/searched only where you have opened/)).toBeNull();
+  });
+
   it("tells a broken expression from an absent one", () => {
     show({ query: "[", regex: true, status: { kind: "bad-pattern" } });
     expect(screen.getByText(/not a regular expression/)).toBeDefined();

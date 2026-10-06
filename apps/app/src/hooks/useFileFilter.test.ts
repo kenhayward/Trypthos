@@ -240,6 +240,29 @@ describe("useFileFilter", () => {
     });
   });
 
+  // A Drive folder searched only where it has been opened says so, and the others do not hide it.
+  it("is partial if any folder's answer was", async () => {
+    const { where } = shell(
+      {
+        Notes: { ok: true, paths: ["Notes/a.md"], truncated: false },
+        Work: { ok: true, paths: [], truncated: false, partial: true },
+      },
+      { workspaces: [NOTES, WORK] },
+    );
+    const { result } = run(where);
+
+    act(() => result.current.setFilter("*.md"));
+    act(() => void vi.advanceTimersByTime(1000));
+    await flush();
+
+    expect(result.current.status).toEqual({
+      kind: "results",
+      paths: ["Notes/a.md"],
+      truncated: false,
+      partial: true,
+    });
+  });
+
   // One folder that has gone - unmounted, renamed - must not take the answer away from the others.
   // A filter is not the place to learn that, and the tree's own row already says a folder failed.
   it("keeps the folders that answered when one fails", async () => {

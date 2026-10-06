@@ -263,6 +263,10 @@ export default function FindDialog({
                 }))}
         </p>
 
+        {results !== null && results.partial === true && (
+          <p className="text-xs text-ink-4">{t("workspace.searchPartialDrive")}</p>
+        )}
+
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"

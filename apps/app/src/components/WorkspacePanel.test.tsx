@@ -500,6 +500,22 @@ describe("filtering the browser", () => {
     expect(screen.getByText(/Stopped early/)).toBeDefined();
   });
 
+  it("says when only the opened Google Drive folders were searched, and not otherwise", () => {
+    panel({
+      filter: "*",
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, partial: true },
+    });
+    expect(screen.getByText("Google Drive folders are searched only where you have opened them.")).toBeDefined();
+  });
+
+  it("does not say it for a complete answer", () => {
+    panel({
+      filter: "*",
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false },
+    });
+    expect(screen.queryByText(/searched only where you have opened/)).toBeNull();
+  });
+
   // These folder rows exist to say where a match is. They came from the search rather than from the
   // map of expanded folders, so collapsing one could not do anything - and a control that does
   // nothing is worse than no control.

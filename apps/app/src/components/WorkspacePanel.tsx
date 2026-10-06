@@ -382,6 +382,11 @@ export default function WorkspacePanel({
               <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.matchesCapped")}</p>
             )}
 
+            {/* Drive is searched only where it has been opened, which the list cannot show by itself. */}
+            {filterStatus.kind === "results" && filterStatus.partial === true && (
+              <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.searchPartialDrive")}</p>
+            )}
+
             {shown.map(({ workspace, state, rows: tree }) => {
               /// What Obsidian draws on this row, or null. The map is keyed by the path inside the
               /// vault, so the workspace id comes off the front first.
