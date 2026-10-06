@@ -227,6 +227,7 @@ test("revealing a Drive entry opens its page in the browser, and the address is 
 
 test("a browser that will not open answers unknown, and logs only the step and the error's code", async () => {
   const logged = [];
+  const attempted = [];
   const original = console.error;
   console.error = (...args) => logged.push(args);
   try {
@@ -238,6 +239,7 @@ test("a browser that will not open answers unknown, and logs only the step and t
       {
         createGoogleDrive: editingDriveFactory([], "rootREJ"),
         openExternal: async (url) => {
+          attempted.push(url);
           throw Object.assign(new Error(`could not open ${url}`), { code: "EACCES" });
         },
       },
@@ -248,8 +250,9 @@ test("a browser that will not open answers unknown, and logs only the step and t
   assert.equal(logged.length, 1);
   const text = JSON.stringify(logged);
   assert.equal(text.includes("EACCES"), true);
-  // Neither the address nor the error's message, which carries it.
-  assert.equal(text.includes("drive.google.com") || text.includes("dirEDT") || text.includes("could not open"), false);
+  // Neither the address it tried, nor the error's message, which carries it.
+  assert.equal(attempted.length, 1);
+  assert.equal(text.includes(attempted[0]) || text.includes("could not open"), false);
 });
 
 test("a shared drive opens under its own name and says it is one", async () => {
