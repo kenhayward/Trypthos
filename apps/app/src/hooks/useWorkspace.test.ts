@@ -227,12 +227,21 @@ describe("providerFailureKey", () => {
     expect(failureKey("read-only")).toBe("errors.readOnly");
     expect(providerFailureKey("google-drive", "read-only")).toBe("errors.driveReadOnly");
   });
+
+  it("names a Drive save's own refusals", () => {
+    expect(providerFailureKey("google-drive", "other-account")).toBe("errors.driveOtherAccount");
+    expect(providerFailureKey("google-drive", "bad-request")).toBe("errors.driveBadName");
+    expect(providerFailureKey("google-drive", "unknown", "save")).toBe("errors.driveSaveUnknown");
+    // Only a save says the save was not confirmed; a read or a sign-in that fails unknown stays generic.
+    expect(providerFailureKey("google-drive", "unknown")).toBe("errors.unknown");
+    expect(providerFailureKey("github", "unknown", "save")).toBe("errors.unknown");
+  });
 });
 
 describe("a Google Drive workspace", () => {
   const driveRef = { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" };
 
-  it("opens its files read-only, and a local file stays editable", async () => {
+  it("opens a file editable unless the read says it is read-only", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));
 
@@ -243,13 +252,108 @@ describe("a Google Drive workspace", () => {
       await result.current.actions.openPath("Notes/Plan.md");
     });
     expect(result.current.state.file?.path).toBe("Notes/Plan.md");
-    expect(result.current.state.readOnly).toBe(true);
+    expect(result.current.state.readOnly).toBe(false);
 
     await act(async () => {
       await result.current.actions.openPath("ws/a.md");
     });
     expect(result.current.state.file?.path).toBe("ws/a.md");
     expect(result.current.state.readOnly).toBe(false);
+  });
+
+  // The shell decides per file: a Google Doc answers readOnly, every other Drive file does not.
+  it("opens a Google Doc read-only, because its read says so", async () => {
+    const { client } = fakeClient({
+      readFile: async (): Promise<ReadResult> => ({ ok: true, content: "Doc\n", revision: { id: "h1" }, readOnly: true }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan");
+    });
+
+    expect(result.current.state.readOnly).toBe(true);
+  });
+
+  it("saves an edited Drive file against the read's revision and keeps the new one", async () => {
+    const calls: (string | null)[] = [];
+    const { client } = fakeClient({
+      readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
+      writeFile: async (_path, _content, revision): Promise<WriteResult> => {
+        calls.push(revision?.id ?? null);
+        return { ok: true, revision: { id: "h2" } };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan.md");
+    });
+    act(() => {
+      result.current.actions.edit("# Two\n");
+    });
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(calls).toEqual(["h1"]);
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.file?.revision.id).toBe("h2");
+  });
+
+  it("keeps the edit, stays dirty and says conflict when Drive moved on", async () => {
+    const { client } = fakeClient({
+      readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
+      writeFile: async () => ({ ok: false, reason: "conflict", theirs: { id: "h9" } }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan.md");
+    });
+    act(() => {
+      result.current.actions.edit("# Mine\n");
+    });
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(result.current.state.content).toBe("# Mine\n");
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.errorKey).toBe("errors.conflict");
+    expect(result.current.state.file?.revision.id).toBe("h1");
+  });
+
+  it("words a Drive save that Drive did not confirm in Drive's words", async () => {
+    const { client } = fakeClient({
+      writeFile: async () => ({ ok: false, reason: "unknown" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan.md");
+    });
+    act(() => {
+      result.current.actions.edit("# Mine\n");
+    });
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.driveSaveUnknown");
+    expect(result.current.state.dirty).toBe(true);
   });
 
   it("says a Drive video cannot play, without naming GitHub", async () => {

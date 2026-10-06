@@ -341,9 +341,26 @@ export function failureKey(reason: string): string | null {
 /// The shared keys for offline, rate-limited and not-connected name GitHub, which is the wrong
 /// provider for a Google Drive folder or the Google account. Everything else is provider-neutral.
 /// Null `kind` is a failure with no workspace to name.
-export function providerFailureKey(kind: ProviderKind | null, reason: string): string | null {
+///
+/// `during` says what was being attempted where the same reason means different things. A Drive
+/// "unknown" on a save is specific - the content landed but Drive did not say as what - and must
+/// not be the wording for a read or a sign-in that failed for an unknown reason.
+export function providerFailureKey(
+  kind: ProviderKind | null,
+  reason: string,
+  during: "save" | null = null,
+): string | null {
   if (kind === "google-drive") {
     switch (reason) {
+      case "unknown":
+        if (during === "save") return "errors.driveSaveUnknown";
+        break;
+      case "other-account":
+        return "errors.driveOtherAccount";
+      // A new file name Drive's tree would show differently - the file would land somewhere other
+      // than the path asked for, so the shell refuses and the user is told to pick another name.
+      case "bad-request":
+        return "errors.driveBadName";
       case "offline":
         return "errors.googleOffline";
       case "rate-limited":
@@ -608,11 +625,15 @@ export function useWorkspace(
   /// Takes the whole result rather than its reason, because one refusal carries numbers with it and
   /// a reason string alone would have thrown them away at the call site.
   const fail = useCallback(
-    (result: { reason: string; sizeBytes?: number; limitBytes?: number }, kind: ProviderKind | null = null) => {
+    (
+      result: { reason: string; sizeBytes?: number; limitBytes?: number },
+      kind: ProviderKind | null = null,
+      during: "save" | null = null,
+    ) => {
       setInternal((prev) => ({
         ...prev,
         busy: false,
-        errorKey: providerFailureKey(kind, result.reason),
+        errorKey: providerFailureKey(kind, result.reason, during),
         errorParams: failureParams(result),
       }));
     },
@@ -762,7 +783,8 @@ export function useWorkspace(
 
       const result = await client.writeFile(open.path, open.content, open.revision, message);
       if (!result.ok) {
-        fail(result);
+        // Worded for the provider the save went to, so a Drive failure names Google, not GitHub.
+        fail(result, kindOf(stateRef.current.workspaces, open.path), "save");
         // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
         // document away on the strength of it. A conflict that read as a save is how the prompt would
         // destroy the work it exists to protect.
@@ -1163,9 +1185,9 @@ export function useWorkspace(
           path,
           content: result.content,
           revision: result.revision,
-          // Saving to Google Drive is the next release; until then the editor does not let a user
-          // type into a file it cannot save.
-          readOnly: kindOf(stateRef.current.workspaces, path) === "google-drive",
+          // The shell decides per file: a Google Doc answers readOnly, because writing markdown back
+          // would turn it into a different thing. Every other file, Drive's included, is editable.
+          readOnly: result.readOnly === true,
         }),
         busy: false,
       }));

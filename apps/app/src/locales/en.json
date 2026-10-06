@@ -389,7 +389,10 @@
     "mediaNotLocal": "Video and audio play from a folder on this computer. Trypthos cannot play them from a GitHub repository yet.",
     "driveMediaNotLocal": "Video and audio play from a folder on this computer. Trypthos cannot play them from Google Drive yet.",
     "readOnly": "Trypthos cannot save this file there yet.",
-    "driveReadOnly": "Trypthos opens Google Drive folders read-only in this release, so this file cannot be saved there yet.",
+    "driveReadOnly": "Google Docs open read-only in Trypthos, so this one cannot be saved.",
+    "driveOtherAccount": "This My Drive belongs to a different Google account from the one connected now. Connect that account, or open My Drive again.",
+    "driveSaveUnknown": "Google Drive did not confirm the save. Reopen the file to see what Drive has before saving again.",
+    "driveBadName": "Google Drive would show that file name differently, so Trypthos did not create it. Choose another name.",
     "rateLimited": "GitHub has had as many requests as it allows for now. Trypthos will work again shortly - usually within the hour.",
     "offline": "Trypthos could not reach GitHub. Check your connection and try again.",
     "notConnected": "No GitHub account is connected. Connect one from the Accounts page of Settings.",
@@ -678,7 +681,7 @@
     "empty": "No folders here.",
     "openThis": "Open this folder",
     "cancel": "Cancel",
-    "readOnlyNote": "A Drive folder opens read-only in this release. Saving to Drive arrives in the next release."
+    "readOnlyNote": "Google Docs open read-only. Other files can be edited and saved."
   },
   "commit": {
     "title": "Save to GitHub",
