@@ -126,7 +126,8 @@ async function openGoogleDrive(ref, { drive }) {
   return {
     ok: true,
     workspace: {
-      ref,
+      // The opener's, not the one asked for: My Drive's comes back pinned to its real root id.
+      ref: opened.ref,
       name: opened.name,
       root: null,
       guard: null,
