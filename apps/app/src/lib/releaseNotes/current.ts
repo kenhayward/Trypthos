@@ -21,7 +21,7 @@ export const RECENT: Release[] = [
       "A name already used in a Drive folder is refused whatever its capitals; a case-only rename is allowed.",
     ],
     fixed: [
-      "A Drive folder listing that was already on its way no longer undoes a rename or a new file made in the meantime.",
+      "A new file made in a Drive folder while a listing of it was already on its way could be missing from the tree afterwards; the folder is now asked again.",
     ],
   },
   {
