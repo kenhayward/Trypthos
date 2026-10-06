@@ -57,7 +57,7 @@ outside your settings file.
 from the browser, browse and read it exactly as you would a folder, and save - which makes a commit
 on a branch Trypthos asks you to choose the first time.
 
-**Not built yet:** opening a pull request from Trypthos, saving to Google Drive, the other cloud folders (OneDrive, Dropbox),
+**Not built yet:** opening a pull request from Trypthos, the other cloud folders (OneDrive, Dropbox), in Google Drive new files and folders from the File menu, renaming and playing video or audio,
 chat history that survives closing the app, and giving chat access to the wider folder rather than
 one document.
 
