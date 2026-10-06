@@ -148,6 +148,41 @@ test("refuses a rename to a name Windows cannot hold, before touching the disk",
   });
 });
 
+/// A repository has no folder to make, nothing to rename without a commit, and no place on disk to
+/// show: each answers that it is unsupported rather than a question every answer to would refuse.
+test("a repository cannot make a folder, rename or reveal", async () => {
+  const tokens = new Map();
+  const accounts = {
+    setToken: async (provider, token) => (tokens.set(provider, token), { ok: true }),
+    getToken: async (provider) => tokens.get(provider) ?? null,
+    hasToken: async (provider) => tokens.has(provider),
+    deleteToken: async (provider) => void tokens.delete(provider),
+    connectedProviders: async () => [...tokens.keys()],
+  };
+  const createGitHub = () => ({
+    whoami: async () => ({ ok: true, login: "ada" }),
+    defaultBranchHead: async () => ({ ok: true, branch: "main", sha: "c0ffee" }),
+    tree: async () => ({ ok: true, entries: [{ path: "a.md", mode: "100644", type: "blob", sha: "b1", size: 1 }], truncated: false }),
+  });
+  const opened = [];
+  await withTwoWorkspaces(
+    { "a.md": null },
+    { "b.md": null },
+    async ({ ipcMain }) => {
+      assert.deepEqual(await ipcMain.invoke("github:connect", { token: "ghp_good" }), { ok: true, login: "ada" });
+      const repo = await ipcMain.invoke("workspace:openRef", { ref: { kind: "github", owner: "ada", repo: "notes" } });
+      assert.equal(repo.ok, true);
+      const id = repo.workspace.id;
+      const unsupported = { ok: false, reason: "unsupported" };
+      assert.deepEqual(await ipcMain.invoke("workspace:createDirectory", { path: `${id}/new` }), unsupported);
+      assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${id}/a.md`, name: "b.md" }), unsupported);
+      assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${id}/a.md` }), unsupported);
+    },
+    { accounts, createGitHub, openExternal: async (url) => opened.push(url) },
+  );
+  assert.deepEqual(opened, []);
+});
+
 test("shows a file, a folder or the workspace itself in the file manager", async () => {
   const revealed = [];
   await withTwoWorkspaces(
