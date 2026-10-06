@@ -312,6 +312,43 @@ describe("a Google Drive workspace", () => {
     expect(result.current.state.file?.revision.id).toBe("h2");
   });
 
+  it("stays unsaved, at the written revision, when text is typed while the save is pending", async () => {
+    let finish: (value: WriteResult) => void = () => undefined;
+    const pending = new Promise<WriteResult>((resolve) => {
+      finish = resolve;
+    });
+    const { client } = fakeClient({
+      readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
+      writeFile: () => pending,
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openPath("Notes/Plan.md");
+    });
+    act(() => {
+      result.current.actions.edit("# Two\n");
+    });
+    let saving: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      saving = result.current.actions.save();
+    });
+    act(() => {
+      result.current.actions.edit("# Two, and more\n");
+    });
+    await act(async () => {
+      finish({ ok: true, revision: { id: "h2" } });
+      await saving;
+    });
+
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.file?.revision.id).toBe("h2");
+    expect(result.current.state.content).toBe("# Two, and more\n");
+  });
+
   it("keeps the edit, stays dirty and says conflict when Drive moved on", async () => {
     const { client } = fakeClient({
       readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
