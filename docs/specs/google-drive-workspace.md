@@ -1,6 +1,6 @@
 # Spec: Google Drive workspaces
 
-**Status: PRs 1-4 delivered (0.96.0, 0.97.0, 0.98.0, 0.99.0); PR 5 pending.** It is the design the work is measured against, agreed before the first line of it.
+**Status: PRs 1-5 delivered (0.96.0, 0.97.0, 0.98.0, 0.99.0, 0.100.0).** It is the design the work is measured against, agreed before the first line of it.
 
 Trypthos opens local folders, Obsidian vaults and GitHub repositories. This specifies the fourth
 source: **a folder in Google Drive** - in My Drive or a Shared Drive - opened as a workspace, browsed
@@ -313,7 +313,7 @@ These settle details the sections above left open. Where they differ from the te
 | 2 | Open a Drive folder as a workspace (read-only until PR 3): picker over My Drive / Shared with me / shared drives, tree with spinners while folders load, read, images, Google Docs as markdown, refresh, reopen at launch, filter and Find in Files over the folders already opened. Settings v23. | 0.97.0 |
 | 3 | Save with check-write-confirm and conflict as a result. **Delivered in 0.98.0:** Drive files are editable and Google Docs stay read-only; the chat's create-file tool can create a file in a Drive folder; My Drive is pinned to the account that opened it (`rootId`); a Refresh wins over a listing in flight. | 0.98.0 |
 | 4 | Video and audio streamed from Drive (the media protocol forwards the player's byte ranges to Drive's download endpoint with `Range`, token held in main), and image viewing with Fit, 100% and zoom/pan by the usual gestures (Ctrl/Cmd + wheel and trackpad pinch to zoom about the pointer, drag to pan, double-click to toggle Fit and 100%) - for every source, not only Drive. Requested after the PR 2 manual check. **Delivered in 0.99.0.** | 0.99.0 |
-| 5 | New file, new folder, rename in a Drive workspace. | 0.100.0 |
+| 5 | New file, new folder, rename in a Drive workspace. **Delivered in 0.100.0:** also rename by a Google Doc's title and Open in Google Drive (file, folder or workspace, in the default browser). Save As into Drive, Open in New Window and Recent files stay local only. | 0.100.0 |
 
 Each PR runs the CLAUDE.md release checklist. Architecture.md gains a Google Drive section in PR 1
 (sign-in, token storage, client injection) and grows with each PR. The app has no help system yet, so
