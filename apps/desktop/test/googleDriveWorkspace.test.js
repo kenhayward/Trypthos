@@ -125,10 +125,21 @@ test("lists the root as tree nodes", async () => {
       { id: "Archive", name: "Archive", kind: "directory" },
       { id: "chart.png", name: "chart.png", kind: "file" },
       { id: "huge.md", name: "huge.md", kind: "file" },
-      { id: "Meeting.md", name: "Meeting.md", kind: "file" },
+      { id: "Meeting.md", name: "Meeting.md", kind: "file", googleDoc: true },
       { id: "Plan.md", name: "Plan.md", kind: "file" },
     ],
   });
+});
+
+// The tree shows a Doc under its own title, not as the `.md` it opens as - so it has to be told which.
+test("marks a Google Doc as one when the folder is already known, too", async () => {
+  const { provider } = await open();
+  await provider.list("");
+  const known = await provider.listKnown("");
+  assert.deepEqual(
+    known.nodes.filter((node) => node.googleDoc === true).map((node) => node.id),
+    ["Meeting.md"],
+  );
 });
 
 test("lists a subfolder by the id its listing recorded", async () => {

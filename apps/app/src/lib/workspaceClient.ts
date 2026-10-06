@@ -58,6 +58,9 @@ export interface RemoteNode {
   id: string;
   name: string;
   kind: "file" | "directory";
+  /// True for a Google Doc. Its path ends `.md` because that is what it opens as; the tree shows its
+  /// own title instead. Absent everywhere else.
+  googleDoc?: boolean;
 }
 
 export type Failure = { ok: false; reason: string };

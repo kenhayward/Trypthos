@@ -1,7 +1,13 @@
 import Glyph from "./Glyph";
 
 /// The places a Drive picker row can stand for.
-export type DriveGlyphKind = "my-drive" | "shared-with-me" | "shared-drive" | "folder" | "shared-folder";
+export type DriveGlyphKind =
+  | "my-drive"
+  | "shared-with-me"
+  | "shared-drive"
+  | "folder"
+  | "shared-folder"
+  | "google-doc";
 
 /// The mark for one kind of Drive place, drawn in the app's own outline style - not Google's artwork.
 ///
@@ -51,6 +57,15 @@ export default function DriveGlyph({ kind, className }: { kind: DriveGlyphKind; 
           <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
           <circle cx="12" cy="11" r="1.75" />
           <path d="M8.5 17v-.5a3.5 3.5 0 0 1 7 0v.5" />
+        </Glyph>
+      );
+    case "google-doc":
+      // A page with lines of text on it.
+      return (
+        <Glyph className={className} mark="drive-google-doc">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+          <path d="M8 13h8M8 17h8M8 9h2" />
         </Glyph>
       );
   }

@@ -18,6 +18,7 @@
     "loading": "Loading...",
     "opening": "Opening...",
     "saving": "Saving...",
+    "googleDoc": "Google Doc - opens read-only as markdown",
     "listFailed": "Couldn't list this folder.",
     "retry": "Retry",
     "unsavedDot": "Unsaved changes",
