@@ -383,13 +383,13 @@ test("an expired token is refreshed once for a range, and the 401 body is releas
     cancel() {
       released.cancelled = true;
     },
-  }), { status: 401 });
+  }, { highWaterMark: 0 }), { status: 401 });
   const { api, calls, tokenCalls } = setup({
     tokens: [{ ok: true, token: "stale" }, { ok: true, token: ACCESS }],
     routes: [unauthorized, streamed(206)],
   });
   const got = await api.downloadRange("f1", 0, 9);
-  assert.equal(released.read || released.cancelled, true);
+  assert.equal(unauthorized.bodyUsed || released.cancelled, true);
   assert.equal(got.status, 206);
   assert.deepEqual(tokenCalls, [{}, { force: true }]);
   assert.equal(calls[1].authorization, `Bearer ${ACCESS}`);
