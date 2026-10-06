@@ -157,6 +157,18 @@ test("opens a Google Drive folder through the Drive client, under its current na
   assert.equal(opened.workspace.provider.kind, "google-drive");
 });
 
+// My Drive's real id is learned at open; the record carries the opener's ref so it can be remembered.
+test("a Drive workspace's record carries the reference the opener answered", async () => {
+  const drive = {
+    fileMeta: async () => ({ ok: true, file: { id: "0ARealRootId", name: "My Drive", mimeType: "application/vnd.google-apps.folder" } }),
+    listChildren: async () => ({ ok: true, files: [] }),
+  };
+  const opened = await openWorkspaceFor({ kind: "google-drive", folderId: "root", name: "My Drive" }, { drive });
+
+  assert.equal(opened.ok, true);
+  assert.deepEqual(opened.workspace.ref, { kind: "google-drive", folderId: "root", rootId: "0ARealRootId", name: "My Drive" });
+});
+
 test("a Drive folder in a build without Google answers not configured", async () => {
   assert.deepEqual(await openWorkspaceFor({ kind: "google-drive", folderId: "rootAAA", name: "Notes" }, {}), {
     ok: false,

@@ -6,6 +6,9 @@ const {
   childrenToEntries,
   createPathGuard,
   decodeTextFile,
+  displayNameFor,
+  encodeTextFile,
+  textMimeFor,
 } = require("@trypthos/domain");
 
 /// A Google Drive folder, as a workspace.
@@ -13,7 +16,15 @@ const {
 /// Drive names a file by id; the tree, the editor, recent files and wiki links all name it by path.
 /// This keeps the map between the two, filled as folders are listed (`childrenToEntries` decides the
 /// names) and walked on demand for a path no listing has reached yet - a restored tab, a followed
-/// link. Read-only in this release: `write` refuses.
+/// link.
+///
+/// Saving is check, write, confirm: the file's current revision is asked of Drive and must be the
+/// one the editor read, the new content is uploaded to the same id (keeping a byte-order mark the
+/// file had), and the revision Drive answers the upload with is what the editor gets. Drive has no
+/// conditional write, so a save landing between the check and the write is overwritten - a window
+/// one request long, with Drive's version history holding what it replaced. A Google Doc is the one
+/// read-only file: it is read as exported markdown, and writing that back would make it another kind
+/// of file.
 ///
 /// The path guard is the shared one, over a root that exists nowhere - the same arrangement as
 /// GitHub's `/repo` - so `..`, absolute and drive-qualified paths are refused here exactly as they
@@ -47,41 +58,56 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     return resolved.path.slice(GUARD_ROOT.length + 1);
   }
 
-  /// Drive folder id -> the raw files of its last successful listing, and when that was.
+  /// Drive folder id -> the raw files of its last successful listing, when that was, and under which
+  /// generation.
   const listings = new Map();
-  /// Drive folder id -> the request in flight, so concurrent walks of one folder ask Drive once.
+  /// Drive folder id -> `{ generation, promise }` for the request in flight, so concurrent walks of
+  /// one folder ask Drive once.
   const inFlight = new Map();
   /// Workspace-relative paths of the folders whose listing has succeeded since the last `refresh()`.
   /// What `listKnown` answers from: the root is in it once listed.
   const listedPaths = new Set();
+  /// Bumped by `refresh()`. A listing that started under an older generation is never cached, never
+  /// joined, and `listInto` asks again - so a Refresh pressed mid-listing cannot be undone by it.
+  let generation = 0;
+  /// Drive file id -> whether its text began with a byte-order mark when last read, so a save keeps it.
+  const boms = new Map();
 
   /// The files of one folder: from the cache while it is fresh, else from Drive. A failure is passed
   /// on and never remembered.
   async function filesOf(folderId) {
     const cached = listings.get(folderId);
-    if (cached !== undefined && now() - cached.at < ttlMs) return { ok: true, files: cached.files };
-
-    let pending = inFlight.get(folderId);
-    if (pending === undefined) {
-      pending = (async () => {
-        try {
-          const listed = await api.listChildren(folderId);
-          if (listed.ok) listings.set(folderId, { at: now(), files: listed.files });
-          return listed;
-        } finally {
-          inFlight.delete(folderId);
-        }
-      })();
-      inFlight.set(folderId, pending);
+    if (cached !== undefined && cached.generation === generation && now() - cached.at < ttlMs) {
+      return { ok: true, files: cached.files };
     }
-    return pending;
+    const joined = inFlight.get(folderId);
+    if (joined !== undefined && joined.generation === generation) return joined.promise;
+
+    const started = generation;
+    const pending = { generation: started, promise: null };
+    pending.promise = (async () => {
+      try {
+        const listed = await api.listChildren(folderId);
+        if (listed.ok && started === generation) {
+          listings.set(folderId, { at: now(), files: listed.files, generation: started });
+        }
+        return listed;
+      } finally {
+        if (inFlight.get(folderId) === pending) inFlight.delete(folderId);
+      }
+    })();
+    inFlight.set(folderId, pending);
+    return pending.promise;
   }
 
   /// Lists one folder and records its children, replacing only that folder's direct children - what
   /// is known about the folders below them stays.
   async function listInto(path, folderId) {
+    const started = generation;
     const listed = await filesOf(folderId);
     if (!listed.ok) return listed;
+    // A refresh while this listing was in flight: what arrived predates it, so ask again.
+    if (generation !== started) return listInto(path, folderId);
 
     const children = childrenToEntries(path, listed.files);
     const incoming = new Map(children.map((child) => [child.path, child]));
@@ -146,6 +172,48 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     return fetched;
   }
 
+  /// The Drive id of a folder by its workspace path ("" is the workspace's own folder).
+  async function folderIdAt(path) {
+    if (path === "") return { ok: true, id: ref.folderId };
+    const found = await ensure(path);
+    if (!found.ok) return found;
+    return found.entry.kind === "directory" ? { ok: true, id: found.entry.fileId } : failure("not-found");
+  }
+
+  function conflict(current) {
+    return { ok: false, reason: "conflict", theirs: current === null ? null : { id: current } };
+  }
+
+  /// A new file at a path nobody has: created in its folder, under exactly the name the path gives.
+  async function create(path, content, expected) {
+    // A revision expected of a file that is not there: it was deleted, or never existed.
+    if (expected !== null) return conflict(null);
+    const parent = parentOf(path);
+    const folder = await folderIdAt(parent);
+    if (!folder.ok) return folder;
+
+    const name = parent === "" ? path : path.slice(parent.length + 1);
+    const mimeType = textMimeFor(name);
+    // A name the tree would show differently would land the file under another path than the one
+    // asked for.
+    if (displayNameFor({ name, mimeType }) !== name) return failure("bad-request");
+
+    // The cached listing can predate a file Drive already has under this name. Creating a second one
+    // would leave the path naming the older file, so the folder is asked for afresh first.
+    listings.delete(folder.id);
+    const fresh = await listInto(parent, folder.id);
+    if (!fresh.ok) return fresh;
+    const existing = entries.get(path);
+    if (existing !== undefined) return existing.kind === "file" ? conflict(existing.revision) : failure("permission-denied");
+
+    const created = await api.createFile(folder.id, name, encodeTextFile(content, { bom: false }), mimeType);
+    if (!created.ok) return created;
+    listings.delete(folder.id);
+    // Re-listed so the new file has its path in the map; the file landed whatever this answers.
+    await listInto(parent, folder.id);
+    return { ok: true, revision: { id: created.file.headRevisionId ?? created.file.id } };
+  }
+
   return {
     id: ref.folderId,
     kind: "google-drive",
@@ -186,11 +254,31 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
     async read(candidate) {
       const found = await fileAt(candidate);
       if (!found.ok) return found;
-      const fetched = await bytesOf(found.entry, MAX_TEXT_FILE_BYTES);
+      const entry = found.entry;
+
+      // The revision is asked for BEFORE the bytes, so any skew between them errs toward a conflict
+      // the user is told about, never toward overwriting a change they have not seen.
+      let revision = entry.revision ?? entry.fileId;
+      if (!entry.googleDoc) {
+        const meta = await api.fileMeta(entry.fileId);
+        if (!meta.ok) return meta;
+        if (meta.file.trashed === true) return failure("not-found");
+        revision = meta.file.headRevisionId ?? revision;
+      }
+
+      const fetched = await bytesOf(entry, MAX_TEXT_FILE_BYTES);
       if (!fetched.ok) return fetched;
       const decoded = decodeTextFile(fetched.bytes);
       if (!decoded.ok) return failure(decoded.reason);
-      return { ok: true, content: decoded.content, revision: { id: found.entry.revision ?? found.entry.fileId } };
+      boms.set(entry.fileId, decoded.bom);
+      return {
+        ok: true,
+        content: decoded.content,
+        revision: { id: revision },
+        // A Google Doc is read as exported markdown; writing that back would turn it into another kind
+        // of file.
+        ...(entry.googleDoc ? { readOnly: true } : {}),
+      };
     },
 
     async readBytes(candidate, limitBytes) {
@@ -199,13 +287,52 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       return bytesOf(found.entry, limitBytes);
     },
 
-    /// Saving to Drive is the next release. Refused here as well as in the interface, because the
-    /// chat's tools write through the provider too.
-    async write() {
-      return failure("read-only");
+    /// Check, write, confirm. Drive has no conditional write, so the check is a request of its own: a
+    /// save landing between the check and the write is overwritten. That window is one request long,
+    /// and Drive's version history keeps what it replaced.
+    ///
+    /// `expected === null` on a path nobody has creates the file, as it does in a folder on disk -
+    /// the chat's create-file tool relies on it.
+    async write(candidate, content, expected) {
+      const path = drivePath(candidate);
+      if (path === null || path === "") return failure("permission-denied");
+
+      const found = await ensure(path);
+      if (!found.ok) return found.reason === "not-found" ? create(path, content, expected) : found;
+      const entry = found.entry;
+      if (entry.kind !== "file") return failure("permission-denied");
+      if (entry.googleDoc) return failure("read-only");
+
+      // 1. Check.
+      const meta = await api.fileMeta(entry.fileId);
+      if (!meta.ok && meta.reason !== "not-found") return meta;
+      const current = !meta.ok || meta.file.trashed === true ? null : (meta.file.headRevisionId ?? null);
+      if (expected === null || current === null || current !== expected.id) return conflict(current);
+
+      // 2. Write.
+      const bytes = encodeTextFile(content, { bom: boms.get(entry.fileId) === true });
+      const uploaded = await api.uploadContent(entry.fileId, bytes, entry.mimeType);
+      if (!uploaded.ok) return uploaded;
+
+      // 3. Confirm: the revision is Drive's answer to the write, never a guess.
+      let revision = uploaded.file.headRevisionId;
+      if (revision === undefined) {
+        const after = await api.fileMeta(entry.fileId);
+        revision = after.ok ? after.file.headRevisionId : undefined;
+      }
+      // The content landed but Drive will not say as what; reporting success with a made-up revision
+      // would let the next save overwrite blindly, so it is reported as unknown instead.
+      if (revision === undefined) return failure("unknown");
+
+      entries.set(path, { ...entry, revision, sizeBytes: bytes.length });
+      const parent = await folderIdAt(parentOf(path));
+      if (parent.ok) listings.delete(parent.id);
+      return { ok: true, revision: { id: revision } };
     },
 
     async refresh() {
+      generation += 1;
+      boms.clear();
       entries.clear();
       listings.clear();
       listedPaths.clear();
@@ -225,6 +352,14 @@ async function openGoogleDriveWorkspace({ ref, api, now, ttlMs }) {
   if (!meta.ok) return meta;
   if (meta.file.mimeType !== FOLDER_MIME || meta.file.trashed === true) return failure("not-found");
 
+  // My Drive is opened by the alias "root", which means whichever account is connected. Its real id
+  // is remembered on first open, and a later open whose real root differs is a different account.
+  let openedRef = ref;
+  if (ref.folderId === "root") {
+    if (ref.rootId !== undefined && ref.rootId !== meta.file.id) return failure("other-account");
+    openedRef = { ...ref, rootId: meta.file.id };
+  }
+
   const sharedDriveRoot = ref.driveId !== undefined && ref.driveId === ref.folderId;
   let name = meta.file.name;
   if (sharedDriveRoot) {
@@ -237,7 +372,13 @@ async function openGoogleDriveWorkspace({ ref, api, now, ttlMs }) {
   else if (sharedDriveRoot) variant = "shared-drive";
   else if (meta.file.shared === true) variant = "shared-folder";
 
-  return { ok: true, name, variant, provider: createGoogleDriveProvider({ ref, api, now, ttlMs }) };
+  return {
+    ok: true,
+    name,
+    variant,
+    ref: openedRef,
+    provider: createGoogleDriveProvider({ ref: openedRef, api, now, ttlMs }),
+  };
 }
 
 module.exports = { openGoogleDriveWorkspace, GUARD_ROOT };

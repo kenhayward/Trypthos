@@ -27,18 +27,52 @@ const DRIVE = {
 
 const BYTES = { mdCCC: Buffer.from("hello"), oldGGG: Buffer.from("old"), pngEEE: Buffer.from([1, 2, 3, 4]) };
 
+/// The metadata `fileMeta` answers for each file, as it is "in Drive" now. Each fake gets its own
+/// copy, so a test can change a file's revision - or delete it - behind the provider's back.
+const META = {
+  rootAAA: { id: "rootAAA", name: "Notes (renamed)", mimeType: FOLDER },
+  dirBBB: { id: "dirBBB", name: "Archive", mimeType: FOLDER },
+  mdCCC: { id: "mdCCC", name: "Plan.md", mimeType: "text/markdown", headRevisionId: "rev1" },
+  pngEEE: { id: "pngEEE", name: "chart.png", mimeType: "image/png", headRevisionId: "revPng" },
+  bigFFF: { id: "bigFFF", name: "huge.md", mimeType: "text/markdown", headRevisionId: "revBig" },
+  oldGGG: { id: "oldGGG", name: "Old.md", mimeType: "text/markdown", headRevisionId: "rev2" },
+};
+
 function fakeApi(overrides = {}) {
-  const calls = { list: [], download: [], export: [] };
+  const calls = { list: [], download: [], export: [], meta: [], upload: [], create: [], order: [] };
+  const drive = Object.fromEntries(Object.entries(DRIVE).map(([id, files]) => [id, [...files]]));
+  const meta = Object.fromEntries(Object.entries(META).map(([id, file]) => [id, { ...file }]));
+  const bytes = { ...BYTES };
+  let created = 0;
   const api = {
-    fileMeta: async (id) =>
-      id === "rootAAA" ? { ok: true, file: { id, name: "Notes (renamed)", mimeType: FOLDER } } : { ok: false, reason: "not-found" },
+    fileMeta: async (id) => {
+      calls.meta.push(id);
+      calls.order.push(["meta", id]);
+      return meta[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, file: { ...meta[id] } };
+    },
     listChildren: async (id) => {
       calls.list.push(id);
-      return DRIVE[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, files: DRIVE[id] };
+      // A copy, as Drive's answer would be: a later change "in Drive" must not reach a cached listing.
+      return drive[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, files: [...drive[id]] };
     },
     download: async (id) => {
       calls.download.push(id);
-      return BYTES[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, bytes: BYTES[id] };
+      calls.order.push(["download", id]);
+      return bytes[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, bytes: bytes[id] };
+    },
+    uploadContent: async (id, content, mimeType) => {
+      calls.upload.push({ id, bytes: Buffer.from(content), mimeType });
+      return { ok: true, file: { id, name: meta[id]?.name ?? id, mimeType, headRevisionId: "rev-new" } };
+    },
+    createFile: async (parentId, name, content, mimeType) => {
+      calls.create.push({ parentId, name, bytes: Buffer.from(content), mimeType });
+      created += 1;
+      const file = { id: `new${created}XYZ`, name, mimeType, size: String(content.length), headRevisionId: `rev-created-${created}` };
+      // The new file is in Drive now: listed in its folder, readable, and answered by `fileMeta`.
+      drive[parentId] = [...(drive[parentId] ?? []), file];
+      meta[file.id] = { id: file.id, name, mimeType, headRevisionId: file.headRevisionId };
+      bytes[file.id] = Buffer.from(content);
+      return { ok: true, file };
     },
     exportMarkdown: async (id) => {
       calls.export.push(id);
@@ -46,14 +80,14 @@ function fakeApi(overrides = {}) {
     },
     ...overrides,
   };
-  return { api, calls };
+  return { api, calls, meta, drive };
 }
 
 async function open(overrides, options = {}) {
-  const { api, calls } = fakeApi(overrides);
+  const { api, calls, meta, drive } = fakeApi(overrides);
   const opened = await openGoogleDriveWorkspace({ ref: REF, api, ...options });
   assert.equal(opened.ok, true);
-  return { provider: opened.provider, name: opened.name, calls };
+  return { provider: opened.provider, name: opened.name, calls, meta, drive };
 }
 
 test("opens a folder under its current name", async () => {
@@ -113,6 +147,7 @@ test("reads a Google Doc as exported markdown", async () => {
     ok: true,
     content: "# Meeting",
     revision: { id: "modified:2026-10-01T00:00:00Z" },
+    readOnly: true,
   });
   assert.deepEqual(calls.export, ["docDDD"]);
   assert.deepEqual(calls.download, []);
@@ -162,10 +197,253 @@ test("reads the bytes of an image, within the caller's limit", async () => {
   assert.equal((await provider.readBytes("chart.png", 2)).reason, "too-large");
 });
 
-test("writing is refused: this release opens Drive read-only", async () => {
-  const { provider } = await open();
+// The listing can be a minute old (the cache), so the revision a read answers is asked of Drive - and
+// asked BEFORE the bytes, so any skew between the two errs toward a conflict, never an overwrite.
+test("a read answers the revision Drive gives now, asked before the download", async () => {
+  const { provider, calls, meta } = await open();
   await provider.list("");
-  assert.deepEqual(await provider.write("Plan.md", "changed", { id: "rev1" }), { ok: false, reason: "read-only" });
+  meta.mdCCC.headRevisionId = "rev5";
+  const read = await provider.read("Plan.md");
+  assert.deepEqual(read, { ok: true, content: "hello", revision: { id: "rev5" } });
+  assert.equal("readOnly" in read, false);
+  assert.deepEqual(calls.order, [["meta", "rootAAA"], ["meta", "mdCCC"], ["download", "mdCCC"]]);
+});
+
+test("a read of a file deleted in Drive since its listing is not found", async () => {
+  const { provider, calls, meta } = await open();
+  await provider.list("");
+  meta.mdCCC.trashed = true;
+  assert.deepEqual(await provider.read("Plan.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(calls.download, []);
+});
+
+test("a save checks the revision, uploads, and answers the revision Drive gave the write", async () => {
+  const { provider, calls } = await open();
+  const read = await provider.read("Plan.md");
+  assert.deepEqual(read.revision, { id: "rev1" });
+  const metaBefore = calls.meta.length;
+
+  const written = await provider.write("Plan.md", "changed", { id: "rev1" });
+
+  assert.deepEqual(written, { ok: true, revision: { id: "rev-new" } });
+  assert.deepEqual(calls.meta.slice(metaBefore), ["mdCCC"]);
+  assert.equal(calls.upload.length, 1);
+  assert.equal(calls.upload[0].id, "mdCCC");
+  assert.equal(calls.upload[0].mimeType, "text/markdown");
+  assert.equal(calls.upload[0].bytes.toString("utf8"), "changed");
+});
+
+test("a save keeps the byte-order mark the file was read with", async () => {
+  const { provider, calls } = await open({
+    download: async () => ({ ok: true, bytes: Buffer.from([0xef, 0xbb, 0xbf, ...Buffer.from("hello")]) }),
+  });
+  const read = await provider.read("Plan.md");
+  assert.equal(read.content, "hello");
+  assert.equal((await provider.write("Plan.md", "edited", read.revision)).ok, true);
+  assert.deepEqual([...calls.upload[0].bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+  assert.equal(calls.upload[0].bytes.subarray(3).toString("utf8"), "edited");
+});
+
+test("a save without a mark read does not add one", async () => {
+  const { provider, calls } = await open();
+  const read = await provider.read("Plan.md");
+  await provider.write("Plan.md", "edited", read.revision);
+  assert.equal(calls.upload[0].bytes.toString("utf8"), "edited");
+});
+
+test("a file changed in Drive since it was read is a conflict, and nothing is uploaded", async () => {
+  const { provider, calls, meta } = await open();
+  await provider.read("Plan.md");
+  meta.mdCCC.headRevisionId = "rev9";
+  assert.deepEqual(await provider.write("Plan.md", "changed", { id: "rev1" }), {
+    ok: false,
+    reason: "conflict",
+    theirs: { id: "rev9" },
+  });
+  assert.deepEqual(calls.upload, []);
+});
+
+test("a file deleted or trashed in Drive since it was read is a conflict with nothing of theirs", async () => {
+  for (const change of [(meta) => delete meta.mdCCC, (meta) => (meta.mdCCC.trashed = true)]) {
+    const { provider, calls, meta } = await open();
+    await provider.read("Plan.md");
+    change(meta);
+    assert.deepEqual(await provider.write("Plan.md", "changed", { id: "rev1" }), {
+      ok: false,
+      reason: "conflict",
+      theirs: null,
+    });
+    assert.deepEqual(calls.upload, []);
+  }
+});
+
+test("a failure to check passes through, and nothing is uploaded", async () => {
+  const { provider, calls } = await open({
+    fileMeta: async (id) => (id === "rootAAA" ? { ok: true, file: META.rootAAA } : { ok: false, reason: "offline" }),
+  });
+  await provider.list("");
+  assert.deepEqual(await provider.write("Plan.md", "changed", { id: "rev1" }), { ok: false, reason: "offline" });
+  assert.deepEqual(calls.upload, []);
+});
+
+test("a failed upload passes through", async () => {
+  const { provider } = await open({ uploadContent: async () => ({ ok: false, reason: "offline" }) });
+  const read = await provider.read("Plan.md");
+  assert.deepEqual(await provider.write("Plan.md", "changed", read.revision), { ok: false, reason: "offline" });
+});
+
+// The content landed, but a made-up revision would let the next save overwrite blindly.
+test("a write whose answer has no revision asks Drive for it, and never guesses one", async () => {
+  // The upload's answer leaves the revision out; what Drive then says about the file is what counts.
+  async function saveWhere(afterUpload) {
+    let meta = null;
+    const opened = await open({
+      uploadContent: async (id) => {
+        afterUpload(meta.mdCCC);
+        return { ok: true, file: { id, name: "Plan.md", mimeType: "text/markdown" } };
+      },
+    });
+    meta = opened.meta;
+    const read = await opened.provider.read("Plan.md");
+    return opened.provider.write("Plan.md", "changed", read.revision);
+  }
+
+  assert.deepEqual(await saveWhere((file) => (file.headRevisionId = "rev-after")), { ok: true, revision: { id: "rev-after" } });
+  assert.deepEqual(await saveWhere((file) => delete file.headRevisionId), { ok: false, reason: "unknown" });
+});
+
+test("a Google Doc refuses a save, without asking Drive anything", async () => {
+  const { provider, calls } = await open();
+  await provider.list("");
+  const metaBefore = calls.meta.length;
+  assert.deepEqual(await provider.write("Meeting.md", "changed", { id: "modified:2026-10-01T00:00:00Z" }), {
+    ok: false,
+    reason: "read-only",
+  });
+  assert.equal(calls.meta.length, metaBefore);
+  assert.deepEqual(calls.upload, []);
+});
+
+test("a write to a folder or outside the workspace is refused", async () => {
+  const { provider, calls } = await open();
+  assert.deepEqual(await provider.write("Archive", "x", null), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(await provider.write("", "x", null), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(await provider.write("../x.md", "x", null), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(calls.upload, []);
+  assert.deepEqual(calls.create, []);
+});
+
+// The chat's create-file tool writes a path nobody has with `expected === null`, as it does locally.
+test("a write with no expected revision to a missing path creates the file in its folder", async () => {
+  const { provider, calls } = await open();
+  const written = await provider.write("Archive/new.md", "# New", null);
+  assert.deepEqual(written, { ok: true, revision: { id: "rev-created-1" } });
+  assert.equal(calls.create.length, 1);
+  assert.equal(calls.create[0].parentId, "dirBBB");
+  assert.equal(calls.create[0].name, "new.md");
+  assert.equal(calls.create[0].mimeType, "text/markdown");
+  assert.equal(calls.create[0].bytes.toString("utf8"), "# New");
+  assert.deepEqual(calls.upload, []);
+
+  assert.deepEqual(await provider.read("Archive/new.md"), { ok: true, content: "# New", revision: { id: "rev-created-1" } });
+  assert.deepEqual((await provider.listKnown("Archive")).nodes.map((node) => node.id).sort(), ["Archive/Old.md", "Archive/new.md"]);
+});
+
+test("a new file at the workspace's own folder is created there, as text when it is not markdown", async () => {
+  const { provider, calls } = await open();
+  assert.equal((await provider.write("todo.txt", "x", null)).ok, true);
+  assert.equal(calls.create[0].parentId, "rootAAA");
+  assert.equal(calls.create[0].mimeType, "text/plain");
+});
+
+// A listing in the cache can predate a file Drive already has; creating another of the same name
+// would leave the path naming the OLDER one, and the save would have landed somewhere else.
+test("a create asks Drive for the folder afresh, and an existing file there is a conflict", async () => {
+  const { provider, calls, drive, meta } = await open();
+  await provider.list("");
+  drive.rootAAA.push({ id: "lateHHH", name: "late.md", mimeType: "text/markdown", size: "1", headRevisionId: "revLate" });
+  meta.lateHHH = { id: "lateHHH", name: "late.md", mimeType: "text/markdown", headRevisionId: "revLate" };
+  assert.deepEqual(await provider.write("late.md", "mine", null), {
+    ok: false,
+    reason: "conflict",
+    theirs: { id: "revLate" },
+  });
+  assert.deepEqual(calls.create, []);
+});
+
+test("a create is refused when the path does not describe a new file honestly", async () => {
+  const { provider, calls } = await open();
+  // A revision expected of a file that is not there: it was deleted, or never existed.
+  assert.deepEqual(await provider.write("Missing.md", "x", { id: "rev1" }), { ok: false, reason: "conflict", theirs: null });
+  // No revision expected of a file that IS there: somebody else's file, not a new one.
+  assert.deepEqual(await provider.write("Plan.md", "x", null), { ok: false, reason: "conflict", theirs: { id: "rev1" } });
+  // A name the tree would show differently would land under another path than the one asked for.
+  assert.deepEqual(await provider.write("Archive/a:b.md", "x", null), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await provider.write("tab\there.md", "x", null), { ok: false, reason: "bad-request" });
+  // "a:b.md" at the root reads as drive-relative to the shared guard, and is refused before that.
+  assert.deepEqual(await provider.write("a:b.md", "x", null), { ok: false, reason: "permission-denied" });
+  // The folder it would go in is not there, or is a file.
+  assert.deepEqual(await provider.write("Nowhere/new.md", "x", null), { ok: false, reason: "not-found" });
+  assert.deepEqual(await provider.write("Plan.md/new.md", "x", null), { ok: false, reason: "not-found" });
+  assert.deepEqual(calls.create, []);
+  assert.deepEqual(calls.upload, []);
+});
+
+test("a failed create passes through", async () => {
+  const { provider } = await open({ createFile: async () => ({ ok: false, reason: "rate-limited" }) });
+  assert.deepEqual(await provider.write("new.md", "x", null), { ok: false, reason: "rate-limited" });
+});
+
+// Refresh pressed while a listing is in flight: what that listing brings back predates the refresh,
+// so it must neither be served nor cached.
+test("a listing that was in flight when refresh was pressed is asked for again", async () => {
+  const OLD = [{ id: "mdCCC", name: "Plan.md", mimeType: "text/markdown", headRevisionId: "rev1" }];
+  const NEW = [{ id: "mdNEW", name: "Fresh.md", mimeType: "text/markdown", headRevisionId: "rev3" }];
+  const gates = [];
+  const asked = [];
+  const { provider } = await open({
+    listChildren: (id) => {
+      asked.push(id);
+      if (asked.length === 1) return new Promise((resolve) => gates.push(resolve));
+      return Promise.resolve({ ok: true, files: NEW });
+    },
+  });
+
+  const pending = provider.list("");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(gates.length, 1);
+  await provider.refresh();
+  gates[0]({ ok: true, files: OLD });
+
+  assert.deepEqual((await pending).nodes.map((node) => node.id), ["Fresh.md"]);
+  assert.deepEqual(asked, ["rootAAA", "rootAAA"]);
+  // Nor did the stale answer reach the cache.
+  assert.deepEqual((await provider.list("")).nodes.map((node) => node.id), ["Fresh.md"]);
+  assert.deepEqual(await provider.read("Plan.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(asked, ["rootAAA", "rootAAA"]);
+});
+
+test("a listing started after refresh does not join one started before it", async () => {
+  const gates = [];
+  const asked = [];
+  const { provider } = await open({
+    listChildren: (id) => {
+      asked.push(id);
+      if (asked.length === 1) return new Promise((resolve) => gates.push(resolve));
+      return Promise.resolve({ ok: true, files: DRIVE.rootAAA });
+    },
+  });
+  const first = provider.list("");
+  await new Promise((resolve) => setImmediate(resolve));
+  await provider.refresh();
+  const second = provider.list("");
+  await new Promise((resolve) => setImmediate(resolve));
+  // Released before asserting, so a provider that joined the old request fails here rather than hangs.
+  gates[0]({ ok: true, files: [] });
+  assert.equal((await second).ok, true);
+  assert.equal((await first).ok, true);
+  assert.deepEqual(asked, ["rootAAA", "rootAAA"]);
+  assert.deepEqual((await second).nodes.map((node) => node.id), (await provider.list("")).nodes.map((node) => node.id));
 });
 
 // Re-expanding a folder without a refresh must replace only its own children, so what was learned
@@ -444,4 +722,35 @@ test("says what kind of place was opened", async () => {
 
   const plain = await openRef(REF, {});
   assert.equal(plain.variant, "folder");
+});
+
+// My Drive is opened by the alias "root", which means whichever account is connected. Its real id is
+// remembered at first open, so a later open under another account is refused rather than followed.
+test("My Drive is pinned to the account that first opened it", async () => {
+  const realRoot = { fileMeta: async () => ({ ok: true, file: { id: "0ARealRootId", name: "My Drive", mimeType: FOLDER } }) };
+
+  const first = await openRef({ kind: "google-drive", folderId: "root", name: "My Drive" }, realRoot);
+  assert.equal(first.ok, true);
+  assert.deepEqual(first.ref, { kind: "google-drive", folderId: "root", rootId: "0ARealRootId", name: "My Drive" });
+  // The key stays the alias: the provider still lists "root".
+  assert.equal(first.provider.id, "root");
+
+  const same = await openRef({ kind: "google-drive", folderId: "root", rootId: "0ARealRootId", name: "My Drive" }, realRoot);
+  assert.equal(same.ok, true);
+  assert.equal(same.ref.rootId, "0ARealRootId");
+
+  assert.deepEqual(await openRef({ kind: "google-drive", folderId: "root", rootId: "0AOtherRoot", name: "My Drive" }, realRoot), {
+    ok: false,
+    reason: "other-account",
+  });
+});
+
+test("a folder that is not My Drive answers its reference unchanged", async () => {
+  const opened = await openRef(REF, {});
+  assert.deepEqual(opened.ref, REF);
+  const shared = await openRef(SHARED_ROOT, {
+    fileMeta: async (id) => ({ ok: true, file: { id, name: "Drive", mimeType: FOLDER } }),
+    sharedDrive: async (id) => ({ ok: true, drive: { id, name: "Team" } }),
+  });
+  assert.deepEqual(shared.ref, SHARED_ROOT);
 });

@@ -8,7 +8,7 @@ const path = require("node:path");
 const { registerIpcHandlers } = require("../src/ipcHandlers");
 
 /// A Drive folder through the real handlers: opened by reference, listed and read through the same
-/// channels as every other workspace, and refused a write.
+/// channels as every other workspace, and saved through the same check-write-confirm a save expects.
 
 const FOLDER = "application/vnd.google-apps.folder";
 
@@ -72,15 +72,60 @@ test("opens a Drive folder by reference and reads it like any other workspace", 
 
     const read = await ipcMain.invoke("file:read", { path: `${opened.workspace.id}/Plan.md` });
     assert.equal(read.content, "hello");
-
-    const written = await ipcMain.invoke("file:write", {
-      path: `${opened.workspace.id}/Plan.md`,
-      content: "changed",
-      expectedRevision: { id: "rev1" },
-      message: null,
-    });
-    assert.deepEqual(written, { ok: false, reason: "read-only" });
   });
+});
+
+/// A Drive whose files can change behind the app's back: `fileMeta` answers each file's current
+/// revision, and an upload moves it on.
+function savingDriveFactory(log) {
+  const meta = {
+    rootSAV: { id: "rootSAV", name: "Saved", mimeType: FOLDER },
+    mdSAV: { id: "mdSAV", name: "Plan.md", mimeType: "text/markdown", headRevisionId: "rev1" },
+  };
+  return () => ({
+    fileMeta: async (id) => (meta[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, file: { ...meta[id] } }),
+    listChildren: async (id) =>
+      id === "rootSAV"
+        ? {
+            ok: true,
+            files: [
+              { id: "mdSAV", name: "Plan.md", mimeType: "text/markdown", size: "5", headRevisionId: meta.mdSAV.headRevisionId },
+              { id: "docSAV", name: "Minutes", mimeType: "application/vnd.google-apps.document", modifiedTime: "2026-10-01T00:00:00Z" },
+            ],
+          }
+        : { ok: false, reason: "not-found" },
+    download: async () => ({ ok: true, bytes: Buffer.from("hello") }),
+    exportMarkdown: async () => ({ ok: true, bytes: Buffer.from("# Minutes") }),
+    uploadContent: async (id, bytes, mimeType) => {
+      log.push({ id, content: Buffer.from(bytes).toString("utf8"), mimeType });
+      meta[id].headRevisionId = `rev${log.length + 1}`;
+      return { ok: true, file: { ...meta[id] } };
+    },
+    createFile: async () => ({ ok: false, reason: "offline" }),
+  });
+}
+
+test("a Drive file saves through file:write with the revision its read gave, and a stale one conflicts", async () => {
+  const uploads = [];
+  await withHandlers(async ({ ipcMain }) => {
+    const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "google-drive", folderId: "rootSAV", name: "Saved" } });
+    assert.equal(opened.ok, true);
+    const file = `${opened.workspace.id}/Plan.md`;
+
+    const read = await ipcMain.invoke("file:read", { path: file });
+    assert.deepEqual(read, { ok: true, content: "hello", revision: { id: "rev1" } });
+
+    const written = await ipcMain.invoke("file:write", { path: file, content: "changed", expectedRevision: read.revision, message: null });
+    assert.deepEqual(written, { ok: true, revision: { id: "rev2" } });
+    assert.deepEqual(uploads, [{ id: "mdSAV", content: "changed", mimeType: "text/markdown" }]);
+
+    const stale = await ipcMain.invoke("file:write", { path: file, content: "again", expectedRevision: { id: "rev1" }, message: null });
+    assert.deepEqual(stale, { ok: false, reason: "conflict", theirs: { id: "rev2" } });
+    assert.equal(uploads.length, 1);
+
+    const doc = await ipcMain.invoke("file:read", { path: `${opened.workspace.id}/Minutes.md` });
+    assert.deepEqual(doc, { ok: true, content: "# Minutes", revision: { id: "modified:2026-10-01T00:00:00Z" }, readOnly: true });
+  }, { createGoogleDrive: savingDriveFactory(uploads) });
 });
 
 test("a shared drive opens under its own name and says it is one", async () => {
