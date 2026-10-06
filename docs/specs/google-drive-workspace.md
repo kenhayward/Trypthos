@@ -1,7 +1,6 @@
 # Spec: Google Drive workspaces
 
-**Status: specified, not built.** Nothing in this document describes code that exists today. It is
-the design the work is measured against, agreed before the first line of it.
+**Status: PRs 1-3 delivered (0.96.0, 0.97.0, 0.98.0); PRs 4-5 pending.** It is the design the work is measured against, agreed before the first line of it.
 
 Trypthos opens local folders, Obsidian vaults and GitHub repositories. This specifies the fourth
 source: **a folder in Google Drive** - in My Drive or a Shared Drive - opened as a workspace, browsed
@@ -266,7 +265,7 @@ These settle details the sections above left open. Where they differ from the te
 | A Google Doc's name in the tree | `<title>.md` (unless the title already ends in `.md`) | The renderer decides what it can open by extension. A bare title would be greyed out as an unknown type. |
 | Characters a path cannot hold | `/`, `\`, `:` and control characters in a Drive name become `_`; an empty, `.` or `..` name becomes `_` | Drive allows all of them in a name; the path guard reads `/` as a separator and `C:` as drive-qualified. Renaming for display only - nothing is written. |
 | Duplicate suffix | `stem~<first 6 of id>.ext`, applied after the two rules above | As in "Decisions taken"; applied to the final display name. |
-| Read-only in PR 2 | The provider's `write` answers `read-only`; the renderer opens every text file from a Drive workspace with `readOnly: true` | The editor should not let a user type into a file it cannot save. `failureKey("read-only")` -> `errors.readOnly`. |
+| Read-only in PR 2 | The provider's `write` answers `read-only`; the renderer opens every text file from a Drive workspace with `readOnly: true` | The editor should not let a user type into a file it cannot save. `failureKey("read-only")` -> `errors.readOnly`. **Superseded in PR 3:** read-only is per file (Google Docs only) and Drive files are editable. |
 | Provider-specific wording | `providerFailureKey(kind, reason)` in `useWorkspace.ts`: for `google-drive`, offline / rate-limited / not-connected use the `errors.google*` keys; everything else is `failureKey`. `useGoogle` uses it too | One mapping both the account section and the workspace use, so a Drive failure never names GitHub. |
 | Re-listing a folder | Replaces that folder's direct children in the id map only | A refresh lists the root before the folders under it; dropping grandchildren would make an open file under an expanded folder briefly unreadable. |
 | Folder picker top level | My Drive's folders, then Shared Drives. "Open this folder" is offered inside any folder and at a Shared Drive's root, not at the top level | Whole-My-Drive roots stay deferred. |
@@ -283,7 +282,7 @@ These settle details the sections above left open. Where they differ from the te
 | Grant revoked in the Google account | Status shows not connected with the reason; opening a Drive workspace answers `not-connected`. |
 | Offline / rate-limited while listing | On the folder row (`folders[path].status = "error"`), as GitHub. |
 | Conflict on save | Existing `errors.conflict` banner; the user's text is kept and the revision is not advanced. |
-| Google Doc save attempted | `errors.readOnly`. The editor should not offer it; the shell refuses regardless. |
+| Google Doc save attempted | `errors.readOnly`. The editor should not offer it; the shell refuses regardless. **Superseded in PR 3:** worded for Google as `errors.driveReadOnly`. |
 
 ## Testing
 
