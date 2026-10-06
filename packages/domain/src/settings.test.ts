@@ -1007,7 +1007,22 @@ describe("version 23", () => {
     const before = { ...DEFAULT_SETTINGS, schemaVersion: 22, workspaces: [{ kind: "local" as const, root: "/v/Notes" }] };
     const loaded = loadSettings(before);
     expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
-    expect(SETTINGS_VERSION).toBe(23);
+    expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(23);
     expect(loaded.workspaces).toEqual([{ kind: "local", root: "/v/Notes" }]);
+  });
+});
+
+describe("version 24", () => {
+  it("remembers My Drive with its real id", () => {
+    const drive = { kind: "google-drive" as const, folderId: "root", rootId: "0ARealRootId", name: "My Drive" };
+    expect(loadSettings({ ...DEFAULT_SETTINGS, workspaces: [drive] }).workspaces).toEqual([drive]);
+  });
+
+  it("leaves workspaces remembered at version 23 exactly as they were", () => {
+    const before = { ...DEFAULT_SETTINGS, schemaVersion: 23, workspaces: [{ kind: "google-drive" as const, folderId: "root", name: "My Drive" }] };
+    const loaded = loadSettings(before);
+    expect(SETTINGS_VERSION).toBe(24);
+    expect(loaded.schemaVersion).toBe(24);
+    expect(loaded.workspaces).toEqual(before.workspaces);
   });
 });

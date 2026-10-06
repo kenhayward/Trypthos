@@ -186,4 +186,11 @@ describe("a Google Drive folder", () => {
     expect(sameWorkspaceRef(ref, { ...ref, name: "Renamed" })).toBe(true);
     expect(sameWorkspaceRef(ref, { ...ref, folderId: "1H60yEnI5d5" })).toBe(false);
   });
+
+  it("remembers My Drive's real id beside the alias, and is still one workspace", () => {
+    const pinned = { kind: "google-drive" as const, folderId: "root", rootId: "0ARealRootId", name: "My Drive" };
+    expect(WorkspaceRefSchema.parse(pinned)).toEqual(pinned);
+    expect(WorkspaceRefSchema.safeParse({ ...pinned, rootId: "a' or 'b" }).success).toBe(false);
+    expect(sameWorkspaceRef(pinned, { kind: "google-drive", folderId: "root", name: "My Drive" })).toBe(true);
+  });
 });

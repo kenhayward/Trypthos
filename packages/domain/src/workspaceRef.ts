@@ -54,6 +54,10 @@ export const GoogleDriveWorkspaceRefSchema = z
     folderId: DriveIdSchema,
     /// The Shared Drive the folder lives in, or absent for My Drive.
     driveId: DriveIdSchema.optional(),
+    /// My Drive's real id, when `folderId` is the alias "root". Filled the first time it opens, so a
+    /// later open under a different Google account is refused rather than showing that account's
+    /// Drive under the same row.
+    rootId: DriveIdSchema.optional(),
     /// What the folder was called when it was chosen. Display only - a rename in Drive makes it
     /// stale, and the shell reads the real name when the folder opens.
     name: z.string().min(1),
