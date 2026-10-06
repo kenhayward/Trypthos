@@ -117,6 +117,9 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
     });
   };
 
+  // A crumb you can go back to reads as a link: the accent, underlined, a pointer, and a focus ring.
+  const crumbLinkClass =
+    "cursor-pointer rounded px-1 text-accent underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
   const rowClass = "flex w-full items-center gap-2 truncate px-2 py-1 text-left text-ui text-ink hover:bg-hover";
 
   return (
@@ -141,26 +144,75 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
           <GoogleAccountSection bridge={bridge} onConnected={() => setReloads((count) => count + 1)} />
         ) : (
           <>
-            <nav className="mt-3 flex flex-wrap items-center gap-1 text-xs text-ink-3">
-              <button type="button" className="rounded px-1 hover:bg-hover" onClick={() => setTrail([])}>
-                {t("drive.root")}
-              </button>
-              {trail.map((place, index) => (
-                <span key={`${place.kind}:${place.id ?? ""}`} className="flex items-center gap-1">
-                  <span aria-hidden="true">/</span>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 rounded px-1 hover:bg-hover"
-                    onClick={() => setTrail((previous) => previous.slice(0, index + 1))}
-                  >
+            <nav aria-label={t("drive.root")} className="mt-3 flex flex-wrap items-center gap-1 text-xs text-ink-3">
+              {here === null ? (
+                <span aria-current="page" className="px-1">
+                  {t("drive.root")}
+                </span>
+              ) : (
+                <button type="button" className={crumbLinkClass} onClick={() => setTrail([])}>
+                  {t("drive.root")}
+                </button>
+              )}
+              {trail.map((place, index) => {
+                const current = index === trail.length - 1;
+                const content = (
+                  <>
                     {index === 0 && <DriveGlyph kind={glyphKindOf(place)} className="size-3.5 text-drive" />}
                     {place.name}
-                  </button>
-                </span>
-              ))}
+                  </>
+                );
+                return (
+                  <span key={`${place.kind}:${place.id ?? ""}`} className="flex items-center gap-1">
+                    <span aria-hidden="true">/</span>
+                    {current ? (
+                      <span aria-current="page" className="flex items-center gap-1 px-1">
+                        {content}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 ${crumbLinkClass}`}
+                        onClick={() => setTrail((previous) => previous.slice(0, index + 1))}
+                      >
+                        {content}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
             </nav>
 
             <div className="mt-2 h-[32rem] max-h-[70vh] overflow-y-auto rounded border border-rule">
+              {here === null && (
+                <ul>
+                  <li>
+                    <button
+                      type="button"
+                      className={rowClass}
+                      onClick={() => enter({ kind: "my-drive", id: "root", name: t("drive.myDrive"), driveId: null, shared: false })}
+                    >
+                      <DriveGlyph kind="my-drive" className="size-4 shrink-0 text-drive" />
+                      {t("drive.myDrive")}
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      className={rowClass}
+                      onClick={() =>
+                        enter({ kind: "shared-with-me", id: null, name: t("drive.sharedWithMe"), driveId: null, shared: true })
+                      }
+                    >
+                      <DriveGlyph kind="shared-with-me" className="size-4 shrink-0 text-drive" />
+                      {t("drive.sharedWithMe")}
+                    </button>
+                  </li>
+                </ul>
+              )}
+              {here === null && listing.state === "loaded" && listing.folders.length > 0 && (
+                <h3 className="px-2 pt-2 text-xs font-medium text-ink-4">{t("drive.sharedDrives")}</h3>
+              )}
               {listing.state === "loading" && (
                 <p className="flex items-center gap-2 p-2 text-xs text-ink-3">
                   <Spinner label={t("drive.loading")} />
@@ -174,37 +226,6 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
               )}
               {listing.state === "loaded" && (
                 <>
-                  {here === null && (
-                    <ul>
-                      <li>
-                        <button
-                          type="button"
-                          className={rowClass}
-                          onClick={() =>
-                            enter({ kind: "my-drive", id: "root", name: t("drive.myDrive"), driveId: null, shared: false })
-                          }
-                        >
-                          <DriveGlyph kind="my-drive" className="size-4 shrink-0 text-drive" />
-                          {t("drive.myDrive")}
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className={rowClass}
-                          onClick={() =>
-                            enter({ kind: "shared-with-me", id: null, name: t("drive.sharedWithMe"), driveId: null, shared: true })
-                          }
-                        >
-                          <DriveGlyph kind="shared-with-me" className="size-4 shrink-0 text-drive" />
-                          {t("drive.sharedWithMe")}
-                        </button>
-                      </li>
-                    </ul>
-                  )}
-                  {here === null && listing.folders.length > 0 && (
-                    <h3 className="px-2 pt-2 text-xs font-medium text-ink-4">{t("drive.sharedDrives")}</h3>
-                  )}
                   <ul>
                     {listing.folders.map((folder) => {
                       const shared = folder.shared || underShared;
