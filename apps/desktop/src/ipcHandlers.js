@@ -1,6 +1,8 @@
 "use strict";
 
 const path = require("node:path");
+const { createReadStream } = require("node:fs");
+const { Readable } = require("node:stream");
 const { randomUUID } = require("node:crypto");
 const {
   CHAT_EVENT_CHANNEL,
@@ -1212,19 +1214,44 @@ function registerIpcHandlers({
 /// The same registry and the same guard as every IPC handler, which is the entire point: the
 /// protocol is a second way to reach a file and must not be a second set of rules.
 ///
-/// A provider with no `locateFile` - GitHub - answers "unsupported" here, and that absence is the
-/// one place playback is decided to be local-only. A repository's blobs arrive base64 over an API
-/// with no range support, so there is nothing to stream from one.
+/// Answers a **byte source** - `{ ok: true, size, open(start, end) }`, `end` inclusive, `open`
+/// answering `{ ok: true, body }` or `{ ok: false, reason }` - so the protocol does not care whether
+/// the bytes are on disk or in a cloud drive. A provider says how it can stream in one of two ways:
+/// a `mediaSource` (Google Drive: ranged requests, the token held in the provider's client and never
+/// in what comes back), or a `locateFile` (the local folder: a path on disk, which is adapted here).
+///
+/// A provider with neither - GitHub - answers "unsupported", and that absence is the one place
+/// playback is decided to be unavailable for a provider. A repository's blobs arrive base64 over an
+/// API with no range support, so there is nothing to stream from one.
 async function locateMedia(qualifiedPath) {
   const attached = locateQualifiedPath(qualifiedPath);
   if (attached === null) return { ok: false, reason: "no-workspace" };
 
   const { workspace, path: relativePath } = attached;
-  if (typeof workspace.provider.locateFile !== "function") return { ok: false, reason: "unsupported" };
+  const { provider } = workspace;
+  if (typeof provider.mediaSource !== "function" && typeof provider.locateFile !== "function") {
+    return { ok: false, reason: "unsupported" };
+  }
   // A qualified path naming only a workspace has no file in it to serve.
   if (relativePath === "") return { ok: false, reason: "not-found" };
 
-  return workspace.provider.locateFile(relativePath);
+  if (typeof provider.mediaSource === "function") return provider.mediaSource(relativePath);
+
+  const located = await provider.locateFile(relativePath);
+  if (!located.ok) return located;
+  return {
+    ok: true,
+    size: located.size,
+    open: async (start, end) => ({ ok: true, body: streamOf(located.path, start, end) }),
+  };
+}
+
+/// A byte range of a file on disk, as a web stream the protocol's Response can take. A stream and
+/// never a buffer, so memory stays flat whether the file is four megabytes or four gigabytes.
+/// `createReadStream` takes an inclusive `end`, the convention the range parser answers in, so no
+/// arithmetic happens here. The protocol never opens an empty file, so `end >= start` always holds.
+function streamOf(file, start, end) {
+  return Readable.toWeb(createReadStream(file, { start, end }));
 }
 
 module.exports = {

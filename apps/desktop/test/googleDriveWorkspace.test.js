@@ -811,3 +811,96 @@ test("a folder that is not My Drive answers its reference unchanged", async () =
   });
   assert.deepEqual(shared.ref, SHARED_ROOT);
 });
+
+/// A Drive with a clip in it, answering ranges. `downloadRange` records what it was asked and hands
+/// back a stream, as the real client does.
+function mediaApi() {
+  const asked = [];
+  const listed = [];
+  const FILES = {
+    rootAAA: [
+      { id: "dirBBB", name: "Archive", mimeType: FOLDER },
+      { id: "vidHHH", name: "clip.mp4", mimeType: "video/mp4", size: "2000" },
+      { id: "nosIII", name: "unsized.mp4", mimeType: "video/mp4" },
+      { id: "docDDD", name: "Meeting", mimeType: DOC, modifiedTime: "2026-10-01T00:00:00Z" },
+    ],
+    dirBBB: [{ id: "audJJJ", name: "song.mp3", mimeType: "audio/mpeg", size: "300" }],
+  };
+  const overrides = {
+    listChildren: async (id) => (listed.push(id), FILES[id] === undefined ? { ok: false, reason: "not-found" } : { ok: true, files: [...FILES[id]] }),
+    downloadRange: async (id, start, end) => {
+      asked.push([id, start, end]);
+      return { ok: true, status: 206, body: new Blob(["bytes"]).stream() };
+    },
+  };
+  return { overrides, asked, listed };
+}
+
+test("mediaSource answers the listed size, with no metadata request and no download", async () => {
+  const { overrides, asked } = mediaApi();
+  const { provider, calls } = await open(overrides);
+  await provider.list("");
+  calls.meta.length = 0;
+
+  const found = await provider.mediaSource("clip.mp4");
+  assert.equal(found.ok, true);
+  assert.equal(found.size, 2000);
+  assert.equal(typeof found.open, "function");
+  assert.deepEqual(calls.meta, []);
+  assert.deepEqual(calls.download, []);
+  assert.deepEqual(asked, []);
+});
+
+test("mediaSource's open asks Drive for exactly that inclusive range and answers its body", async () => {
+  const { overrides, asked } = mediaApi();
+  const { provider } = await open(overrides);
+  const found = await provider.mediaSource("clip.mp4");
+
+  const opened = await found.open(10, 19);
+  assert.equal(opened.ok, true);
+  assert.deepEqual(asked, [["vidHHH", 10, 19]]);
+  assert.equal(await new Response(opened.body).text(), "bytes");
+});
+
+test("mediaSource's open passes on a failure from Drive as its reason", async () => {
+  const { overrides } = mediaApi();
+  const { provider } = await open({ ...overrides, downloadRange: async () => ({ ok: false, reason: "unsatisfiable" }) });
+  const found = await provider.mediaSource("clip.mp4");
+  assert.deepEqual(await found.open(5000, 5001), { ok: false, reason: "unsatisfiable" });
+});
+
+test("mediaSource refuses a path outside the workspace before Drive is asked", async () => {
+  const { overrides, asked, listed } = mediaApi();
+  const { provider, calls } = await open(overrides);
+  // Opening asked Drive about the folder itself; what must stay quiet is everything after.
+  calls.meta.length = 0;
+  for (const bad of ["../clip.mp4", "Archive/../../clip.mp4", "", "/etc/clip.mp4"]) {
+    const found = await provider.mediaSource(bad);
+    assert.equal(found.ok, false, bad);
+    assert.equal(found.reason, "permission-denied", bad);
+  }
+  assert.deepEqual(listed, []);
+  assert.deepEqual(calls.meta, []);
+  assert.deepEqual(asked, []);
+});
+
+test("mediaSource answers not-found for a folder, a Google Doc, an unknown path and an unsized file", async () => {
+  const { overrides } = mediaApi();
+  const { provider } = await open(overrides);
+  for (const missing of ["Archive", "Meeting.md", "nothing.mp4", "unsized.mp4"]) {
+    assert.deepEqual(await provider.mediaSource(missing), { ok: false, reason: "not-found" }, missing);
+  }
+});
+
+test("mediaSource finds a file nobody has listed by the same walk read uses", async () => {
+  const { overrides, asked, listed } = mediaApi();
+  const { provider } = await open(overrides);
+
+  const found = await provider.mediaSource("Archive/song.mp3");
+  assert.equal(found.ok, true);
+  assert.equal(found.size, 300);
+  assert.deepEqual(listed, ["rootAAA", "dirBBB"]);
+
+  await found.open(0, 299);
+  assert.deepEqual(asked, [["audJJJ", 0, 299]]);
+});

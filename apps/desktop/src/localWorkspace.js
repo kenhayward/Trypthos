@@ -229,7 +229,8 @@ function createLocalWorkspace({ root, guard }) {
     /// two answers about a file that can change in between.
     ///
     /// Deliberately absent from the GitHub provider: a repository's blobs arrive base64 over an API
-    /// with no ranges, so playback is local-only and this absence is the one place that says so.
+    /// with no ranges, so playback is unavailable there and this absence (with no `mediaSource`
+    /// either) is the one place that says so. Google Drive streams through its own `mediaSource`.
     async locateFile(relativePath) {
       const resolved = await resolve(relativePath, { mustExist: true });
       if (!resolved.ok) return resolved;

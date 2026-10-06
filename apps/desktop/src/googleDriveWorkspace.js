@@ -302,6 +302,29 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
       return bytesOf(found.entry, limitBytes);
     },
 
+    /// A file as a source of byte ranges, for the protocol that streams video and audio.
+    ///
+    /// The size is the LISTING's, so answering costs no request beyond the walk `read` already does:
+    /// the player asks for ranges in quick succession and each one must not start with a metadata call.
+    /// A file with no listed size - a Google Doc, or anything Drive did not size - cannot be ranged, so
+    /// it is `not-found` rather than a stream of unknown length. The token stays in the api; what leaves
+    /// here is a body.
+    async mediaSource(candidate) {
+      const found = await fileAt(candidate);
+      if (!found.ok) return found;
+      const entry = found.entry;
+      if (entry.googleDoc || entry.sizeBytes === null) return failure("not-found");
+
+      return {
+        ok: true,
+        size: entry.sizeBytes,
+        open: async (start, end) => {
+          const ranged = await api.downloadRange(entry.fileId, start, end);
+          return ranged.ok ? { ok: true, body: ranged.body } : ranged;
+        },
+      };
+    },
+
     /// Check, write, confirm. Drive has no conditional write, so the check is a request of its own: a
     /// save landing between the check and the write is overwritten. That window is one request long,
     /// and Drive's version history keeps what it replaced.
