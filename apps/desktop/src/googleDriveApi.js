@@ -86,6 +86,39 @@ function createGoogleDriveApi({
     }
   }
 
+  /// Like `attempt`, but for a body that is meant to be streamed: the deadline covers the arrival of
+  /// the headers (and, for an error status, its small JSON body) and then stands down, so a long
+  /// playback is never cut off by it. A successful response is answered unread. Answers `{ response,
+  /// value }` (`value` is the parsed error body, `null` on success) or `null` when it did not complete.
+  async function attemptHeaders(url, token, headers) {
+    const controller = new AbortController();
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const error = Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
+        controller.abort(error);
+        reject(error);
+      }, timeoutMs);
+    });
+    const work = (async () => {
+      const response = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${token}`, ...headers },
+      });
+      const value = response.ok ? null : await response.json().catch(() => null);
+      return { response, value };
+    })();
+    try {
+      return await Promise.race([work, deadline]);
+    } catch (error) {
+      logger.error?.(`A request to Google Drive did not complete: ${codeOf(error)}`);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function tokenFrom(options) {
     try {
       return await accessToken(options);
@@ -169,6 +202,46 @@ function createGoogleDriveApi({
     return getBytes(driveMediaUrl(id));
   }
 
+  /// A byte range of a file, as the response's own stream and unread: the caller pulls it as a player
+  /// plays. `start` and `end` are inclusive offsets, `end` null for "to the end". Drive may answer 200
+  /// with the whole file, which is only usable when the range began at 0; anywhere else it would play
+  /// the wrong bytes, so it is refused and released.
+  async function downloadRange(id, start, end) {
+    if (!isDriveId(id)) return failure("not-found");
+    let token = await tokenFrom();
+    if (!token.ok) return token;
+    const range = `bytes=${start}-${end ?? ""}`;
+
+    let refreshed = false;
+    let waited = false;
+    for (;;) {
+      const got = await attemptHeaders(driveMediaUrl(id), token.token, { Range: range });
+      if (got === null) return failure("offline");
+      const { response } = got;
+      if (response.ok) {
+        if (response.status === 206 || (response.status === 200 && start === 0)) {
+          return { ok: true, status: response.status, body: response.body };
+        }
+        await response.body?.cancel().catch(() => {});
+        return failure("offline");
+      }
+
+      const reason = response.status === 416 ? "unsatisfiable" : driveErrorFor(response.status, got.value);
+      if (reason === "not-connected" && !refreshed) {
+        refreshed = true;
+        token = await tokenFrom({ force: true });
+        if (!token.ok) return token;
+        continue;
+      }
+      if (reason === "rate-limited" && !waited) {
+        waited = true;
+        await sleep(RETRY_DELAY_MS + Math.floor(random() * RETRY_DELAY_MS));
+        continue;
+      }
+      return failure(reason);
+    }
+  }
+
   async function exportMarkdown(id) {
     if (!isDriveId(id)) return failure("not-found");
     return getBytes(exportUrl(id));
@@ -231,7 +304,7 @@ function createGoogleDriveApi({
     return answer.ok ? { ok: true, file: answer.value } : answer;
   }
 
-  return { uploadContent, createFile, listChildren, fileMeta, download, exportMarkdown, sharedDrive, sharedDrives, sharedWithMeFolders };
+  return { uploadContent, createFile, listChildren, fileMeta, download, downloadRange, exportMarkdown, sharedDrive, sharedDrives, sharedWithMeFolders };
 }
 
 module.exports = { createGoogleDriveApi };
