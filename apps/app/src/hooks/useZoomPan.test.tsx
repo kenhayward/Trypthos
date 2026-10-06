@@ -43,20 +43,44 @@ const mouse = (target: EventTarget, type: string, init: MouseEventInit) =>
   target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, ...init }));
 
 describe("useZoomPan: the wheel", () => {
-  it("zooms when the wheel turns with Shift held", () => {
+  it("zooms when the wheel turns with Ctrl held", () => {
     const onZoom = vi.fn();
     render(<Surface onZoom={onZoom} />);
 
-    wheel(host(), { shiftKey: true, deltaY: -120 });
+    wheel(host(), { ctrlKey: true, deltaY: -120 });
     expect(onZoom).toHaveBeenCalledWith("in");
 
-    wheel(host(), { shiftKey: true, deltaY: 120 });
+    wheel(host(), { ctrlKey: true, deltaY: 120 });
     expect(onZoom).toHaveBeenLastCalledWith("out");
   });
 
-  // A shifted wheel arrives on the horizontal axis, which is also what the browser would scroll
-  // sideways with. Both halves matter: the zoom happens, and the sideways scroll does not.
-  it("takes the shifted wheel away from the browser", () => {
+  it("zooms when the wheel turns with Cmd held", () => {
+    const onZoom = vi.fn();
+    render(<Surface onZoom={onZoom} />);
+
+    wheel(host(), { metaKey: true, deltaY: -100 });
+    expect(onZoom).toHaveBeenCalledWith("in");
+  });
+
+  // Both halves matter: the zoom happens, and the browser's own page zoom does not.
+  it("takes the zoom wheel away from the browser", () => {
+    const onZoom = vi.fn();
+    render(<Surface onZoom={onZoom} />);
+
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      deltaY: -120,
+    });
+    host().dispatchEvent(event);
+
+    expect(onZoom).toHaveBeenCalledWith("in");
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  // Shift is sideways scrolling again.
+  it("leaves a shifted wheel to scroll sideways", () => {
     const onZoom = vi.fn();
     render(<Surface onZoom={onZoom} />);
 
@@ -68,8 +92,36 @@ describe("useZoomPan: the wheel", () => {
     });
     host().dispatchEvent(event);
 
+    expect(onZoom).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  // A mouse notch is 100 px in Chromium: one click is one rung, not two.
+  it("steps one rung for one 100 px notch", () => {
+    const onZoom = vi.fn();
+    render(<Surface onZoom={onZoom} />);
+
+    wheel(host(), { ctrlKey: true, deltaY: -100 });
+    expect(onZoom).toHaveBeenCalledTimes(1);
+  });
+
+  // A pinch is a stream of tiny deltas, which must not step a rung each.
+  it("steps one rung for ten small pinch deltas", () => {
+    const onZoom = vi.fn();
+    render(<Surface onZoom={onZoom} />);
+
+    for (let event = 0; event < 10; event += 1) wheel(host(), { ctrlKey: true, deltaY: -5 });
+    expect(onZoom).toHaveBeenCalledTimes(1);
     expect(onZoom).toHaveBeenCalledWith("in");
-    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("starts the count again when the direction flips", () => {
+    const onZoom = vi.fn();
+    render(<Surface onZoom={onZoom} />);
+
+    for (let event = 0; event < 9; event += 1) wheel(host(), { ctrlKey: true, deltaY: -5 });
+    for (let event = 0; event < 9; event += 1) wheel(host(), { ctrlKey: true, deltaY: 5 });
+    expect(onZoom).not.toHaveBeenCalled();
   });
 
   it("leaves an ordinary wheel alone", () => {
@@ -91,7 +143,7 @@ describe("useZoomPan: the wheel", () => {
     const surface = host();
     unmount();
 
-    wheel(surface, { shiftKey: true, deltaY: -120 });
+    wheel(surface, { ctrlKey: true, deltaY: -120 });
     expect(onZoom).not.toHaveBeenCalled();
   });
 });

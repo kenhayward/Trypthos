@@ -797,9 +797,8 @@ describe("EditorPanel: zoom", () => {
           new WheelEvent("wheel", {
             bubbles: true,
             cancelable: true,
-            shiftKey: true,
-            // A shifted wheel arrives on the horizontal axis, which is how the browser reports it.
-            deltaX: direction === "in" ? -120 : 120,
+            ctrlKey: true,
+            deltaY: direction === "in" ? -120 : 120,
           }),
         );
       }
@@ -819,7 +818,7 @@ describe("EditorPanel: zoom", () => {
     expect(level(surface())).toBe("1");
   });
 
-  it("grows the text when the wheel turns forwards with Shift held", () => {
+  it("grows the text when the wheel turns forwards with Ctrl held", () => {
     render(<Harness />);
 
     spin(surface(), 1, "in");
@@ -836,7 +835,7 @@ describe("EditorPanel: zoom", () => {
     expect(level(surface())).toBe("1");
   });
 
-  it("leaves an unshifted wheel to scroll", () => {
+  it("leaves a plain wheel to scroll", () => {
     render(<Harness />);
 
     act(() =>
@@ -845,6 +844,46 @@ describe("EditorPanel: zoom", () => {
       ),
     );
     expect(level(surface())).toBe("1");
+  });
+
+  // Shift is sideways scrolling again, not zoom.
+  it("leaves a shifted wheel to scroll sideways", () => {
+    render(<Harness />);
+
+    act(() =>
+      void surface().dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, shiftKey: true, deltaX: -120 }),
+      ),
+    );
+    expect(level(surface())).toBe("1");
+  });
+
+  // A pinch is a stream of small ctrl-wheel deltas: one rung, not one per event.
+  it("steps one rung for ten small pinch deltas", () => {
+    render(<Harness />);
+
+    act(() => {
+      for (let turn = 0; turn < 10; turn += 1) {
+        surface().dispatchEvent(
+          new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -5 }),
+        );
+      }
+    });
+    expect(level(surface())).toBe("1.1");
+  });
+
+  // Ctrl+1 is for pictures; text has no "actual size" distinct from its own, so it must neither
+  // change the level nor swallow the key.
+  it("ignores Ctrl+1 for text, and leaves the key alone", () => {
+    render(<Harness />);
+
+    spin(surface(), 2, "in");
+    const zoomed = level(surface());
+
+    const press = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "1", ctrlKey: true });
+    act(() => void window.dispatchEvent(press));
+    expect(level(surface())).toBe(zoomed);
+    expect(press.defaultPrevented).toBe(false);
   });
 
   // A view, not a transform: switching mode must not disturb the document OR how the reader had it
@@ -940,7 +979,7 @@ describe("EditorPanel: zooming an image", () => {
 
     act(() =>
       void picture.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, shiftKey: true, deltaX: -120 }),
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -120 }),
       ),
     );
     expect(Number(picture.style.getPropertyValue("--tp-zoom"))).toBeGreaterThan(1);

@@ -6,8 +6,10 @@ import {
   ZOOM_LEVELS,
   nextZoom,
   panScroll,
-  wheelZoomDirection,
+  stepWheelTravel,
+  wheelZoomTravel,
   zoomKeyCommand,
+  type WheelGesture,
   type ZoomKeyPress,
 } from "./zoom";
 
@@ -59,25 +61,69 @@ describe("nextZoom", () => {
   });
 });
 
-describe("wheelZoomDirection", () => {
-  it("ignores a wheel with no shift held", () => {
-    expect(wheelZoomDirection({ shiftKey: false, deltaX: 0, deltaY: -120 })).toBeNull();
+describe("wheelZoomTravel", () => {
+  const wheel = (init: Partial<WheelGesture> = {}): WheelGesture => ({
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    deltaX: 0,
+    deltaY: 0,
+    deltaMode: 0,
+    ...init,
   });
 
-  it("reads a wheel forwards as zooming in", () => {
-    expect(wheelZoomDirection({ shiftKey: true, deltaX: 0, deltaY: -120 })).toBe("in");
-    expect(wheelZoomDirection({ shiftKey: true, deltaX: 0, deltaY: 120 })).toBe("out");
+  // A pinch on a trackpad arrives as a wheel with ctrlKey set, on macOS and on Windows alike.
+  it("reads Ctrl and the wheel as zoom travel, forwards being negative", () => {
+    expect(wheelZoomTravel(wheel({ ctrlKey: true, deltaY: -120 }))).toBe(-120);
+    expect(wheelZoomTravel(wheel({ ctrlKey: true, deltaY: 120 }))).toBe(120);
   });
 
-  // The one that is easy to miss: holding Shift makes the browser report a vertical wheel on the
-  // HORIZONTAL axis, so a handler reading deltaY alone sees zero on every notch and never zooms.
-  it("reads the horizontal axis, which is where a shifted wheel arrives", () => {
-    expect(wheelZoomDirection({ shiftKey: true, deltaX: -120, deltaY: 0 })).toBe("in");
-    expect(wheelZoomDirection({ shiftKey: true, deltaX: 120, deltaY: 0 })).toBe("out");
+  it("reads Cmd and the wheel as zoom travel", () => {
+    expect(wheelZoomTravel(wheel({ metaKey: true, deltaY: -100 }))).toBe(-100);
   });
 
-  it("ignores a wheel that went nowhere", () => {
-    expect(wheelZoomDirection({ shiftKey: true, deltaX: 0, deltaY: 0 })).toBeNull();
+  // Shift goes back to scrolling sideways.
+  it("leaves Shift alone, and a plain wheel", () => {
+    expect(wheelZoomTravel(wheel({ shiftKey: true, deltaX: -120 }))).toBeNull();
+    expect(wheelZoomTravel(wheel({ shiftKey: true, deltaY: -120 }))).toBeNull();
+    expect(wheelZoomTravel(wheel({ deltaY: -120 }))).toBeNull();
+  });
+
+  it("ignores a zoom wheel that went nowhere", () => {
+    expect(wheelZoomTravel(wheel({ ctrlKey: true }))).toBeNull();
+  });
+
+  it("converts lines at 40 px and pages at 800 px", () => {
+    expect(wheelZoomTravel(wheel({ ctrlKey: true, deltaY: -3, deltaMode: 1 }))).toBe(-120);
+    expect(wheelZoomTravel(wheel({ ctrlKey: true, deltaY: 1, deltaMode: 2 }))).toBe(800);
+  });
+});
+
+describe("stepWheelTravel", () => {
+  // A Chromium mouse notch is 100 px, so a step per 50 px would jump two rungs per click.
+  it("steps one rung for one event of 50 px or more, and clears what was pending", () => {
+    expect(stepWheelTravel(20, 100)).toEqual({ pending: 0, direction: "out" });
+    expect(stepWheelTravel(0, -100)).toEqual({ pending: 0, direction: "in" });
+    expect(stepWheelTravel(0, -50)).toEqual({ pending: 0, direction: "in" });
+  });
+
+  it("accumulates small deltas and steps when they reach 50 px, keeping the remainder", () => {
+    let pending = 0;
+    const steps: (string | null)[] = [];
+    for (let event = 0; event < 10; event += 1) {
+      const result = stepWheelTravel(pending, -5);
+      pending = result.pending;
+      steps.push(result.direction);
+    }
+    expect(steps.filter((step) => step === "in")).toHaveLength(1);
+    expect(steps[9]).toBe("in");
+    expect(pending).toBe(0);
+
+    expect(stepWheelTravel(-45, -8)).toEqual({ pending: -3, direction: "in" });
+  });
+
+  it("starts again when the direction flips", () => {
+    expect(stepWheelTravel(-40, 5)).toEqual({ pending: 5, direction: null });
   });
 });
 
@@ -118,6 +164,14 @@ describe("zoomKeyCommand", () => {
     expect(zoomKeyCommand(press("=", { ctrlKey: true }), "win32")).toBe("in");
     expect(zoomKeyCommand(press("-", { ctrlKey: true }), "win32")).toBe("out");
     expect(zoomKeyCommand(press("0", { ctrlKey: true }), "linux")).toBe("reset");
+  });
+
+  it("reads Ctrl+1 (Cmd+1 on macOS) as actual size, under the same modifier rules", () => {
+    expect(zoomKeyCommand(press("1", { ctrlKey: true }), "win32")).toBe("actual");
+    expect(zoomKeyCommand(press("1", { metaKey: true }), "darwin")).toBe("actual");
+    expect(zoomKeyCommand(press("1", { ctrlKey: true }), "darwin")).toBeNull();
+    expect(zoomKeyCommand(press("1", { ctrlKey: true, altKey: true }), "win32")).toBeNull();
+    expect(zoomKeyCommand(press("1"), "win32")).toBeNull();
   });
 
   // Ctrl and the plus key is Ctrl+Shift+= on a US layout and its own key on a numeric pad, so the

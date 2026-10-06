@@ -34,28 +34,72 @@ export function nextZoom(current: number, direction: ZoomDirection): number {
 }
 
 export interface WheelGesture {
+  ctrlKey: boolean;
+  metaKey: boolean;
   shiftKey: boolean;
   deltaX: number;
   deltaY: number;
+  /// 0 pixels, 1 lines, 2 pages - the DOM's `WheelEvent.deltaMode`.
+  deltaMode: number;
 }
 
-/// Which way a wheel notch means to zoom, or null when it is an ordinary scroll.
+/// What a line and a page of wheel travel are worth in pixels, so a mouse that reports lines (Firefox
+/// does, and so does a Windows setting) lands on the same scale as one that reports pixels.
+const PIXELS_PER_LINE = 40;
+const PIXELS_PER_PAGE = 800;
+
+/// Pixels of zoom travel in a wheel event - negative is in - or null when it is not a zoom gesture.
 ///
-/// Both axes are read, and that is the whole point of the function. Holding Shift makes the browser
-/// report a vertical wheel as HORIZONTAL travel, so `deltaY` is zero on exactly the gesture this
-/// feature is bound to - a handler reading it alone never fires, and does so silently.
-export function wheelZoomDirection({ shiftKey, deltaX, deltaY }: WheelGesture): ZoomDirection | null {
-  if (!shiftKey) return null;
-  const travel = deltaY !== 0 ? deltaY : deltaX;
-  if (travel === 0) return null;
-  // Away from the user is negative on both axes, and means closer.
-  return travel < 0 ? "in" : "out";
+/// Ctrl or Cmd with the wheel, which is what a browser and VS Code do. A trackpad pinch needs no
+/// case of its own: Chromium reports it as a wheel event with `ctrlKey` set, on macOS and on
+/// Windows alike, so reading Ctrl is how a pinch is read. Shift is NOT a zoom modifier - it is
+/// sideways scrolling, and the browser is left to do that.
+export function wheelZoomTravel(event: WheelGesture): number | null {
+  if (!event.ctrlKey && !event.metaKey) return null;
+  // Ctrl+Shift can move a vertical wheel onto the horizontal axis, so fall back to it rather than
+  // reading a zero.
+  const raw = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+  if (raw === 0) return null;
+  if (event.deltaMode === 1) return raw * PIXELS_PER_LINE;
+  if (event.deltaMode === 2) return raw * PIXELS_PER_PAGE;
+  return raw;
+}
+
+/// Travel that makes one rung, and the size of one Chromium mouse notch is twice this.
+const PIXELS_PER_STEP = 50;
+
+/// Folds one event's travel into what is pending, and says whether that is a rung.
+///
+/// Two regimes, because the two devices differ by an order of magnitude. A mouse notch is one event
+/// of 100 px: stepping per 50 px of ACCUMULATED travel would make one click jump two rungs, so an
+/// event that is a step by itself steps exactly one and clears what was pending. A pinch is dozens
+/// of events of a few px each: those accumulate, and every time they reach 50 px they step once and
+/// keep the remainder. Flipping direction discards the pending travel, so a pinch that reverses does
+/// not start already halfway to a step the other way.
+export function stepWheelTravel(
+  pending: number,
+  travel: number,
+): { pending: number; direction: ZoomDirection | null } {
+  const heldBack = Math.sign(pending) === Math.sign(travel) ? pending : 0;
+  // Away from the user is negative, and means closer.
+  const toward = (amount: number): ZoomDirection => (amount < 0 ? "in" : "out");
+
+  if (Math.abs(travel) >= PIXELS_PER_STEP) return { pending: 0, direction: toward(travel) };
+
+  const total = heldBack + travel;
+  if (Math.abs(total) >= PIXELS_PER_STEP) {
+    return { pending: total - Math.sign(total) * PIXELS_PER_STEP, direction: toward(total) };
+  }
+  return { pending: total, direction: null };
 }
 
 /// What a zoom shortcut asks for. `reset` is the one the gestures cannot express: the wheel walks
 /// the ladder, and getting back to 100% by turning it is only reliable BECAUSE 1 is a rung - a key
 /// says it in one press from anywhere on the ladder.
-export type ZoomCommand = ZoomDirection | "reset";
+///
+/// `actual` is Ctrl/Cmd+1: a picture's own pixels, which for a picture is not the same as its
+/// fitted size. Text has no such distinction, so a text surface ignores it.
+export type ZoomCommand = ZoomDirection | "reset" | "actual";
 
 export interface ZoomKeyPress {
   key: string;
@@ -86,6 +130,7 @@ export function zoomKeyCommand(
   if (press.key === "=" || press.key === "+") return "in";
   if (press.key === "-" || press.key === "_") return "out";
   if (press.key === "0") return "reset";
+  if (press.key === "1") return "actual";
   return null;
 }
 
