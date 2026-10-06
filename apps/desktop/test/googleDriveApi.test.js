@@ -28,7 +28,7 @@ function answer(status, body, { bytes = null } = {}) {
   };
 }
 
-function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }], timeoutMs, accessToken } = {}) {
+function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }], timeoutMs, accessToken, boundary } = {}) {
   const calls = [];
   const tokenCalls = [];
   const logs = [];
@@ -36,6 +36,7 @@ function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }], timeoutMs,
   let tokenIndex = 0;
   const api = createGoogleDriveApi({
     timeoutMs,
+    boundary,
     accessToken: accessToken ?? (async (options = {}) => {
       tokenCalls.push(options);
       const next = tokens[Math.min(tokenIndex, tokens.length - 1)];
@@ -43,7 +44,7 @@ function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }], timeoutMs,
       return next;
     }),
     fetch: async (url, init) => {
-      calls.push({ url, authorization: init.headers.Authorization });
+      calls.push({ url, authorization: init.headers.Authorization, method: init.method, headers: init.headers, body: init.body });
       const route = routes.shift();
       if (route === undefined) throw new Error(`no route for call ${calls.length}`);
       return typeof route === "function" ? route(url) : route;
@@ -264,4 +265,58 @@ test("a token supplier that throws on the forced refresh is not connected", asyn
     logger: { error: () => {} },
   });
   assert.deepEqual(await api.listChildren(FOLDER), { ok: false, reason: "not-connected" });
+});
+
+test("uploads new content to a file with PATCH, its type, and the bytes", async () => {
+  const { api, calls } = setup({ routes: [answer(200, { id: "f1", name: "a.md", mimeType: "text/markdown", headRevisionId: "r2" })] });
+  const bytes = new TextEncoder().encode("# Hi");
+
+  const uploaded = await api.uploadContent("f1", bytes, "text/markdown");
+  assert.deepEqual(uploaded, { ok: true, file: { id: "f1", name: "a.md", mimeType: "text/markdown", headRevisionId: "r2" } });
+  assert.equal(calls[0].method, "PATCH");
+  assert.equal(calls[0].headers["Content-Type"], "text/markdown");
+  assert.equal(calls[0].headers.Authorization, `Bearer ${ACCESS}`);
+  assert.equal(new URL(calls[0].url).searchParams.get("uploadType"), "media");
+  assert.deepEqual([...calls[0].body], [...bytes]);
+});
+
+test("creates a file with one multipart POST into its folder", async () => {
+  const { api, calls } = setup({
+    routes: [answer(200, { id: "n1", name: "new.md", mimeType: "text/markdown", headRevisionId: "r1" })],
+    boundary: () => "B0UND",
+  });
+
+  const created = await api.createFile("folderAAA111", "new.md", new TextEncoder().encode("x"), "text/markdown");
+  assert.equal(created.ok, true);
+  assert.equal(created.file.id, "n1");
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].headers["Content-Type"], "multipart/related; boundary=trypthos-B0UND");
+  const body = new TextDecoder().decode(calls[0].body);
+  assert.match(body, /"name":"new\.md"/);
+  assert.match(body, /"parents":\["folderAAA111"\]/);
+});
+
+test("refuses a write to an id that is not a Drive id, without a request", async () => {
+  const { api, calls } = setup();
+  assert.deepEqual(await api.uploadContent("a' or 'b", new Uint8Array(), "text/plain"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await api.createFile("../x", "a.md", new Uint8Array(), "text/plain"), { ok: false, reason: "not-found" });
+  assert.equal(calls.length, 0);
+});
+
+// 401 and 429 mean Drive did not process the request, so the write is repeated once.
+test("a write is repeated after an expired token, with the same body", async () => {
+  const { api, calls } = setup({
+    tokens: [{ ok: true, token: "stale" }, { ok: true, token: ACCESS }],
+    routes: [answer(401, {}), answer(200, { id: "f1", name: "a.md", mimeType: "text/plain", headRevisionId: "r2" })],
+  });
+  assert.equal((await api.uploadContent("f1", new TextEncoder().encode("x"), "text/plain")).ok, true);
+  assert.equal(calls.length, 2);
+  assert.deepEqual([...calls[1].body], [...new TextEncoder().encode("x")]);
+});
+
+// A timed-out write may have landed. It is not repeated; the next save's check reports what Drive has.
+test("a write that times out is not repeated, and answers offline", async () => {
+  const { api, calls } = setup({ routes: [() => new Promise(() => {})], timeoutMs: 20 });
+  assert.deepEqual(await api.uploadContent("f1", new Uint8Array([1]), "text/plain"), { ok: false, reason: "offline" });
+  assert.equal(calls.length, 1);
 });
