@@ -343,7 +343,7 @@ export function failureKey(reason: string): string | null {
 /// Null `kind` is a failure with no workspace to name.
 ///
 /// `during` says what was being attempted where the same reason means different things. A Drive
-/// "unknown" on a save is specific - the content landed but Drive did not say as what - and must
+/// "unknown" on a save is specific - Drive did not confirm the save - and must
 /// not be the wording for a read or a sign-in that failed for an unknown reason.
 export function providerFailureKey(
   kind: ProviderKind | null,
@@ -357,10 +357,9 @@ export function providerFailureKey(
         break;
       case "other-account":
         return "errors.driveOtherAccount";
-      // A new file name Drive's tree would show differently - the file would land somewhere other
-      // than the path asked for, so the shell refuses and the user is told to pick another name.
-      case "bad-request":
-        return "errors.driveBadName";
+      // The shared key is generic; Drive's says the file changed there and the text is still here.
+      case "conflict":
+        return "errors.driveConflict";
       case "offline":
         return "errors.googleOffline";
       case "rate-limited":

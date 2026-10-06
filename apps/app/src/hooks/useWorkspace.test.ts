@@ -230,7 +230,12 @@ describe("providerFailureKey", () => {
 
   it("names a Drive save's own refusals", () => {
     expect(providerFailureKey("google-drive", "other-account")).toBe("errors.driveOtherAccount");
-    expect(providerFailureKey("google-drive", "bad-request")).toBe("errors.driveBadName");
+    // Not a Drive-specific wording: it fires on every Drive failure path, and only one means a name.
+    expect(providerFailureKey("google-drive", "bad-request")).toBe(failureKey("bad-request"));
+    expect(providerFailureKey("google-drive", "bad-request", "save")).toBe(failureKey("bad-request"));
+    expect(providerFailureKey("google-drive", "conflict")).toBe("errors.driveConflict");
+    expect(providerFailureKey("github", "conflict")).toBe("errors.conflict");
+    expect(providerFailureKey(null, "conflict")).toBe("errors.conflict");
     expect(providerFailureKey("google-drive", "unknown", "save")).toBe("errors.driveSaveUnknown");
     // Only a save says the save was not confirmed; a read or a sign-in that fails unknown stays generic.
     expect(providerFailureKey("google-drive", "unknown")).toBe("errors.unknown");
@@ -329,7 +334,7 @@ describe("a Google Drive workspace", () => {
 
     expect(result.current.state.content).toBe("# Mine\n");
     expect(result.current.state.dirty).toBe(true);
-    expect(result.current.state.errorKey).toBe("errors.conflict");
+    expect(result.current.state.errorKey).toBe("errors.driveConflict");
     expect(result.current.state.file?.revision.id).toBe("h1");
   });
 

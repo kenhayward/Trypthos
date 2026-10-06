@@ -392,7 +392,7 @@
     "driveReadOnly": "Google Docs open read-only in Trypthos, so this one cannot be saved.",
     "driveOtherAccount": "This My Drive belongs to a different Google account from the one connected now. Connect that account, or open My Drive again.",
     "driveSaveUnknown": "Google Drive did not confirm the save. Reopen the file to see what Drive has before saving again.",
-    "driveBadName": "Google Drive would show that file name differently, so Trypthos did not create it. Choose another name.",
+    "driveConflict": "This file was changed in Google Drive since you opened it, so Trypthos did not overwrite it. Your text is still here - copy it somewhere, then reopen the file to see Drive's version.",
     "rateLimited": "GitHub has had as many requests as it allows for now. Trypthos will work again shortly - usually within the hour.",
     "offline": "Trypthos could not reach GitHub. Check your connection and try again.",
     "notConnected": "No GitHub account is connected. Connect one from the Accounts page of Settings.",
