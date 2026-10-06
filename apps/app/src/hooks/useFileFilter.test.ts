@@ -66,6 +66,7 @@ describe("useFileFilter", () => {
       kind: "results",
       paths: ["Notes/docs/plan.md"],
       truncated: false,
+      pending: false,
     });
   });
 
@@ -131,6 +132,7 @@ describe("useFileFilter", () => {
       kind: "results",
       paths: ["Notes/fast.md"],
       truncated: false,
+      pending: false,
     });
   });
 
@@ -151,7 +153,12 @@ describe("useFileFilter", () => {
     act(() => void vi.advanceTimersByTime(1000));
     await flush();
 
-    expect(result.current.status).toEqual({ kind: "results", paths: ["Notes/a.md"], truncated: false });
+    expect(result.current.status).toEqual({
+      kind: "results",
+      paths: ["Notes/a.md"],
+      truncated: false,
+      pending: true,
+    });
 
     await act(async () => {
       releaseWork?.({ ok: true, paths: ["Work/b.md"], truncated: false });
@@ -160,7 +167,32 @@ describe("useFileFilter", () => {
       kind: "results",
       paths: ["Notes/a.md", "Work/b.md"],
       truncated: false,
+      pending: false,
     });
+  });
+
+  // The panel reads this to keep saying "Searching..." rather than "No files match." while a slow
+  // folder is still being walked and a quick one has already answered with nothing.
+  it("is pending while any folder has yet to answer, and not once all have", async () => {
+    let releaseWork: ((result: FilterResult) => void) | undefined;
+    const where: FilterSurroundings = {
+      workspaces: [NOTES, WORK],
+      filterFiles: (request) =>
+        request.path === "Work"
+          ? new Promise<FilterResult>((resolve) => (releaseWork = resolve))
+          : Promise.resolve({ ok: true, paths: [], truncated: false }),
+    };
+    const { result } = run(where);
+
+    act(() => result.current.setFilter("a"));
+    act(() => void vi.advanceTimersByTime(1000));
+    await flush();
+    expect(result.current.status).toMatchObject({ kind: "results", paths: [], pending: true });
+
+    await act(async () => {
+      releaseWork?.({ ok: true, paths: [], truncated: false });
+    });
+    expect(result.current.status).toMatchObject({ kind: "results", paths: [], pending: false });
   });
 
   it("ignores a late answer from a superseded filter, per folder", async () => {
@@ -189,6 +221,7 @@ describe("useFileFilter", () => {
       kind: "results",
       paths: ["Notes/new.md", "Work/new.md"],
       truncated: false,
+      pending: false,
     });
   });
 
@@ -237,6 +270,7 @@ describe("useFileFilter", () => {
       kind: "results",
       paths: ["Notes/a.md", "Work/b.md"],
       truncated: true,
+      pending: false,
     });
   });
 
@@ -260,6 +294,7 @@ describe("useFileFilter", () => {
       paths: ["Notes/a.md"],
       truncated: false,
       partial: true,
+      pending: false,
     });
   });
 
@@ -283,6 +318,7 @@ describe("useFileFilter", () => {
       kind: "results",
       paths: ["Work/b.md"],
       truncated: false,
+      pending: false,
     });
   });
 

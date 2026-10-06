@@ -36,7 +36,7 @@ ground this design stands on; each is a fact about Google's API, not a guess.
 | Granular consent | **Checked.** A grant without the `drive` scope is refused with `scope-denied` and not stored | Google's consent screen lets a user untick Drive; a token that cannot read Drive must not read as "connected". |
 | OAuth client | **Shipped in the installer**, injected at build time from a CI secret; read from a local file in development | Google treats a Desktop client secret as non-confidential, but it still does not belong in a public repository. A build without it reports `not-configured` and offers no Google source. |
 | API client | **Hand-rolled over Electron `net.fetch`**, like `githubApi.js` | `googleapis` is very large and brings its own HTTP stack, which loses the proxy and certificate store `net.fetch` gives us. Five endpoints do not need a SDK. |
-| Workspace root | **Any folder in My Drive or a Shared Drive**, chosen in our own folder-picker dialog | Workspaces are folders everywhere else. "My Drive" whole and "Shared with me" are deferred. |
+| Workspace root | **Any folder in My Drive or a Shared Drive**, chosen in our own folder-picker dialog | Workspaces are folders everywhere else. My Drive whole, folders shared with you and shared drives are all openable (PR 2). |
 | Paths | **Name paths** (`Notes/Daily/2026-10-05.md`), mapped to Drive ids by a per-workspace map filled as folders are listed | Every existing seam - path guard, qualified ids, recent files, wiki-link resolution - is path-shaped. An id-shaped tree would fork all of them. |
 | Duplicate names | **Second and later siblings get a suffix `name~<6 chars of id>.ext`** (extension kept so the file type still resolves) | Drive allows identical siblings; a path must name exactly one file. The first sibling (by `createdTime`, then id) keeps its plain name so the common case is untouched. |
 | Revision | **`headRevisionId`** | Changes on every content write, present on every binary file. `version` is not per-save; `md5Checksum` cannot tell a revert from no change. |
@@ -311,17 +311,20 @@ These settle details the sections above left open. Where they differ from the te
 | PR | Ships | Version |
 |---|---|---|
 | 1 | Connect a Google account in Settings -> Accounts. Client config + CI injection. CLAUDE.md order amended. | 0.96.0 |
-| 2 | Open a Drive folder as a read-only workspace: picker, tree, read, images, Google Docs as markdown, refresh, reopen at launch. Settings v23. | 0.97.0 |
+| 2 | Open a Drive folder as a read-only workspace: picker over My Drive / Shared with me / shared drives, tree with spinners while folders load, read, images, Google Docs as markdown, refresh, reopen at launch, filter and Find in Files over the folders already opened. Settings v23. | 0.97.0 |
 | 3 | Save with check-write-confirm and conflict as a result. | 0.98.0 |
 | 4 | Video and audio streamed from Drive (the media protocol forwards the player's byte ranges to Drive's download endpoint with `Range`, token held in main), and image viewing with Fit, 100% and zoom/pan by the usual gestures (Ctrl/Cmd + wheel and trackpad pinch to zoom about the pointer, drag to pan, double-click to toggle Fit and 100%) - for every source, not only Drive. Requested after the PR 2 manual check. | 0.99.0 |
 | 5 | New file, new folder, rename in a Drive workspace. | 0.100.0 |
 
 Each PR runs the CLAUDE.md release checklist. Architecture.md gains a Google Drive section in PR 1
-(sign-in, token storage, client injection) and grows with each PR. The help article on Drive lands in
-PR 2, when there is something a user can do with the account.
+(sign-in, token storage, client injection) and grows with each PR. The app has no help system yet, so
+help articles (including one on Drive) land when one exists.
 
 ## Out of scope
 
-"Shared with me" and whole-My-Drive roots; shortcuts; Sheets and Slides; the Changes API and live
+Shortcuts; Sheets and Slides; the Changes API and live
 refresh; offline caching; graph indexing of Drive folders; multiple Google accounts; the column
 source browser; Google verification for a public release.
+
+A My Drive workspace is stored as the alias `root`, not as a folder id, so it follows whichever Google
+account is connected rather than a particular one.

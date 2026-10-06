@@ -22,6 +22,9 @@ export type FilterStatus =
       paths: readonly string[];
       /// True when a search stopped at its budget. An answer cut short has to say so.
       truncated: boolean;
+      /// True while some folder has yet to answer. The paths so far are real matches, but an empty
+      /// list is not yet "nothing matches".
+      pending: boolean;
       /// True when a Google Drive folder was searched only where it has been opened. Absent otherwise.
       partial?: boolean;
     };
@@ -123,7 +126,9 @@ export function useFileFilter(where: FilterSurroundings) {
       truncated = truncated || slot.truncated;
       partial = partial || slot.partial === true;
     }
-    status = { kind: "results", paths, truncated, ...(partial ? { partial } : {}) };
+    // One slot per open folder, so an empty one is a folder still being walked.
+    const pending = workspaces.some((_, index) => answer.slots[index] === undefined);
+    status = { kind: "results", paths, truncated, pending, ...(partial ? { partial } : {}) };
   }
 
   return { filter, setFilter, status };

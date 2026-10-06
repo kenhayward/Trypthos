@@ -176,7 +176,30 @@ describe("WorkspacePanel", () => {
   });
 
   it("says so when a filter matches nothing", () => {
-    panel({ filter: "nothing-matches-this", filterStatus: { kind: "results", paths: [], truncated: false } });
+    panel({ filter: "nothing-matches-this", filterStatus: { kind: "results", paths: [], truncated: false, pending: false } });
+    expect(screen.getByText("No files match.")).toBeDefined();
+  });
+
+  // Folders answer one by one, so an empty answer from one is not "nothing matches" while another is
+  // still being walked.
+  it("keeps saying it is searching while a folder has yet to answer, with no match yet", () => {
+    panel({ filter: "plan", filterStatus: { kind: "results", paths: [], truncated: false, pending: true } });
+    expect(screen.getByText("Searching...")).toBeDefined();
+    expect(screen.queryByText("No files match.")).toBeNull();
+  });
+
+  it("shows the matches found so far and still says it is searching", () => {
+    panel({
+      filter: "plan",
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, pending: true },
+    });
+    expect(screen.getByText("Searching...")).toBeDefined();
+    expect(screen.getByText("plan.md")).toBeDefined();
+  });
+
+  it("does not say it is searching once every folder has answered", () => {
+    panel({ filter: "plan", filterStatus: { kind: "results", paths: [], truncated: false, pending: false } });
+    expect(screen.queryByText("Searching...")).toBeNull();
     expect(screen.getByText("No files match.")).toBeDefined();
   });
 
@@ -270,7 +293,7 @@ describe("choosing the folder chat maps", () => {
   it("offers no band on a filter result", () => {
     panel({
       filter: "doc",
-      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false } as FilterStatus,
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, pending: false } as FilterStatus,
     });
     expect(screen.queryByRole("button", { name: /^Expand |^Collapse / })).toBeNull();
   });
@@ -456,7 +479,7 @@ describe("filtering the browser", () => {
   const filtered = (paths: string[], overrides: Partial<React.ComponentProps<typeof WorkspacePanel>> = {}) =>
     panel({
       filter: "plan",
-      filterStatus: { kind: "results", paths, truncated: false },
+      filterStatus: { kind: "results", paths, truncated: false, pending: false },
       ...overrides,
     });
 
@@ -495,7 +518,7 @@ describe("filtering the browser", () => {
   it("says when the search stopped early", () => {
     panel({
       filter: "*",
-      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: true },
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: true, pending: false },
     });
     expect(screen.getByText(/Stopped early/)).toBeDefined();
   });
@@ -503,7 +526,7 @@ describe("filtering the browser", () => {
   it("says when only the opened Google Drive folders were searched, and not otherwise", () => {
     panel({
       filter: "*",
-      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, partial: true },
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, pending: false, partial: true },
     });
     expect(screen.getByText("Google Drive folders are searched only where you have opened them.")).toBeDefined();
   });
@@ -511,7 +534,7 @@ describe("filtering the browser", () => {
   it("does not say it for a complete answer", () => {
     panel({
       filter: "*",
-      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false },
+      filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, pending: false },
     });
     expect(screen.queryByText(/searched only where you have opened/)).toBeNull();
   });

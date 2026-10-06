@@ -7,7 +7,7 @@ const { searchFiles } = require("../src/fileSearch");
 const { outlineWorkspace } = require("../src/workspaceOutline");
 
 /// A provider for Drive's shape: `listKnown` answers from what has been opened, `list` would go to
-/// the network. The three walkers must prefer the first and say so when it was incomplete.
+/// the network. The filter and Find in Files prefer the first and say so when it was incomplete; the outline is one level and one request, so it uses `list`.
 
 function file(id) {
   return { id, name: id.split("/").pop(), kind: "file" };
@@ -64,18 +64,14 @@ test("Find in Files reads known folders only, and reports partial", async () => 
   assert.deepEqual(calls.list, []);
 });
 
-test("the outline lists with listKnown and reports partial when the folder was never opened", async () => {
+test("the outline lists a Drive folder nobody has opened, through list", async () => {
   const { provider, calls } = drive({ listed: new Set(), tree: TREE });
   const outline = await outlineWorkspace(provider, { path: "", fileTypes: ["markdown"] });
-  assert.equal(outline.partial, true);
-  assert.deepEqual(calls.list, []);
-});
-
-test("the outline of an opened folder is not partial", async () => {
-  const { provider } = drive({ listed: new Set([""]), tree: TREE });
-  const outline = await outlineWorkspace(provider, { path: "", fileTypes: ["markdown"] });
   assert.deepEqual(outline.paths, ["a.md"]);
-  assert.equal(outline.partial, undefined);
+  assert.deepEqual(outline.folders, ["Opened", "Unopened"]);
+  assert.equal("partial" in outline, false);
+  assert.deepEqual(calls.list, [""]);
+  assert.deepEqual(calls.listKnown, []);
 });
 
 test("a provider without listKnown is walked with list and never partial", async () => {
