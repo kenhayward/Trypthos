@@ -320,7 +320,15 @@ function createGoogleDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_T
         size: entry.sizeBytes,
         open: async (start, end) => {
           const ranged = await api.downloadRange(entry.fileId, start, end);
-          return ranged.ok ? { ok: true, body: ranged.body } : ranged;
+          if (!ranged.ok) return ranged;
+          // Drive ignoring the Range answers 200 with the whole file. That is only a correct answer
+          // to a range that IS the whole file; for any other, the protocol would label the full body
+          // a 206 of the wrong length, so it is refused rather than passed on.
+          if (ranged.status === 200 && end !== entry.sizeBytes - 1) {
+            await ranged.body?.cancel().catch(() => {});
+            return failure("offline");
+          }
+          return { ok: true, body: ranged.body };
         },
       };
     },
