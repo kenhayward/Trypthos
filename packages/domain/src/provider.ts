@@ -63,8 +63,9 @@ export type WriteResult =
   /// The write landed. `revision` is what a subsequent conditional write must present.
   | { ok: true; revision: Revision }
   /// Somebody else wrote since `expected`. Never resolve this silently: the editor must not report
-  /// a save that did not happen, and the user picks what wins.
-  | { ok: false; reason: "conflict"; theirs: Revision }
+  /// a save that did not happen, and the user picks what wins. `theirs` is null when the file has
+  /// gone (deleted or trashed) since `expected`.
+  | { ok: false; reason: "conflict"; theirs: Revision | null }
   | { ok: false; reason: ProviderError };
 
 export interface StorageProvider {
