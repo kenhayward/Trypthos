@@ -65,7 +65,9 @@ describe("URLs", () => {
   });
 
   it("builds the per-file addresses", () => {
-    expect(fileUrl("f1")).toMatch(new RegExp(`^${DRIVE_API}/files/f1\\?`));
+    // An exact prefix rather than a pattern: the address's dots are literal, and a regex built from
+    // it would treat them as "any character".
+    expect(fileUrl("f1").startsWith(`${DRIVE_API}/files/f1?`)).toBe(true);
     expect(new URL(fileUrl("f1")).searchParams.get("supportsAllDrives")).toBe("true");
     expect(new URL(driveMediaUrl("f1")).searchParams.get("alt")).toBe("media");
     expect(new URL(exportUrl("f1")).searchParams.get("mimeType")).toBe("text/markdown");
