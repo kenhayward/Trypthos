@@ -38,7 +38,10 @@ function spellCheckerLanguagesFor({ current, available, locale }) {
 ///
 /// Never throws: a window that cannot spellcheck must still open. The caller logs the answer, which
 /// is the only place the difference is visible at all.
-function enableSpellChecker(session, { platform, locale }) {
+///
+/// A failure is logged by its kind only, never its message: what the platform puts in a message is
+/// not ours to vet, and the log reaches crash reports.
+function enableSpellChecker(session, { platform, locale, logger = console }) {
   // macOS spellchecks through the OS, which owns its own languages. Setting them here is an error
   // rather than a preference, and the OS checker is already running.
   if (platform === "darwin") return { checking: true, languages: [] };
@@ -52,7 +55,7 @@ function enableSpellChecker(session, { platform, locale }) {
     if (languages !== current) session.setSpellCheckerLanguages(languages);
     return { checking: true, languages };
   } catch (error) {
-    console.error("Could not configure the spellchecker:", error);
+    logger.error?.(`Could not configure the spellchecker (${error?.code ?? error?.name ?? "unknown"}).`);
     return { checking: false, languages: [] };
   }
 }

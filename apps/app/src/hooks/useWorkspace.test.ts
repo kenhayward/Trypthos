@@ -6,6 +6,7 @@ import {
   MAX_TEXT_FILE_BYTES,
   homePagePath,
   mediaUrl,
+  type WorkspaceRef,
 } from "@trypthos/domain";
 import {
   canOpenInNewWindow,
@@ -965,6 +966,27 @@ describe("useWorkspace", () => {
 
     expect(result.current.state.workspaces).toEqual([]);
     expect(result.current.state.errorKey).toBeNull();
+  });
+
+  // The caller keeps remembering what could not open, so it has to be told which ones those were.
+  it("answers the remembered workspaces it could not reopen", async () => {
+    const { client } = fakeClient({
+      openWorkspaceRef: async (ref: WorkspaceRef) =>
+        ref.kind === "local" && ref.root === "D:/Gone"
+          ? { ok: false as const, reason: "not-found" as const }
+          : { ok: true as const, workspace: { id: "Notes", name: "Notes", ref, truncated: false } },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    let missed: readonly WorkspaceRef[] = [];
+    await act(async () => {
+      missed = await result.current.actions.reopen([
+        { kind: "local", root: "D:/Gone" },
+        { kind: "local", root: "D:/Notes" },
+      ]);
+    });
+
+    expect(missed).toEqual([{ kind: "local", root: "D:/Gone" }]);
   });
 
   // The one reopen failure the user did not cause by forgetting: the account connected now is not
@@ -2855,7 +2877,7 @@ describe("several folders open at once", () => {
       openWorkspaceRef: async (ref) => {
         const root = ref.kind === "local" ? ref.root : "";
         return root === "D:/Gone"
-          ? { ok: false as const, reason: "not-found" }
+          ? { ok: false as const, reason: "not-found" as const }
           : { ok: true as const, workspace: { id: root, name: root, ref, truncated: false } };
       },
     });

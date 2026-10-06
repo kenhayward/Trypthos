@@ -124,7 +124,10 @@ export interface WorkspaceActions {
   openVault(id: string): Promise<void>;
   /// Opens remembered workspaces on launch, without asking. Each is opened in turn, and one that has
   /// since been deleted - or a repository that can no longer be seen - is skipped in silence.
-  reopen(refs: readonly WorkspaceRef[]): Promise<void>;
+  ///
+  /// Answers the ones it could not open, in the order given, so the caller can go on remembering
+  /// them: a workspace that is offline today is not one the user has forgotten.
+  reopen(refs: readonly WorkspaceRef[]): Promise<readonly WorkspaceRef[]>;
   /// Closes one folder, and every document that came from it.
   ///
   /// The documents go with it, asking about unsaved work one at a time and stopping at the first
@@ -1315,6 +1318,7 @@ export function useWorkspace(
     async (refs: readonly WorkspaceRef[]) => {
       // In turn rather than at once, so the order on screen is the order they were opened in - and
       // so one workspace that has since gone cannot take the rest with it.
+      const missed: WorkspaceRef[] = [];
       for (const ref of refs) {
         const result = await client.openWorkspaceRef(ref);
         // Silent on failure: a remembered folder that has since gone, or a repository behind a
@@ -1329,8 +1333,12 @@ export function useWorkspace(
         // Collapsed, unlike a workspace the user just chose. Nothing is listed, which for a cloud
         // provider also means nothing is fetched for a workspace nobody has looked at yet.
         if (result.ok) await addWorkspace(result.workspace, { expand: false });
-        else if (result.reason === "other-account") fail(result, ref.kind);
+        else {
+          missed.push(ref);
+          if (result.reason === "other-account") fail(result, ref.kind);
+        }
       }
+      return missed;
     },
     [addWorkspace, client, fail],
   );

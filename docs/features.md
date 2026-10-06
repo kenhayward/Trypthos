@@ -102,7 +102,9 @@ not using away and the one you are stays at the top. One click both collapses a 
 chat and Find at it, exactly as it does for a folder inside one. A cross at the end of the row closes
 the folder instead - taking its tabs with it, and asking about anything unsaved one document at a
 time. Every folder you leave open is reopened the
-next time you start, in the order you opened them. Opening the same folder twice is one folder, not
+next time you start, in the order you opened them. One that cannot be reopened this time - a Drive or
+GitHub workspace while you are offline, or a folder on a drive that is not plugged in - is skipped
+quietly and tried again next time, so it is forgotten only when you close it. Opening the same folder twice is one folder, not
 two: two trees over one directory would be two sets of tabs for the same files, each with its own
 idea of what is in them.
 
@@ -1413,7 +1415,7 @@ unsaved changes are all there when it comes back. Hiding the chat brings the edi
 something has to fill the window.
 
 Panel sizes, which panels are hidden, and the folder you had open are remembered between launches -
-the folder reopens automatically, and is quietly ignored if it has since been moved or deleted.
+the folder reopens automatically, and is quietly skipped if it cannot be opened, then tried again next launch.
 
 If the window is too narrow to fit everything, the side panels give up their space before the editor
 does. A cramped file list is workable; a cramped document is not.

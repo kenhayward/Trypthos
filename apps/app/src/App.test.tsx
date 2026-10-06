@@ -426,6 +426,94 @@ describe("App", () => {
       await waitFor(() => expect(written.at(-1)?.workspaces).toEqual([pinned]));
     });
 
+    // Reopening takes a moment, and the list on screen is empty until it finishes. Written then, a
+    // crash or a quit in that window would forget every remembered workspace.
+    it("does not write an empty list while the remembered workspaces reopen", async () => {
+      const stored = { kind: "local" as const, root: "D:/Notes" };
+      let finish: (() => void) | null = null;
+      const { written } = shellWithFiles({
+        openWorkspaceRef: (ref: WorkspaceRef) =>
+          new Promise((resolve) => {
+            finish = () => resolve({ ok: true as const, workspace: { id: "Notes", name: "Notes", ref } });
+          }),
+      });
+      render(<App />);
+
+      await waitFor(() => expect(finish).not.toBeNull());
+      // Past the settings file's write delay, so a write that was going to happen has happened.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      });
+      expect(written.some((settings) => settings.workspaces.length === 0)).toBe(false);
+
+      await act(async () => finish?.());
+      await screen.findByText("Notes");
+      expect(written.every((settings) => settings.workspaces.length > 0)).toBe(true);
+      expect(written.at(-1)?.workspaces ?? [stored]).toEqual([stored]);
+    });
+
+    // A Drive or GitHub workspace cannot open while offline, and a folder on a drive that is not
+    // plugged in cannot open either. Neither is the user forgetting it.
+    it("keeps remembering a workspace that could not reopen", async () => {
+      const offline = { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Shared" };
+      const local = { kind: "local" as const, root: "D:/Notes" };
+      const { written } = shellWithFiles({
+        readSettings: async () => ({
+          ok: true as const,
+          settings: { ...DEFAULT_SETTINGS, workspaces: [offline, local] },
+        }),
+        openWorkspaceRef: async (ref: WorkspaceRef) =>
+          ref.kind === "google-drive"
+            ? { ok: false as const, reason: "network" }
+            : { ok: true as const, workspace: { id: "Notes", name: "Notes", ref } },
+      });
+      render(<App />);
+
+      await screen.findByText("Notes");
+      // Nothing written may drop it, and once the list is written again it is still there.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      });
+      expect(written.length).toBeGreaterThan(0);
+      expect(written.every((settings) => settings.workspaces.some((ref) => ref.kind === "google-drive"))).toBe(
+        true,
+      );
+      // After the ones that opened, so the order on screen is the order written.
+      await waitFor(() => expect(written.at(-1)?.workspaces).toEqual([local, offline]), { timeout: 2000 });
+    });
+
+    // Kept only until the user opens it themselves. From then on it is an ordinary workspace, and
+    // closing it forgets it like any other.
+    it("forgets a kept workspace once it is opened by hand and closed", async () => {
+      const user = userEvent.setup();
+      const offline = { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Shared" };
+      const local = { kind: "local" as const, root: "D:/Notes" };
+      const { written, menu } = shellWithFiles({
+        readSettings: async () => ({
+          ok: true as const,
+          settings: { ...DEFAULT_SETTINGS, workspaces: [offline, local] },
+        }),
+        openWorkspaceRef: async (ref: WorkspaceRef) =>
+          ref.kind === "google-drive"
+            ? { ok: false as const, reason: "network" }
+            : { ok: true as const, workspace: { id: "Notes", name: "Notes", ref } },
+        // Back online, and chosen again from the dialog.
+        openWorkspace: async () => ({
+          ok: true as const,
+          workspace: { id: "Shared", name: "Shared", ref: offline },
+        }),
+        closeWorkspace: async () => ({ ok: true as const }),
+      });
+      render(<App />);
+
+      await screen.findByText("Notes");
+      act(() => menu.push?.("open-folder"));
+      await screen.findByText("Shared");
+      await user.click(screen.getByRole("button", { name: "Close Shared" }));
+
+      await waitFor(() => expect(written.at(-1)?.workspaces).toEqual([local]), { timeout: 2000 });
+    });
+
     it("clears the list when the menu asks", async () => {
       const user = userEvent.setup();
       const { written, menu } = shellWithFiles();

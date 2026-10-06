@@ -22,6 +22,24 @@ function fakeIpcMain() {
   };
 }
 
+/// A refused payload is reported on the console (see `guarded`). Tests that send one on purpose
+/// collect that line here, so it is asserted rather than printed into an otherwise clean run.
+async function collectingErrors(body) {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return logged;
+}
+
+function assertRejectionLogged(logged, times = 1) {
+  assert.equal(logged.filter((line) => line.includes("Rejected malformed IPC payload")).length, times);
+}
+
 async function withWorkspace(files, body) {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-find-ipc-"));
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-find-data-"));
@@ -173,26 +191,29 @@ test("refuses a folder that climbs out of the workspace", async () => {
 });
 
 test("refuses a request that is not the shape it expects", async () => {
-  await withWorkspace({ "notes.md": "needle" }, async ({ ipcMain, q }) => {
-    const empty = await ipcMain.invoke("workspace:find", {
-      path: q(""),
-      pattern: "",
-      regex: false,
-      caseSensitive: false,
-      fileTypes: MARKDOWN,
-    });
-    assert.equal(empty.ok, false);
+  const logged = await collectingErrors(() =>
+    withWorkspace({ "notes.md": "needle" }, async ({ ipcMain, q }) => {
+      const empty = await ipcMain.invoke("workspace:find", {
+        path: q(""),
+        pattern: "",
+        regex: false,
+        caseSensitive: false,
+        fileTypes: MARKDOWN,
+      });
+      assert.equal(empty.ok, false);
 
-    const extra = await ipcMain.invoke("workspace:find", {
-      path: q(""),
-      pattern: "needle",
-      regex: false,
-      caseSensitive: false,
-      fileTypes: MARKDOWN,
-      follow: true,
-    });
-    assert.equal(extra.ok, false);
-  });
+      const extra = await ipcMain.invoke("workspace:find", {
+        path: q(""),
+        pattern: "needle",
+        regex: false,
+        caseSensitive: false,
+        fileTypes: MARKDOWN,
+        follow: true,
+      });
+      assert.equal(extra.ok, false);
+    }),
+  );
+  assertRejectionLogged(logged, 2);
 });
 
 /// A search is the one thing here that can touch a whole tree, so the cap is about effort. An answer

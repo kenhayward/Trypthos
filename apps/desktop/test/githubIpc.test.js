@@ -336,19 +336,26 @@ test("no channel answers with the stored token", async () => {
   await withHandlers(async ({ ipcMain }) => {
     await ipcMain.invoke("github:connect", { token: "ghp_good" });
 
-    for (const [channel, handler] of ipcMain.handlers) {
-      let answer;
-      try {
-        answer = await handler(null, {});
-      } catch {
-        continue; // A handler refusing a payload it cannot read has answered with nothing at all.
+    // Most channels refuse `{}` and say so on the console. Collected rather than printed, so a
+    // passing run stays quiet - and checked, since a log line is somewhere a token could leak too.
+    const logged = [];
+    const realConsoleError = console.error;
+    console.error = (...args) => void logged.push(args.map(String).join(" "));
+    try {
+      for (const [channel, handler] of ipcMain.handlers) {
+        let text;
+        try {
+          text = JSON.stringify((await handler(null, {})) ?? null);
+        } catch (error) {
+          // A refusal is an answer too, and its message is as visible as any other.
+          text = `${String(error)} ${error?.stack ?? ""}`;
+        }
+        assert.ok(!text.includes("ghp_good"), `${channel} answered with the stored token`);
       }
-
-      assert.ok(
-        !JSON.stringify(answer ?? null).includes("ghp_good"),
-        `${channel} answered with the stored token`,
-      );
+    } finally {
+      console.error = realConsoleError;
     }
+    assert.ok(!logged.join(" ").includes("ghp_good"), "a log line carried the stored token");
   });
 });
 

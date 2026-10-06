@@ -31,6 +31,24 @@ function fakeIpcMain() {
   };
 }
 
+/// A refused payload is reported on the console (see `guarded`). Tests that send one on purpose
+/// collect that line here, so it is asserted rather than printed into an otherwise clean run.
+async function collectingErrors(body) {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => logged.push(args.join(" "));
+  try {
+    await body();
+  } finally {
+    console.error = original;
+  }
+  return logged;
+}
+
+function assertRejectionLogged(logged, times = 1) {
+  assert.equal(logged.filter((line) => line.includes("Rejected malformed IPC payload")).length, times);
+}
+
 async function withWorkspace(files, body) {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-image-"));
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-image-data-"));
@@ -131,8 +149,11 @@ test("refuses an image larger than the app will draw", async () => {
 });
 
 test("refuses a malformed request before touching disk", async () => {
-  await withWorkspace({}, async ({ ipcMain, q }) => {
-    const result = await ipcMain.invoke("file:readImage", { path: q("a.png"), extra: true });
-    assert.deepEqual(result, { ok: false, reason: "bad-request" });
-  });
+  const logged = await collectingErrors(() =>
+    withWorkspace({}, async ({ ipcMain, q }) => {
+      const result = await ipcMain.invoke("file:readImage", { path: q("a.png"), extra: true });
+      assert.deepEqual(result, { ok: false, reason: "bad-request" });
+    }),
+  );
+  assertRejectionLogged(logged);
 });
