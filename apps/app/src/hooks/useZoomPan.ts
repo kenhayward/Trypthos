@@ -24,7 +24,7 @@ interface Options {
 ///
 /// - The wheel listener is attached by hand rather than through `onWheel`. React attaches its wheel
 ///   listener PASSIVELY at the root, so `preventDefault` from a React handler does nothing: the zoom
-///   would happen and the browser would scroll the surface sideways at the same time.
+///   would happen and the browser's own page zoom would fire alongside it.
 /// - The press is taken in the CAPTURE phase and stopped there. CodeMirror handles a shifted
 ///   mousedown as "extend the selection to here", so without this a pan also selects everything it
 ///   is dragged across - and then the next keystroke replaces it.
