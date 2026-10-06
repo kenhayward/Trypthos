@@ -654,9 +654,10 @@ the tab beside it, and switching between Live, Source and Preview keeps the leve
 at - a view of a document, in both senses. It is not saved: a zoom is how you are reading something
 now rather than a setting, so a file opens at its own size every time.
 
-**The keyboard does the same three things.** **Ctrl and plus** and **Ctrl and minus** step the same
-ladder the wheel does, and **Ctrl and 0** goes straight back to 100% from wherever you are on it (for a picture, back to Fit) -
-the one thing the wheel cannot do in a press. On macOS they are Cmd. They act on the document on
+**The keyboard does the same three things.** **Ctrl and plus** and **Ctrl and minus** step.
+In text they step the same ladder the wheel does, and **Ctrl and 0** goes straight back to 100% from wherever you are on it -
+the one thing the wheel cannot do in a press. For a picture the wheel and a pinch zoom continuously while the keys step, **Ctrl and 0** goes to Fit
+and **Ctrl and 1** goes to 100%. On macOS they are Cmd. They act on the document on
 screen wherever the cursor is, so you do not have to put the pointer over anything first.
 
 **Dragging with Shift held pans instead of selecting.** That is the one thing it takes away: in the
