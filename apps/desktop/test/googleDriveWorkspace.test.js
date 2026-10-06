@@ -904,3 +904,35 @@ test("mediaSource finds a file nobody has listed by the same walk read uses", as
   await found.open(0, 299);
   assert.deepEqual(asked, [["audJJJ", 0, 299]]);
 });
+
+/// Drive can ignore a Range and answer 200 with the whole file; the client passes that on for a
+/// range starting at 0. A 200 is only the answer to a range that IS the whole file.
+function ignoringRangeApi() {
+  const cancelled = [];
+  const overrides = {
+    listChildren: async () => ({ ok: true, files: [{ id: "vidHHH", name: "clip.mp4", mimeType: "video/mp4", size: "20" }] }),
+    downloadRange: async () => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream({ cancel: () => void cancelled.push(true) }),
+    }),
+  };
+  return { overrides, cancelled };
+}
+
+test("mediaSource refuses a whole-file 200 as the answer to a partial range, and cancels its body", async () => {
+  const { overrides, cancelled } = ignoringRangeApi();
+  const { provider } = await open(overrides);
+  const found = await provider.mediaSource("clip.mp4");
+  assert.deepEqual(await found.open(0, 4), { ok: false, reason: "offline" });
+  assert.deepEqual(cancelled, [true]);
+});
+
+test("mediaSource accepts a 200 for a range that is the whole file", async () => {
+  const { overrides, cancelled } = ignoringRangeApi();
+  const { provider } = await open(overrides);
+  const found = await provider.mediaSource("clip.mp4");
+  const opened = await found.open(0, 19);
+  assert.equal(opened.ok, true);
+  assert.deepEqual(cancelled, []);
+});

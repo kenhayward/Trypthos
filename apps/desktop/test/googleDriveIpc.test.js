@@ -8,6 +8,7 @@ const path = require("node:path");
 const { mediaUrl } = require("@trypthos/domain");
 const { registerIpcHandlers, locateMedia } = require("../src/ipcHandlers");
 const { createMediaHandler } = require("../src/mediaProtocol");
+const { createGoogleDriveApi } = require("../src/googleDriveApi");
 
 /// A Drive folder through the real handlers: opened by reference, listed and read through the same
 /// channels as every other workspace, and saved through the same check-write-confirm a save expects.
@@ -259,17 +260,28 @@ test("google:folders refuses a malformed request and answers not configured with
 
 test("a Drive clip streams in ranges through locateMedia, and neither the token nor the URL is logged", async () => {
   const logged = [];
+  const record = (...args) => logged.push(args);
   const originals = { error: console.error, warn: console.warn, log: console.log };
-  for (const name of Object.keys(originals)) console[name] = (...args) => logged.push(args);
-  const asked = [];
-  const factory = () => ({
-    fileMeta: async () => ({ ok: true, file: { id: "rootMED", name: "Media", mimeType: FOLDER } }),
-    listChildren: async () => ({ ok: true, files: [{ id: "vidMED", name: "clip.mp4", mimeType: "video/mp4", size: "20" }] }),
-    downloadRange: async (id, start, end) => {
-      asked.push([id, start, end]);
-      return { ok: true, status: 206, body: new Blob([Buffer.from("0123456789ABCDEFGHIJ").subarray(start, end + 1)]).stream() };
-    },
-  });
+  for (const name of Object.keys(originals)) console[name] = record;
+
+  // The REAL client over a scripted fetch, so its own log paths run: the third range request throws
+  // an error whose message carries the URL, as a network failure's can.
+  const TOKEN = "SECRET-TOKEN-VALUE";
+  const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  const seen = [];
+  const fetchScript = async (url, options) => {
+    seen.push({ url, authorization: options.headers.Authorization, range: options.headers.Range ?? null });
+    if (url.includes("alt=media")) {
+      const range = options.headers.Range;
+      if (range === "bytes=15-19") throw Object.assign(new Error(`connect failed for ${url}`), { code: "ECONNRESET" });
+      const [start, end] = range.replace("bytes=", "").split("-").map(Number);
+      return new Response(Buffer.from("0123456789ABCDEFGHIJ").subarray(start, end + 1), { status: 206 });
+    }
+    if (url.includes("/files/rootMED?")) return json({ id: "rootMED", name: "Media", mimeType: FOLDER });
+    return json({ files: [{ id: "vidMED", name: "clip.mp4", mimeType: "video/mp4", size: "20" }] });
+  };
+  const factory = (accessToken) => createGoogleDriveApi({ accessToken, fetch: fetchScript, logger: { error: record, warn: record, log: record } });
+
   try {
     await withHandlers(
       async ({ ipcMain }) => {
@@ -283,20 +295,27 @@ test("a Drive clip streams in ranges through locateMedia, and neither the token 
         const range = await found.open(5, 9);
         assert.equal(range.ok, true);
         assert.equal(await new Response(range.body).text(), "56789");
-        assert.deepEqual(asked, [["vidMED", 5, 9]]);
 
         // Through the protocol too: the window sees bytes and headers, nothing of Drive.
         const handle = createMediaHandler({ locate: locateMedia });
         const response = await handle(new Request(mediaUrl(`${opened.workspace.id}/clip.mp4`), { headers: { Range: "bytes=0-3" } }));
         assert.equal(response.status, 206);
         assert.equal(await response.text(), "0123");
+
+        // The failing request answers as a failure, and logs.
+        assert.deepEqual(await found.open(15, 19), { ok: false, reason: "offline" });
       },
-      { google: { accessToken: async () => ({ ok: true, token: "SECRET-TOKEN-VALUE" }) }, createGoogleDrive: factory },
+      { google: { accessToken: async () => ({ ok: true, token: TOKEN }) }, createGoogleDrive: factory },
     );
   } finally {
     Object.assign(console, originals);
   }
+
+  // The test is only meaningful if the token really was used and a log line really was written.
+  assert.ok(seen.length >= 4 && seen.every((request) => request.authorization === `Bearer ${TOKEN}`));
+  assert.ok(logged.length >= 1);
   const text = JSON.stringify(logged);
-  assert.equal(text.includes("SECRET-TOKEN-VALUE"), false);
+  assert.equal(text.includes(TOKEN), false);
   assert.equal(text.includes("googleapis.com"), false);
+  assert.equal(text.includes("alt=media"), false);
 });
