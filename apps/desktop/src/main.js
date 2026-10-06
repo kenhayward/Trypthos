@@ -45,6 +45,7 @@ const { enableSpellChecker } = require("./spellcheck");
 const { APP_NAME } = require("./appName");
 const { chromeOptionsFor } = require("./windowChrome");
 const { registerWindowHandlers } = require("./windowHandlers");
+const { onWindowClosed } = require("./windowClosed");
 const { closeDecision, createCloseGuard } = require("./closeGuard");
 const { createDocumentHandoff } = require("./documentHandoff");
 const { createUpdater } = require("./updater");
@@ -166,7 +167,7 @@ function createDocumentWindow(target) {
   // Read now: `webContents` cannot be reached once the window is destroyed, which is exactly when the
   // handoff most needs to hear about it.
   const contentsId = documentWindow.webContents.id;
-  documentWindow.on("closed", () => {
+  onWindowClosed(documentWindow, () => {
     documentGuards.delete(documentWindow);
     documentHandoff.abandon(contentsId);
     forgetPasteMarkdownContext(contentsId);
@@ -349,8 +350,8 @@ function createWindow() {
     revealWindow(mainWindow);
   });
 
-  mainWindow.on("closed", () => {
-    forgetPasteMarkdownContext(mainWindow.webContents.id);
+  onWindowClosed(mainWindow, (contentsId) => {
+    forgetPasteMarkdownContext(contentsId);
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
     mainWindow = null;
