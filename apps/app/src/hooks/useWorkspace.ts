@@ -378,9 +378,6 @@ export function providerFailureKey(
         return "errors.googleRateLimited";
       case "not-connected":
         return "errors.googleNotConnected";
-      // The shared key says GitHub, which is wrong here.
-      case "media-not-local":
-        return "errors.driveMediaNotLocal";
       case "read-only":
         return "errors.driveReadOnly";
     }
@@ -436,21 +433,21 @@ function reportIfLocal(
   if (root !== null && relative !== undefined) report?.({ root, path: relative });
 }
 
-/// Whether a path is in a workspace we KNOW is not a folder on this computer.
+/// Whether a path is in a workspace we KNOW cannot stream a recording.
 ///
-/// Note the shape of the question. It is not "is this local" but "is this positively known not to
-/// be", and the two differ for a path whose workspace is not open: that answers false here and the
-/// open proceeds, failing for whatever the real reason turns out to be.
+/// Note the shape of the question. It is not "can this stream" but "is it positively known not to",
+/// and the two differ for a path whose workspace is not open: that answers false here and the open
+/// proceeds, failing for whatever the real reason turns out to be.
 ///
 /// This is not a second boundary check, and it must not become one. Whether a recording CAN be
 /// streamed is decided in the main process, by the provider that either has `locateFile` or does
 /// not. What this buys is only a better sentence: a repository's blobs arrive base64 over an API
 /// with no range support, so the tab could only ever show a failure, and saying so where the user
-/// clicked beats opening a player that cannot play.
-function isKnownNonLocal(workspaces: readonly WorkspaceInfo[], qualified: string): boolean {
+/// clicked beats opening a player that cannot play. Local and Drive both stream in ranges.
+function cannotStream(workspaces: readonly WorkspaceInfo[], qualified: string): boolean {
   const workspaceId = splitQualified(qualified)?.workspaceId;
   const workspace = workspaces.find((candidate) => candidate.id === workspaceId);
-  return workspace !== undefined && workspace.ref.kind !== "local";
+  return workspace !== undefined && workspace.ref.kind === "github";
 }
 
 /// The provider a qualified path's workspace belongs to, or null when no open workspace claims it.
@@ -1171,7 +1168,7 @@ export function useWorkspace(
       // what forces one, and there is no data URL here.
       const mediaKind = mediaKindFor(path);
       if (mediaKind !== null) {
-        if (isKnownNonLocal(stateRef.current.workspaces, path)) {
+        if (cannotStream(stateRef.current.workspaces, path)) {
           return failOpening({ reason: "media-not-local" }, path);
         }
 
