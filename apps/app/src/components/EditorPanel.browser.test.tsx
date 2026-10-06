@@ -1104,51 +1104,159 @@ describe("Zooming a picture, in a real browser", () => {
   const PNG_DATA_URL =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mOIqjgxIIhh1OJRi0ctHrV41OJRi0ctHrV45FgMAPz9AYwylnrnAAAAAElFTkSuQmCC";
 
-  const PNG = { source: PNG_DATA_URL, kind: "image" as const };
+  /// 1600x1000 - far larger than the 600x400 frame below, so Fit has something to shrink. Drawn on a
+  /// canvas rather than inlined, because a PNG that size would be most of this file.
+  const largeDataUrl = (): string => {
+    const canvas = document.createElement("canvas");
+    canvas.width = LARGE.width;
+    canvas.height = LARGE.height;
+    const context = canvas.getContext("2d")!;
+    const gradient = context.createLinearGradient(0, 0, LARGE.width, LARGE.height);
+    gradient.addColorStop(0, "white");
+    gradient.addColorStop(1, "black");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, LARGE.width, LARGE.height);
+    return canvas.toDataURL("image/png");
+  };
+  const LARGE = { width: 1600, height: 1000 };
 
-  const withImage = () =>
-    render(
-      <EditorPanel
-        workspaceName="Notes"
-        paths={["shot.png"]}
-        activePath="shot.png"
-        dirty={false}
-        value=""
-        readOnly
-        media={PNG}
-        fileTypes={["markdown", "image"]}
-        onChange={() => {}}
-      />,
+  /// The panel in a frame of a known size, so what Fit works out to can be said in advance - the
+  /// test page's own size is whatever the runner's viewport happens to be.
+  function Framed({ source, width = 600 }: { source: string; width?: number }) {
+    return (
+      <div style={{ display: "flex", width, height: 400 }}>
+        <EditorPanel
+          workspaceName="Notes"
+          paths={["shot.png"]}
+          activePath="shot.png"
+          dirty={false}
+          value=""
+          readOnly
+          media={{ source, kind: "image" }}
+          fileTypes={["markdown", "image"]}
+          onChange={() => {}}
+        />
+      </div>
     );
+  }
 
   const picture = () => screen.getByRole("img", { name: "shot.png" });
+  const scroller = () => screen.getByTestId("picture-view");
+  const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
 
-  const spinOver = (element: Element, notches: number) => {
-    for (let turn = 0; turn < notches; turn += 1) {
-      element.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -120 }),
-      );
-    }
+  /// The scale Fit should land on: the scroller's visible box less the 16px padding on each side.
+  const expectedFit = () => {
+    const box = scroller();
+    return Math.min(1, (box.clientWidth - 32) / LARGE.width, (box.clientHeight - 32) / LARGE.height);
   };
 
-  it("opens at the picture's own pixels", async () => {
-    withImage();
-    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(40));
-    expect(picture().getBoundingClientRect().height).toBe(20);
+  /// Waits for the large picture to have loaded and been fitted.
+  const openLarge = async (width?: number) => {
+    const source = largeDataUrl();
+    const view = render(<Framed source={source} width={width} />);
+    await vi.waitFor(() =>
+      expect(picture().getBoundingClientRect().width).toBeCloseTo(LARGE.width * expectedFit(), 0),
+    );
+    return { view, source };
+  };
+
+  it("opens a picture larger than the panel scaled to fit it", async () => {
+    await openLarge();
+
+    const box = picture().getBoundingClientRect();
+    expect(box.width).toBeLessThan(LARGE.width);
+    expect(box.height).toBeCloseTo(LARGE.height * expectedFit(), 0);
+    // The whole of it shows: nothing to scroll.
+    expect(scroller().scrollWidth).toBeLessThanOrEqual(scroller().clientWidth);
+    expect(scroller().scrollHeight).toBeLessThanOrEqual(scroller().clientHeight);
+    expect(pressed("Fit")).toBe("true");
   });
 
-  // A real zoom: the layout box grows, not just what is painted. That is what gives the surface
-  // something to scroll, and a zoomed picture that cannot be panned is half a feature.
-  it("grows the picture's box, so there is something to pan", async () => {
-    withImage();
+  // Fit never enlarges: a 40x20 picture blown up to the panel would be blurred, not clearer.
+  it("opens a picture smaller than the panel at its own pixels", async () => {
+    render(<Framed source={PNG_DATA_URL} />);
     await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(40));
+    expect(picture().getBoundingClientRect().height).toBe(20);
+    expect(pressed("Fit")).toBe("true");
+  });
 
-    spinOver(picture(), 5);
+  it("keeps the point under the pointer where it was when Ctrl and the wheel zoom in", async () => {
+    await openLarge();
+    const before = picture().getBoundingClientRect();
+    const scaleBefore = before.width / LARGE.width;
+
+    // A point off-centre in both axes, so a zoom about the middle could not pass by accident.
+    const pointer = { x: before.left + before.width * 0.7, y: before.top + before.height * 0.3 };
+    const point = { x: (pointer.x - before.left) / scaleBefore, y: (pointer.y - before.top) / scaleBefore };
+
+    scroller().dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true,
+        deltaY: -300,
+        clientX: pointer.x,
+        clientY: pointer.y,
+      }),
+    );
+
+    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBeGreaterThan(before.width * 1.5));
+    const after = picture().getBoundingClientRect();
+    const scaleAfter = after.width / LARGE.width;
+    expect(Math.abs(after.left + point.x * scaleAfter - pointer.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.top + point.y * scaleAfter - pointer.y)).toBeLessThanOrEqual(1);
+    expect(pressed("Fit")).toBe("false");
+  });
+
+  it("pans with a plain drag, and does nothing on a click that does not move", async () => {
+    await openLarge();
+    await userEvent.click(screen.getByRole("button", { name: "100%" }));
+    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(LARGE.width));
+
+    scroller().scrollLeft = 300;
+    scroller().scrollTop = 200;
+    const start = { x: 300, y: 200 };
+    const box = scroller().getBoundingClientRect();
+    const at = (x: number, y: number) => ({ bubbles: true, cancelable: true, button: 0, clientX: box.left + x, clientY: box.top + y });
+
+    // A click that does not travel is not a pan, and not a zoom either.
+    scroller().dispatchEvent(new MouseEvent("mousedown", at(start.x, start.y)));
+    window.dispatchEvent(new MouseEvent("mouseup", at(start.x, start.y)));
+    expect(scroller().scrollLeft).toBe(300);
+    expect(scroller().scrollTop).toBe(200);
+    expect(pressed("100%")).toBe("true");
+
+    // Grab and drag: the picture follows the pointer, so the scroll moves the other way.
+    scroller().dispatchEvent(new MouseEvent("mousedown", at(start.x, start.y)));
+    window.dispatchEvent(new MouseEvent("mousemove", at(start.x - 120, start.y - 80)));
+    window.dispatchEvent(new MouseEvent("mouseup", at(start.x - 120, start.y - 80)));
+    expect(scroller().scrollLeft).toBe(420);
+    expect(scroller().scrollTop).toBe(280);
+  });
+
+  it("toggles between Fit and 100% on a double-click", async () => {
+    await openLarge();
+
+    await userEvent.dblClick(picture());
+    await vi.waitFor(() => expect(picture().getBoundingClientRect().width).toBe(LARGE.width));
+    expect(pressed("100%")).toBe("true");
+
+    await userEvent.dblClick(picture());
+    await vi.waitFor(() =>
+      expect(picture().getBoundingClientRect().width).toBeCloseTo(LARGE.width * expectedFit(), 0),
+    );
+    expect(pressed("Fit")).toBe("true");
+  });
+
+  // Fit is a way of looking, not the number it worked out to once: a narrower panel fits again.
+  it("refits when the panel is resized while in Fit", async () => {
+    const { view, source } = await openLarge(600);
+    const wide = picture().getBoundingClientRect().width;
+
+    view.rerender(<Framed source={source} width={400} />);
     await vi.waitFor(() => {
-      const box = picture().getBoundingClientRect();
-      expect(box.width).toBeGreaterThan(40);
-      // In proportion, which is the whole claim of a zoom as against a resize.
-      expect(box.width / box.height).toBeCloseTo(2, 5);
+      expect(picture().getBoundingClientRect().width).toBeLessThan(wide);
+      expect(picture().getBoundingClientRect().width).toBeCloseTo(LARGE.width * expectedFit(), 0);
     });
   });
 });

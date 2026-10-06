@@ -972,17 +972,66 @@ describe("EditorPanel: zooming an image", () => {
       />,
     );
 
-  it("reports the level on the picture, so it can be scaled to it", () => {
-    withImage();
-    const picture = screen.getByRole("img", { name: "shot.png" });
-    expect(picture.style.getPropertyValue("--tp-zoom")).toBe("1");
+  const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
+  const level = () => screen.getByRole("status").textContent;
+  const press = (key: string) => {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ctrlKey: true });
+    act(() => void window.dispatchEvent(event));
+    return event;
+  };
 
-    act(() =>
-      void picture.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -120 }),
-      ),
-    );
-    expect(Number(picture.style.getPropertyValue("--tp-zoom"))).toBeGreaterThan(1);
+  // jsdom has no layout, so the panel has no size and nothing has loaded: Fit works out to 100%
+  // here. What it works out to in a real panel is the browser suite's question.
+  it("opens in Fit", () => {
+    withImage();
+    expect(pressed("Fit")).toBe("true");
+    expect(level()).toBe("100%");
+  });
+
+  it("switches between Fit and 100% from the toolbar", async () => {
+    const user = userEvent.setup();
+    withImage();
+
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(pressed("Fit")).toBe("false");
+    expect(pressed("100%")).toBe("false");
+
+    await user.click(screen.getByRole("button", { name: "100%" }));
+    expect(pressed("100%")).toBe("true");
+    expect(pressed("Fit")).toBe("false");
+
+    await user.click(screen.getByRole("button", { name: "Fit" }));
+    expect(pressed("Fit")).toBe("true");
+  });
+
+  it("steps from the toolbar", async () => {
+    const user = userEvent.setup();
+    withImage();
+
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(level()).toBe("110%");
+
+    await user.click(screen.getByRole("button", { name: "Zoom out" }));
+    await user.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(level()).toBe("90%");
+  });
+
+  it("steps with the keyboard", () => {
+    withImage();
+
+    expect(press("=").defaultPrevented).toBe(true);
+    expect(level()).toBe("110%");
+  });
+
+  it("goes to 100% on Ctrl+1 and back to Fit on Ctrl+0", () => {
+    withImage();
+
+    expect(press("1").defaultPrevented).toBe(true);
+    expect(pressed("100%")).toBe("true");
+    expect(pressed("Fit")).toBe("false");
+
+    expect(press("0").defaultPrevented).toBe(true);
+    expect(pressed("Fit")).toBe("true");
   });
 });
 

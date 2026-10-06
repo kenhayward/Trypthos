@@ -6,9 +6,9 @@ export type ZoomDirection = "in" | "out";
 /// on exactly 100%, or the only way back to the size a document opened at is to close the tab. A
 /// factor of 1.1 per notch drifts past it and never returns.
 ///
-/// One ladder for text and pictures alike. The two scale different things - a font size and an
-/// image's pixels - but "how far in am I" is the same question, and two ranges would mean a
-/// document that zooms further than the screenshot beside it for no reason a user could name.
+/// Text's ladder. A picture's buttons and keys step a ladder with these same rungs in the middle and
+/// more at each end (`PICTURE_ZOOM_LEVELS`), because a picture's range is wider: a photograph can be
+/// ten times the panel. Sharing the middle keeps 100% a rung for both.
 export const ZOOM_LEVELS: readonly number[] = [
   0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4,
 ];
