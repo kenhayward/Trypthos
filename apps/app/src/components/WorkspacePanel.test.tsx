@@ -1094,6 +1094,82 @@ describe("the workspace menu", () => {
 
     expect(screen.queryByRole("menuitem", { name: "New File ..." })).toBeNull();
   });
+
+  describe("in a Google Drive workspace", () => {
+    const NOTES = {
+      id: "Notes",
+      name: "Notes",
+      ref: { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" },
+      truncated: false,
+    };
+    const folders = {
+      Notes: {
+        status: "loaded" as const,
+        children: [
+          { id: "Notes/ideas", name: "ideas", kind: "directory" as const },
+          { id: "Notes/plan.md", name: "plan.md", kind: "file" as const },
+        ],
+      },
+    };
+    const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
+
+    it("offers the workspace row new file, new folder and Open in Google Drive, but not rename", async () => {
+      panel({ workspaces: [NOTES], folders, selectedFolder: "Notes" });
+      await rightClick(screen.getByRole("button", { name: /^Notes$/ }));
+
+      expect(items()).toEqual(["New File ...", "New Folder ...", "Open in Google Drive", "Refresh"]);
+    });
+
+    it("offers a folder rename and Open in Google Drive, and no Reveal or new window", async () => {
+      panel({ workspaces: [NOTES], folders, selectedFolder: "Notes" });
+      await rightClick(screen.getByRole("button", { name: /^ideas$/ }));
+
+      expect(items()).toEqual(["New File ...", "New Folder ...", "Rename ...", "Open in Google Drive", "Refresh"]);
+    });
+
+    it("offers a file rename and Open in Google Drive, and no Reveal or new window", async () => {
+      panel({ workspaces: [NOTES], folders, selectedFolder: "Notes" });
+      await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      expect(items()).not.toContain("Open in Explorer");
+      expect(items()).not.toContain("Open in New Window ...");
+      expect(items()).toContain("Rename ...");
+      expect(items()).toContain("Open in Google Drive");
+    });
+
+    it("asks to show the entry right-clicked through the same handler as Reveal", async () => {
+      const onRevealEntry = vi.fn();
+      panel({ workspaces: [NOTES], folders, onRevealEntry });
+      const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Open in Google Drive" }));
+
+      expect(onRevealEntry).toHaveBeenCalledWith("Notes/plan.md");
+    });
+
+    it("renames the entry right-clicked", async () => {
+      const onRename = vi.fn();
+      panel({ workspaces: [NOTES], folders, onRename });
+      const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+
+      expect(onRename).toHaveBeenCalledWith("Notes/plan.md");
+    });
+
+    it("leaves a local folder and a repository without Open in Google Drive", async () => {
+      panel({ workspaces: [ESSAYS], folders: {} });
+      await rightClick(screen.getByRole("button", { name: /^essays$/ }));
+      expect(screen.queryByRole("menuitem", { name: "Open in Google Drive" })).toBeNull();
+    });
+
+    it("does not offer Open in Google Drive for a local file", async () => {
+      panel();
+      await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+      expect(screen.queryByRole("menuitem", { name: "Open in Google Drive" })).toBeNull();
+      expect(screen.getByRole("menuitem", { name: "Open in Explorer" })).toBeDefined();
+    });
+  });
 });
 
 describe("a workspace the provider could not list in full", () => {

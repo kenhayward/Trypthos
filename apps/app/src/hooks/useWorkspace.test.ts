@@ -523,6 +523,128 @@ describe("a Google Drive workspace", () => {
 
     expect(result.current.state.errorKey).toBe("errors.googleOffline");
   });
+
+  it("makes a new file in a Drive folder and opens it", async () => {
+    const { client, writes } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.createEmptyFile("Notes", "plan.md");
+    });
+
+    expect(writes).toEqual([{ path: "Notes/plan.md", content: "", revision: null, message: null }]);
+    expect(result.current.state.file?.path).toBe("Notes/plan.md");
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  it("makes a new folder in a Drive folder", async () => {
+    const created: string[] = [];
+    const { client } = fakeClient({
+      createDirectory: async (path) => {
+        created.push(path);
+        return { ok: true as const };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.createDirectory("Notes", "ideas");
+    });
+
+    expect(created).toEqual(["Notes/ideas"]);
+    expect(result.current.state.folders.Notes?.children).toContainEqual({
+      id: "Notes/ideas",
+      name: "ideas",
+      kind: "directory",
+    });
+  });
+
+  it("renames a Drive file, and its open tab follows", async () => {
+    const renamed: [string, string][] = [];
+    const { client } = fakeClient({
+      renameEntry: async (path, name) => {
+        renamed.push([path, name]);
+        return { ok: true as const, path: `Notes/${name}` };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+    await act(async () => {
+      await result.current.actions.openFile({ id: "Notes/a.md", name: "a.md", kind: "file" });
+    });
+
+    let problem: string | null = "not called";
+    await act(async () => {
+      problem = await result.current.actions.renameEntry("Notes/a.md", "z.md");
+    });
+
+    expect(problem).toBeNull();
+    expect(renamed).toEqual([["Notes/a.md", "z.md"]]);
+    expect(result.current.state.file?.path).toBe("Notes/z.md");
+  });
+
+  it("asks the shell to show a Drive entry where it lives", async () => {
+    const revealed: string[] = [];
+    const { client } = fakeClient({
+      revealEntry: async (path) => {
+        revealed.push(path);
+        return { ok: true as const };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(driveRef);
+    });
+
+    await act(async () => {
+      await result.current.actions.revealEntry("Notes/a.md");
+    });
+
+    expect(revealed).toEqual(["Notes/a.md"]);
+  });
+
+  it("still refuses to create or rename in a GitHub repository", async () => {
+    const calls: string[] = [];
+    const { client } = fakeClient({
+      createDirectory: async () => {
+        calls.push("createDirectory");
+        return { ok: true as const };
+      },
+      renameEntry: async (path) => {
+        calls.push("renameEntry");
+        return { ok: true as const, path };
+      },
+      writeFile: async () => {
+        calls.push("writeFile");
+        return { ok: true as const, revision: { id: "r" } };
+      },
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef({ kind: "github", owner: "ada", repo: "notes" });
+    });
+
+    await act(async () => {
+      await result.current.actions.createEmptyFile("notes", "x.md");
+    });
+    expect(result.current.state.errorKey).toBe("errors.unsupported");
+    await act(async () => {
+      await result.current.actions.createDirectory("notes", "x");
+    });
+    let problem: string | null = null;
+    await act(async () => {
+      problem = await result.current.actions.renameEntry("notes/a.md", "b.md");
+    });
+
+    expect(problem).toBe("errors.unsupported");
+    expect(calls).toEqual([]);
+  });
 });
 
 describe("failureParams", () => {

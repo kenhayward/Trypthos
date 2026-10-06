@@ -38,7 +38,8 @@
       "addToChat": "Add to Chat",
       "rename": "Rename ...",
       "revealInExplorer": "Open in Explorer",
-      "revealInFinder": "Open in Finder"
+      "revealInFinder": "Open in Finder",
+      "openInDrive": "Open in Google Drive"
   },
   "refreshRepo": {
     "title": "Refresh {{name}} from GitHub",

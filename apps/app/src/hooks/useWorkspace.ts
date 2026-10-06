@@ -32,6 +32,7 @@ import {
 import type { MediaSource } from "@trypthos/domain";
 import type { RemoteNode, WorkspaceClient, WorkspaceInfo } from "../lib/workspaceClient";
 import type { FolderState } from "../lib/treeRows";
+import { canEditTree, opensInBrowser } from "../lib/workspaceCapabilities";
 
 /// All the workspace state and the transitions between them.
 ///
@@ -416,6 +417,13 @@ function rootOf(workspaces: readonly WorkspaceInfo[], qualified: string): string
   const workspaceId = splitQualified(qualified)?.workspaceId;
   const ref = workspaces.find((workspace) => workspace.id === workspaceId)?.ref;
   return ref?.kind === "local" ? ref.root : null;
+}
+
+/// Whether the workspace a qualified path is in can have its tree edited (see `canEditTree`).
+function canEditPath(workspaces: readonly WorkspaceInfo[], qualified: string): boolean {
+  const workspaceId = splitQualified(qualified)?.workspaceId;
+  const ref = workspaces.find((workspace) => workspace.id === workspaceId)?.ref;
+  return ref !== undefined && canEditTree(ref);
 }
 
 /// Records that a file was opened, when there is somewhere to record it FROM.
@@ -830,7 +838,7 @@ export function useWorkspace(
       const workspace = parent === null
         ? undefined
         : stateRef.current.workspaces.find((candidate) => candidate.id === parent.workspaceId);
-      if (parent === null || workspace?.ref.kind !== "local") {
+      if (parent === null || workspace === undefined || !canEditTree(workspace.ref)) {
         fail({ reason: "unsupported" });
         return;
       }
@@ -879,7 +887,7 @@ export function useWorkspace(
       const workspace = parent === null
         ? undefined
         : stateRef.current.workspaces.find((candidate) => candidate.id === parent.workspaceId);
-      if (parent === null || workspace?.ref.kind !== "local") {
+      if (parent === null || workspace === undefined || !canEditTree(workspace.ref)) {
         fail({ reason: "unsupported" });
         return;
       }
@@ -915,7 +923,7 @@ export function useWorkspace(
 
   const renameEntry = useCallback(
     async (path: string, name: string): Promise<string | null> => {
-      if (rootOf(stateRef.current.workspaces, path) === null) return "errors.unsupported";
+      if (!canEditPath(stateRef.current.workspaces, path)) return "errors.unsupported";
 
       const result = await client.renameEntry(path, name);
       if (!result.ok) {
@@ -938,7 +946,11 @@ export function useWorkspace(
 
   const revealEntry = useCallback(
     async (path: string) => {
-      if (rootOf(stateRef.current.workspaces, path) === null) {
+      // Local reveals in the file manager, Drive opens in the browser: the shell chooses, so both
+      // are asked the same way. A repository has neither.
+      const workspaceId = splitQualified(path)?.workspaceId;
+      const ref = stateRef.current.workspaces.find((candidate) => candidate.id === workspaceId)?.ref;
+      if (ref === undefined || (ref.kind !== "local" && !opensInBrowser(ref))) {
         fail({ reason: "unsupported" });
         return;
       }
