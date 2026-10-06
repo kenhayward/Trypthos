@@ -83,7 +83,8 @@ export type ObsidianVaultsResult =
 export type ListResult = { ok: true; nodes: RemoteNode[] } | Failure;
 export type CreateDirectoryResult = { ok: true } | Failure;
 export type ReadResult =
-  | { ok: true; content: string; revision: Revision }
+  /// `readOnly` is the shell's per-file answer - true for a Google Doc, absent for everything else.
+  | { ok: true; content: string; revision: Revision; readOnly?: boolean }
   /// Carries its numbers, so the refusal can name the file's size and the app's limit. Mirrors the
   /// domain's `ReadResult` - the shell returns that shape and this is where the renderer sees it.
   | { ok: false; reason: "too-large"; sizeBytes: number; limitBytes: number }
