@@ -10,11 +10,12 @@ export const RECENT: Release[] = [
     pr: 220,
     headline: "Open a Google Drive folder beside your other folders",
     summary:
-      "With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive: My Drive's folders, then your shared drives, with a breadcrumb to go back up. Choose a folder and it opens as another tree beside your local folders and repositories, marked with Drive's logo, and comes back the next time you start Trypthos. Markdown and text files open as they do anywhere else, Google Docs open as markdown, and pictures a note embeds are shown. Folders are read as you open them, so a large Drive is not read all at once, and right-click Refresh asks Drive again. This release opens Drive folders read-only: the editor does not let you type into a Drive file, and saving to Drive arrives in the next release. Shortcuts, Sheets and Slides are not listed. A spinner shows on a file or folder while it loads, and in the Drive folder picker.",
+      "With a Google account connected, the folder browser has a Google Drive button. It opens a picker over your Drive: My Drive's folders, then your shared drives, with a breadcrumb to go back up. Choose a folder and it opens as another tree beside your local folders and repositories, marked with Drive's logo, and comes back the next time you start Trypthos. Markdown and text files open as they do anywhere else, Google Docs open as markdown, and pictures a note embeds are shown. Folders are read as you open them, so a large Drive is not read all at once, and right-click Refresh asks Drive again. This release opens Drive folders read-only: the editor does not let you type into a Drive file, and saving to Drive arrives in the next release. Shortcuts, Sheets and Slides are not listed. A spinner shows on a file or folder while it loads, and in the Drive folder picker. The picker also opens My Drive itself and folders shared with you, with Drive-style icons.",
     added: [
       "Google Drive folders as workspaces: pick a folder in My Drive or a shared drive and browse it beside your other folders, read-only for now.",
       "Google Docs open as markdown, and pictures embedded in a Drive note are shown.",
       "A spinner shows on a file or folder while it loads, and in the Drive folder picker.",
+      "Open My Drive itself, or a folder shared with you, from the Google Drive picker, which now shows Drive-style icons for My Drive, Shared with me and shared drives.",
     ],
   },
   {

@@ -273,9 +273,13 @@ export type ConnectGitHubRequest = z.infer<typeof ConnectGitHubRequest>;
 
 /// The Drive folder picker asking what is inside a folder. Folders only, ids and names only.
 ///
-/// Null is the top level: My Drive's folders and the Shared Drives. The id is a Drive id or nothing -
-/// it reaches a Drive query string, so the schema is what keeps it one.
-export const GoogleFoldersRequest = z.object({ parentId: DriveIdSchema.nullable() }).strict();
+/// Which place to list: the Shared drives, the folders shared with the user, or one folder. My Drive
+/// is the folder `root`. The id reaches a Drive query string, so the schema is what keeps it one.
+export const GoogleFoldersRequest = z.discriminatedUnion("in", [
+  z.object({ in: z.literal("drives") }).strict(),
+  z.object({ in: z.literal("shared-with-me") }).strict(),
+  z.object({ in: z.literal("folder"), id: DriveIdSchema }).strict(),
+]);
 
 export type GoogleFoldersRequest = z.infer<typeof GoogleFoldersRequest>;
 

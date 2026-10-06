@@ -514,5 +514,6 @@ export {
   foldersOf,
   isDriveId,
   sharedDrivesUrl,
+  sharedWithMeUrl,
 } from "./googleDrive";
 export type { DriveEntry, DriveFailure, DriveFile } from "./googleDrive";

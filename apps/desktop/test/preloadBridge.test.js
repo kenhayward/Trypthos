@@ -146,16 +146,17 @@ test("the Google account calls reach their handlers, carrying nothing from the r
   ]);
 });
 
-test("listing Drive folders sends the parent id and nothing else", async () => {
+test("listing Drive folders forwards the location and nothing else", async () => {
   const { bridge, ipcMain } = loadBridge();
   const received = [];
   ipcMain.handle("google:folders", async (_event, payload) => {
     received.push(payload);
-    return { ok: true, folders: [], drives: [] };
+    return { ok: true, folders: [] };
   });
 
-  await bridge.listDriveFolders(null);
-  await bridge.listDriveFolders("1H60yEnI5d4");
+  await bridge.listDriveFolders({ in: "drives" });
+  await bridge.listDriveFolders({ in: "shared-with-me" });
+  await bridge.listDriveFolders({ in: "folder", id: "1H60yEnI5d4" });
 
-  assert.deepEqual(received, [{ parentId: null }, { parentId: "1H60yEnI5d4" }]);
+  assert.deepEqual(received, [{ in: "drives" }, { in: "shared-with-me" }, { in: "folder", id: "1H60yEnI5d4" }]);
 });

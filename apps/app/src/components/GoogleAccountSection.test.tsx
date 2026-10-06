@@ -11,7 +11,7 @@ function fakeBridge(overrides: Partial<GoogleBridge> = {}) {
     connectGoogle: vi.fn(async (): Promise<GoogleConnectResult> => ({ ok: true, email: "ada@example.com" })),
     cancelGoogleConnect: vi.fn(async () => ({ ok: true })),
     disconnectGoogle: vi.fn(async () => ({ ok: true })),
-    listDriveFolders: vi.fn(async () => ({ ok: true as const, folders: [], drives: [] })),
+    listDriveFolders: vi.fn(async () => ({ ok: true as const, folders: [] })),
     ...overrides,
   } satisfies GoogleBridge;
 }

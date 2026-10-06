@@ -158,6 +158,20 @@ test("lists every Shared Drive", async () => {
   assert.deepEqual(await api.sharedDrives(), { ok: true, drives: [{ id: "d1", name: "Team" }, { id: "d2", name: "Ops" }] });
 });
 
+test("lists every folder shared with the user, across pages", async () => {
+  const { api, calls } = setup({
+    routes: [
+      answer(200, { nextPageToken: "p2", files: [{ id: "s1", name: "Team plan", mimeType: "application/vnd.google-apps.folder", shared: true }] }),
+      answer(200, { files: [{ id: "s2", name: "Notes", mimeType: "application/vnd.google-apps.folder" }] }),
+    ],
+  });
+  const listed = await api.sharedWithMeFolders();
+  assert.equal(listed.ok, true);
+  assert.deepEqual(listed.files.map((file) => file.id), ["s1", "s2"]);
+  assert.match(new URL(calls[0].url).searchParams.get("q"), /^sharedWithMe = true/);
+  assert.equal(new URL(calls[1].url).searchParams.get("pageToken"), "p2");
+});
+
 test("an answer in an unknown shape is offline, logged without the URL", async () => {
   const { api, logs } = setup({ routes: [answer(200, { files: "nope" })] });
   assert.deepEqual(await api.listChildren(FOLDER), { ok: false, reason: "offline" });

@@ -641,14 +641,19 @@ describe("the icons channel", () => {
 });
 
 describe("GoogleFoldersRequest", () => {
-  it("names a parent folder by Drive id, or null for the top level", () => {
-    expect(GoogleFoldersRequest.parse({ parentId: null })).toEqual({ parentId: null });
-    expect(GoogleFoldersRequest.parse({ parentId: "1H60yEnI5d4" })).toEqual({ parentId: "1H60yEnI5d4" });
+  it("names a place: the shared drives, Shared with me, or a folder by Drive id", () => {
+    expect(GoogleFoldersRequest.parse({ in: "drives" })).toEqual({ in: "drives" });
+    expect(GoogleFoldersRequest.parse({ in: "shared-with-me" })).toEqual({ in: "shared-with-me" });
+    expect(GoogleFoldersRequest.parse({ in: "folder", id: "root" })).toEqual({ in: "folder", id: "root" });
+    expect(GoogleFoldersRequest.parse({ in: "folder", id: "1H60yEnI5d4" })).toEqual({ in: "folder", id: "1H60yEnI5d4" });
   });
 
-  it("refuses an id that is not a Drive id, and anything extra", () => {
-    expect(GoogleFoldersRequest.safeParse({ parentId: "a' or 'b" }).success).toBe(false);
-    expect(GoogleFoldersRequest.safeParse({ parentId: null, extra: 1 }).success).toBe(false);
+  it("refuses an id that is not a Drive id, and anything extra or unknown", () => {
+    expect(GoogleFoldersRequest.safeParse({ in: "folder", id: "a' or 'b" }).success).toBe(false);
+    expect(GoogleFoldersRequest.safeParse({ in: "folder" }).success).toBe(false);
+    expect(GoogleFoldersRequest.safeParse({ in: "drives", extra: 1 }).success).toBe(false);
+    expect(GoogleFoldersRequest.safeParse({ in: "trash" }).success).toBe(false);
+    expect(GoogleFoldersRequest.safeParse({ parentId: null }).success).toBe(false);
     expect(GoogleFoldersRequest.safeParse({}).success).toBe(false);
   });
 });

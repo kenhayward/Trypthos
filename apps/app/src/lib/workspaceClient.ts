@@ -310,8 +310,12 @@ export interface GoogleStatus {
 
 export type GoogleConnectResult = { ok: true; email: string } | { ok: false; reason: string };
 
+/// A place the Drive picker can list: the Shared drives, the folders shared with the user, or one
+/// folder by Drive id (My Drive is the folder `root`).
+export type DriveLocation = { in: "drives" } | { in: "shared-with-me" } | { in: "folder"; id: string };
+
 export type DriveFoldersResult =
-  | { ok: true; folders: { id: string; name: string }[]; drives: { id: string; name: string }[] }
+  | { ok: true; folders: { id: string; name: string; shared: boolean }[] }
   | { ok: false; reason: string };
 
 /// The Google half of the bridge. Connecting takes no argument: the sign-in happens in the user's
@@ -321,7 +325,7 @@ export interface GoogleBridge {
   connectGoogle(): Promise<GoogleConnectResult>;
   cancelGoogleConnect(): Promise<{ ok: boolean }>;
   disconnectGoogle(): Promise<{ ok: boolean; reason?: string }>;
-  listDriveFolders(parentId: string | null): Promise<DriveFoldersResult>;
+  listDriveFolders(location: DriveLocation): Promise<DriveFoldersResult>;
 }
 
 interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge, GoogleBridge {
