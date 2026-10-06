@@ -372,12 +372,24 @@ test("headers that never arrive answer offline and abort the request", async () 
 });
 
 test("an expired token is refreshed once for a range, and the 401 body is released", async () => {
-  const cancelled = { value: false };
+  const released = { read: false, cancelled: false };
+  const errorBody = new TextEncoder().encode("{}");
+  const unauthorized = new Response(new ReadableStream({
+    pull(controller) {
+      released.read = true;
+      controller.enqueue(errorBody);
+      controller.close();
+    },
+    cancel() {
+      released.cancelled = true;
+    },
+  }), { status: 401 });
   const { api, calls, tokenCalls } = setup({
     tokens: [{ ok: true, token: "stale" }, { ok: true, token: ACCESS }],
-    routes: [new Response(JSON.stringify({}), { status: 401 }), streamed(206, { cancelled })],
+    routes: [unauthorized, streamed(206)],
   });
   const got = await api.downloadRange("f1", 0, 9);
+  assert.equal(released.read || released.cancelled, true);
   assert.equal(got.status, 206);
   assert.deepEqual(tokenCalls, [{}, { force: true }]);
   assert.equal(calls[1].authorization, `Bearer ${ACCESS}`);
