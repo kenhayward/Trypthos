@@ -266,7 +266,7 @@ export default function WorkspacePanel({
   const shown = filtering ? trees.filter((tree) => tree.rows.length > 0) : trees;
   const rows = useMemo(() => shown.flatMap((tree) => tree.rows), [shown]);
   const fileCount = visibleFileCount(rows);
-  const noMatches = filterStatus.kind === "results" && matches.length === 0;
+  const noMatches = filterStatus.kind === "results" && !filterStatus.pending && matches.length === 0;
 
   // Resolved through the domain rather than counting the stored ids, so a pinned type and an id
   // this build does not recognise are handled here exactly as the tree handles them. The footer
@@ -369,7 +369,7 @@ export default function WorkspacePanel({
           >
             {/* A walk of every open folder takes as long as those folders are big, so the panel says
                 what it is doing rather than sitting silently on rows from the last filter. */}
-            {filterStatus.kind === "searching" && (
+            {(filterStatus.kind === "searching" || (filterStatus.kind === "results" && filterStatus.pending)) && (
               <p className="px-2 py-1 text-sm text-ink-4">{t("workspace.searching")}</p>
             )}
 

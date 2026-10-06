@@ -6,7 +6,6 @@ const {
   isOpenable,
   isSkippedWhenWalking,
 } = require("@trypthos/domain");
-const { listForSearch } = require("./searchListing");
 
 /// The files and folders chat is shown when a folder is attached - the model's map of it.
 ///
@@ -15,6 +14,11 @@ const { listForSearch } = require("./searchListing");
 /// outline is a menu the model reads and then orders from, so a short, predictable one beats a
 /// complete one. It names the folders directly inside as well as the files, so the model knows there
 /// is more below - and, with tools, can list or search there.
+///
+/// **It lists with `list`, not `listKnown`.** The outline is one level and one request, already
+/// cached by the provider, and a selected folder in a Drive workspace may never have been expanded
+/// (every Drive workspace reopened at launch); answering from what has been seen would hand the chat
+/// an empty outline for it. Only the walkers (filter, Find in Files) prefer `listKnown`.
 ///
 /// **This is NOT the allowlist.** It once was, when the model could read only what was named here.
 /// What the model may read now is any enabled file inside the attached folder, checked when a read
@@ -38,7 +42,7 @@ const { listForSearch } = require("./searchListing");
 ///
 /// Total: it never throws.
 async function outlineWorkspace(provider, { path, fileTypes, limit = DEFAULT_OUTLINE_FILE_LIMIT }) {
-  const listing = await listForSearch(provider, path);
+  const listing = await provider.list(path);
   if (!listing.ok) return { path: "", paths: [], folders: [], truncated: false };
 
   // Sorted so the same folder produces the same menu twice running. Without it the order is the
@@ -60,8 +64,6 @@ async function outlineWorkspace(provider, { path, fileTypes, limit = DEFAULT_OUT
     // Reported rather than silently short: an outline that stopped without saying so would have the
     // model answering as though it had seen the whole folder.
     truncated: files.length > limit || folders.length > OUTLINE_PATH_LIMIT,
-    // A Drive folder nobody has opened: the outline is what has been seen, not the folder.
-    ...(listing.complete === false ? { partial: true } : {}),
   };
 }
 
