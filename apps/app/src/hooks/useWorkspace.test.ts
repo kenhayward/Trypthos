@@ -772,6 +772,35 @@ describe("useWorkspace", () => {
     expect(result.current.state.errorKey).toBeNull();
   });
 
+  // The one reopen failure the user did not cause by forgetting: the account connected now is not
+  // the one this My Drive belongs to, and "it is just not there" would send them looking in the wrong place.
+  it("says so when a remembered My Drive belongs to a different account", async () => {
+    const { client } = fakeClient({
+      openWorkspaceRef: async () => ({ ok: false, reason: "other-account" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen([{ kind: "google-drive", folderId: "root", name: "My Drive" }]);
+    });
+
+    expect(result.current.state.workspaces).toEqual([]);
+    expect(result.current.state.errorKey).toBe("errors.driveOtherAccount");
+  });
+
+  it("stays silent about a Drive workspace that failed for any other reason", async () => {
+    const { client } = fakeClient({
+      openWorkspaceRef: async () => ({ ok: false, reason: "not-found" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+
+    await act(async () => {
+      await result.current.actions.reopen([{ kind: "google-drive", folderId: "root", name: "My Drive" }]);
+    });
+
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
   it("reopens a remembered folder, collapsed", async () => {
     const { client } = fakeClient();
     const { result } = renderHook(() => useWorkspace(client));

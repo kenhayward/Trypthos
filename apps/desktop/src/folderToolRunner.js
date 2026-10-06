@@ -326,11 +326,21 @@ async function create(provider, folder, fileTypes, openInTab, argumentsJson) {
   const written = await provider.write(args.path, args.content, null);
   if (!written.ok) {
     // A conflict here means the file is already there, which is the one thing this tool will not do.
-    return refuse(
-      written.reason === "conflict"
-        ? `${args.path} already exists. Propose an edit to change a file that is there.`
-        : `${args.path} could not be created.`,
-    );
+    if (written.reason === "conflict") {
+      return refuse(`${args.path} already exists. Propose an edit to change a file that is there.`);
+    }
+    // Drive answers these two when the file may have landed anyway (no revision came back, or a
+    // request timed out mid-flight). Saying "could not be created" would send the model to make it
+    // again, and a second attempt is a duplicate or a conflict.
+    if (written.reason === "unknown" || written.reason === "offline") {
+      return refuse(
+        `${args.path} may have been created. List the folder to check before trying again.`,
+      );
+    }
+    if (written.reason === "bad-request") {
+      return refuse(`${args.path} cannot be used here. Choose another name.`);
+    }
+    return refuse(`${args.path} could not be created.`);
   }
 
   if (args.open && openInTab !== null) openInTab(args.path);

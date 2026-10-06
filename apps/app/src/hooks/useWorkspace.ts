@@ -1293,12 +1293,17 @@ export function useWorkspace(
         // launch with a warning about something they may not remember choosing is worse than simply
         // opening without it.
         //
+        // The one exception is a My Drive that now belongs to a different account: that is not a
+        // folder gone missing, and without a word the workspace would simply vanish while the user
+        // looked for it in the wrong place.
+        //
         // Collapsed, unlike a workspace the user just chose. Nothing is listed, which for a cloud
         // provider also means nothing is fetched for a workspace nobody has looked at yet.
         if (result.ok) await addWorkspace(result.workspace, { expand: false });
+        else if (result.reason === "other-account") fail(result, ref.kind);
       }
     },
-    [addWorkspace, client],
+    [addWorkspace, client, fail],
   );
 
   const toggleFolder = useCallback(

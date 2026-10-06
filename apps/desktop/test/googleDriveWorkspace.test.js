@@ -62,6 +62,7 @@ function fakeApi(overrides = {}) {
     },
     uploadContent: async (id, content, mimeType) => {
       calls.upload.push({ id, bytes: Buffer.from(content), mimeType });
+      calls.order.push(["upload", id]);
       // Each upload moves the file on to a new revision, which `fileMeta` then answers.
       const headRevisionId = calls.upload.length === 1 ? "rev-new" : `rev-new-${calls.upload.length}`;
       if (meta[id] !== undefined) meta[id].headRevisionId = headRevisionId;
@@ -231,6 +232,8 @@ test("a save checks the revision, uploads, and answers the revision Drive gave t
 
   assert.deepEqual(written, { ok: true, revision: { id: "rev-new" } });
   assert.deepEqual(calls.meta.slice(metaBefore), ["mdCCC"]);
+  // The race between check and write is one request long, so nothing may sit between the two.
+  assert.deepEqual(calls.order.slice(-2), [["meta", "mdCCC"], ["upload", "mdCCC"]]);
   assert.equal(calls.upload.length, 1);
   assert.equal(calls.upload[0].id, "mdCCC");
   assert.equal(calls.upload[0].mimeType, "text/markdown");
