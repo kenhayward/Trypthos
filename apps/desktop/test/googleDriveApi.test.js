@@ -44,7 +44,7 @@ function setup({ routes = [], tokens = [{ ok: true, token: ACCESS }], timeoutMs,
       return next;
     }),
     fetch: async (url, init) => {
-      calls.push({ url, authorization: init.headers.Authorization, method: init.method, headers: init.headers, body: init.body });
+      calls.push({ signal: init.signal, url, authorization: init.headers.Authorization, method: init.method, headers: init.headers, body: init.body });
       const route = routes.shift();
       if (route === undefined) throw new Error(`no route for call ${calls.length}`);
       return typeof route === "function" ? route(url) : route;
@@ -319,4 +319,104 @@ test("a write that times out is not repeated, and answers offline", async () => 
   const { api, calls } = setup({ routes: [() => new Promise(() => {})], timeoutMs: 20 });
   assert.deepEqual(await api.uploadContent("f1", new Uint8Array([1]), "text/plain"), { ok: false, reason: "offline" });
   assert.equal(calls.length, 1);
+});
+
+// A ranged read hands the body back unread: the player pulls it as it plays.
+function streamed(status, { pulls = { count: 0 }, cancelled = { value: false }, stall = false } = {}) {
+  const body = new ReadableStream({
+    pull(controller) {
+      pulls.count += 1;
+      if (stall) return new Promise(() => {});
+      controller.enqueue(new Uint8Array([1, 2, 3]));
+      controller.close();
+    },
+    cancel() {
+      cancelled.value = true;
+    },
+  }, { highWaterMark: 0 });
+  return new Response(body, { status });
+}
+
+test("a byte range is asked for with the token and answered as an unread stream", async () => {
+  const pulls = { count: 0 };
+  const { api, calls } = setup({ routes: [streamed(206, { pulls })] });
+  const got = await api.downloadRange("f1", 100, 199);
+  assert.equal(got.ok, true);
+  assert.equal(got.status, 206);
+  assert.equal(calls[0].headers.Range, "bytes=100-199");
+  assert.equal(calls[0].authorization, `Bearer ${ACCESS}`);
+  assert.equal(new URL(calls[0].url).pathname.endsWith("/f1"), true);
+  assert.equal(new URL(calls[0].url).searchParams.get("alt"), "media");
+  assert.equal(pulls.count, 0);
+  assert.deepEqual([...new Uint8Array(await new Response(got.body).arrayBuffer())], [1, 2, 3]);
+});
+
+test("an open-ended range omits the end", async () => {
+  const { api, calls } = setup({ routes: [streamed(206)] });
+  await api.downloadRange("f1", 5, null);
+  assert.equal(calls[0].headers.Range, "bytes=5-");
+});
+
+test("the deadline covers the headers only, not a body that stalls", async () => {
+  const { api } = setup({ routes: [streamed(206, { stall: true })], timeoutMs: 20 });
+  const got = await api.downloadRange("f1", 0, 9);
+  assert.equal(got.ok, true);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(got.body.locked, false);
+});
+
+test("headers that never arrive answer offline and abort the request", async () => {
+  const { api, calls } = setup({ routes: [() => new Promise(() => {})], timeoutMs: 20 });
+  assert.deepEqual(await api.downloadRange("f1", 0, 9), { ok: false, reason: "offline" });
+  assert.equal(calls[0].signal.aborted, true);
+});
+
+test("an expired token is refreshed once for a range, and the 401 body is released", async () => {
+  const cancelled = { value: false };
+  const { api, calls, tokenCalls } = setup({
+    tokens: [{ ok: true, token: "stale" }, { ok: true, token: ACCESS }],
+    routes: [new Response(JSON.stringify({}), { status: 401 }), streamed(206, { cancelled })],
+  });
+  const got = await api.downloadRange("f1", 0, 9);
+  assert.equal(got.status, 206);
+  assert.deepEqual(tokenCalls, [{}, { force: true }]);
+  assert.equal(calls[1].authorization, `Bearer ${ACCESS}`);
+});
+
+test("a rate limit is waited out once for a range", async () => {
+  const { api, slept } = setup({ routes: [new Response("{}", { status: 429 }), streamed(206)] });
+  assert.equal((await api.downloadRange("f1", 0, 9)).status, 206);
+  assert.equal(slept.length, 1);
+});
+
+test("a range failure is named: 416, 404 and 403", async () => {
+  for (const [status, reason] of [[416, "unsatisfiable"], [404, "not-found"], [403, "permission-denied"]]) {
+    const { api } = setup({ routes: [new Response("{}", { status })] });
+    assert.deepEqual(await api.downloadRange("f1", 0, 9), { ok: false, reason });
+  }
+});
+
+test("a 200 answers a range only from the start; otherwise it is refused and released", async () => {
+  const whole = setup({ routes: [streamed(200)] });
+  const ok = await whole.api.downloadRange("f1", 0, 9);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.status, 200);
+
+  const cancelled = { value: false };
+  const middle = setup({ routes: [streamed(200, { cancelled })] });
+  assert.deepEqual(await middle.api.downloadRange("f1", 10, 19), { ok: false, reason: "offline" });
+  assert.equal(cancelled.value, true);
+});
+
+test("a range of an id that is not a Drive id never reaches a request", async () => {
+  const { api, calls } = setup();
+  assert.deepEqual(await api.downloadRange("../x", 0, 9), { ok: false, reason: "not-found" });
+  assert.equal(calls.length, 0);
+});
+
+test("a range failure logs no URL, id or token", async () => {
+  const { api, logs } = setup({ routes: [() => new Promise(() => {})], timeoutMs: 20 });
+  await api.downloadRange("f1", 0, 9);
+  assert.ok(logs.length > 0);
+  for (const line of logs) assert.doesNotMatch(line, /f1|https?:|access-invented/);
 });
