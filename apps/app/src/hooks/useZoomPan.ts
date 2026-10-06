@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { panScroll, wheelZoomDirection, type PanStart, type ZoomDirection } from "../lib/zoom";
+import { panScroll, stepWheelTravel, wheelZoomTravel, type PanStart, type ZoomDirection } from "../lib/zoom";
 
 interface Options {
   /// The element the gestures are read on.
@@ -9,12 +9,13 @@ interface Options {
   /// A function rather than an element, because the answer can arrive after this hook runs:
   /// CodeMirror's scroller is created by CodeMirror, and only exists once the view has been built.
   scroller?: () => HTMLElement | null;
-  /// A wheel notch with Shift held. The surface decides what a step means - a font size, or an
-  /// image's pixels - which is why this reports a direction and not a number.
+  /// One rung of zoom, from a Ctrl or Cmd wheel notch or a pinch. The surface decides what a step
+  /// means - a font size, or an image's pixels - which is why this reports a direction and not a
+  /// number.
   onZoom: (direction: ZoomDirection) => void;
 }
 
-/// Shift+wheel to zoom, Shift+drag to pan.
+/// Ctrl/Cmd+wheel or pinch to zoom, Shift+drag to pan. Shift+wheel is left to scroll sideways.
 ///
 /// One hook for all three surfaces - the editor, rendered prose, and a picture - so the gesture is
 /// the same wherever the pointer is, and there is one place to correct it if it is wrong.
@@ -42,11 +43,19 @@ export function useZoomPan({ host, scroller, onZoom }: Options): void {
 
     const scrolling = () => latestScroller.current?.() ?? element;
 
+    /// Travel not yet worth a rung. A pinch is a stream of tiny deltas, so the accumulator is what
+    /// stops it stepping the whole ladder in one gesture; see `stepWheelTravel`.
+    let pending = 0;
+
     const onWheel = (event: WheelEvent) => {
-      const direction = wheelZoomDirection(event);
-      if (direction === null) return;
+      const travel = wheelZoomTravel(event);
+      if (travel === null) return;
+      // Prevented for every zoom event, stepping or not - a pinch's small deltas would otherwise
+      // fall through to the browser's own page zoom between rungs.
       event.preventDefault();
-      latestOnZoom.current(direction);
+      const result = stepWheelTravel(pending, travel);
+      pending = result.pending;
+      if (result.direction !== null) latestOnZoom.current(result.direction);
     };
 
     let start: PanStart | null = null;

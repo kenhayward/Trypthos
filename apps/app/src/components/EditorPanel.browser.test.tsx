@@ -1015,10 +1015,8 @@ describe("Zoom, in a real browser", () => {
         new WheelEvent("wheel", {
           bubbles: true,
           cancelable: true,
-          shiftKey: true,
-          // A shifted wheel is reported on the HORIZONTAL axis by the browser. This is the one
-          // place that claim is made against a real one.
-          deltaX: direction === "in" ? -120 : 120,
+          ctrlKey: true,
+          deltaY: direction === "in" ? -120 : 120,
         }),
       );
     }
@@ -1059,6 +1057,32 @@ describe("Zoom, in a real browser", () => {
     await vi.waitFor(() => expect(sizeOf(surface())).toBeGreaterThan(before));
     spin(editorSurface(), 3, "out");
     await vi.waitFor(() => expect(sizeOf(surface())).toBe(before));
+  });
+
+  // Shift is sideways scrolling again, in a real browser too.
+  it("does not zoom on a shifted wheel", async () => {
+    await renderEditor();
+    const before = sizeOf(surface());
+
+    editorSurface().dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, shiftKey: true, deltaX: -120 }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sizeOf(surface())).toBe(before);
+  });
+
+  // A pinch arrives as a stream of small ctrl-wheel deltas: one rung, not one per event.
+  it("steps one rung for ten small pinch deltas", async () => {
+    await renderEditor();
+    const before = sizeOf(surface());
+
+    for (let turn = 0; turn < 10; turn += 1) {
+      editorSurface().dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -5 }),
+      );
+    }
+    // One rung up from 1 is 1.1, so the font is 1.1 times its base.
+    await vi.waitFor(() => expect(sizeOf(surface())).toBeCloseTo(before * 1.1, 1));
   });
 
   it("draws rendered prose larger too", async () => {
@@ -1102,7 +1126,7 @@ describe("Zooming a picture, in a real browser", () => {
   const spinOver = (element: Element, notches: number) => {
     for (let turn = 0; turn < notches; turn += 1) {
       element.dispatchEvent(
-        new WheelEvent("wheel", { bubbles: true, cancelable: true, shiftKey: true, deltaX: -120 }),
+        new WheelEvent("wheel", { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -120 }),
       );
     }
   };

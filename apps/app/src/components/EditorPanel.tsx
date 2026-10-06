@@ -291,7 +291,9 @@ export default function EditorPanel({
     const platform = currentPlatform();
     const onKeyDown = (event: KeyboardEvent) => {
       const command = zoomKeyCommand(event, platform);
-      if (command === null) return;
+      // Ctrl+1 is a picture's "actual size"; text has no such thing, so it is left for whatever
+      // else wants the key.
+      if (command === null || command === "actual") return;
       event.preventDefault();
       if (command === "reset") setZooms((prev) => ({ ...prev, [key]: DEFAULT_ZOOM }));
       else stepZoom(command);
