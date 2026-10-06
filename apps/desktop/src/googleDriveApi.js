@@ -90,15 +90,26 @@ function createGoogleDriveApi({
   /// the headers (and, for an error status, its small JSON body) and then stands down, so a long
   /// playback is never cut off by it. A successful response is answered unread. Answers `{ response,
   /// value }` (`value` is the parsed error body, `null` on success) or `null` when it did not complete.
-  async function attemptHeaders(url, token, headers) {
+  ///
+  /// `signal` is the caller's: when it aborts, so does the request, and the answer is `null` at once
+  /// rather than at the deadline. A caller that gave up is not a failure worth an error line, so that
+  /// one is logged quietly - by its code, like every other.
+  async function attemptHeaders(url, token, headers, signal) {
     const controller = new AbortController();
     let timer;
+    let onAbort;
     const deadline = new Promise((_, reject) => {
       timer = setTimeout(() => {
         const error = Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
         controller.abort(error);
         reject(error);
       }, timeoutMs);
+      onAbort = () => {
+        const error = Object.assign(new Error("aborted"), { name: "AbortError", abandoned: true });
+        controller.abort(error);
+        reject(error);
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
     const work = (async () => {
       const response = await fetch(url, {
@@ -112,10 +123,12 @@ function createGoogleDriveApi({
     try {
       return await Promise.race([work, deadline]);
     } catch (error) {
-      logger.error?.(`A request to Google Drive did not complete: ${codeOf(error)}`);
+      if (error?.abandoned === true) logger.info?.(`A request to Google Drive was abandoned: ${codeOf(error)}`);
+      else logger.error?.(`A request to Google Drive did not complete: ${codeOf(error)}`);
       return null;
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
     }
   }
 
@@ -206,8 +219,12 @@ function createGoogleDriveApi({
   /// plays. `start` and `end` are inclusive offsets, `end` null for "to the end". Drive may answer 200
   /// with the whole file, which is only usable when the range began at 0; anywhere else it would play
   /// the wrong bytes, so it is refused and released.
-  async function downloadRange(id, start, end) {
+  ///
+  /// `signal`, when given, is the window's request for the range: once it aborts no further request is
+  /// made, and the one in flight is aborted. Nobody is left to read the answer, so it is just a failure.
+  async function downloadRange(id, start, end, { signal } = {}) {
     if (!isDriveId(id)) return failure("not-found");
+    if (signal?.aborted) return failure("offline");
     let token = await tokenFrom();
     if (!token.ok) return token;
     const range = `bytes=${start}-${end ?? ""}`;
@@ -215,7 +232,8 @@ function createGoogleDriveApi({
     let refreshed = false;
     let waited = false;
     for (;;) {
-      const got = await attemptHeaders(driveMediaUrl(id), token.token, { Range: range });
+      if (signal?.aborted) return failure("offline");
+      const got = await attemptHeaders(driveMediaUrl(id), token.token, { Range: range }, signal);
       if (got === null) return failure("offline");
       const { response } = got;
       if (response.ok) {

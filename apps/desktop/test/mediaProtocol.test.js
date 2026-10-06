@@ -22,12 +22,13 @@ const BODY = Buffer.from("0123456789ABCDEFGHIJ");
 
 /// A byte source over an in-memory buffer, as `locate` answers one. `opened` records every
 /// `open(start, end)` so a test can assert what the handler asked for, not just what it returned.
-function sourceOf(buffer, opened, failure = null) {
+function sourceOf(buffer, opened, failure = null, signals = []) {
   return {
     ok: true,
     size: buffer.length,
-    open: async (start, end) => {
+    open: async (start, end, signal) => {
       opened.push([start, end]);
+      signals.push(signal);
       if (failure !== null) return { ok: false, reason: failure };
       return { ok: true, body: new Blob([buffer.subarray(start, end + 1)]).stream() };
     },
@@ -36,8 +37,9 @@ function sourceOf(buffer, opened, failure = null) {
 
 async function withFile(body) {
   const opened = [];
+  const signals = [];
   const locate = async (qualified) => {
-    if (qualified === "Notes/clip.mp4") return sourceOf(BODY, opened);
+    if (qualified === "Notes/clip.mp4") return sourceOf(BODY, opened, null, signals);
     if (qualified === "Notes/empty.mp4") return sourceOf(Buffer.alloc(0), opened);
     if (qualified === "Notes/denied.mp4") return sourceOf(BODY, opened, "permission-denied");
     if (qualified === "Notes/gone.mp4") return sourceOf(BODY, opened, "not-found");
@@ -45,10 +47,15 @@ async function withFile(body) {
     if (qualified === "Notes/shrunk.mp4") return sourceOf(BODY, opened, "unsatisfiable");
     if (qualified === "Notes/secret.mp4") return { ok: false, reason: "permission-denied" };
     if (qualified === "Repo/clip.mp4") return { ok: false, reason: "unsupported" };
+    if (qualified === "Closed/clip.mp4") return { ok: false, reason: "no-workspace" };
+    // A cloud listing walk can fail on the way to the file, for reasons that say nothing about it.
+    for (const reason of ["offline", "rate-limited", "not-connected"]) {
+      if (qualified === `Drive/${reason}.mp4`) return { ok: false, reason };
+    }
     return { ok: false, reason: "not-found" };
   };
 
-  await body({ handle: createMediaHandler({ locate }), opened });
+  await body({ handle: createMediaHandler({ locate }), opened, signals });
 }
 
 const get = (url, headers = {}) => new Request(url, { headers });
@@ -157,6 +164,35 @@ test("refuses a workspace that cannot stream", async () => {
   await withFile(async ({ handle }) => {
     const response = await handle(get(mediaUrl("Repo/clip.mp4")));
     assert.equal(response.status, 404);
+  });
+});
+
+test("refuses a workspace that has closed as missing", async () => {
+  await withFile(async ({ handle }) => {
+    assert.equal((await handle(get(mediaUrl("Closed/clip.mp4")))).status, 404);
+  });
+});
+
+// A network problem on the way to the file is not a missing file: a player told 404 gives up on a
+// clip that is still there.
+test("a locate that failed for a reason other than the file answers 502, as an open would", async () => {
+  await withFile(async ({ handle }) => {
+    for (const reason of ["offline", "rate-limited", "not-connected"]) {
+      const response = await handle(get(mediaUrl(`Drive/${reason}.mp4`)));
+      assert.equal(response.status, 502, reason);
+      assert.equal((await response.arrayBuffer()).byteLength, 0, reason);
+    }
+  });
+});
+
+// When the player abandons a range, the request behind it must be able to stop.
+test("hands the window's request signal to the source's open", async () => {
+  await withFile(async ({ handle, signals }) => {
+    const ranged = get(mediaUrl("Notes/clip.mp4"), { Range: "bytes=0-4" });
+    await (await handle(ranged)).arrayBuffer();
+    const whole = get(mediaUrl("Notes/clip.mp4"));
+    await (await handle(whole)).arrayBuffer();
+    assert.deepEqual(signals, [ranged.signal, whole.signal]);
   });
 });
 

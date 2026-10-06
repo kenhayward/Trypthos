@@ -905,6 +905,62 @@ test("mediaSource finds a file nobody has listed by the same walk read uses", as
   assert.deepEqual(asked, [["audJJJ", 0, 299]]);
 });
 
+test("mediaSource's open passes the request's abort signal on to Drive", async () => {
+  const seen = [];
+  const { overrides } = mediaApi();
+  const { provider } = await open({
+    ...overrides,
+    downloadRange: async (id, start, end, options) => {
+      seen.push(options?.signal);
+      return { ok: true, status: 206, body: new Blob(["bytes"]).stream() };
+    },
+  });
+  const found = await provider.mediaSource("clip.mp4");
+  const controller = new AbortController();
+  await found.open(10, 19, controller.signal);
+  assert.deepEqual(seen, [controller.signal]);
+});
+
+/// A Drive whose clip can be replaced behind the provider's back, under a clock the test moves.
+async function replaceableClip() {
+  let clock = 1000;
+  const files = { rootAAA: [{ id: "vidHHH", name: "clip.mp4", mimeType: "video/mp4", size: "2000" }] };
+  const listed = [];
+  const { provider } = await open(
+    { listChildren: async (id) => (listed.push(id), { ok: true, files: [...(files[id] ?? [])] }) },
+    { now: () => clock, ttlMs: 60_000 },
+  );
+  return { provider, files, listed, advance: (ms) => (clock += ms) };
+}
+
+// The size is the listing's, and a listing is trusted for the TTL and no longer - so a clip replaced
+// in Drive is served at its new size within a minute, not whenever its folder happens to be opened.
+test("mediaSource asks Drive nothing more within the TTL, however often it is called", async () => {
+  const { provider, listed, advance } = await replaceableClip();
+  for (let i = 0; i < 5; i += 1) {
+    assert.equal((await provider.mediaSource("clip.mp4")).size, 2000);
+    advance(10_000);
+  }
+  assert.deepEqual(listed, ["rootAAA"]);
+});
+
+test("mediaSource re-lists the parent after the TTL and answers the new size", async () => {
+  const { provider, files, listed, advance } = await replaceableClip();
+  assert.equal((await provider.mediaSource("clip.mp4")).size, 2000);
+  files.rootAAA = [{ id: "vidHHH", name: "clip.mp4", mimeType: "video/mp4", size: "1500" }];
+  advance(60_001);
+  assert.equal((await provider.mediaSource("clip.mp4")).size, 1500);
+  assert.deepEqual(listed, ["rootAAA", "rootAAA"]);
+});
+
+test("mediaSource answers not-found for a file gone from the fresh listing", async () => {
+  const { provider, files, advance } = await replaceableClip();
+  assert.equal((await provider.mediaSource("clip.mp4")).ok, true);
+  files.rootAAA = [];
+  advance(60_001);
+  assert.deepEqual(await provider.mediaSource("clip.mp4"), { ok: false, reason: "not-found" });
+});
+
 /// Drive can ignore a Range and answer 200 with the whole file; the client passes that on for a
 /// range starting at 0. A 200 is only the answer to a range that IS the whole file.
 function ignoringRangeApi() {

@@ -371,6 +371,31 @@ test("headers that never arrive answer offline and abort the request", async () 
   assert.equal(calls[0].signal.aborted, true);
 });
 
+// A player that seeks fast, or a tab that closes, abandons ranges whose headers have not arrived.
+// The Drive request behind each must stop then, not run on to its deadline and hand a body to nobody.
+test("a range whose request is aborted before its headers aborts the fetch and answers promptly", async () => {
+  const { api, calls, logs } = setup({ routes: [() => new Promise(() => {})], timeoutMs: 10_000 });
+  const controller = new AbortController();
+  const started = Date.now();
+  const pending = api.downloadRange("f1", 0, 9, { signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.abort();
+  const got = await pending;
+  assert.equal(got.ok, false);
+  assert.ok(Date.now() - started < 1_000);
+  assert.equal(calls[0].signal.aborted, true);
+  // Nothing went wrong that anybody needs to be told about.
+  assert.deepEqual(logs, []);
+});
+
+test("a range asked for under a signal already aborted asks Drive nothing", async () => {
+  const { api, calls } = setup({ routes: [streamed(206)] });
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal((await api.downloadRange("f1", 0, 9, { signal: controller.signal })).ok, false);
+  assert.equal(calls.length, 0);
+});
+
 test("an expired token is refreshed once for a range, and the 401 body is released", async () => {
   const released = { read: false, cancelled: false };
   const errorBody = new TextEncoder().encode("{}");
