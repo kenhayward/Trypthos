@@ -1246,15 +1246,21 @@ export default function App() {
 
       {renaming && (
         <RenameDialog
-          current={renaming.slice(renaming.lastIndexOf("/") + 1)}
+          // A Google Doc is named by its title: the `.md` is the app's suffix, not part of the name
+          // somebody gave it in Drive.
+          current={googleDocTitle(renaming, googleDocs) ?? renaming.slice(renaming.lastIndexOf("/") + 1)}
           // What the tree already knows is in the same folder, so a clash is said while typing. A folder
           // that has not been listed offers nothing, and the shell still refuses the clash.
           siblings={(state.folders[renaming.slice(0, renaming.lastIndexOf("/"))]?.children ?? []).map(
-            (node) => node.name,
+            (node) => googleDocTitle(node.id, googleDocs) ?? node.name,
           )}
           onCancel={() => setRenaming(false)}
           onRename={async (name) => {
-            const problem = await actions.renameEntry(renaming, name);
+            // The path keeps one meaning everywhere, so a Doc goes to the shell as `Title.md`.
+            const problem = await actions.renameEntry(
+              renaming,
+              googleDocs.has(renaming) ? `${name}.md` : name,
+            );
             if (problem === null) setRenaming(false);
             return problem;
           }}

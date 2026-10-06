@@ -1189,6 +1189,52 @@ describe("making a new file", () => {
     expect(await screen.findByRole("button", { name: "roadmap.md" })).toBeDefined();
   });
 
+  // A Google Doc is a file whose `.md` is only the app's suffix, so the dialog shows and compares
+  // titles, and the name it submits gets the suffix back - the shell strips it for Drive.
+  it("renames a Google Doc by its title, without the .md", async () => {
+    const user = userEvent.setup();
+    shell();
+    const renamed: [string, string][] = [];
+    Object.assign(window.trypthos!, {
+      readSettings: async () => ({
+        ok: true as const,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          workspaces: [{ kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" }],
+        },
+      }),
+      listDirectory: async () => ({
+        ok: true as const,
+        nodes: [
+          { id: "Notes/Meeting.md", name: "Meeting.md", kind: "file" as const, googleDoc: true },
+          { id: "Notes/Minutes.md", name: "Minutes.md", kind: "file" as const, googleDoc: true },
+        ],
+      }),
+      renameEntry: async (path: string, name: string) => {
+        renamed.push([path, name]);
+        return { ok: true as const, path: `Notes/${name}` };
+      },
+    });
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Expand Notes" }));
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: "Meeting" }) });
+    await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+
+    const field = screen.getByLabelText("Name") as HTMLInputElement;
+    expect(field.value).toBe("Meeting");
+
+    await user.clear(field);
+    await user.type(field, "Minutes");
+    expect(screen.getByRole("alert").textContent).toBe("Something in this folder is already called that.");
+
+    await user.clear(field);
+    await user.type(field, "Agenda");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(renamed).toEqual([["Notes/Meeting.md", "Agenda.md"]]));
+  });
+
   it("shows a folder in the file manager from its context menu", async () => {
     const user = userEvent.setup();
     shell();

@@ -19,6 +19,7 @@ import ContextMenu, { ContextMenuItem } from "./ContextMenu";
 import Glyph from "./Glyph";
 import DriveGlyph from "./DriveGlyph";
 import { googleDocIds } from "../lib/googleDocs";
+import { canEditTree, opensInBrowser } from "../lib/workspaceCapabilities";
 import SourceGlyph, { sourceColour } from "./SourceGlyph";
 import Spinner from "./Spinner";
 
@@ -209,18 +210,22 @@ export default function WorkspacePanel({
   // A right-click does not change the selected folder. The action therefore names the folder the
   // user already chose, rather than quietly changing a folder chat or Find may be using just to
   // decide where a file goes.
+  const editable = menuWorkspace !== undefined && canEditTree(menuWorkspace.ref);
   const newFileDirectory =
-    menuWorkspace?.ref.kind === "local" &&
+    editable &&
     (selectedFolder === menuWorkspace.id || selectedFolder.startsWith(`${menuWorkspace.id}/`))
       ? selectedFolder
       : null;
-  const newFolderDirectory = menuWorkspace?.ref.kind === "local" ? menu?.directory ?? null : null;
+  const newFolderDirectory = editable ? menu?.directory ?? null : null;
   const local = menuWorkspace?.ref.kind === "local";
+  const inBrowser = menuWorkspace !== undefined && opensInBrowser(menuWorkspace.ref);
   const newWindowFile = local && menu?.openable === true ? menu.file : null;
-  // A folder on disk is the one thing both of these need, and the workspace's own folder is the
-  // one entry that can be shown but not renamed.
-  const revealTarget = local ? (menu?.target ?? null) : null;
-  const renameTargetPath = revealTarget !== null && revealTarget !== menuWorkspace?.id ? revealTarget : null;
+  // A folder on disk is the one thing Reveal needs; Open in Google Drive needs the same entry but
+  // shows it on the web. Both go through the one handler, and the shell decides which it is.
+  const revealTarget = local || inBrowser ? (menu?.target ?? null) : null;
+  // The workspace's own folder is the one entry that can be shown but not renamed.
+  const renameTargetPath =
+    editable && menu !== null && menu.target !== menuWorkspace.id ? menu.target : null;
   // Any workspace, unlike a new window: a repository file reads like any other. Not a picture and
   // not a recording, neither of which has any text to send and both of which would only ever be
   // refused.
@@ -550,7 +555,11 @@ export default function WorkspacePanel({
                     onRevealEntry(revealTarget);
                   }}
                 >
-                  {platform === "darwin" ? t("workspace.revealInFinder") : t("workspace.revealInExplorer")}
+                  {inBrowser
+                    ? t("workspace.openInDrive")
+                    : platform === "darwin"
+                      ? t("workspace.revealInFinder")
+                      : t("workspace.revealInExplorer")}
                 </ContextMenuItem>
               )}
               {/* The same entry for a folder and a repository. What refreshing a repository changes
