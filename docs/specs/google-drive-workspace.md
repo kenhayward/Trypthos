@@ -313,7 +313,8 @@ These settle details the sections above left open. Where they differ from the te
 | 1 | Connect a Google account in Settings -> Accounts. Client config + CI injection. CLAUDE.md order amended. | 0.96.0 |
 | 2 | Open a Drive folder as a read-only workspace: picker, tree, read, images, Google Docs as markdown, refresh, reopen at launch. Settings v23. | 0.97.0 |
 | 3 | Save with check-write-confirm and conflict as a result. | 0.98.0 |
-| 4 | New file, new folder, rename in a Drive workspace. | 0.99.0 |
+| 4 | Video and audio streamed from Drive (the media protocol forwards the player's byte ranges to Drive's download endpoint with `Range`, token held in main), and image viewing with Fit, 100% and zoom/pan by the usual gestures (Ctrl/Cmd + wheel and trackpad pinch to zoom about the pointer, drag to pan, double-click to toggle Fit and 100%) - for every source, not only Drive. Requested after the PR 2 manual check. | 0.99.0 |
+| 5 | New file, new folder, rename in a Drive workspace. | 0.100.0 |
 
 Each PR runs the CLAUDE.md release checklist. Architecture.md gains a Google Drive section in PR 1
 (sign-in, token storage, client injection) and grows with each PR. The help article on Drive lands in
