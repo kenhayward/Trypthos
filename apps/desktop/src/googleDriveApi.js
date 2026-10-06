@@ -3,6 +3,7 @@
 const {
   DriveFileListSchema,
   DriveFileSchema,
+  FOLDER_MIME,
   SharedDriveListSchema,
   SharedDriveSchema,
   childrenUrl,
@@ -11,6 +12,7 @@ const {
   driveMediaUrl,
   exportUrl,
   fileUrl,
+  folderCreateUrl,
   isDriveId,
   multipartRelated,
   sharedDriveUrl,
@@ -322,7 +324,30 @@ function createGoogleDriveApi({
     return answer.ok ? { ok: true, file: answer.value } : answer;
   }
 
-  return { uploadContent, createFile, listChildren, fileMeta, download, downloadRange, exportMarkdown, sharedDrive, sharedDrives, sharedWithMeFolders };
+  /// A new folder inside another. Metadata only, so a JSON POST to the metadata endpoint. Repeated
+  /// after a 401 or a rate limit and not after a timeout, like every write here.
+  async function createFolder(parentId, name) {
+    if (!isDriveId(parentId)) return failure("not-found");
+    const answer = await sendJson(folderCreateUrl(), DriveFileSchema, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
+    });
+    return answer.ok ? { ok: true, file: answer.value } : answer;
+  }
+
+  /// A new name for a file or folder, nothing else changed. A Google Doc's name is its title.
+  async function renameFile(id, name) {
+    if (!isDriveId(id)) return failure("not-found");
+    const answer = await sendJson(fileUrl(id), DriveFileSchema, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    return answer.ok ? { ok: true, file: answer.value } : answer;
+  }
+
+  return { uploadContent, createFile, createFolder, renameFile, listChildren, fileMeta, download, downloadRange, exportMarkdown, sharedDrive, sharedDrives, sharedWithMeFolders };
 }
 
 module.exports = { createGoogleDriveApi };
