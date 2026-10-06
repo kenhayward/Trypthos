@@ -25,6 +25,7 @@ import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
 import { DEFAULT_EDITOR_MODE, isEditable, type EditorMode } from "../lib/editorMode";
 import { DEFAULT_ZOOM, nextZoom, zoomKeyCommand, type ZoomDirection } from "../lib/zoom";
+import { stepPicture, type PictureView } from "../lib/pictureZoom";
 import type { FindMatch, MediaSource } from "@trypthos/domain";
 import { previewVisibleText } from "../lib/findInPreview";
 import { renderMarkdown } from "../lib/markdown";
@@ -165,6 +166,9 @@ const NO_FILE_TYPES: readonly string[] = [];
 /// this array, and a fresh `[]` per render would make each of them run on every render.
 const NO_MATCHES: readonly FindMatch[] = [];
 
+/// What a picture opens at. One object, so a picture nobody has zoomed is the same view every render.
+const FIT: PictureView = { kind: "fit" };
+
 export default function EditorPanel({
   workspaceName,
   pageName,
@@ -277,6 +281,23 @@ export default function EditorPanel({
     [key],
   );
 
+  /// How each picture is being looked at, keyed by path like the text zoom above and kept apart
+  /// from it: a picture opens at Fit, which is not a number, and has a 100% that text does not. Not
+  /// persisted either, for the same reason.
+  const [pictureViews, setPictureViews] = useState<Record<string, PictureView>>({});
+  const pictureView = pictureViews[key] ?? FIT;
+  const setPictureView = useCallback(
+    (next: PictureView) => setPictureViews((prev) => ({ ...prev, [key]: next })),
+    [key],
+  );
+  /// What Fit works out to for the picture on screen, as the viewer last measured it. A key steps
+  /// from the scale on screen, and in Fit only the viewer knows what that is.
+  const pictureFit = useRef(1);
+  const reportFit = useCallback((fit: number) => {
+    pictureFit.current = fit;
+  }, []);
+  const picture = media?.kind === "image";
+
   /// Ctrl and plus, minus or zero - Cmd on macOS.
   ///
   /// Bound on the WINDOW rather than on a surface, unlike the wheel and the drag: a gesture is aimed
@@ -291,16 +312,29 @@ export default function EditorPanel({
     const platform = currentPlatform();
     const onKeyDown = (event: KeyboardEvent) => {
       const command = zoomKeyCommand(event, platform);
+      if (command === null) return;
+      if (picture) {
+        // A picture's reset is Fit - what it opened at - and Ctrl+1 is its own pixels.
+        event.preventDefault();
+        if (command === "reset") setPictureView(FIT);
+        else if (command === "actual") setPictureView({ kind: "scale", scale: 1 });
+        else
+          setPictureViews((prev) => ({
+            ...prev,
+            [key]: stepPicture(prev[key] ?? FIT, pictureFit.current, command),
+          }));
+        return;
+      }
       // Ctrl+1 is a picture's "actual size"; text has no such thing, so it is left for whatever
       // else wants the key.
-      if (command === null || command === "actual") return;
+      if (command === "actual") return;
       event.preventDefault();
       if (command === "reset") setZooms((prev) => ({ ...prev, [key]: DEFAULT_ZOOM }));
       else stepZoom(command);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [key, stepZoom]);
+  }, [key, stepZoom, picture, setPictureView]);
 
   /// The right-click menu is drawn in the shell, but its one renderer-named item can only be offered
   /// where it would land: over an editable markdown document. So every right-click reports what was
@@ -481,10 +515,17 @@ export default function EditorPanel({
           page
         ) : media !== null ? (
           media.kind === "image" ? (
-            // A picture, drawn rather than edited. It scrolls within the panel at its own size
-            // rather than being scaled to fit, because a screenshot shrunk to a panel is a
-            // screenshot you cannot read - and Ctrl (Cmd on macOS) and the wheel, or a pinch, get it back.
-            <ImageViewer source={media.source} name={activePath ?? ""} zoom={zoom} onZoom={stepZoom} />
+            // A picture, drawn rather than edited. It opens fitted to the panel and is zoomed from
+            // there; see ImageViewer for why. `key`, so one picture's measured size and scroll are
+            // never carried into the next.
+            <ImageViewer
+              key={activePath}
+              source={media.source}
+              name={activePath ?? ""}
+              view={pictureView}
+              onView={setPictureView}
+              onFit={reportFit}
+            />
           ) : (
             // A recording, played. No zoom: a video is watched at the panel's size, and the way to
             // make it bigger is the control bar's fullscreen button.

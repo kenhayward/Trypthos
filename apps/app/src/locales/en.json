@@ -100,6 +100,13 @@
       "saved": "Close Saved"
     },
     "imageAlt": "{{name}}",
+    "picture": {
+      "fit": "Fit",
+      "actual": "100%",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomLevel": "{{percent}}%"
+    },
     "videoLabel": "{{name}}",
     "audioLabel": "{{name}}",
     "mediaUndecodable": "This file opened, but this computer cannot play its video or audio coding.",

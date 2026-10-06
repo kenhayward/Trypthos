@@ -10,15 +10,16 @@ interface Options {
   /// CodeMirror's scroller is created by CodeMirror, and only exists once the view has been built.
   scroller?: () => HTMLElement | null;
   /// One rung of zoom, from a Ctrl or Cmd wheel notch or a pinch. The surface decides what a step
-  /// means - a font size, or an image's pixels - which is why this reports a direction and not a
-  /// number.
+  /// means - a font size, or rendered prose's `em` - which is why this reports a direction and not
+  /// a number.
   onZoom: (direction: ZoomDirection) => void;
 }
 
 /// Ctrl/Cmd+wheel or pinch to zoom, Shift+drag to pan. Shift+wheel is left to scroll sideways.
 ///
-/// One hook for all three surfaces - the editor, rendered prose, and a picture - so the gesture is
-/// the same wherever the pointer is, and there is one place to correct it if it is wrong.
+/// One hook for both text surfaces - the editor and rendered prose - so the gesture is the same
+/// wherever the pointer is, and there is one place to correct it if it is wrong. A picture has its
+/// own (see `ImageViewer`): it zooms continuously about the pointer, and a plain drag pans it.
 ///
 /// Two pieces of DOM detail are load-bearing here, and both are invisible when they are wrong:
 ///
