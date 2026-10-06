@@ -11,9 +11,11 @@ const DOC = "# Title\n\nSome **bold** text and `code`.\n\n- one\n- two\n";
 function Harness({
   onChange = vi.fn(),
   dirty = false,
+  saving = false,
 }: {
   onChange?: (value: string) => void;
   dirty?: boolean;
+  saving?: boolean;
 }) {
   const [value, setValue] = useState(DOC);
   return (
@@ -22,6 +24,7 @@ function Harness({
       paths={["docs/notes.md"]}
       activePath="docs/notes.md"
       dirty={dirty}
+      saving={saving}
       value={value}
       onChange={(next) => {
         setValue(next);
@@ -227,6 +230,15 @@ describe("EditorPanel", () => {
     render(<Harness dirty />);
 
     expect(screen.getByText("Unsaved")).toBeDefined();
+  });
+
+  // Still unsaved until Drive answers, so the pill keeps its place and says what is happening.
+  it("says Saving, with a spinner, while the document on screen is being saved", () => {
+    render(<Harness dirty saving />);
+
+    expect(screen.getByRole("status", { name: "Saving..." })).toBeDefined();
+    expect(screen.getByText("Saving...")).toBeDefined();
+    expect(screen.queryByText("Unsaved")).toBeNull();
   });
 
   // Moved out of the header when the tabs arrived: the top row has to give its width to the strip,

@@ -92,6 +92,9 @@ export interface WorkspaceState {
   /// The qualified path of the file being read right now, or null. What the tree puts a spinner on.
   /// Only the latest: a second open that starts first is the one shown until it arrives.
   opening: string | null;
+  /// The qualified paths whose save has been sent and not yet answered. What the tree and the header
+  /// put a spinner on - a save to Drive takes long enough to look as if nothing happened.
+  savingPaths: readonly string[];
   busy: boolean;
   /// Translation key for the current failure, or null. Never a sentence - see `failureKey`.
   errorKey: string | null;
@@ -234,9 +237,17 @@ interface Internal {
   /// somebody making a second "notes.md", and the tab strip tells documents apart by path.
   drafts: number;
   opening: string | null;
+  savingPaths: readonly string[];
   busy: boolean;
   errorKey: string | null;
   errorParams: Record<string, string> | null;
+}
+
+/// `paths` without one occurrence of `path`. One, not every: two saves of the same file can overlap,
+/// and the first answer must not take the second's spinner down with it.
+function withoutOne(paths: readonly string[], path: string): readonly string[] {
+  const at = paths.indexOf(path);
+  return at === -1 ? paths : [...paths.slice(0, at), ...paths.slice(at + 1)];
 }
 
 const INITIAL: Internal = {
@@ -247,6 +258,7 @@ const INITIAL: Internal = {
   scratch: "",
   drafts: 0,
   opening: null,
+  savingPaths: [],
   busy: false,
   errorKey: null,
   errorParams: null,
@@ -778,9 +790,17 @@ export function useWorkspace(
         }
       }
 
-      setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
+      setInternal((prev) => ({
+        ...prev,
+        busy: true,
+        errorKey: null,
+        errorParams: null,
+        savingPaths: [...prev.savingPaths, open.path],
+      }));
 
       const result = await client.writeFile(open.path, open.content, open.revision, message);
+      // Down on any answer, and only this save's entry: another tab's save may still be on its way.
+      setInternal((prev) => ({ ...prev, savingPaths: withoutOne(prev.savingPaths, open.path) }));
       if (!result.ok) {
         // Worded for the provider the save went to, so a Drive failure names Google, not GitHub.
         fail(result, kindOf(stateRef.current.workspaces, open.path), "save");
@@ -1394,6 +1414,7 @@ export function useWorkspace(
       readOnly: active?.readOnly ?? false,
       media: active?.media ?? null,
       opening: internal.opening,
+      savingPaths: internal.savingPaths,
       busy: internal.busy,
       errorKey: internal.errorKey,
       errorParams: internal.errorParams,

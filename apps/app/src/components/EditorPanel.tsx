@@ -47,6 +47,9 @@ interface Props {
   /// Whether the document ON SCREEN has unsaved work. The header says so in words; the tabs mark the
   /// others with a dot.
   dirty: boolean;
+  /// Whether that document's save has been sent and not yet answered. The header says so, with a
+  /// spinner, until it is.
+  saving?: boolean;
   value: string;
   /// Whether the document on screen refuses edits - the built-in guide, which has no file behind it.
   ///
@@ -169,6 +172,7 @@ export default function EditorPanel({
   activePath,
   dirtyPaths = [],
   dirty,
+  saving = false,
   value,
   readOnly = false,
   readClipboard,
@@ -450,7 +454,7 @@ export default function EditorPanel({
           {/* Nothing to switch between for an image, and a header offering three views of a
               photograph would be three buttons that do nothing. */}
           {media === null && page === null && (
-            <EditorHeader dirty={dirty} mode={mode} modes={fileType.modes} onModeChange={setMode} />
+            <EditorHeader dirty={dirty} saving={saving} mode={mode} modes={fileType.modes} onModeChange={setMode} />
           )}
         </div>
       )}

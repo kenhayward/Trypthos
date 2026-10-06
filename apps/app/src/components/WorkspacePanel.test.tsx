@@ -134,6 +134,15 @@ describe("WorkspacePanel", () => {
     expect(within(screen.getByRole("button", { name: /README\.md/ })).queryByRole("status")).toBeNull();
   });
 
+  // A save to Drive takes seconds, and without a mark the click looks as if it did nothing.
+  it("shows a spinner on a file being saved, labelled as saving", () => {
+    panel({ openPaths: ["Diariz/docs/plan.md"], savingPaths: ["Diariz/docs/plan.md"] });
+
+    const saving = screen.getByRole("button", { name: /plan\.md/ });
+    expect(within(saving).getByRole("status", { name: "Saving..." })).toBeDefined();
+    expect(within(screen.getByRole("button", { name: /README\.md/ })).queryByRole("status")).toBeNull();
+  });
+
   it("shows a spinner, labelled as loading, on a folder that is being listed", () => {
     panel({
       folders: { ...FOLDERS, "Diariz/docs": { status: "loading" } },
