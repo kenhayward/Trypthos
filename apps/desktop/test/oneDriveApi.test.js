@@ -83,7 +83,8 @@ test("refuses a next page that is not on Graph, and sends it nothing", async () 
   const { api, calls, logs } = setup({ routes: [json(200, { value: [PLAN], "@odata.nextLink": "https://elsewhere.example/steal" })] });
   assert.deepEqual(await api.children(DRIVE, "root", ""), { ok: false, reason: "unknown" });
   assert.equal(calls.length, 1);
-  assert.equal(logs.join(" ").includes("https://elsewhere.example/steal"), false);
+  // The whole log, exactly: the one fixed line, with no address in it.
+  assert.deepEqual(logs, ["OneDrive named a next page somewhere other than Graph; it was not followed."]);
 });
 
 test("lists what is shared with the user, across pages", async () => {
