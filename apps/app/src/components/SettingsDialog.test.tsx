@@ -18,7 +18,7 @@ function dialog(overrides: Partial<React.ComponentProps<typeof SettingsDialog>> 
     onClose: vi.fn(),
     onChange: vi.fn(),
     onSaveKey: vi.fn(async () => ({ ok: true }) as const),
-    onDeleteKey: vi.fn(async () => {}),
+    onDeleteKey: vi.fn(async () => ({ ok: true }) as const),
     explorer: { checked: true, supported: true, registered: false, set: vi.fn(async () => {}) },
     // Null, as in the browser preview: the Accounts page then says so rather than drawing a form
     // that cannot work, and no test here is about GitHub.
@@ -521,6 +521,22 @@ describe("SettingsDialog: API keys", () => {
     expect(props.onDeleteKey).toHaveBeenCalledWith("http://localhost:11434/v1");
   });
 
+  // Issue #235. The store can refuse to remove a key (a newer version's file, or one it could not
+  // open). Saying nothing would leave the user believing a key is gone that is still on disk.
+  it("reports a key that could not be removed, and still shows it stored", async () => {
+    const user = userEvent.setup();
+    keys({
+      keyedEndpoints: ["http://localhost:11434/v1"],
+      onDeleteKey: vi.fn(async () => ({ ok: false, reason: "from-the-future" }) as const),
+    });
+    await openEditor(user);
+
+    await user.click(screen.getByRole("button", { name: "Remove key" }));
+
+    expect(await screen.findByText(/could not be removed/)).toBeDefined();
+    expect(screen.getByText("Key stored")).toBeDefined();
+  });
+
   it("offers nothing to remove when no key is stored", async () => {
     const user = userEvent.setup();
     keys();
@@ -578,7 +594,7 @@ describe("SettingsDialog: AI and the system prompt", () => {
           onClose={vi.fn()}
           onChange={(change) => setSettings((current) => ({ ...current, ...change }))}
           onSaveKey={vi.fn(async () => ({ ok: true }) as const)}
-          onDeleteKey={vi.fn(async () => {})}
+          onDeleteKey={vi.fn(async () => ({ ok: true }) as const)}
         />
       );
     }

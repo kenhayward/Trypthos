@@ -514,6 +514,7 @@
       "removeKey": "Remove key",
       "keyHint": "Keys are encrypted by your operating system and never leave this computer. Trypthos cannot show a stored key back to you.",
       "keyFailed": "That key could not be stored securely on this computer, so it was not saved.",
+      "keyRemoveFailed": "That key could not be removed from this computer, so it is still stored.",
       "saveModel": "Save model",
       "cancel": "Cancel",
       "remove": "Remove",

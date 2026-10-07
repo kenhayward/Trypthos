@@ -15,6 +15,17 @@ export interface KeyBridge {
 
 export type SaveKeyResult = { ok: true } | { ok: false; reason: string };
 
+/// The delete channel's answer is checked here rather than trusted by type: the bridge declares it
+/// `unknown`, and only an explicit refusal means the key is still there.
+function isRefusal(value: unknown): value is { ok: false; reason: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { ok?: unknown }).ok === false &&
+    typeof (value as { reason?: unknown }).reason === "string"
+  );
+}
+
 export function useApiKeys(bridge: KeyBridge | null, configuredEndpoints: readonly string[]) {
   const [keyedEndpoints, setKeyedEndpoints] = useState<string[]>([]);
 
@@ -66,11 +77,16 @@ export function useApiKeys(bridge: KeyBridge | null, configuredEndpoints: readon
     [bridge, refresh],
   );
 
+  /// Answers like `saveKey`. The shell can refuse (issue #235: a newer version's key file, or one it
+  /// could not open), and then the key is still on disk - so nothing is refreshed and the interface
+  /// keeps saying "Key stored", which is the truth.
   const deleteKey = useCallback(
-    async (endpoint: string) => {
-      if (bridge === null) return;
-      await bridge.deleteApiKey(endpoint);
+    async (endpoint: string): Promise<SaveKeyResult> => {
+      if (bridge === null) return { ok: false, reason: "not-desktop" };
+      const result = await bridge.deleteApiKey(endpoint);
+      if (isRefusal(result)) return { ok: false, reason: result.reason };
       await refresh();
+      return { ok: true };
     },
     [bridge, refresh],
   );
