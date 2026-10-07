@@ -1350,6 +1350,47 @@ A loader is handed a `LanguageRequest`, not a bare name, because **one** of them
 filename: `markdown` builds its `codeLanguages` from the rest of the catalogue. Every loader is
 given the whole request rather than the editor special-casing the one that is different.
 
+### A PDF, read rather than drawn
+
+A document is the third thing the centre panel opens, and it is neither of the two the app already
+does: a picture is drawn from pixels, a recording is played from a stream, and a PDF is **read with
+an engine**. It crosses the transport a recording uses rather than a new one - the engine wants a URL
+it can range-request, not a buffer it must hold - so `OpenDocument`'s `media.kind` answers `pdf`
+beside `image`/`video`/`audio` (`openDocuments.ts`) and the shell answers `application/pdf` for it
+through `pdfMediaTypeFor`, a second claimant on the name beside `mediaTypeFor`. Nothing else about
+the transport changed: a PDF is a whole file, and range requests are what the reader asks for
+anyway, so the head, the xref and the objects a page needs are fetched and nothing else is.
+
+- **pdfjs-dist 6.4.299 is a new external dependency, and it belongs to the renderer, not the shell.**
+  The engine runs where the page is drawn; the shell's job is the bytes and the boundary check, and it
+  already has both. It is `import()`ed inside the parse step, never at the top of a module - the same
+  rule the grammar packages and KaTeX are held to, so a window with no document open pays no parser.
+  `GlobalWorkerOptions.workerSrc` is pointed at the worker build Vite ships beside the parser
+  (`pdfjs-dist/build/pdf.worker.mjs?url`), so the worker is a blob module worker in the window rather
+  than a page on the wire.
+- **The parse is cached by source, for as long as the app is open**, and the cache is module-level and
+  exported (`parsed` in `PdfViewer.tsx`). A document is a page description, so re-reading it at every
+  zoom or panel resize is the feature's point lost, and a second parse is a second round of range
+  requests. The export is also how the jsdom suite seeds a hand-written document and never reaches the
+  engine: the surface is tested without an engine, and the real window is the proof of the engine.
+- **A page is zoomed exactly as a picture is**, so the viewer calls `pictureZoom` rather
+  than reimplementing it and reuses the picture's zoom buttons and zoom-level readout; the only new
+  strings are the page bar's. That is a decision, not an economy - the surface is the picture's, and a
+  page has a natural size exactly as a picture does. The bar's arithmetic clamps in both jsdom and a
+  real window through `Math.max(1, width)`, because jsdom reports no geometry.
+- **One page is on screen at a time.** A stacked scroll would erase the page boundary, which is the
+  whole point of a document; the page bar carries the rest of it, answers the page count, and turns to
+  the nearest page where it is clicked. There are no page-turn buttons: keys and a bar are enough, and
+  a control whose length depends on the document is not one.
+- **Nothing is written back, and a document is never offered as a new file.** `WRITABLE` in
+  `newFile.ts` is that filter - prose, plain and code are the kinds the app writes into - because an
+  empty `.pdf` is not a PDF, exactly as an empty `.png` is not a picture. The same reason keeps a
+  picture and a recording out of the dialog.
+- **The catalogue answers which names open.** `wikiLink.ts` no longer carries its own copy of the
+  document extensions: the row in `fileTypes.ts` is the catalogue, and a second copy of a row is a
+  copy that can disagree with the row. A wiki link and a markdown link to a `.pdf` follow to the
+  document only while its row is on, which is the same claim the tree makes.
+
 ### Fenced code inside markdown
 
 `lib/fenceLanguages.ts` turns the enabled catalogue into the `LanguageDescription`s that

@@ -1,7 +1,7 @@
 {
   "name": "trypthos-app",
   "private": true,
-  "version": "0.104.1",
+  "version": "0.105.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -46,6 +46,7 @@
     "lucide-static": "1.48.0",
     "marked": "^18.0.14",
     "mermaid": "12.0.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-i18next": "^17.0.15",

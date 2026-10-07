@@ -5,6 +5,24 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.105.0",
+    date: "2026-10-07",
+    pr: 240,
+    headline: "Open a PDF and read it",
+    summary:
+      "A .pdf in a folder now opens in the centre panel and is read there. The page is drawn at the panel's size, and the bar under it answers how many pages the file has; click along that bar where the page you want is, or press Page Down and Page Up. Ctrl+wheel (Cmd on macOS) or a pinch zooms about the pointer and a drag moves the page, exactly as a picture does, and Fit and 100% are the same two answers. A PDF is read, never written: nothing is ever saved back, and the New file dialog does not offer one, because an empty .pdf is not a PDF. A file that needs a password says so rather than showing a blank page, and one that is not a PDF says that too. Links follow to a document now: a wiki link or a markdown link that names a .pdf opens it, and still refuses when the PDF row is turned off. The row is on by default in a new installation, like every other type.",
+    added: [
+      "A PDF opens in the centre panel as a read-only page, drawn at the panel's size.",
+      "A page bar that answers the page count, turns to a page where you click it, and answers Page Down and Page Up.",
+      "Zoom, pan, Fit and 100% over a page, with the same gestures a picture answers to.",
+      "The PDF file type, on by default, and a settings migration that turns it on for existing installations.",
+    ],
+    changed: [
+      "The New file dialog offers only the kinds Trypthos writes into, so a PDF, a picture and a recording are no longer offered as a new file.",
+      "A wiki link or a markdown link that names a .pdf follows to the document when its row is on, and refuses when it is off.",
+    ],
+  },
+  {
     version: "0.104.1",
     date: "2026-10-07",
     pr: 239,
