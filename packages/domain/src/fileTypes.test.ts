@@ -109,6 +109,24 @@ describe("fileTypeFor", () => {
   });
 });
 
+describe("the pdf row", () => {
+  const row = FILE_TYPES.find((type) => type.id === "pdf");
+
+  it("claims .pdf and nothing else", () => {
+    expect(fileTypeFor("report.pdf", DEFAULT_FILE_TYPES)?.id).toBe("pdf");
+    expect(fileTypeFor("REPORT.PDF", DEFAULT_FILE_TYPES)?.id).toBe("pdf");
+  });
+
+  // Live, Source and Preview are markdown constructs; a PDF is none of the three.
+  it("offers no view modes", () => {
+    expect(row?.modes).toEqual([]);
+  });
+
+  it("is its own kind, so nothing tries to edit it", () => {
+    expect(row?.kind).toBe("pdf");
+  });
+});
+
 describe("the catalogue", () => {
   // ONE assertion over the whole catalogue, not a check per type. Every type can be well-formed
   // while the set still has two of them claiming `.m`, and a per-type check cannot see that.
@@ -172,12 +190,13 @@ describe("the catalogue", () => {
 
   // A type with no modes is a file that opens into a panel with no view to draw it in - unless it is
   // not drawn by the editor at all. An image has nothing to switch between: Live and Preview are
-  // markdown constructs and Source is text, and a photograph is none of the three.
+  // markdown constructs and Source is text, and a photograph is none of the three - nor is a video,
+  // a sound, or a document an engine draws.
   it("gives every type at least one view, unless it is not text", () => {
     // Live and Preview are markdown constructs and Source is text, so a type with no views is
-    // exactly a type that is not text: a picture, a video, a sound. A header offering three views
+    // exactly a type that is not text: a picture, a video, a sound, a document an engine draws. A header offering three views
     // of one of those would be three buttons that do nothing.
-    const notText = new Set(["image", "video", "audio"]);
+    const notText = new Set(["image", "video", "audio", "pdf"]);
     const viewless = FILE_TYPES.filter((type) => type.modes.length === 0);
     expect(viewless.every((type) => notText.has(type.kind))).toBe(true);
     expect(FILE_TYPES.filter((type) => notText.has(type.kind)).every((type) => type.modes.length === 0)).toBe(true);
