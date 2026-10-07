@@ -539,3 +539,14 @@ test("a refresh begun while a cancelled sign-in's token is being deleted cannot 
   assert.equal(accounts.tokens.has("onedrive"), false);
   assert.deepEqual(await h.instance.accessToken(), { ok: false, reason: "not-connected" });
 });
+
+// "Your account is no longer connected" is wrong on a first sign-in: there was no account yet.
+test("a sign-in whose code Microsoft refuses as invalid_grant is unknown, not 'no longer connected'", async () => {
+  const h = harness({
+    microsoft: intercept(fakeMicrosoft(), (url, init) =>
+      url.endsWith("/token") && isGrant(init, "authorization_code") ? json(400, { error: "invalid_grant" }) : undefined,
+    ),
+  });
+  assert.deepEqual(await h.instance.connect(), { ok: false, reason: "unknown" });
+  assert.equal(h.accounts.tokens.size, 0);
+});

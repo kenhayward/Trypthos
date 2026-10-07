@@ -123,20 +123,23 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 
 ### Shell (`apps/desktop/src`, CommonJS)
 
-- **`loopbackOAuth.js`** (PR 1): `listenOnce`, `pkcePair`, `checkState` - moved, not rewritten.
+- **`loopbackOAuth.js`** (PR 1): `listenOnce`, `pkcePair` - moved, not rewritten. The state check is
+  the domain's `readRedirect` (from `googleAuth.ts`), reused by both providers.
 - **`microsoftClient.js`** (PR 1): `loadMicrosoftClient({ packaged, resourcesPath, env })` answers
   `{ clientId }` or `null`.
 - **`microsoftAuth.js`** (PR 1): `createMicrosoftAuth({ client, accounts, openExternal, fetch })` with
   `status()`, `connect()`, `cancelConnect()`, `disconnect()`, `accessToken()`.
   - `connect` opens the authorize URL through `openExternal`, waits on the loopback, exchanges the
-    code, checks scopes, stores the refresh token, then reads `/me`.
+    code, checks scopes, reads `/me`, and stores the refresh token last - only once it has been
+    shown to work. A refused code reads as `unknown`, never `not-connected`.
   - `accessToken` returns the cached token until 60 s before expiry, then refreshes. A refresh is
     single-flight (one promise shared by concurrent callers) and stores the rotated refresh token
     before resolving.
   - `invalid_grant` on refresh clears the stored token and reports `not-connected`.
   - `disconnect` forgets the stored token. Personal-account tokens cannot be revoked by the app;
     the Settings text says to remove the app's access at account.live.com if the user wants that too.
-- **`oneDriveApi.js`** (PR 1 for `/me` and `/me/drive`; PR 2 for reads; PR 3 for writes):
+- **`oneDriveApi.js`** (PR 2 for reads; PR 3 for writes). PR 1 has no `oneDriveApi.js`: its only
+  Graph call, `/me`, lives in `microsoftAuth.js`.
   `createOneDriveApi({ accessToken, fetch })`. Each call: one retry after a 401 (with a fresh
   token), one after 429/503 honouring `Retry-After` up to 10 s, a deadline on headers.
   - Reads: `me`, `drive`, `children(driveId, itemId, path)` (all pages, capped at the tree's
@@ -168,8 +171,8 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 - **`SourceGlyph`**: an `onedrive` mark and colour token in `index.css`, light and dark.
 - **`workspaceCapabilities.ts`**: `canEditTree` and `opensInBrowser` include `onedrive` (PR 3 for
   editing, PR 2 for opening in the browser).
-- **Strings**: `workspace.openInOneDrive`, `settings.onedrive.*`, `errors.onedrive*` - all through the
-  catalogue, no em or en dashes.
+- **Strings**: `workspace.openInOneDrive`, `onedrive.*`, `cloud.*`, `settings.accounts.oneDrive` and
+  `errors.oneDrive*` - all through the catalogue, no em or en dashes.
 
 ## Error handling
 
@@ -215,7 +218,7 @@ TDD throughout. Every Graph and login response comes from a hand-written fake `f
 Three PRs, each a Minor bump, each with the release checklist in CLAUDE.md:
 
 1. **Connect a Microsoft account (0.102.0)** - `loopbackOAuth` extraction, `microsoftClient`,
-   `microsoftAuth`, `oneDriveApi.me/drive`, the `onedrive:*` account channels, `CloudAccountSection`,
+   `microsoftAuth` (with its `/me` lookup), the `onedrive:*` account channels, `CloudAccountSection`,
    the release workflow and builder config, README fork note, leak guards. CLAUDE.md's provider
    order becomes "OneDrive, Dropbox" remaining, and its status line mentions OneDrive.
 2. **Browse OneDrive (0.103.0)** - the ref kind and settings 25, reads, `oneDriveWorkspace` (list,

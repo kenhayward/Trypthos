@@ -28,8 +28,8 @@ export default function CloudAccountSection({ kind, bridge, onConnected }: Props
       ? t("cloud.connectedAs", { email: account.email })
       : t("cloud.notConnected");
 
-  // `configured` stays false when the status check itself failed, so "this build has no support for this provider
-  // support" is only claimed when the check answered and no error is showing.
+  // `configured` stays false when the status check itself failed, so "this build has no support for this
+  // provider" is only claimed when the check answered and no error is showing.
   const missingInBuild = !account.configured && account.errorKey === null;
 
   return (

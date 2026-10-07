@@ -125,9 +125,12 @@ export function grantsOneDrive(scope: string): boolean {
 
 const MicrosoftErrorBodySchema = z.object({ error: z.string() });
 
-export type MicrosoftAuthFailure = "not-connected" | "not-configured" | "permission-denied" | "rate-limited" | "offline";
+export type MicrosoftAuthFailure = "not-connected" | "not-configured" | "permission-denied" | "rate-limited" | "offline" | "unknown";
 
 /// What a refusal from the token endpoint or `/me` means to the user.
+///
+/// A 4xx it does not name is `unknown`, not `offline`: Microsoft answered, so telling the user to
+/// check their connection would send them to the wrong place. A 5xx still reads as `offline`.
 export function microsoftAuthErrorFor(status: number, body: unknown): MicrosoftAuthFailure {
   const parsed = MicrosoftErrorBodySchema.safeParse(body);
   if (parsed.success) {
@@ -136,5 +139,6 @@ export function microsoftAuthErrorFor(status: number, body: unknown): MicrosoftA
   }
   if (status === 401) return "permission-denied";
   if (status === 429) return "rate-limited";
+  if (status >= 400 && status < 500) return "unknown";
   return "offline";
 }

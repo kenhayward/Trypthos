@@ -39,6 +39,12 @@ jobs:
       # console downloads for the Desktop app client. A Desktop client's secret is not confidential by
       # Google's own definition, but it does not belong in a public repository either. Without the
       # secret the app still builds, and says Google Drive is not available.
+      #
+      # The OneDrive client, written to onedrive-client.json from a secret holding the Microsoft app
+      # registration's client id (a GUID; a public client has no secret). Unset, the app builds and
+      # says OneDrive is not available. Set but not a GUID, the build fails here rather than shipping
+      # a client the app would refuse on launch. Written by node, not printf, so the value is JSON-
+      # encoded whatever it holds.
       - name: Write the Google and OneDrive OAuth clients
         shell: bash
         env:
@@ -52,9 +58,15 @@ jobs:
           else
             echo "::warning::GOOGLE_OAUTH_CLIENT_JSON is not set, so this build has no Google Drive sign-in."
           fi
+          ONEDRIVE_CLIENT_ID="$(printf '%s' "$ONEDRIVE_CLIENT_ID" | tr -d '[:space:]')"
+          export ONEDRIVE_CLIENT_ID
           if [ -n "$ONEDRIVE_CLIENT_ID" ]; then
+            if ! printf '%s' "$ONEDRIVE_CLIENT_ID" | grep -Eq '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'; then
+              echo "::error::ONEDRIVE_CLIENT_ID is set but is not a GUID."
+              exit 1
+            fi
             mkdir -p apps/desktop/build
-            printf '{ "clientId": "%s" }' "$ONEDRIVE_CLIENT_ID" > apps/desktop/build/onedrive-client.json
+            node -e "require('fs').writeFileSync('apps/desktop/build/onedrive-client.json', JSON.stringify({ clientId: process.env.ONEDRIVE_CLIENT_ID.trim() }))"
             echo "ok: OneDrive client written"
           else
             echo "::warning::ONEDRIVE_CLIENT_ID is not set, so this build has no OneDrive sign-in."

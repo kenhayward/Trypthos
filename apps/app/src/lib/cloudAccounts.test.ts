@@ -38,6 +38,8 @@ describe("oneDriveFailureKey", () => {
     ["scope-denied", "errors.oneDriveScopeDenied"],
     ["timed-out", "errors.oneDriveTimedOut"],
     ["not-configured", "errors.oneDriveNotConfigured"],
+    // A failed code exchange answers this. The shared wording names no provider.
+    ["unknown", "errors.unknown"],
   ])("answers %s with %s, which exists", (reason, key) => {
     expect(oneDriveFailureKey(reason)).toBe(key);
     expect(typeof lookup(key)).toBe("string");
