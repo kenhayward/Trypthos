@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 25;
+export const SETTINGS_VERSION = 26;
 
 export const SettingsSchema = z
   .object({
@@ -175,6 +175,22 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 26,
+    // Version 26 added the pdf row. Appended rather than left for the user to find, for the reason
+    // version 22 gives: the rule in `file-types.md` protects a choice somebody MADE, and nobody
+    // chose to exclude a row that had no checkbox.
+    //
+    // Written out rather than read from DEFAULT_FILE_TYPES, for the reason version 11 gives: a
+    // migration is a record of what a version DID, and reading a constant would silently change
+    // what old files become the day that constant changes.
+    migrate: (input) => {
+      const fileTypes = (input as { fileTypes?: { enabled?: unknown } }).fileTypes ?? {};
+      const enabled = Array.isArray(fileTypes.enabled) ? fileTypes.enabled : [];
+      const added = ["pdf"].filter((id) => !enabled.includes(id));
+      return { ...input, fileTypes: { ...fileTypes, enabled: [...enabled, ...added] } };
+    },
+  },
   {
     to: 25,
     // Version 25 lets a remembered workspace be a OneDrive folder. Nothing already remembered changes.
