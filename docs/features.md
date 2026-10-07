@@ -286,6 +286,10 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 **A spinner shows while things load.** A file you have clicked shows a spinner at the end of its row until it opens, a folder shows one while it lists, and the Drive folder picker shows one beside "Loading folders...". It does the same for local folders and repositories, and holds still if your system asks for reduced motion.
 
+## OneDrive
+
+**Connect a personal Microsoft account from Settings > Accounts.** Connect opens Microsoft's sign-in page in your browser: sign in with your personal Microsoft account and allow access to your files, and the section shows the account you connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Microsoft directly from this machine. Disconnect forgets the sign-in on this computer; to remove Trypthos's access from your Microsoft account as well, visit account.live.com/consent/Manage. Opening OneDrive folders follows in the next release. Work and school accounts are not supported.
+
 ## Home page and graph
 
 **Every workspace has a home page.** Click a workspace's name in the folder browser and its page
