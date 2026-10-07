@@ -30,6 +30,10 @@ const { DEFAULT_SETTINGS, readStoredSettings } = require("@trypthos/domain");
 ///   - **Could not be opened at all** (held by another process, permissions): refused, since there
 ///     is nothing to back up and no telling what it holds. The next write tries again.
 ///
+/// Those checks see the file at WRITE time. What a window loaded is checked in the IPC layer, per
+/// window (`settings:read` / `settings:write` in ipcHandlers.js): a window whose own load did not
+/// succeed holds defaults, and every write from it is refused until its own re-read succeeds.
+///
 /// Log lines name the step and the reason. Never the file's contents, and never its path - the path
 /// carries the user's account name on every platform.
 
@@ -69,17 +73,6 @@ async function inspectStored(userDataDir, readFile = fs.readFile) {
   return { state: "unreadable", reason: result.reason };
 }
 
-/// Which settings directories' last load did NOT succeed (review round 1 of #235).
-///
-/// The stateless check in `writeSettings` sees the file as it is at write time - which is not
-/// enough. If the load hit a held file (EBUSY at launch), it answered defaults; 400 ms later the
-/// lock is gone, the file reads as current, and the renderer's write would put those defaults over
-/// it. So a failed load is remembered, and while it is, a write over an existing current file is
-/// refused (`not-loaded`) until a later load succeeds. A missing file is a successful load of
-/// nothing, so a first run is never blocked. Keyed by directory, so tests over separate temporary
-/// directories cannot see each other's state.
-const failedLoads = new Set();
-
 /// Which settings directories had an unreadable file replaced in this run of the app (fix round 2).
 ///
 /// The replaced file held the user's profiles; what the session holds started from defaults. Every
@@ -94,28 +87,39 @@ function sweepHeld(userDataDir) {
   return replacedUnreadable.has(userDataDir);
 }
 
-async function readSettings(userDataDir, { logger = console, readFile } = {}) {
+/// Reads the settings and says how the load went: `{ settings, state }`, where `state` is the
+/// `inspectStored` state ("current", "missing", "from-the-future", "unreadable", "unopenable").
+///
+/// The store keeps NO memory of a load (fix round 3). Whether a load failed matters only to the
+/// window whose renderer will save from it, so that bookkeeping lives in the IPC layer, keyed by the
+/// sender - see `settings:read` in ipcHandlers.js. A store-level flag was set and cleared by every
+/// main-process read (chat:send, the outline, another window), so an unrelated read succeeding
+/// let a window holding defaults write them over a good file.
+async function loadSettingsFile(userDataDir, { logger = console, readFile } = {}) {
   const stored = await inspectStored(userDataDir, readFile);
-
-  if (stored.state === "current" || stored.state === "missing") failedLoads.delete(userDataDir);
-  else failedLoads.add(userDataDir);
 
   switch (stored.state) {
     case "current":
-      return stored.settings;
+      return { settings: stored.settings, state: stored.state };
     case "missing":
       // First run. The overwhelmingly common case, and not worth a line.
-      return DEFAULT_SETTINGS;
+      return { settings: DEFAULT_SETTINGS, state: stored.state };
     case "from-the-future":
       logger.warn?.("Settings load: fell back to defaults (from-the-future); the file will not be written.");
-      return DEFAULT_SETTINGS;
+      return { settings: DEFAULT_SETTINGS, state: stored.state };
     case "unreadable":
       logger.warn?.(`Settings load: fell back to defaults (${stored.reason}).`);
-      return DEFAULT_SETTINGS;
+      return { settings: DEFAULT_SETTINGS, state: stored.state };
     default:
       logger.warn?.(`Settings load: could not open the file (${stored.code}).`);
-      return DEFAULT_SETTINGS;
+      return { settings: DEFAULT_SETTINGS, state: stored.state };
   }
+}
+
+/// Just the settings - for the main process's own reads (chat:send, the outline, startup), which
+/// save nothing and so have no load to remember.
+async function readSettings(userDataDir, options) {
+  return (await loadSettingsFile(userDataDir, options)).settings;
 }
 
 /// A file name safe on every platform: an ISO time with the colons and the dot that Windows refuses
@@ -148,7 +152,15 @@ let written = 0;
 /// written often enough (every panel drag settles) that "rarely" is not an argument. The temporary
 /// name is unique per write, so a second instance of the app cannot rename this one's half-written
 /// file into place.
-function writeSettings(userDataDir, settings, { logger = console, now = () => new Date(), readFile } = {}) {
+///
+/// `replaceOnly`: the caller loaded an unreadable file and holds defaults because of it, so the
+/// write may replace that file and nothing else - if it has since become readable, or gone, the
+/// defaults must not land there, and the write answers `not-loaded`.
+function writeSettings(
+  userDataDir,
+  settings,
+  { logger = console, now = () => new Date(), readFile, replaceOnly = false } = {},
+) {
   return queued(async () => {
     const target = settingsPath(userDataDir);
     const stored = await inspectStored(userDataDir, readFile);
@@ -161,7 +173,7 @@ function writeSettings(userDataDir, settings, { logger = console, now = () => ne
       logger.warn?.(`Settings write: refused, the file could not be opened (${stored.code}).`);
       return { ok: false, reason: "unopenable" };
     }
-    if (stored.state === "current" && failedLoads.has(userDataDir)) {
+    if (replaceOnly && stored.state !== "unreadable") {
       logger.warn?.("Settings write: refused (not-loaded).");
       return { ok: false, reason: "not-loaded" };
     }
@@ -200,7 +212,6 @@ function writeSettings(userDataDir, settings, { logger = console, now = () => ne
 
     if (stored.state === "unreadable") {
       // What is on disk now is what this session holds, so later writes are ordinary ones.
-      failedLoads.delete(userDataDir);
       replacedUnreadable.add(userDataDir);
       return { ok: true, replacedUnreadable: true };
     }
@@ -230,6 +241,7 @@ function notifySettingsWritten(settings) {
 
 module.exports = {
   readSettings,
+  loadSettingsFile,
   writeSettings,
   settingsPath,
   readCloseToTray,

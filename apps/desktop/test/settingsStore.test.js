@@ -6,7 +6,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { DEFAULT_SETTINGS, SETTINGS_VERSION } = require("@trypthos/domain");
-const { readSettings, writeSettings, settingsPath } = require("../src/settingsStore");
+const { loadSettingsFile, readSettings, writeSettings, settingsPath } = require("../src/settingsStore");
 
 const silent = { error: () => {}, warn: () => {} };
 
@@ -287,32 +287,38 @@ test("a write while the file cannot be opened is refused, with no backup and the
   });
 });
 
-/// The launch race: the load hits a held file and answers defaults, the lock is gone 400 ms later
-/// when the renderer writes those defaults back. The file is readable by then - and still must not
-/// be written, because what is being written is not what was in it.
-test("after a load that could not open the file, a write over a current file is refused", async () => {
+/// The launch race - the load hits a held file and answers defaults, the lock is gone 400 ms later
+/// - is decided per WINDOW in the IPC layer (secretsIpc.test.js, fix round 3). The store only says
+/// how a load went, and remembers nothing: a plain read never changes what a later write may do.
+test("a load says how it went, and a failed one changes nothing a later write may do", async () => {
   await withDir(async (dir) => {
     await writeSettings(dir, CUSTOM);
-    const before = await fs.readFile(settingsPath(dir), "utf8");
+    const failed = await loadSettingsFile(dir, { logger: silent, readFile: failingOnce("EBUSY") });
+    assert.deepEqual(failed, { settings: DEFAULT_SETTINGS, state: "unopenable" });
+    assert.deepEqual(await loadSettingsFile(dir), { settings: CUSTOM, state: "current" });
 
-    assert.deepEqual(await readSettings(dir, { logger: silent, readFile: failingOnce("EBUSY") }), DEFAULT_SETTINGS);
-    const result = await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent });
-
-    assert.deepEqual(result, { ok: false, reason: "not-loaded" });
-    assert.equal(await fs.readFile(settingsPath(dir), "utf8"), before);
+    await readSettings(dir, { logger: silent, readFile: failingOnce("EBUSY") });
+    assert.deepEqual(await writeSettings(dir, CUSTOM), { ok: true });
   });
 });
 
-test("once a later load succeeds, writes work again", async () => {
+/// A window that loaded an unreadable file may replace that file - and nothing else. If it has
+/// since become readable, or gone, its defaults must not land there.
+test("a replace-only write lands over an unreadable file and nothing else", async () => {
   await withDir(async (dir) => {
     await writeSettings(dir, CUSTOM);
-    await readSettings(dir, { logger: silent, readFile: failingOnce("EBUSY") });
-    assert.equal((await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent })).ok, false);
+    const before = await fs.readFile(settingsPath(dir), "utf8");
+    const options = { logger: silent, replaceOnly: true };
 
-    assert.deepEqual(await readSettings(dir), CUSTOM);
-    const settings = { ...CUSTOM, panels: { ...CUSTOM.panels, workspaceWidth: 344 } };
-    assert.deepEqual(await writeSettings(dir, settings), { ok: true });
-    assert.deepEqual(await readSettings(dir), settings);
+    assert.deepEqual(await writeSettings(dir, DEFAULT_SETTINGS, options), { ok: false, reason: "not-loaded" });
+    assert.equal(await fs.readFile(settingsPath(dir), "utf8"), before);
+
+    await fs.rm(settingsPath(dir));
+    assert.deepEqual(await writeSettings(dir, DEFAULT_SETTINGS, options), { ok: false, reason: "not-loaded" });
+    assert.deepEqual(await fs.readdir(dir), []);
+
+    await fs.writeFile(settingsPath(dir), "{ this is not json", "utf8");
+    assert.deepEqual(await writeSettings(dir, DEFAULT_SETTINGS, options), { ok: true, replacedUnreadable: true });
   });
 });
 

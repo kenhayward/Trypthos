@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { DEFAULT_SETTINGS, IPC_CHANNELS, SETTINGS_VERSION } = require("@trypthos/domain");
+const { DEFAULT_SETTINGS, IPC_CHANNELS, SETTINGS_VERSION, SettingsSchema } = require("@trypthos/domain");
 const { createSecretStore } = require("../src/secretStore");
 const { registerIpcHandlers } = require("../src/ipcHandlers");
 const { readSettings, writeSettings } = require("../src/settingsStore");
@@ -266,45 +266,145 @@ test("after replacing an unreadable file, later settings writes in the session s
   });
 });
 
-// The launch race: the load hit a held file and answered defaults, and by the time the renderer
-// writes them back the file reads fine. Refused, and nothing swept.
-test("a settings write after a load that could not open the file is refused, and sweeps no keys", async () => {
-  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+// ---- Fix round 3: a failed load belongs to the window that will save from it ----
+//
+// The launch race: one window's settings:read hits a file it cannot open and answers defaults. That
+// window's renderer will write those defaults back. Whether IT loaded is the question - not whether
+// some other read (chat:send, the outline, another window) happened to succeed in between.
+
+/// Parsed, so it carries every default a stored profile is read back with and compares equal.
+const KEPT = SettingsSchema.parse({
+  ...DEFAULT_SETTINGS,
+  chat: {
+    ...DEFAULT_SETTINGS.chat,
+    profiles: [{ id: "one", label: "Kept", endpoint: ENDPOINT, model: "m", supportsImages: false, isDefault: true }],
+  },
+});
+
+/// A window, as the IPC layer sees one: its handler calls carry `event.sender`.
+function windowOf(ipcMain, id) {
+  return {
+    invoke: (channel, payload) => ipcMain.handlers.get(channel)({ sender: { id } }, payload),
+  };
+}
+
+/// The settings file made unopenable the portable way: a directory where the file should be reads
+/// as EISDIR on every platform, which the store treats exactly as a held file.
+async function makeUnopenable(file) {
+  await fs.rm(file, { force: true });
+  await fs.mkdir(file);
+}
+
+async function makeReadable(dir, file, settings = KEPT) {
+  await fs.rm(file, { recursive: true, force: true });
+  await writeSettings(dir, settings);
+}
+
+/// Every one of these provokes a warn line on purpose.
+async function withQuietSettings(body) {
+  await withHandlers(async (context) => {
     const warnings = console.warn;
     console.warn = () => {};
     try {
-      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
-      const kept = {
-        ...DEFAULT_SETTINGS,
-        chat: {
-          ...DEFAULT_SETTINGS.chat,
-          profiles: [
-            { id: "one", label: "Kept", endpoint: ENDPOINT, model: "m", supportsImages: false, isDefault: true },
-          ],
-        },
-      };
-      await writeSettings(dir, kept);
-      const file = path.join(dir, "settings.json");
-      const before = await fs.readFile(file, "utf8");
-
-      let failed = false;
-      const readFile = async (target, encoding) => {
-        if (!failed) {
-          failed = true;
-          throw Object.assign(new Error("held"), { code: "EBUSY" });
-        }
-        return fs.readFile(target, encoding);
-      };
-      await readSettings(dir, { readFile });
-
-      const result = await ipcMain.invoke("settings:write", DEFAULT_SETTINGS);
-
-      assert.deepEqual(result, { ok: false, reason: "not-loaded" });
-      assert.equal(await fs.readFile(file, "utf8"), before);
-      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+      await context.ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      await body({ ...context, file: path.join(context.dir, "settings.json") });
     } finally {
       console.warn = warnings;
     }
+  });
+}
+
+// (a) The bypass the re-review found: a plain read for chat:send succeeding must not clear the flag
+// of the window that holds defaults.
+test("a window's failed load is not cleared by another read succeeding", async () => {
+  await withQuietSettings(async ({ ipcMain, secrets, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    assert.deepEqual((await window.invoke("settings:read")).settings, DEFAULT_SETTINGS);
+
+    await makeReadable(dir, file);
+    const before = await fs.readFile(file, "utf8");
+    assert.deepEqual(await readSettings(dir), KEPT); // what chat:send does
+
+    assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+    assert.equal(await fs.readFile(file, "utf8"), before);
+    assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// (b) The converse: a transient failure in a main-process read mid-session is not this window's load.
+test("a failed read for chat:send does not block a window that loaded", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeReadable(dir, file);
+    assert.deepEqual((await window.invoke("settings:read")).settings, KEPT);
+
+    await makeUnopenable(file);
+    await readSettings(dir); // chat:send, failing
+    await makeReadable(dir, file);
+
+    assert.deepEqual(await window.invoke("settings:write", KEPT), { ok: true });
+  });
+});
+
+// (c) One window's failure is its own.
+test("one window's failed load does not block another that loaded", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const loaded = windowOf(ipcMain, 1);
+    const failed = windowOf(ipcMain, 2);
+    await makeReadable(dir, file);
+    assert.deepEqual((await loaded.invoke("settings:read")).settings, KEPT);
+
+    await makeUnopenable(file);
+    await failed.invoke("settings:read");
+    await makeReadable(dir, file);
+
+    assert.deepEqual(await loaded.invoke("settings:write", KEPT), { ok: true });
+    assert.deepEqual(await failed.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+  });
+});
+
+// (d) Whatever the file's state at write time - here, gone. Defaults written and swept by would
+// otherwise delete every key.
+test("a failed load followed by the file going missing still refuses, and sweeps nothing", async () => {
+  await withQuietSettings(async ({ ipcMain, secrets, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    await window.invoke("settings:read");
+    await fs.rm(file, { recursive: true, force: true });
+
+    assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+    await assert.rejects(fs.access(file));
+    assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// (e) The window's own successful re-read is what clears it.
+test("after the window's own successful re-read, its writes work again", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    await window.invoke("settings:read");
+    await makeReadable(dir, file);
+
+    assert.deepEqual((await window.invoke("settings:read")).settings, KEPT);
+    assert.deepEqual(await window.invoke("settings:write", KEPT), { ok: true });
+  });
+});
+
+// A window that loaded an unreadable file holds defaults on purpose and replaces that file - but
+// only that file. If it has since become readable (or gone), its defaults must not land over it.
+test("a window that loaded an unreadable file may replace it, and nothing else", async () => {
+  await withQuietSettings(async ({ ipcMain, secrets, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    await window.invoke("settings:read");
+    await makeReadable(dir, file);
+    const before = await fs.readFile(file, "utf8");
+
+    assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+    assert.equal(await fs.readFile(file, "utf8"), before);
+    assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
   });
 });
 

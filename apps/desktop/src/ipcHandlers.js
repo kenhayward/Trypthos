@@ -61,7 +61,7 @@ const {
   OBSIDIAN_ICONS_FILE,
   parseObsidianIcons,
 } = require("@trypthos/domain");
-const { readSettings, writeSettings, notifySettingsWritten, sweepHeld } = require("./settingsStore");
+const { loadSettingsFile, readSettings, writeSettings, notifySettingsWritten, sweepHeld } = require("./settingsStore");
 const { openWorkspaceFor } = require("./providers");
 const { readObsidianVaults } = require("./obsidianVaults");
 const chatStore = require("./chatStore");
@@ -353,15 +353,49 @@ function registerIpcHandlers({
 
   // Settings are not workspace-scoped, so they do not go through `guarded` - there is no workspace
   // to require, and the app needs to read them before one is open.
-  ipcMain.handle("settings:read", async () => ({ ok: true, settings: await readSettings(userDataDir) }));
+  //
+  // How each window's OWN load went, keyed by its sender id (issue #235, fix round 3). Its renderer
+  // writes back whatever that load gave it, so this - not any other read - decides what it may
+  // write. Absent: loaded (or never read, which the renderer never does before writing). "failed":
+  // the file could not be opened, or came from a newer build, so the window holds defaults and every
+  // write from it is refused (`not-loaded`), whatever the file looks like by then, until its own
+  // re-read succeeds. "unreadable": it holds defaults because no build can read the file, so it may
+  // replace that file and nothing else. Main-process reads (chat:send, the outline, startup) go
+  // straight to the store and neither set nor clear this. An entry goes when its window does.
+  const loads = new Map();
+  function senderId(event) {
+    return event?.sender?.id ?? null;
+  }
 
-  ipcMain.handle("settings:write", async (_event, payload) => {
+  ipcMain.handle("settings:read", async (event) => {
+    const { settings, state } = await loadSettingsFile(userDataDir);
+    const id = senderId(event);
+    if (state === "current" || state === "missing") {
+      loads.delete(id);
+    } else {
+      if (!loads.has(id)) event?.sender?.once?.("destroyed", () => loads.delete(id));
+      loads.set(id, state === "unreadable" ? "unreadable" : "failed");
+    }
+    return { ok: true, settings };
+  });
+
+  ipcMain.handle("settings:write", async (event, payload) => {
     const parsed = WriteSettingsRequest.safeParse(payload);
     if (!parsed.success) {
       console.error("Rejected malformed settings write.");
       return { ok: false, reason: "bad-request" };
     }
-    const written = await writeSettings(userDataDir, parsed.data);
+    const id = senderId(event);
+    const load = loads.get(id);
+    let written;
+    if (load === "failed") {
+      console.warn("Settings write: refused (not-loaded).");
+      written = { ok: false, reason: "not-loaded" };
+    } else {
+      written = await writeSettings(userDataDir, parsed.data, { replaceOnly: load === "unreadable" });
+      // Replaced: the file now holds what this window holds.
+      if (written.ok) loads.delete(id);
+    }
     // The main process still hears the settings the renderer is running on: for this session they
     // ARE the settings (close to tray, the recent list), stored or not.
     notifySettingsWritten(parsed.data);
