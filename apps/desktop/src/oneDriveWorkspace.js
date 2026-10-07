@@ -5,6 +5,7 @@ const {
   createPathGuard,
   decodeTextFile,
   oneDriveEntriesOf,
+  oneDrivePathKey,
   sameOneDriveId,
 } = require("@trypthos/domain");
 
@@ -78,10 +79,12 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
     return resolved.path.slice(GUARD_ROOT.length + 1);
   }
 
-  /// Workspace path -> `{ at, generation, entries }` of that folder's last successful listing.
+  /// `oneDrivePathKey(path)` -> `{ at, generation, entries }` of that folder's last successful
+  /// listing. Folded, because Graph is case-insensitive: one folder reached by two spellings is one
+  /// entry, and a write through either drops it.
   const listings = new Map();
-  /// Workspace path -> `{ generation, promise }` for the listing in flight, so concurrent walks of one
-  /// folder ask Graph once.
+  /// `oneDrivePathKey(path)` -> `{ generation, promise }` for the listing in flight, so concurrent
+  /// walks of one folder - by any spelling - ask Graph once.
   const inFlight = new Map();
   /// Item id -> the pre-authenticated address its bytes were last fetched from.
   const locations = new Map();
@@ -89,11 +92,12 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
   let generation = 0;
 
   async function entriesOf(path) {
-    const cached = listings.get(path);
+    const key = oneDrivePathKey(path);
+    const cached = listings.get(key);
     if (cached !== undefined && cached.generation === generation && now() - cached.at < ttlMs) {
       return { ok: true, entries: cached.entries };
     }
-    const joined = inFlight.get(path);
+    const joined = inFlight.get(key);
     if (joined !== undefined && joined.generation === generation) return joined.promise;
 
     const started = generation;
@@ -103,13 +107,13 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
         const listed = await api.children(ref.driveId, ref.itemId, path);
         if (!listed.ok) return listed;
         const entries = oneDriveEntriesOf(listed.items);
-        if (started === generation) listings.set(path, { at: now(), generation: started, entries });
+        if (started === generation) listings.set(key, { at: now(), generation: started, entries });
         return { ok: true, entries };
       } finally {
-        if (inFlight.get(path) === pending) inFlight.delete(path);
+        if (inFlight.get(key) === pending) inFlight.delete(key);
       }
     })();
-    inFlight.set(path, pending);
+    inFlight.set(key, pending);
     return pending.promise;
   }
 
@@ -159,7 +163,7 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
     async listKnown(candidate) {
       const path = relativePath(candidate);
       if (path === null) return failure("permission-denied");
-      const known = listings.get(path);
+      const known = listings.get(oneDrivePathKey(path));
       if (known === undefined || known.generation !== generation) return { ok: true, nodes: [], complete: false };
       return { ok: true, nodes: known.entries.map((entry) => treeNode(path, entry)), complete: true };
     },
