@@ -44,10 +44,12 @@ function settingsPath(userDataDir) {
 ///   { state: "from-the-future" }             - written by a newer build
 ///   { state: "unreadable", reason }          - present, but no build could read it
 ///   { state: "unopenable", code }            - present (or maybe), but it could not be read
-async function inspectStored(userDataDir) {
+///
+/// `readFile` is injectable so a test can make one read fail the way a held file does on Windows.
+async function inspectStored(userDataDir, readFile = fs.readFile) {
   let text;
   try {
-    text = await fs.readFile(settingsPath(userDataDir), "utf8");
+    text = await readFile(settingsPath(userDataDir), "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return { state: "missing" };
     return { state: "unopenable", code: error?.code ?? error?.name };
@@ -67,8 +69,22 @@ async function inspectStored(userDataDir) {
   return { state: "unreadable", reason: result.reason };
 }
 
-async function readSettings(userDataDir, { logger = console } = {}) {
-  const stored = await inspectStored(userDataDir);
+/// Which settings directories' last load did NOT succeed (review round 1 of #235).
+///
+/// The stateless check in `writeSettings` sees the file as it is at write time - which is not
+/// enough. If the load hit a held file (EBUSY at launch), it answered defaults; 400 ms later the
+/// lock is gone, the file reads as current, and the renderer's write would put those defaults over
+/// it. So a failed load is remembered, and while it is, a write over an existing current file is
+/// refused (`not-loaded`) until a later load succeeds. A missing file is a successful load of
+/// nothing, so a first run is never blocked. Keyed by directory, so tests over separate temporary
+/// directories cannot see each other's state.
+const failedLoads = new Set();
+
+async function readSettings(userDataDir, { logger = console, readFile } = {}) {
+  const stored = await inspectStored(userDataDir, readFile);
+
+  if (stored.state === "current" || stored.state === "missing") failedLoads.delete(userDataDir);
+  else failedLoads.add(userDataDir);
 
   switch (stored.state) {
     case "current":
@@ -94,41 +110,87 @@ function backupPath(userDataDir, now) {
   return `${settingsPath(userDataDir)}.unreadable-${now.toISOString().replace(/[:.]/g, "-")}`;
 }
 
+/// Every write runs through here, one at a time, so check-then-write is one step: two writes in
+/// flight over an unreadable file would otherwise each see it unreadable and each try to back it up.
+/// The same pattern as `encryptedStore.js`. A write that fails does not stop the next one.
+let writes = Promise.resolve();
+function queued(operation) {
+  const run = writes.then(operation, operation);
+  writes = run.catch(() => {});
+  return run;
+}
+let written = 0;
+
 /// Writes via a temporary file and a rename - after checking it may (see the header above).
 ///
-/// Answers `{ ok: true }`, or `{ ok: false, reason }` when it refused. A refusal is a result, never
-/// a throw: it is the expected outcome for the rest of a session on a downgraded build.
+/// Answers `{ ok: true }`; `{ ok: true, replacedUnreadable: true }` when it replaced an unreadable
+/// file, so the caller knows the settings it wrote are defaults and must not act on them (the
+/// chat-key sweep); or `{ ok: false, reason }` when it did not write. A refusal is a result, never a
+/// throw: it is the expected outcome for the rest of a session on a downgraded build, and it crosses
+/// IPC.
 ///
 /// A rename is atomic, so a reader sees either the old file or the new one - never a half-written
 /// one. Writing in place risks a crash or a power cut leaving a truncated file, and settings are
-/// written often enough (every panel drag settles) that "rarely" is not an argument.
-async function writeSettings(userDataDir, settings, { logger = console, now = () => new Date() } = {}) {
-  const target = settingsPath(userDataDir);
-  const stored = await inspectStored(userDataDir);
+/// written often enough (every panel drag settles) that "rarely" is not an argument. The temporary
+/// name is unique per write, so a second instance of the app cannot rename this one's half-written
+/// file into place.
+function writeSettings(userDataDir, settings, { logger = console, now = () => new Date(), readFile } = {}) {
+  return queued(async () => {
+    const target = settingsPath(userDataDir);
+    const stored = await inspectStored(userDataDir, readFile);
 
-  if (stored.state === "from-the-future") {
-    logger.warn?.("Settings write: refused (from-the-future).");
-    return { ok: false, reason: "from-the-future" };
-  }
-  if (stored.state === "unopenable") {
-    logger.warn?.(`Settings write: refused, the file could not be opened (${stored.code}).`);
-    return { ok: false, reason: "unopenable" };
-  }
+    if (stored.state === "from-the-future") {
+      logger.warn?.("Settings write: refused (from-the-future).");
+      return { ok: false, reason: "from-the-future" };
+    }
+    if (stored.state === "unopenable") {
+      logger.warn?.(`Settings write: refused, the file could not be opened (${stored.code}).`);
+      return { ok: false, reason: "unopenable" };
+    }
+    if (stored.state === "current" && failedLoads.has(userDataDir)) {
+      logger.warn?.("Settings write: refused (not-loaded).");
+      return { ok: false, reason: "not-loaded" };
+    }
 
-  await fs.mkdir(userDataDir, { recursive: true });
+    try {
+      await fs.mkdir(userDataDir, { recursive: true });
+    } catch (error) {
+      logger.error?.(`Settings write: could not create the directory (${error?.code ?? error?.name}).`);
+      return { ok: false, reason: "write-failed" };
+    }
 
-  if (stored.state === "unreadable") {
-    // Copied, not renamed: if the write below fails, the original is still where it was. COPYFILE_EXCL
-    // so two backups in the same millisecond cannot overwrite each other - the second throws, and the
-    // write is retried on the next change with a fresh time.
-    await fs.copyFile(target, backupPath(userDataDir, now()), fs.constants.COPYFILE_EXCL);
-    logger.warn?.(`Settings write: backed up the unreadable file (${stored.reason}) before replacing it.`);
-  }
+    if (stored.state === "unreadable") {
+      // Copied, not renamed: if the write below fails, the original is still where it was.
+      // COPYFILE_EXCL so a backup is never overwritten; a collision answers a refusal, and the next
+      // change tries again with a fresh time.
+      try {
+        await fs.copyFile(target, backupPath(userDataDir, now()), fs.constants.COPYFILE_EXCL);
+      } catch (error) {
+        logger.error?.(`Settings write: could not back up the unreadable file (${error?.code ?? error?.name}).`);
+        return { ok: false, reason: "backup-failed" };
+      }
+      logger.warn?.(`Settings write: backed up the unreadable file (${stored.reason}) before replacing it.`);
+    }
 
-  const temporary = `${target}.tmp`;
-  await fs.writeFile(temporary, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
-  await fs.rename(temporary, target);
-  return { ok: true };
+    written += 1;
+    const temporary = `${target}.${process.pid}.${written}.tmp`;
+    try {
+      await fs.writeFile(temporary, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+      await fs.rename(temporary, target);
+    } catch (error) {
+      // A unique name is never overwritten by the next write, so a failed one is cleared here.
+      await fs.rm(temporary, { force: true }).catch(() => {});
+      logger.error?.(`Settings write: could not write the file (${error?.code ?? error?.name}).`);
+      return { ok: false, reason: "write-failed" };
+    }
+
+    if (stored.state === "unreadable") {
+      // What is on disk now is what this session holds, so later writes are ordinary ones.
+      failedLoads.delete(userDataDir);
+      return { ok: true, replacedUnreadable: true };
+    }
+    return { ok: true };
+  });
 }
 
 /// Just the one value the main process needs at close time.

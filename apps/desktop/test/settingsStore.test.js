@@ -174,7 +174,8 @@ test("an unparseable file is backed up beside itself, then replaced", async () =
     assert.deepEqual(await readSettings(dir, { logger: silent }), DEFAULT_SETTINGS);
     const result = await writeSettings(dir, settings, { logger: silent });
 
-    assert.deepEqual(result, { ok: true });
+    // Said, so `settings:write` knows these settings are defaults and must not sweep keys by them.
+    assert.deepEqual(result, { ok: true, replacedUnreadable: true });
     assert.deepEqual(await readSettings(dir, { logger: silent }), settings);
 
     const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("settings.json.unreadable-"));
@@ -189,7 +190,10 @@ test("a file of the wrong shape takes the same path as a corrupt one", async () 
     const wrong = JSON.stringify({ panels: "wrong" });
     await fs.writeFile(settingsPath(dir), wrong, "utf8");
 
-    assert.deepEqual(await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent }), { ok: true });
+    assert.deepEqual(await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent }), {
+      ok: true,
+      replacedUnreadable: true,
+    });
 
     const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("settings.json.unreadable-"));
     assert.equal(backups.length, 1);
@@ -250,5 +254,110 @@ test("a first run, with no file, logs nothing", async () => {
     const { lines, logger } = recordingLogger();
     await readSettings(dir, { logger });
     assert.deepEqual(lines, []);
+  });
+});
+
+// ---- Issue #235, review round 1: a load that failed must not let defaults overwrite a good file ----
+
+/// A readFile that fails once with the given code, then reads the real file. EBUSY is what Windows
+/// answers while an antivirus scanner or a sync client holds the file at launch.
+function failingOnce(code) {
+  let failed = false;
+  return async (file, encoding) => {
+    if (!failed) {
+      failed = true;
+      throw Object.assign(new Error("held"), { code });
+    }
+    return fs.readFile(file, encoding);
+  };
+}
+
+const CUSTOM = { ...DEFAULT_SETTINGS, panels: { ...DEFAULT_SETTINGS.panels, workspaceWidth: 333 } };
+
+test("a write while the file cannot be opened is refused, with no backup and the bytes unchanged", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, CUSTOM);
+    const before = await fs.readFile(settingsPath(dir), "utf8");
+
+    const result = await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent, readFile: failingOnce("EBUSY") });
+
+    assert.deepEqual(result, { ok: false, reason: "unopenable" });
+    assert.equal(await fs.readFile(settingsPath(dir), "utf8"), before);
+    assert.deepEqual(await fs.readdir(dir), ["settings.json"]);
+  });
+});
+
+/// The launch race: the load hits a held file and answers defaults, the lock is gone 400 ms later
+/// when the renderer writes those defaults back. The file is readable by then - and still must not
+/// be written, because what is being written is not what was in it.
+test("after a load that could not open the file, a write over a current file is refused", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, CUSTOM);
+    const before = await fs.readFile(settingsPath(dir), "utf8");
+
+    assert.deepEqual(await readSettings(dir, { logger: silent, readFile: failingOnce("EBUSY") }), DEFAULT_SETTINGS);
+    const result = await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent });
+
+    assert.deepEqual(result, { ok: false, reason: "not-loaded" });
+    assert.equal(await fs.readFile(settingsPath(dir), "utf8"), before);
+  });
+});
+
+test("once a later load succeeds, writes work again", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, CUSTOM);
+    await readSettings(dir, { logger: silent, readFile: failingOnce("EBUSY") });
+    assert.equal((await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent })).ok, false);
+
+    assert.deepEqual(await readSettings(dir), CUSTOM);
+    const settings = { ...CUSTOM, panels: { ...CUSTOM.panels, workspaceWidth: 344 } };
+    assert.deepEqual(await writeSettings(dir, settings), { ok: true });
+    assert.deepEqual(await readSettings(dir), settings);
+  });
+});
+
+/// A first run reads nothing - successfully. Blocking its writes would mean no settings, ever.
+test("a missing file is a successful load, so the first write goes ahead", async () => {
+  await withDir(async (dir) => {
+    assert.deepEqual(await readSettings(dir), DEFAULT_SETTINGS);
+    assert.deepEqual(await writeSettings(dir, CUSTOM), { ok: true });
+    assert.deepEqual(await readSettings(dir), CUSTOM);
+  });
+});
+
+/// Check-then-write is one step: two writes in flight over an unreadable file would each see it
+/// unreadable and each try to back it up - the second colliding with the first and throwing across
+/// IPC. Queued, the second sees the file the first wrote.
+test("two overlapping writes over an unreadable file make one backup, and both answer", async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(settingsPath(dir), "{ this is not json", "utf8");
+    const instant = new Date("2026-01-02T03:04:05.006Z");
+    const options = { logger: silent, now: () => instant };
+
+    const results = await Promise.all([
+      writeSettings(dir, DEFAULT_SETTINGS, options),
+      writeSettings(dir, CUSTOM, options),
+    ]);
+
+    assert.deepEqual(results, [{ ok: true, replacedUnreadable: true }, { ok: true }]);
+    const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("settings.json.unreadable-"));
+    assert.equal(backups.length, 1);
+    assert.deepEqual(await readSettings(dir), CUSTOM);
+    assert.deepEqual((await fs.readdir(dir)).length, 2, "no temporary file is left behind");
+  });
+});
+
+/// A backup that collides (a second instance of the app, at the same millisecond) is a result for
+/// the renderer, not an exception thrown across IPC.
+test("a backup that cannot be taken answers a refusal rather than throwing", async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(settingsPath(dir), "{ this is not json", "utf8");
+    const instant = new Date("2026-01-02T03:04:05.006Z");
+    await fs.writeFile(`${settingsPath(dir)}.unreadable-2026-01-02T03-04-05-006Z`, "taken", "utf8");
+
+    const result = await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent, now: () => instant });
+
+    assert.deepEqual(result, { ok: false, reason: "backup-failed" });
+    assert.equal(await fs.readFile(settingsPath(dir), "utf8"), "{ this is not json");
   });
 });

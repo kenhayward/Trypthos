@@ -8,6 +8,7 @@ const path = require("node:path");
 const { DEFAULT_SETTINGS, IPC_CHANNELS, SETTINGS_VERSION } = require("@trypthos/domain");
 const { createSecretStore } = require("../src/secretStore");
 const { registerIpcHandlers } = require("../src/ipcHandlers");
+const { readSettings, writeSettings } = require("../src/settingsStore");
 
 /// The IPC side of key storage, and the guard that keeps it write-only.
 ///
@@ -178,6 +179,68 @@ test("a settings write over a newer build's file is refused, and sweeps no keys"
 
       assert.deepEqual(result, { ok: false, reason: "from-the-future" });
       assert.equal(await fs.readFile(file, "utf8"), future);
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
+  });
+});
+
+// Replacing an unreadable file is a successful write - of the DEFAULTS this build fell back to, with
+// no profiles. Sweeping by them would delete every chat key the lost file's profiles used.
+test("a settings write that replaces an unreadable file sweeps no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      await fs.writeFile(path.join(dir, "settings.json"), "{ this is not json", "utf8");
+
+      const result = await ipcMain.invoke("settings:write", DEFAULT_SETTINGS);
+
+      assert.deepEqual(result, { ok: true });
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
+  });
+});
+
+// The launch race: the load hit a held file and answered defaults, and by the time the renderer
+// writes them back the file reads fine. Refused, and nothing swept.
+test("a settings write after a load that could not open the file is refused, and sweeps no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      const kept = {
+        ...DEFAULT_SETTINGS,
+        chat: {
+          ...DEFAULT_SETTINGS.chat,
+          profiles: [
+            { id: "one", label: "Kept", endpoint: ENDPOINT, model: "m", supportsImages: false, isDefault: true },
+          ],
+        },
+      };
+      await writeSettings(dir, kept);
+      const file = path.join(dir, "settings.json");
+      const before = await fs.readFile(file, "utf8");
+
+      let failed = false;
+      const readFile = async (target, encoding) => {
+        if (!failed) {
+          failed = true;
+          throw Object.assign(new Error("held"), { code: "EBUSY" });
+        }
+        return fs.readFile(target, encoding);
+      };
+      await readSettings(dir, { readFile });
+
+      const result = await ipcMain.invoke("settings:write", DEFAULT_SETTINGS);
+
+      assert.deepEqual(result, { ok: false, reason: "not-loaded" });
+      assert.equal(await fs.readFile(file, "utf8"), before);
       assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
     } finally {
       console.warn = warnings;

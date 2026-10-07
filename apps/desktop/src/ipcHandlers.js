@@ -366,10 +366,12 @@ function registerIpcHandlers({
     // ARE the settings (close to tray, the recent list), stored or not.
     notifySettingsWritten(parsed.data);
 
-    // Refused because the file on disk came from a newer build (issue #235). The sweep is refused
-    // with it: these settings are the defaults this build fell back to, with no profiles, and
-    // sweeping by them would delete every chat key the newer build's profiles still use.
+    // Refused (a newer build's file, a file that could not be opened, or a load that did not
+    // succeed - issue #235), or written over an unreadable file. Either way these settings are the
+    // defaults this build fell back to, with no profiles, and sweeping by them would delete every
+    // chat key the stored profiles still use. So no sweep.
     if (!written.ok) return written;
+    if (written.replacedUnreadable) return { ok: true };
 
     // Saving settings is the only moment the app learns that a profile was deleted, or its endpoint
     // repointed. Without this, a live credential for a provider nothing references any more would
