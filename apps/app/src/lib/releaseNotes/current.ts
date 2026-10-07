@@ -7,7 +7,7 @@ export const RECENT: Release[] = [
   {
     version: "0.104.1",
     date: "2026-10-07",
-    pr: 238,
+    pr: 239,
     headline: "Safer upgrades, saves and sign-ins",
     summary:
       "Three fixes that protect your work and your credentials. Running an older Trypthos no longer wipes the settings, sign-ins or chat API keys that a newer version saved, and a file the app cannot read is backed up before it is replaced. Pressing save again while a save to a cloud folder is still in progress no longer reports a conflict with your own save. And if a service redirects a request, a sign-in token or an AI API key is never sent on to a different server.",
