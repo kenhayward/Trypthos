@@ -179,6 +179,9 @@ contextBridge.exposeInMainWorld("trypthos", {
   /// The folders inside one Drive folder, or the top level when `parentId` is null. Ids and names
   /// only - the picker chooses a folder, and opening it goes through `openWorkspaceRef`.
   listDriveFolders: (location) => ipcRenderer.invoke("google:folders", location),
+  /// The folders in one OneDrive place - My files, Shared with me, or one folder by its drive and item
+  /// id - as ids and names. Never a token and never an address.
+  listOneDriveFolders: (location) => ipcRenderer.invoke("onedrive:folders", location),
   /// The repositories the connected account owns. Fetched in the main process, where the token is,
   /// and held for the session - `refresh` is for a user who has just made one.
   listRepositories: (refresh = false) => ipcRenderer.invoke("github:repos", { refresh }),

@@ -345,6 +345,7 @@ export {
   BranchesRequest,
   ListReposRequest,
   GoogleFoldersRequest,
+  OneDriveFoldersRequest,
   RepoInfoRequest,
   RefreshWorkspaceRequest,
   SetBranchRequest,

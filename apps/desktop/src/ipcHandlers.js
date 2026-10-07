@@ -55,6 +55,8 @@ const {
   IconsRequest,
   GoogleFoldersRequest,
   foldersOf,
+  OneDriveFoldersRequest,
+  oneDriveFoldersOf,
   NO_ICONS,
   OBSIDIAN_ICONS_FILE,
   parseObsidianIcons,
@@ -801,6 +803,44 @@ function registerIpcHandlers({
         : await drive.listChildren(place.id, { foldersOnly: true });
     if (!listed.ok) return listed;
     return { ok: true, folders: foldersOf(listed.files) };
+  });
+
+  /// The OneDrive folder picker's only window onto OneDrive: My files (the connected drive's root,
+  /// answered with that drive's id, so the picker can open My files itself), Shared with me, or the
+  /// folders in one folder by drive and item id. Folders only - drive ids, item ids, names and whether
+  /// each is shared - never a token and never an address. Opening one goes through
+  /// `workspace:openRef` like every other workspace.
+  ///
+  /// Shared with me never fails the picker (spec, open questions): Graph's shared-items endpoint has
+  /// changed before, so an error from it is "nothing shared", logged by its reason. A failure is
+  /// answered as its reason alone, so nothing else the client carried can cross.
+  ipcMain.handle("onedrive:folders", async (_event, payload) => {
+    const parsed = OneDriveFoldersRequest.safeParse(payload);
+    if (!parsed.success) {
+      console.error("Rejected a malformed OneDrive folder request.");
+      return { ok: false, reason: "bad-request" };
+    }
+    if (oneDrive === null) return { ok: false, reason: "not-configured" };
+
+    const place = parsed.data;
+    if (place.in === "shared-with-me") {
+      const shared = await oneDrive.sharedWithMe();
+      if (!shared.ok) {
+        console.error(`OneDrive's shared folders could not be listed: ${shared.reason}`);
+        return { ok: true, folders: [] };
+      }
+      return { ok: true, folders: oneDriveFoldersOf(shared.items, null) };
+    }
+    if (place.in === "my-files") {
+      const mine = await oneDrive.drive();
+      if (!mine.ok) return { ok: false, reason: mine.reason };
+      const listed = await oneDrive.children(mine.drive.id, "root", "");
+      if (!listed.ok) return { ok: false, reason: listed.reason };
+      return { ok: true, driveId: mine.drive.id, folders: oneDriveFoldersOf(listed.items, mine.drive.id) };
+    }
+    const listed = await oneDrive.children(place.driveId, place.itemId, "");
+    if (!listed.ok) return { ok: false, reason: listed.reason };
+    return { ok: true, folders: oneDriveFoldersOf(listed.items, place.driveId) };
   });
 
   ipcMain.handle("github:repos", async (_event, payload) => {
