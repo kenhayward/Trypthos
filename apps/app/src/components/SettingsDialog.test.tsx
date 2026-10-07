@@ -24,6 +24,7 @@ function dialog(overrides: Partial<React.ComponentProps<typeof SettingsDialog>> 
     // that cannot work, and no test here is about GitHub.
     github: null,
     google: null,
+    oneDrive: null,
     ...overrides,
   };
   render(<SettingsDialog {...props} />);
@@ -573,6 +574,7 @@ describe("SettingsDialog: AI and the system prompt", () => {
           explorer={{ checked: true, supported: false, registered: false, set: vi.fn(async () => {}) }}
           github={null}
           google={null}
+          oneDrive={null}
           onClose={vi.fn()}
           onChange={(change) => setSettings((current) => ({ ...current, ...change }))}
           onSaveKey={vi.fn(async () => ({ ok: true }) as const)}

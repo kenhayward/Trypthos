@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkspaceRef } from "@trypthos/domain";
 import DriveGlyph, { type DriveGlyphKind } from "./DriveGlyph";
-import GoogleAccountSection from "./GoogleAccountSection";
+import CloudAccountSection from "./CloudAccountSection";
+import { GOOGLE_ACCOUNT } from "../lib/cloudAccounts";
 import SourceGlyph from "./SourceGlyph";
 import Spinner from "./Spinner";
 import { attempt } from "../hooks/useGitHub";
 import { providerFailureKey } from "../hooks/useWorkspace";
-import type { DriveFoldersResult, DriveLocation, GoogleBridge } from "../lib/workspaceClient";
+import { googleAccount, type DriveFoldersResult, type DriveLocation, type GoogleBridge } from "../lib/workspaceClient";
 
 interface Props {
   /// The Google half of the shell, or null in the browser preview.
@@ -69,6 +70,8 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
   const [trail, setTrail] = useState<Place[]>([]);
   const [answer, setAnswer] = useState<{ request: string; listing: Listing } | null>(null);
   const [reloads, setReloads] = useState(0);
+  // Memoised so the account hook's effect does not re-run on every render.
+  const googleCalls = useMemo(() => googleAccount(bridge), [bridge]);
   const here = trail.at(-1) ?? null;
   const request = `${here === null ? "top" : `${here.kind}:${here.id ?? ""}`}#${reloads}`;
   const listing: Listing | { state: "loading" } = answer !== null && answer.request === request ? answer.listing : { state: "loading" };
@@ -141,7 +144,7 @@ export default function OpenDriveDialog({ bridge, onCancel, onOpen }: Props) {
         </div>
 
         {bridge === null || listing.state === "connect" ? (
-          <GoogleAccountSection bridge={bridge} onConnected={() => setReloads((count) => count + 1)} />
+          <CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleCalls} onConnected={() => setReloads((count) => count + 1)} />
         ) : (
           <>
             <nav aria-label={t("drive.root")} className="mt-3 flex flex-wrap items-center gap-1 text-xs text-ink-3">

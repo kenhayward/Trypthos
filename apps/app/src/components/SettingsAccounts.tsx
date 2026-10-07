@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useGitHub } from "../hooks/useGitHub";
-import type { GitHubBridge, GoogleBridge } from "../lib/workspaceClient";
-import GoogleAccountSection from "./GoogleAccountSection";
+import { GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT } from "../lib/cloudAccounts";
+import { googleAccount, oneDriveAccount, type GitHubBridge, type GoogleBridge, type OneDriveBridge } from "../lib/workspaceClient";
+import CloudAccountSection from "./CloudAccountSection";
 
 interface Props {
   /// The GitHub half of the shell, or null in the browser preview.
   bridge: GitHubBridge | null;
   /// The Google half of the shell, or null in the browser preview.
   google: GoogleBridge | null;
+  /// The OneDrive half of the shell, or null in the browser preview.
+  oneDrive: OneDriveBridge | null;
 }
 
 /// The cloud accounts Trypthos can open folders from.
@@ -21,10 +24,13 @@ interface Props {
 /// the shell reports after asking GitHub - so a revoked token reads as disconnected rather than as an
 /// account that is still there. There is no channel that returns a token, and there must never be
 /// one.
-export default function SettingsAccounts({ bridge, google }: Props) {
+export default function SettingsAccounts({ bridge, google, oneDrive }: Props) {
   const { t } = useTranslation();
   const github = useGitHub(bridge);
   const [token, setToken] = useState("");
+  // Memoised so the account hook's effect does not re-run on every render.
+  const googleCalls = useMemo(() => googleAccount(google), [google]);
+  const oneDriveCalls = useMemo(() => oneDriveAccount(oneDrive), [oneDrive]);
 
   const connect = async () => {
     if (await github.connect(token)) setToken("");
@@ -97,7 +103,8 @@ export default function SettingsAccounts({ bridge, google }: Props) {
         <p className="mt-3 text-xs text-ink-4">{t("github.readOnlyNote")}</p>
       </section>
 
-      <GoogleAccountSection bridge={google} />
+      <CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleCalls} />
+      <CloudAccountSection kind={ONEDRIVE_ACCOUNT} bridge={oneDriveCalls} />
     </div>
   );
 }
