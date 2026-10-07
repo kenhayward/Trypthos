@@ -5,6 +5,20 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.102.0",
+    date: "2026-10-07",
+    pr: 231,
+    headline: "Connect a OneDrive account",
+    summary:
+      "Settings > Accounts has a OneDrive section. Connect opens Microsoft's sign-in page in your browser: sign in with your personal Microsoft account and allow access to your files, and the section shows the account you connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Microsoft directly from this machine. Disconnect forgets the sign-in on this computer; to remove Trypthos's access from your Microsoft account as well, visit account.live.com/consent/Manage. Opening OneDrive folders follows in the next release. Work and school accounts are not supported.",
+    added: [
+      "Connect and disconnect a personal Microsoft account for OneDrive in Settings > Accounts.",
+    ],
+    changed: [
+      "The Google Drive and OneDrive account sections in Settings share one design.",
+    ],
+  },
+  {
     version: "0.101.1",
     date: "2026-10-07",
     pr: 230,
