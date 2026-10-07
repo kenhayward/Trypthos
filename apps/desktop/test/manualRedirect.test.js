@@ -103,10 +103,58 @@ test("an answer that is not a redirect resolves with its status, headers and bod
 test("a header sent more than once is joined, as fetch joins it", async () => {
   const { fetchManual, made } = setup();
   const pending = fetchManual(URL_, init());
-  made[0].respond(200, { "x-invented": ["one", "two"] }, ["ok"]);
+  made[0].respond(403, { "x-invented": ["one", "two"] }, ["no"]);
   const response = await pending;
   assert.equal(response.headers.get("x-invented"), "one, two");
-  assert.equal(await response.text(), "ok");
+  assert.equal(await response.text(), "no");
+});
+
+// `/content` answering 2xx is the file itself rather than an address: the caller refuses it without
+// reading a byte, so the whole file is never buffered into memory.
+test("a success answers at once with a null body, and the request is aborted", async () => {
+  const { fetchManual, made } = setup();
+  const pending = fetchManual(URL_, init());
+  const message = new EventEmitter();
+  message.statusCode = 200;
+  message.headers = { "content-type": "text/markdown" };
+  made[0].emit("response", message);
+  const response = await pending;
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "text/markdown");
+  assert.equal(response.body, null);
+  assert.equal(made[0].aborts, 1);
+  // Bytes that still arrive are not collected, and a late error changes nothing.
+  message.emit("data", Buffer.from("# Plan"));
+  message.emit("error", new Error("late"));
+  assert.equal(made[0].aborts, 1);
+});
+
+// An error body is read for Graph's error code, which is small; a body past 64 KB is not an error
+// body worth holding, so collection stops there, the request is aborted, and what arrived is answered.
+test("an error body is collected only up to 64 KB, then the request is aborted", async () => {
+  const { fetchManual, made } = setup();
+  const pending = fetchManual(URL_, init());
+  const message = new EventEmitter();
+  message.statusCode = 500;
+  message.headers = {};
+  made[0].emit("response", message);
+  const kb = Buffer.alloc(1024, 0x61);
+  for (let i = 0; i < 70; i += 1) message.emit("data", kb);
+  const response = await pending;
+  assert.equal(response.status, 500);
+  assert.equal(made[0].aborts, 1);
+  assert.equal((await response.arrayBuffer()).byteLength, 64 * 1024);
+  message.emit("end");
+  assert.equal(made[0].aborts, 1);
+});
+
+test("an error body of exactly 64 KB is answered whole, without an abort", async () => {
+  const { fetchManual, made } = setup();
+  const pending = fetchManual(URL_, init());
+  made[0].respond(500, {}, [Buffer.alloc(64 * 1024, 0x62)]);
+  const response = await pending;
+  assert.equal((await response.arrayBuffer()).byteLength, 64 * 1024);
+  assert.equal(made[0].aborts, 0);
 });
 
 test("a status that carries no body answers a null body rather than failing", async () => {
@@ -148,7 +196,7 @@ test("a response that fails while its body arrives rejects", async () => {
   const { fetchManual, made } = setup();
   const pending = fetchManual(URL_, init());
   const message = new EventEmitter();
-  message.statusCode = 200;
+  message.statusCode = 404;
   message.headers = {};
   made[0].emit("response", message);
   message.emit("error", Object.assign(new Error("cut"), { code: "ECONNRESET" }));
