@@ -34,7 +34,7 @@ Graph, not a guess.
 | What changes the tags | A content write changes both `eTag` and `cTag`. A rename changes `eTag` only. |
 | Creating without overwriting | `?@microsoft.graph.conflictBehavior=fail` on a content PUT onto an existing name answers 409. **`If-None-Match: *` is ignored** - it answered 200 and overwrote. |
 | Rename | `PATCH {name}` 200. Onto an existing sibling, with or without a case difference: 409. |
-| `If-Match` on a path renamed away since the read (PR 3 manual check) | Pending the controller's manual check: none of 412, 404 or 201 loses the user's text, and the finding is to be recorded here. |
+| `If-Match` on a path renamed away since the read | Not measured in the spike - a follow-up for the PR 3 manual check, see "Open questions". |
 | Downloads | `GET /content` answers **302** to a pre-authenticated URL on `microsoftpersonalcontent.com`. A `Range` request to that URL **without a token** answers 206 with `Content-Range`. `$select=@microsoft.graph.downloadUrl` returned nothing. |
 | Delta | Works on a non-root folder of a personal drive (200 with a `deltaLink`). |
 | Web addresses | `webUrl` on items, on `onedrive.live.com`. |
@@ -155,12 +155,12 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
   - Reads: `me`, `drive`, `children(driveId, itemId, path)` (all pages, capped at the tree's
     listing limit), `item(driveId, itemId, path)`, `readText(..., limitBytes)`,
     `downloadLocation(...)` (302 `Location`, never followed with the token), `sharedWithMe`.
-  - Writes: `writeText(..., cTag)`, `createText(...)`, `createFolder(...)`, `rename(..., newName)` (ruled in PR 3: `writeContent(driveId, itemId, path, bytes, cTag)`, `createContent(driveId, itemId, path, bytes)`, `createFolder(driveId, itemId, parentPath, name)`, `rename(driveId, itemId, path, name)` - they take bytes, and the provider keeps the byte-order mark; uploads are sent as `application/octet-stream`; `If-Match` is on a save only, a create uses `conflictBehavior=fail` and never `If-None-Match`, and a new folder and a rename carry no conditional header; a write is repeated after a 401 or a 429 only, never after a 503 or a deadline).
+  - Writes: `writeText(..., cTag)`, `createText(...)`, `createFolder(...)`, `rename(..., newName)` (ruled in PR 3: `writeContent(driveId, itemId, path, bytes, cTag)`, `createContent(driveId, itemId, path, bytes)`, `createFolder(driveId, itemId, parentPath, name)`, `rename(driveId, itemId, path, name)` - they take bytes, and the provider keeps the byte-order mark; uploads are sent as `application/octet-stream`; `If-Match` is on a save only, a create uses `conflictBehavior=fail` and never `If-None-Match`, and a new folder and a rename carry no conditional header; a write is repeated after a 401 or a 429 only, never after a 5xx or a deadline).
   - A ranged read from the pre-authenticated URL accepts 206 with a `Content-Range` matching the
     request, or 200 only for a whole-file range - the same rule as Drive's `downloadRange`.
 - **`oneDriveWorkspace.js`** (PR 2, extended in PR 3): the provider. `GUARD_ROOT = "/onedrive"`.
-  `list`, `read` (revision `{ id: cTag }`), `mediaSource`, `webAddress`; then `write`, `create`,
-  `createDirectory`, `rename`. A short listing cache (as Drive's TTL) is kept for the tree and
+  `list`, `read` (revision `{ id: cTag }`), `mediaSource`, `webAddress`; then `write`,
+  `createDirectory`, `rename` (no `create` member - see below). A short listing cache (as Drive's TTL) is kept for the tree and
   dropped for a folder on any write into it (ruled in PR 3: keyed by the folded path, `oneDrivePathKey`, because Graph is case-insensitive; a listing in flight across a write is not kept).
   (Ruled in PR 3: the provider has no `create` member. The chat's create and New File use
   `write(path, content, null)`. A create checks its parent with a fresh metadata request before
@@ -220,12 +220,13 @@ TDD throughout. Every Graph and login response comes from a hand-written fake `f
 - **`microsoftAuth`**: state mismatch, cancel, scope refusal, the rotated refresh token is stored on
   every refresh, two concurrent `accessToken()` calls make one refresh request, `invalid_grant`
   clears the store.
-- **`oneDriveApi`**: 401 retry, `Retry-After` cap, `If-Match` present on every write,
+- **`oneDriveApi`**: 401 retry, `Retry-After` cap, `If-Match` present on every save,
   `conflictBehavior=fail` on every create and absent `If-None-Match`, the 302 is never followed
   with the `Authorization` header, a ranged 200 is accepted only for a whole-file range.
 - **Provider**: the guard refuses `..`, absolute, drive-letter and UNC paths before any request;
-  listing across pages; read revision is `cTag`; save maps 412 to `conflict`; rename and create map
-  409 to `exists`; media re-fetches an expired location once.
+  listing across pages; read revision is `cTag`; save maps 412 to `conflict`; on a rename or a
+  create onto a taken name the API answers Graph's 409 as `exists`, and the provider answers it as
+  `conflict`; media re-fetches an expired location once.
 - **Leak guards**: the IPC walk and log capture assert the exact access and refresh token strings
   are absent (the CodeQL lesson: exact values, not host-name substrings).
 - **Renderer**: Google's account and picker tests unchanged; OneDrive variants of each; the header
@@ -249,11 +250,19 @@ Three PRs, each a Minor bump, each with the release checklist in CLAUDE.md:
 - **Listing a shared folder** was not exercised: the test account had no folder shared with it.
   PR 2's manual check needs one (a second Microsoft account sharing a test folder is enough). If
   `sharedWithMe` or the cross-drive listing behaves differently, PR 2 records the finding here and
-  the Shared with me tab may ship later. **Status at PR 2:** the shared-folder listing and
-  `sharedWithMe` itself are pending the user's PR 2 manual check against a real shared folder. The
-  floor is already in place: a Shared with me that answers nothing, or fails, shows as an empty
-  place, never an error over the dialog. **Still pending at PR 3:** the PR 3 manual check also
-  covers saving into a folder shared for editing and the refusal in a view-only one.
+  the Shared with me tab may ship later. The shared-folder listing and `sharedWithMe` itself are
+  for the user's manual check against a real shared folder. The floor is already in place: a
+  Shared with me that answers nothing, or fails, shows as an empty place, never an error over the
+  dialog.
+- **Follow-ups for the PR 3 manual check**, which need the user's own Microsoft accounts:
+  - `If-Match` on a path that was renamed away (on the web, or by another device) since the
+    editor read it: whether Graph answers 412, 404 or creates a new file at the old path (201).
+  - Saving into a folder shared with the account for editing.
+  - The refusal when saving into a folder shared for viewing only.
+
+  The safe floor holds whatever Graph answers: no text is lost (the editor keeps the buffer and
+  never shows a save that was not confirmed), a 412 shows the conflict prompt, and a 403 shows
+  OneDrive's own view-only wording.
 - **`sharedWithMe` longevity**: not verified either way; Graph endpoints for shared items have
   changed before. PR 2 treats an error from it as "nothing shared" in the picker rather than failing the
   dialog.
