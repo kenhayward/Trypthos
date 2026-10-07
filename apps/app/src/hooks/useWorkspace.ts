@@ -925,10 +925,14 @@ export function useWorkspace(
         let result: Awaited<ReturnType<WorkspaceClient["writeFile"]>>;
         try {
           result = await client.writeFile(path, content, revision, commitMessage);
-        } catch (error) {
+        } catch {
           finish();
+          // A write that threw is a save that did not land: the same banner as an answered failure,
+          // the spinner and busy down, the document still dirty. Reported as false rather than
+          // rethrown, so a caller that is about to close the document learns it was not saved.
+          fail({ reason: "unknown" }, kindOf(stateRef.current.workspaces, path), "save");
           current.followUp?.resolve(false);
-          throw error;
+          return false;
         }
         const waiting = current.followUp;
         current.followUp = null;
@@ -950,9 +954,9 @@ export function useWorkspace(
         const latest = stateRef.current.documents.documents.find((document) => document.path === path);
         const next = waiting !== null && latest !== undefined && latest.content !== content ? latest : null;
 
-        // The editor keeps the user's text either way. On success the revision advances so the next save
-        // compares against what was just written; on a conflict nothing here changes, which is precisely
-        // what leaves their work intact for them to decide about.
+        // The editor keeps the user's text either way. The revision advances so the next save compares
+        // against what was just written, and the text that went out is marked saved; a failure was
+        // answered above, where nothing changed, which is what leaves their work intact.
         setInternal((prev) => ({
           ...prev,
           // The text that went out, so an edit made while the write was pending keeps its flag.
@@ -962,8 +966,10 @@ export function useWorkspace(
 
         if (next === null || waiting === null) {
           finish();
-          // Nothing changed since this write went out, so what the queued presses asked for has landed.
-          waiting?.resolve(true);
+          // Nothing changed since this write went out, so what the queued presses asked for has landed
+          // - unless the document is gone (closed, or renamed to another path) and there is no text
+          // left for them to have asked about.
+          waiting?.resolve(latest !== undefined);
           return true;
         }
 

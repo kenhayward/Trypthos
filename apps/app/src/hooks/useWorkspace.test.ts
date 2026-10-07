@@ -460,11 +460,15 @@ describe("a Google Drive workspace", () => {
     async function gatedDrive(paths: readonly string[] = ["Notes/Plan.md"]) {
       const writes: { path: string; content: string; revision: string | null }[] = [];
       const settle: ((value: WriteResult) => void)[] = [];
+      const reject: ((error: Error) => void)[] = [];
       const { client } = fakeClient({
         readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
         writeFile: (path, content, revision) => {
           writes.push({ path, content, revision: revision?.id ?? null });
-          return new Promise<WriteResult>((resolve) => settle.push(resolve));
+          return new Promise<WriteResult>((resolve, rejectWrite) => {
+            settle.push(resolve);
+            reject.push(rejectWrite);
+          });
         },
       });
       const hook = renderHook(() => useWorkspace(client));
@@ -481,7 +485,7 @@ describe("a Google Drive workspace", () => {
           hook.result.current.actions.edit(`# Two of ${path}\n`);
         });
       }
-      return { result: hook.result, writes, settle, opened };
+      return { result: hook.result, writes, settle, reject, opened };
     }
 
     function press(result: { current: { actions: WorkspaceActions } }, path?: string) {
@@ -591,6 +595,60 @@ describe("a Google Drive workspace", () => {
       });
       expect(result.current.state.dirty).toBe(false);
       expect(result.current.state.file?.revision.id).toBe("h2");
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+
+    it("takes the spinner down, resets busy and shows the banner when the write throws", async () => {
+      const { result, reject } = await gatedDrive();
+      const first = press(result);
+      const second = press(result);
+
+      await act(async () => {
+        reject[0]?.(new Error("socket hang up"));
+        expect(await first).toBe(false);
+        expect(await second).toBe(false);
+      });
+      expect(result.current.state.savingPaths).toEqual([]);
+      expect(result.current.state.busy).toBe(false);
+      expect(result.current.state.dirty).toBe(true);
+      expect(result.current.state.errorKey).not.toBeNull();
+    });
+
+    it("does the same when the queued follow-up throws", async () => {
+      const { result, settle, reject } = await gatedDrive();
+      const first = press(result);
+      act(() => {
+        result.current.actions.edit("# Three\n");
+      });
+      const second = press(result);
+
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "h2" } });
+        expect(await first).toBe(true);
+      });
+      await act(async () => {
+        reject[1]?.(new Error("socket hang up"));
+        expect(await second).toBe(false);
+      });
+      expect(result.current.state.savingPaths).toEqual([]);
+      expect(result.current.state.busy).toBe(false);
+      expect(result.current.state.dirty).toBe(true);
+      expect(result.current.state.errorKey).not.toBeNull();
+    });
+
+    it("answers a queued press false when the document was closed during the save", async () => {
+      const { result, settle, opened } = await gatedDrive();
+      const first = press(result);
+      const second = press(result);
+      await act(async () => {
+        await result.current.actions.closeFile(opened[0] ?? "");
+      });
+
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "h2" } });
+        await first;
+        expect(await second).toBe(false);
+      });
       expect(result.current.state.savingPaths).toEqual([]);
     });
 
