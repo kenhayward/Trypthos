@@ -744,9 +744,11 @@ a network, and it is the shape the next three providers should copy.
   `errors.newerVersionCredentials`. A file nothing can parse is copied to
   `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) and then replaced; one
   that cannot be opened refuses every change (`unopenable`), and a backup that collides answers
-  `backup-failed` rather than throwing across IPC. The Google, Microsoft and GitHub
-  disconnects pass a refused delete through as their answer, after dropping the in-memory access
-  token, so a sign-out that did not reach disk is never reported as done.
+  `backup-failed` rather than throwing across IPC. The Google and Microsoft disconnects pass a
+  refused delete through as their answer after dropping the in-memory access token; GitHub's does
+  the same after dropping its repository list (it holds no access token in memory). `secrets:delete`
+  passes a refused delete through as well, and the settings dialog then says the key is still
+  stored. A sign-out or key removal that did not reach disk is never reported as done.
 - **Pinned to a commit.** Opening resolves the default branch and then that branch's head commit, and
   the tree is fetched at that SHA. A branch name would move under the user while they read.
 - **One request for the whole tree.** `?recursive=1` returns every path in the repository, so every
@@ -1456,10 +1458,17 @@ in the user's workspace.
   `replacedUnreadable: true` and `settings:write` skips the sweep for it - and for every later write
   in that run of the app (`sweepHeld`), since the session's profiles started from defaults; an
   unreferenced key is swept on a later launch, once settings load cleanly. A file that cannot be
-  opened at all is refused until the next write. **A failed load is remembered** per directory: if
-  the load hit a held file (EBUSY at launch) and answered defaults, a later write over a file that
-  now reads as current is refused (`not-loaded`) until a load succeeds - otherwise the renderer's
-  write 400 ms later would put the defaults over a good file. A missing file is a successful load.
+  opened at all is refused until the next write. **A failed load belongs to the window that will
+  save from it.** `ipcHandlers.js` keeps a map keyed by `event.sender.id`, dropped when that sender
+  is destroyed, and only that window's own `settings:read` sets or clears its entry. If its load hit
+  a held file (EBUSY at launch) or a newer build's file, the window holds defaults, and every
+  `settings:write` from it is refused (`not-loaded`, nothing swept) whatever the file looks like by
+  then - readable, or gone - until that window's own re-read succeeds. Otherwise the renderer's write
+  400 ms later would put the defaults over a good file. A window that loaded an unreadable file may
+  replace that file and nothing else (`writeSettings` `replaceOnly`). Main-process reads (chat:send,
+  the outline, startup) go to the store directly and neither set nor clear an entry; the store
+  itself remembers no load (`loadSettingsFile` only reports how one went). A missing file is a
+  successful load.
   Writes are queued (check-then-write is one step), each uses its own temporary name, and a backup
   collision or a failed write answers a result rather than throwing across IPC. `settings:read`
   still answers `ok: true` with the defaults: the renderer treats `ok: false` the same way, so the
