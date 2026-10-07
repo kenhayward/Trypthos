@@ -418,6 +418,11 @@
     "timedOut": "Google's sign-in page did not answer in time. Connect again to try once more.",
     "googleOffline": "Trypthos could not reach Google. Check your connection and try again.",
     "googleRateLimited": "Google has had as many requests as it allows for now. Wait a few minutes and try again.",
+    "oneDriveOffline": "Could not reach Microsoft. Check your connection and try again.",
+    "oneDriveRateLimited": "Microsoft is busy. Wait a minute and try again.",
+    "oneDriveNotConnected": "Your Microsoft account is no longer connected. Connect it again in Settings > Accounts.",
+    "oneDriveScopeDenied": "Trypthos needs access to your files to open OneDrive folders. Connect again and allow it.",
+    "oneDriveTimedOut": "Microsoft's sign-in page did not answer in time. Connect again to try once more.",
     "googleNotConnected": "Trypthos is no longer signed in to Google. Connect again from the Accounts page of Settings.",
     "notConfigured": "Google did not accept this build's sign-in setup, so Google Drive cannot be connected. Updating Trypthos may fix it.",
     "windowFailed": "The new window did not open, so the tab is still here with your changes.",
@@ -549,7 +554,8 @@
       "title": "Accounts",
       "blurb": "Cloud sources Trypthos can open folders from. Tokens are encrypted by your operating system and stored outside your settings file.",
       "github": "GitHub",
-      "googleDrive": "Google Drive"
+      "googleDrive": "Google Drive",
+      "oneDrive": "OneDrive"
     }
   },
   "menu": {
@@ -672,14 +678,24 @@
     "readOnlyNote": "A repository opens at its default branch. Saving makes a commit - Trypthos asks which branch it goes to the first time you save.",
     "browserOnly": "Connecting to GitHub needs the desktop app. This is the browser preview."
   },
-  "google": {
-    "checking": "Checking your Google account...",
-    "connect": "Connect Google Drive",
+  "cloud": {
     "connecting": "Waiting for your browser...",
     "cancel": "Cancel",
     "disconnect": "Disconnect",
     "connectedAs": "Connected as {{email}}",
-    "notConnected": "Not connected",
+    "notConnected": "Not connected"
+  },
+  "onedrive": {
+    "checking": "Checking your Microsoft account...",
+    "connect": "Connect OneDrive",
+    "connectBlurb": "Trypthos opens Microsoft's sign-in page in your browser. Sign in with your personal Microsoft account and allow access to your files, then come back here. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Microsoft directly from this machine.",
+    "notConfigured": "This build of Trypthos was made without OneDrive support.",
+    "browserOnly": "Connecting to OneDrive needs the desktop app. This is the browser preview.",
+    "removeAccess": "Disconnecting forgets the sign-in on this computer. To remove Trypthos's access from your Microsoft account too, visit account.live.com/consent/Manage."
+  },
+  "google": {
+    "checking": "Checking your Google account...",
+    "connect": "Connect Google Drive",
     "connectBlurb": "Trypthos opens Google's sign-in page in your browser. Allow access to Google Drive there, then come back here. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Google directly from this machine.",
     "notConfigured": "This build of Trypthos was made without Google Drive support.",
     "browserOnly": "Connecting to Google Drive needs the desktop app. This is the browser preview."

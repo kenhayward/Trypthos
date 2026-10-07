@@ -306,10 +306,10 @@ export interface GitHubBridge {
   repoInfo(workspaceId: string): Promise<RepoInfoResult>;
 }
 
-/// What the shell says about the Google account. An EMAIL, never a token - see `GitHubBridge`.
+/// What the shell says about a cloud account. An EMAIL, never a token - see `GitHubBridge`.
 ///
-/// `configured` false is a build without a Google OAuth client, which offers no way to connect.
-export interface GoogleStatus {
+/// `configured` false is a build without an OAuth client for that provider, which offers no way to connect.
+export interface CloudAccountStatus {
   ok: true;
   configured: boolean;
   connected: boolean;
@@ -317,7 +317,26 @@ export interface GoogleStatus {
   reason: string | null;
 }
 
-export type GoogleConnectResult = { ok: true; email: string } | { ok: false; reason: string };
+export type CloudConnectResult = { ok: true; email: string } | { ok: false; reason: string };
+
+export type GoogleStatus = CloudAccountStatus;
+export type GoogleConnectResult = CloudConnectResult;
+
+/// Any provider's account, as the shared section drives it.
+export interface CloudAccountBridge {
+  status(): Promise<CloudAccountStatus>;
+  connect(): Promise<CloudConnectResult>;
+  cancelConnect(): Promise<{ ok: boolean }>;
+  disconnect(): Promise<{ ok: boolean; reason?: string }>;
+}
+
+/// The OneDrive half of the bridge. Like Google's, there is deliberately no `getToken`.
+export interface OneDriveBridge {
+  oneDriveStatus(): Promise<CloudAccountStatus>;
+  connectOneDrive(): Promise<CloudConnectResult>;
+  cancelOneDriveConnect(): Promise<{ ok: boolean }>;
+  disconnectOneDrive(): Promise<{ ok: boolean; reason?: string }>;
+}
 
 /// A place the Drive picker can list: the Shared drives, the folders shared with the user, or one
 /// folder by Drive id (My Drive is the folder `root`).
@@ -337,7 +356,7 @@ export interface GoogleBridge {
   listDriveFolders(location: DriveLocation): Promise<DriveFoldersResult>;
 }
 
-interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge, GoogleBridge {
+interface TrypthosBridge extends WorkspaceClient, KeyBridge, ChatBridge, ChatHistoryBridge, GitHubBridge, GoogleBridge, OneDriveBridge {
   platform: string;
   isDesktop: true;
   explorerIntegration(): Promise<IntegrationStatus>;
@@ -441,6 +460,39 @@ export function googleBridge(): GoogleBridge | null {
     cancelGoogleConnect: bridge.cancelGoogleConnect,
     disconnectGoogle: bridge.disconnectGoogle,
     listDriveFolders: bridge.listDriveFolders,
+  };
+}
+
+/// The OneDrive half of the bridge, or null outside the desktop shell.
+export function oneDriveBridge(): OneDriveBridge | null {
+  const bridge = window.trypthos;
+  if (!bridge?.oneDriveStatus) return null;
+  return {
+    oneDriveStatus: bridge.oneDriveStatus,
+    connectOneDrive: bridge.connectOneDrive,
+    cancelOneDriveConnect: bridge.cancelOneDriveConnect,
+    disconnectOneDrive: bridge.disconnectOneDrive,
+  };
+}
+
+/// Google's account calls under the names the shared section uses.
+export function googleAccount(bridge: GoogleBridge | null): CloudAccountBridge | null {
+  if (bridge === null) return null;
+  return {
+    status: () => bridge.googleStatus(),
+    connect: () => bridge.connectGoogle(),
+    cancelConnect: () => bridge.cancelGoogleConnect(),
+    disconnect: () => bridge.disconnectGoogle(),
+  };
+}
+
+export function oneDriveAccount(bridge: OneDriveBridge | null): CloudAccountBridge | null {
+  if (bridge === null) return null;
+  return {
+    status: () => bridge.oneDriveStatus(),
+    connect: () => bridge.connectOneDrive(),
+    cancelConnect: () => bridge.cancelOneDriveConnect(),
+    disconnect: () => bridge.disconnectOneDrive(),
   };
 }
 

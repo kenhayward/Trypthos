@@ -95,6 +95,12 @@ const DYNAMIC_PREFIXES = [
   // checks the other direction: every signal has both a singular and a counted wording.
   "editor.flavour.signal.",
   "editor.flavour.signals.",
+  // Named by CloudAccountKind (GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT) so one section serves every provider.
+  // `cloudAccounts.test` checks the other direction: every key a kind names exists.
+  "google.",
+  "onedrive.",
+  "settings.accounts.googleDrive",
+  "settings.accounts.oneDrive",
 ];
 
 function usedKeys(): Map<string, string[]> {

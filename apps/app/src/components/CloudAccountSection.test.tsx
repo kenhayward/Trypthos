@@ -2,8 +2,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectsConsoleError } from "../test-setup";
-import GoogleAccountSection from "./GoogleAccountSection";
-import type { GoogleBridge, GoogleConnectResult } from "../lib/workspaceClient";
+import CloudAccountSection from "./CloudAccountSection";
+import { GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT } from "../lib/cloudAccounts";
+import { googleAccount, oneDriveAccount, type GoogleBridge, type GoogleConnectResult, type OneDriveBridge } from "../lib/workspaceClient";
 
 function fakeBridge(overrides: Partial<GoogleBridge> = {}) {
   return {
@@ -16,10 +17,10 @@ function fakeBridge(overrides: Partial<GoogleBridge> = {}) {
   } satisfies GoogleBridge;
 }
 
-describe("GoogleAccountSection", () => {
+describe("CloudAccountSection with Google", () => {
   it("connects through the browser and shows who is connected", async () => {
     const bridge = fakeBridge();
-    render(<GoogleAccountSection bridge={bridge} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
 
@@ -36,7 +37,7 @@ describe("GoogleAccountSection", () => {
         return { ok: true };
       }),
     });
-    render(<GoogleAccountSection bridge={bridge} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
     expect(screen.getByText("Waiting for your browser...")).toBeDefined();
@@ -50,7 +51,7 @@ describe("GoogleAccountSection", () => {
     const bridge = fakeBridge({
       googleStatus: vi.fn(async () => ({ ok: true as const, configured: false, connected: false, email: null, reason: null })),
     });
-    render(<GoogleAccountSection bridge={bridge} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} />);
 
     expect(await screen.findByText("This build of Trypthos was made without Google Drive support.")).toBeDefined();
     expect(screen.queryByRole("button", { name: "Connect Google Drive" })).toBeNull();
@@ -58,14 +59,14 @@ describe("GoogleAccountSection", () => {
 
   it("shows a refused sign-in as an alert", async () => {
     const bridge = fakeBridge({ connectGoogle: vi.fn(async () => ({ ok: false as const, reason: "scope-denied" })) });
-    render(<GoogleAccountSection bridge={bridge} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Google Drive access was not allowed");
   });
 
   it("explains the browser preview cannot connect", async () => {
-    render(<GoogleAccountSection bridge={null} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={null} />);
     expect(await screen.findByText("Connecting to Google Drive needs the desktop app. This is the browser preview.")).toBeDefined();
   });
 
@@ -76,7 +77,7 @@ describe("GoogleAccountSection", () => {
         throw new Error("ipc down");
       }),
     });
-    render(<GoogleAccountSection bridge={bridge} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} />);
 
     expect(await screen.findByRole("alert")).toBeDefined();
     expect(screen.getByRole("button", { name: "Connect Google Drive" })).toBeDefined();
@@ -87,7 +88,7 @@ describe("GoogleAccountSection", () => {
     const bridge = fakeBridge({
       connectGoogle: vi.fn(async (): Promise<GoogleConnectResult> => ({ ok: false, reason: "offline" })),
     });
-    render(<GoogleAccountSection bridge={bridge} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
 
@@ -98,7 +99,7 @@ describe("GoogleAccountSection", () => {
 
   it("tells its owner when an account has been connected", async () => {
     const onConnected = vi.fn();
-    render(<GoogleAccountSection bridge={fakeBridge()} onConnected={onConnected} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(fakeBridge())} onConnected={onConnected} />);
     await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
     await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
   });
@@ -106,9 +107,72 @@ describe("GoogleAccountSection", () => {
   it("does not report a sign-in that did not connect", async () => {
     const onConnected = vi.fn();
     const bridge = fakeBridge({ connectGoogle: vi.fn(async () => ({ ok: false as const, reason: "cancelled" })) });
-    render(<GoogleAccountSection bridge={bridge} onConnected={onConnected} />);
+    render(<CloudAccountSection kind={GOOGLE_ACCOUNT} bridge={googleAccount(bridge)} onConnected={onConnected} />);
     await userEvent.click(await screen.findByRole("button", { name: "Connect Google Drive" }));
     await waitFor(() => expect(bridge.connectGoogle).toHaveBeenCalled());
     expect(onConnected).not.toHaveBeenCalled();
+  });
+});
+
+function fakeOneDrive(overrides: Partial<OneDriveBridge> = {}): OneDriveBridge {
+  return {
+    oneDriveStatus: async () => ({ ok: true, configured: true, connected: false, email: null, reason: null }),
+    connectOneDrive: async () => ({ ok: true, email: "ada@example.com" }),
+    cancelOneDriveConnect: async () => ({ ok: true }),
+    disconnectOneDrive: async () => ({ ok: true }),
+    ...overrides,
+  };
+}
+
+describe("the OneDrive account", () => {
+  it("connects and names the account", async () => {
+    const user = userEvent.setup();
+    render(<CloudAccountSection kind={ONEDRIVE_ACCOUNT} bridge={oneDriveAccount(fakeOneDrive())} />);
+    expect(await screen.findByRole("heading", { name: "OneDrive" })).toBeTruthy();
+    await user.click(await screen.findByRole("button", { name: "Connect OneDrive" }));
+    expect(await screen.findByText("Connected as ada@example.com")).toBeTruthy();
+    // Microsoft cannot be asked to forget the grant, so the section says where to.
+    expect(screen.getByText(/account\.live\.com/)).toBeTruthy();
+  });
+
+  it("says when this build has no OneDrive", async () => {
+    render(
+      <CloudAccountSection
+        kind={ONEDRIVE_ACCOUNT}
+        bridge={oneDriveAccount(fakeOneDrive({ oneDriveStatus: async () => ({ ok: true, configured: false, connected: false, email: null, reason: null }) }))}
+      />,
+    );
+    expect(await screen.findByText("This build of Trypthos was made without OneDrive support.")).toBeTruthy();
+  });
+
+  it("explains a failed sign-in in OneDrive's words", async () => {
+    const user = userEvent.setup();
+    render(
+      <CloudAccountSection
+        kind={ONEDRIVE_ACCOUNT}
+        bridge={oneDriveAccount(fakeOneDrive({ connectOneDrive: async () => ({ ok: false, reason: "offline" }) }))}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Connect OneDrive" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not reach Microsoft. Check your connection and try again.");
+  });
+
+  it("names Microsoft, not Google, when sign-in is refused or times out", async () => {
+    const user = userEvent.setup();
+    render(
+      <CloudAccountSection
+        kind={ONEDRIVE_ACCOUNT}
+        bridge={oneDriveAccount(fakeOneDrive({ connectOneDrive: async () => ({ ok: false, reason: "scope-denied" }) }))}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Connect OneDrive" }));
+    const alert = (await screen.findByRole("alert")).textContent ?? "";
+    expect(alert).toContain("OneDrive");
+    expect(alert).not.toContain("Google");
+  });
+
+  it("is a desktop-only control in the browser preview", () => {
+    render(<CloudAccountSection kind={ONEDRIVE_ACCOUNT} bridge={null} />);
+    expect(screen.getByText("Connecting to OneDrive needs the desktop app. This is the browser preview.")).toBeTruthy();
   });
 });

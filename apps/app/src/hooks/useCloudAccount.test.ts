@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useGoogle } from "./useGoogle";
-import type { GoogleBridge, GoogleConnectResult } from "../lib/workspaceClient";
+import { useCloudAccount } from "./useCloudAccount";
+import { GOOGLE_ACCOUNT } from "../lib/cloudAccounts";
+import { googleAccount, type GoogleBridge, type GoogleConnectResult } from "../lib/workspaceClient";
 
 /// The Google account, from the interface's side: which of not configured, checking, connected,
 /// waiting for the browser and "that did not work" the section is in.
@@ -17,12 +18,18 @@ function fakeBridge(overrides: Partial<GoogleBridge> = {}) {
   } satisfies GoogleBridge;
 }
 
-describe("useGoogle", () => {
+/// The adapter is made once per bridge, as the components do, so the hook sees a stable identity.
+function hook(bridge: GoogleBridge) {
+  const account = googleAccount(bridge);
+  return renderHook(() => useCloudAccount(account, GOOGLE_ACCOUNT.failureKey));
+}
+
+describe("useCloudAccount", () => {
   it("asks the shell whether an account is connected", async () => {
     const bridge = fakeBridge({
       googleStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: true, email: "ada@example.com", reason: null })),
     });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
 
     await waitFor(() => expect(result.current.email).toBe("ada@example.com"));
     expect(result.current.connected).toBe(true);
@@ -30,7 +37,7 @@ describe("useGoogle", () => {
   });
 
   it("reports no shell as unsupported", async () => {
-    const { result } = renderHook(() => useGoogle(null));
+    const { result } = renderHook(() => useCloudAccount(null, GOOGLE_ACCOUNT.failureKey));
     await waitFor(() => expect(result.current.checking).toBe(false));
     expect(result.current.supported).toBe(false);
   });
@@ -39,7 +46,7 @@ describe("useGoogle", () => {
     const bridge = fakeBridge({
       googleStatus: vi.fn(async () => ({ ok: true as const, configured: false, connected: false, email: null, reason: null })),
     });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.checking).toBe(false));
     expect(result.current.configured).toBe(false);
   });
@@ -47,7 +54,7 @@ describe("useGoogle", () => {
   it("is connecting while the browser is open, then connected", async () => {
     let finish: (value: GoogleConnectResult) => void = () => {};
     const bridge = fakeBridge({ connectGoogle: vi.fn(() => new Promise<GoogleConnectResult>((resolve) => (finish = resolve))) });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.checking).toBe(false));
 
     let connected: Promise<boolean> = Promise.resolve(false);
@@ -68,7 +75,7 @@ describe("useGoogle", () => {
   // Closing the browser or pressing Cancel is not a failure and must not raise a banner.
   it("returns to idle without an error when the sign-in is cancelled", async () => {
     const bridge = fakeBridge({ connectGoogle: vi.fn(async () => ({ ok: false as const, reason: "cancelled" })) });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.checking).toBe(false));
 
     await act(async () => {
@@ -81,7 +88,7 @@ describe("useGoogle", () => {
 
   it("names a refused sign-in", async () => {
     const bridge = fakeBridge({ connectGoogle: vi.fn(async () => ({ ok: false as const, reason: "scope-denied" })) });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.checking).toBe(false));
 
     await act(async () => {
@@ -92,7 +99,7 @@ describe("useGoogle", () => {
 
   it("cancel asks the shell to stop waiting", async () => {
     const bridge = fakeBridge();
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.checking).toBe(false));
 
     await act(async () => {
@@ -105,7 +112,7 @@ describe("useGoogle", () => {
     const bridge = fakeBridge({
       googleStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: true, email: "ada@example.com", reason: null })),
     });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.connected).toBe(true));
 
     await act(async () => {
@@ -119,7 +126,7 @@ describe("useGoogle", () => {
     const bridge = fakeBridge({
       googleStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: false, email: null, reason: "not-connected" })),
     });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.checking).toBe(false));
     expect(result.current.errorKey).toBe("errors.googleNotConnected");
   });
@@ -129,7 +136,7 @@ describe("useGoogle", () => {
       googleStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: true, email: "ada@example.com", reason: null })),
       disconnectGoogle: vi.fn(async () => ({ ok: false as const, reason: "unknown" })),
     });
-    const { result } = renderHook(() => useGoogle(bridge));
+    const { result } = hook(bridge);
     await waitFor(() => expect(result.current.connected).toBe(true));
 
     await act(async () => {
