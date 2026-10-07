@@ -408,6 +408,10 @@ if (!gotLock) {
     // Chromium's stack - the machine's proxy and certificate store. OneDrive keeps its own rules
     // (redirect: "error" plus createManualFetch, below).
     const providerFetch = createSafeFetch((options) => net.request(options));
+    // The chat key goes through the same rules, with one allowance: a model on plain http (Ollama or
+    // llama.cpp on the loopback) may redirect within its own origin. An http hop to another host or
+    // port, and every downgrade from https, is refused; credentials never cross an origin.
+    const chatFetch = createSafeFetch((options) => net.request(options), { allowHttpSameOrigin: true });
 
     // The Google account. Null in a build without an OAuth client - a fork, or a developer who has
     // not set TRYPTHOS_GOOGLE_CLIENT - which the interface reports as Google Drive being unavailable.
@@ -453,12 +457,13 @@ if (!gotLock) {
       // The provider call lives here and only here. The renderer never opens a socket to a provider
       // and never holds the key.
       //
-      // **Electron's `net.fetch`, not Node's**, for two reasons. Node's gives up on any response
+      // **Chromium's network stack, not Node's**, for two reasons. Node's gives up on any response
       // after five minutes of silence, which no setting here could raise - so a large reasoning model
       // thinking before its first token could never be waited for. Chromium's stack sets no such
       // limit, and each model's own reply timeout (see `createSilenceWatch`) is the limit instead. It
       // also knows the machine's proxy and certificate store, which is why GitHub already uses it.
-      chat: createChatProvider({ secrets, fetchImpl: (url, options) => net.fetch(url, options) }),
+      // chatFetch runs on that stack (net.request) and keeps the key off a redirect to another host.
+      chat: createChatProvider({ secrets, fetchImpl: chatFetch }),
       accounts,
       // Every GitHub call happens here, where the token is. The renderer never opens a socket to
       // GitHub and never holds the token - the same rule as the chat provider, for the same reason.

@@ -157,7 +157,9 @@ function createManualFetch(request) {
 /// - a **same-origin** hop (scheme, host and port) keeps the headers; a **cross-origin** hop drops
 ///   `Authorization`, `Cookie` and `Proxy-Authorization`, and once dropped they stay dropped;
 /// - a hop to anything but https, a sixth hop, or a body that would be resent to another origin
-///   (a cross-origin 307/308, or a 301/302 that keeps its method) rejects without contacting it;
+///   (a cross-origin 307/308, or a 301/302 that keeps its method) rejects without contacting it.
+///   `{ allowHttpSameOrigin: true }` (the chat provider's, for a loopback model) also lets an http
+///   chain follow an http hop within its own origin; see `nextHop`;
 /// - a 303 (and a 301/302 after a POST) becomes a GET with no body and no body headers.
 ///
 /// The answer is a `Response` over the IncomingMessage via `Readable.toWeb`, resolved at the
@@ -194,8 +196,12 @@ function bodyBytes(body) {
   throw Object.assign(new TypeError("The request body is not a supported type."), { code: "ERR_UNSUPPORTED_BODY" });
 }
 
-/// The next hop, or a thrown refusal. `hop` is the request about to be redirected away from.
-function nextHop(hop, status, location, redirects) {
+/// The next hop, or a thrown refusal. `hop` is the request about to be redirected away from;
+/// `firstUrl` is where the chain began. With `allowHttpSameOrigin`, an http hop is allowed only
+/// when the chain began on http AND the hop stays on the same origin (scheme included) - a loopback
+/// model redirecting within itself. Every other http hop is refused: a downgrade from https, and an
+/// http hop to another host or port, which is never contacted rather than contacted without the key.
+function nextHop(hop, status, location, redirects, firstUrl, allowHttpSameOrigin) {
   if (redirects >= MAX_REDIRECTS) throw refusal("ERR_TOO_MANY_REDIRECTS");
   let target;
   try {
@@ -203,9 +209,14 @@ function nextHop(hop, status, location, redirects) {
   } catch {
     throw refusal("ERR_REDIRECT_INVALID");
   }
-  if (target.protocol !== "https:") throw refusal("ERR_REDIRECT_INSECURE");
 
+  // Origin as the URL standard parses it: a default port and a host's case fold away; a trailing
+  // dot does not, so it counts as another origin (the safe direction).
   const sameOrigin = target.origin === hop.url.origin;
+  if (target.protocol !== "https:") {
+    const httpAllowed = allowHttpSameOrigin && target.protocol === "http:" && firstUrl.protocol === "http:" && sameOrigin;
+    if (!httpAllowed) throw refusal("ERR_REDIRECT_INSECURE");
+  }
   const headers = new Headers(hop.headers);
   let { method, body } = hop;
 
@@ -222,7 +233,7 @@ function nextHop(hop, status, location, redirects) {
   return { url: target, method, headers, body };
 }
 
-function createSafeFetch(request) {
+function createSafeFetch(request, { allowHttpSameOrigin = false } = {}) {
   return function safeFetch(url, init = {}) {
     return new Promise((resolve, reject) => {
       const signal = init.signal ?? null;
@@ -243,6 +254,7 @@ function createSafeFetch(request) {
         return;
       }
 
+      const firstUrl = hop.url;
       // pending -> streaming (resolved, the body still arriving) -> done.
       let state = "pending";
       let current = null;
@@ -297,7 +309,7 @@ function createSafeFetch(request) {
           // Stopped already: a refusal below has nothing more to abort.
           current = null;
           try {
-            hop = nextHop(hop, status, location, redirects);
+            hop = nextHop(hop, status, location, redirects, firstUrl, allowHttpSameOrigin);
           } catch (error) {
             fail(error);
             return;

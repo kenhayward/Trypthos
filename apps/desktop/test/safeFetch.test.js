@@ -1,6 +1,7 @@
 "use strict";
 
 const test = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
 const { PassThrough } = require("node:stream");
@@ -318,6 +319,170 @@ test("a late event from a request already redirected away from changes nothing",
   assert.equal(await (await pending).text(), "ok");
 });
 
+test("Proxy-Authorization is dropped on a cross-origin hop too", async () => {
+  const { fetch, made } = setup();
+  const pending = fetch(API, { headers: { ...bearer, "Proxy-Authorization": "Basic invented" } });
+  assert.equal(made[0].headers["proxy-authorization"], "Basic invented");
+  made[0].redirect(302, OTHER);
+  assert.equal(made[1].headers["proxy-authorization"], undefined);
+  made[1].respond(200).end();
+  await pending;
+});
+
+test("a credential header named in any case is dropped cross-origin", async () => {
+  const { fetch, made } = setup();
+  const pending = fetch(API, { headers: { AUTHORIZATION: `Bearer ${ACCESS}`, cOoKiE: "c=invented" } });
+  made[0].redirect(302, OTHER);
+  assert.deepEqual(Object.keys(made[1].headers).filter((n) => /authorization|cookie/i.test(n)), []);
+  made[1].respond(200).end();
+  await pending;
+});
+
+// Origin is compared on the parsed URL: a default port and a host's case are the same origin.
+for (const [label, location] of [
+  ["an explicit :443", "https://www.googleapis.com:443/drive/v3/x"],
+  ["an uppercase host", "https://WWW.GoogleAPIs.COM/drive/v3/x"],
+]) {
+  test(`a hop to the same origin written with ${label} keeps the token`, async () => {
+    const { fetch, made } = setup();
+    const pending = fetch(API, { headers: bearer });
+    made[0].redirect(302, location);
+    assert.equal(made[1].headers.authorization, `Bearer ${ACCESS}`);
+    made[1].respond(200).end();
+    await pending;
+  });
+}
+
+// The rule: a trailing dot is a different host to the URL standard, so it is treated as another
+// origin and the token is dropped - the safe direction to be wrong in.
+test("a hop to the same host with a trailing dot is another origin, and drops the token", async () => {
+  const { fetch, made } = setup();
+  const pending = fetch(API, { headers: bearer });
+  made[0].redirect(302, "https://www.googleapis.com./drive/v3/x");
+  assert.equal(made[1].headers.authorization, undefined);
+  made[1].respond(200).end();
+  await pending;
+});
+
+test("an error on the IncomingMessage mid-body errors the body", async () => {
+  const { fetch, made } = setup();
+  const pending = fetch(API, { headers: bearer });
+  const message = made[0].respond(206);
+  const response = await pending;
+  message.write("part");
+  message.destroy(Object.assign(new Error("cut"), { code: "ECONNRESET" }));
+  await assert.rejects(response.arrayBuffer(), { code: "ECONNRESET" });
+});
+
+/// The chat provider's fetch: `allowHttpSameOrigin` lets a loopback model on http follow a redirect
+/// within its own origin. The rule: an http hop is allowed only when the FIRST request was http and
+/// the hop is same-origin, scheme included. An http hop to another host is REFUSED (not stripped
+/// and followed); an upgrade to https is followed with credentials stripped (it is cross-origin);
+/// a downgrade from https is refused.
+describe("allowHttpSameOrigin", () => {
+  const LOCAL = "http://127.0.0.1:11434/v1/chat/completions";
+  const KEY_HEADERS = { Authorization: "Bearer sk-invented-safe-fetch" };
+  const chatSetup = () => {
+    const made = [];
+    const fetch = createSafeFetch(
+      (options) => {
+        const request = new FakeRequest(options);
+        made.push(request);
+        return request;
+      },
+      { allowHttpSameOrigin: true },
+    );
+    return { fetch, made };
+  };
+
+  it("a same-origin http hop keeps the key and the body", async () => {
+    const { fetch, made } = chatSetup();
+    const pending = fetch(LOCAL, { method: "POST", headers: KEY_HEADERS, body: "{}" });
+    made[0].redirect(307, "http://127.0.0.1:11434/v2/chat/completions");
+    assert.equal(made[1].options.url, "http://127.0.0.1:11434/v2/chat/completions");
+    assert.equal(made[1].headers.authorization, "Bearer sk-invented-safe-fetch");
+    assert.equal(made[1].sent.toString(), "{}");
+    made[1].respond(200).end();
+    await pending;
+  });
+
+  it("an http hop to another host is refused, never contacted", async () => {
+    for (const location of ["http://localhost:11434/v1/chat/completions", "http://127.0.0.1:8080/v1"]) {
+      const { fetch, made } = chatSetup();
+      const pending = fetch(LOCAL, { headers: KEY_HEADERS });
+      made[0].redirect(302, location);
+      await assert.rejects(pending, { code: "ERR_REDIRECT_INSECURE" });
+      assert.equal(made.length, 1);
+    }
+  });
+
+  it("an upgrade to https is followed with the key stripped", async () => {
+    const { fetch, made } = chatSetup();
+    const pending = fetch(LOCAL, { headers: KEY_HEADERS });
+    made[0].redirect(301, "https://127.0.0.1:11434/v1/chat/completions");
+    assert.equal(made[1].headers.authorization, undefined);
+    made[1].respond(200).end();
+    await pending;
+  });
+
+  it("https to http is refused, even to the same host", async () => {
+    const { fetch, made } = chatSetup();
+    const pending = fetch("https://api.invented.example/v1/chat/completions", { headers: KEY_HEADERS });
+    made[0].redirect(302, "http://api.invented.example/v1/chat/completions");
+    await assert.rejects(pending, { code: "ERR_REDIRECT_INSECURE" });
+    assert.equal(made.length, 1);
+  });
+
+  it("an http to https to http chain is refused at the downgrade", async () => {
+    const { fetch, made } = chatSetup();
+    const pending = fetch(LOCAL, { headers: KEY_HEADERS });
+    made[0].redirect(302, "https://127.0.0.1:11434/v1/up");
+    made[1].redirect(302, LOCAL);
+    await assert.rejects(pending, { code: "ERR_REDIRECT_INSECURE" });
+    assert.equal(made.length, 2);
+  });
+
+  it("a cross-origin 307 with a body is still refused", async () => {
+    const { fetch, made } = chatSetup();
+    const pending = fetch(LOCAL, { method: "POST", headers: KEY_HEADERS, body: "{}" });
+    made[0].redirect(307, "https://api.invented.example/v1/chat/completions");
+    await assert.rejects(pending, { code: "ERR_REDIRECT_BODY" });
+  });
+
+  it("without the option a same-origin http hop is refused", async () => {
+    const { fetch, made } = setup();
+    const pending = fetch(LOCAL, { headers: KEY_HEADERS });
+    made[0].redirect(302, "http://127.0.0.1:11434/v2/chat/completions");
+    await assert.rejects(pending, { code: "ERR_REDIRECT_INSECURE" });
+  });
+
+  // The real chat provider over the safe fetch and the fake net.request: SSE frames stream through
+  // as tokens, after a same-origin redirect that kept the key.
+  it("streams a chat reply from a loopback http model over the safe fetch", async () => {
+    const { createChatProvider } = require("../src/chatProvider");
+    const { fetch, made } = chatSetup();
+    const events = [];
+    const chat = createChatProvider({
+      fetchImpl: fetch,
+      secrets: { getKey: async () => "sk-invented-safe-fetch" },
+      logger: { error: () => {}, warn: () => {}, info: () => {} },
+    });
+    const profile = { id: "local", label: "Local", endpoint: "http://127.0.0.1:11434/v1", model: "invented", supportsImages: false, isDefault: true };
+    const running = chat.run({ profile, turns: [{ role: "user", content: "Hello" }], onEvent: (e) => events.push(e) });
+    while (made.length === 0) await tick();
+    assert.equal(made[0].options.url, LOCAL);
+    made[0].redirect(307, "http://127.0.0.1:11434/v1/moved");
+    assert.equal(made[1].headers.authorization, "Bearer sk-invented-safe-fetch");
+    const message = made[1].respond(200, { "content-type": "text/event-stream" });
+    message.write('data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n');
+    while (!events.some((e) => e.type === "token")) await tick();
+    assert.deepEqual(events, [{ type: "token", text: "Hel" }]);
+    message.end('data: {"choices":[{"delta":{"content":"lo"}}]}\n\ndata: [DONE]\n\n');
+    await running;
+    assert.deepEqual(events, [{ type: "token", text: "Hel" }, { type: "token", text: "lo" }, { type: "end" }]);
+  });
+});
+
 /// Asserted against `main.js` because that is the only place a client and its fetch are joined, and
 /// no test loads it: every client takes whatever fetch it is handed, and every test hands it a fake.
 /// OneDrive is deliberately absent - it has its own rules (`redirect: "error"` plus createManualFetch).
@@ -330,6 +495,15 @@ test("main.js builds every token-carrying client but OneDrive's on the safe fetc
     assert.match(calls[0], /fetch: providerFetch\b/, `${factory} must be given providerFetch`);
     assert.doesNotMatch(calls[0], /net\.fetch/, `${factory} must not be given net.fetch`);
   }
+  // The chat key: its own safe fetch, which lets a loopback http model redirect within its origin.
+  assert.match(
+    main,
+    /const chatFetch = createSafeFetch\(\(options\) => net\.request\(options\), \{ allowHttpSameOrigin: true \}\);/,
+  );
+  const chat = main.match(/createChatProvider\(\{[^}]*\}\)/g) ?? [];
+  assert.equal(chat.length, 1, "createChatProvider should be built once");
+  assert.match(chat[0], /fetchImpl: chatFetch\b/, "createChatProvider must be given chatFetch");
+  assert.doesNotMatch(chat[0], /net\.fetch/, "createChatProvider must not be given net.fetch");
 });
 
 test("no refusal carries an address or a header in its message", async () => {
