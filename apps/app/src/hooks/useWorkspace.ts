@@ -993,7 +993,7 @@ export function useWorkspace(
         return;
       }
       const result = await client.revealEntry(path);
-      if (!result.ok) fail(result);
+      if (!result.ok) fail(result, ref.kind);
     },
     [client, fail],
   );

@@ -2760,6 +2760,27 @@ describe("showing an entry in the file manager", () => {
 
     expect(result.current.state.errorKey).toBe("errors.notFound");
   });
+
+  // The shell asks the service for the entry's address first, so it can answer offline. That
+  // must be worded for the service the folder is on, not for GitHub.
+  it.each([
+    ["a OneDrive", { kind: "onedrive" as const, driveId: "d0c0ffee", itemId: "ITEM!3", name: "Plans" }, "Plans/plan.md", "errors.oneDriveOffline"],
+    ["a Google Drive", { kind: "google-drive" as const, folderId: "1H60yEnI5d4", name: "Notes" }, "Notes/plan.md", "errors.googleOffline"],
+  ])("words an offline reveal in %s workspace for that service", async (_label, ref, path, key) => {
+    const { client } = fakeClient({
+      revealEntry: async () => ({ ok: false as const, reason: "offline" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(ref);
+    });
+
+    await act(async () => {
+      await result.current.actions.revealEntry(path);
+    });
+
+    expect(result.current.state.errorKey).toBe(key);
+  });
 });
 
 /// Opening an image, which is read by a different call and held in a different field.
