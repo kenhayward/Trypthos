@@ -80,6 +80,20 @@ async function inspectStored(userDataDir, readFile = fs.readFile) {
 /// directories cannot see each other's state.
 const failedLoads = new Set();
 
+/// Which settings directories had an unreadable file replaced in this run of the app (fix round 2).
+///
+/// The replaced file held the user's profiles; what the session holds started from defaults. Every
+/// later save in the session is an ordinary write, but sweeping chat keys by its profiles would
+/// delete every key the lost profiles used - credential loss. So the sweep is held off until the
+/// app restarts. Deliberately never cleared: a key nothing references any more is swept on a later
+/// launch, once settings load cleanly, and losing a sweep for one session costs nothing.
+const replacedUnreadable = new Set();
+
+/// Whether `settings:write` must skip the chat-key sweep for this directory, for the rest of this run.
+function sweepHeld(userDataDir) {
+  return replacedUnreadable.has(userDataDir);
+}
+
 async function readSettings(userDataDir, { logger = console, readFile } = {}) {
   const stored = await inspectStored(userDataDir, readFile);
 
@@ -187,6 +201,7 @@ function writeSettings(userDataDir, settings, { logger = console, now = () => ne
     if (stored.state === "unreadable") {
       // What is on disk now is what this session holds, so later writes are ordinary ones.
       failedLoads.delete(userDataDir);
+      replacedUnreadable.add(userDataDir);
       return { ok: true, replacedUnreadable: true };
     }
     return { ok: true };
@@ -220,4 +235,5 @@ module.exports = {
   readCloseToTray,
   onSettingsWritten,
   notifySettingsWritten,
+  sweepHeld,
 };

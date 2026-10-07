@@ -206,6 +206,27 @@ test("a settings write that replaces an unreadable file sweeps no keys", async (
   });
 });
 
+// The replaced file held the profiles; what this session holds started from defaults. A later,
+// ordinary save sweeping by those would delete every key the lost profiles used. Held off until
+// the app restarts and settings load cleanly.
+test("after replacing an unreadable file, later settings writes in the session sweep no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      await fs.writeFile(path.join(dir, "settings.json"), "{ this is not json", "utf8");
+
+      assert.deepEqual(await ipcMain.invoke("settings:write", DEFAULT_SETTINGS), { ok: true });
+      assert.deepEqual(await ipcMain.invoke("settings:write", DEFAULT_SETTINGS), { ok: true });
+
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
+  });
+});
+
 // The launch race: the load hit a held file and answered defaults, and by the time the renderer
 // writes them back the file reads fine. Refused, and nothing swept.
 test("a settings write after a load that could not open the file is refused, and sweeps no keys", async () => {

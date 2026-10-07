@@ -61,7 +61,7 @@ const {
   OBSIDIAN_ICONS_FILE,
   parseObsidianIcons,
 } = require("@trypthos/domain");
-const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
+const { readSettings, writeSettings, notifySettingsWritten, sweepHeld } = require("./settingsStore");
 const { openWorkspaceFor } = require("./providers");
 const { readObsidianVaults } = require("./obsidianVaults");
 const chatStore = require("./chatStore");
@@ -371,7 +371,9 @@ function registerIpcHandlers({
     // defaults this build fell back to, with no profiles, and sweeping by them would delete every
     // chat key the stored profiles still use. So no sweep.
     if (!written.ok) return written;
-    if (written.replacedUnreadable) return { ok: true };
+    // And for every later write in this run once an unreadable file was replaced: the session's
+    // profiles started from defaults, not from the profiles the lost file held (see `sweepHeld`).
+    if (written.replacedUnreadable || sweepHeld(userDataDir)) return { ok: true };
 
     // Saving settings is the only moment the app learns that a profile was deleted, or its endpoint
     // repointed. Without this, a live credential for a provider nothing references any more would
