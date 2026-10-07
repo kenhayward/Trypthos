@@ -407,3 +407,240 @@ test("no log line holds an address, an id, a path, the token or an error's messa
   }
   assert.ok(text.includes("ECONNRESET"));
 });
+
+// ---- The writes (PR 3) ----
+
+const { ONEDRIVE_UPLOAD_LIMIT_BYTES } = require("@trypthos/domain");
+
+const headerNames = (call) => Object.keys(call.init.headers).map((name) => name.toLowerCase());
+
+test("a save is one PUT by path with If-Match, answering the item as Graph now has it", async () => {
+  const { api, calls } = setup({ routes: [json(200, { ...PLAN, cTag: "ctag-2" })] });
+  const bytes = Buffer.from("new text");
+  const answer = await api.writeContent(DRIVE, "root", "Notes/Plan.md", bytes, "ctag-1");
+  assert.equal(answer.ok, true);
+  assert.equal(answer.item.cTag, "ctag-2");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://graph.microsoft.com/v1.0/drives/d0c0ffee/items/root:/Notes/Plan.md:/content");
+  assert.equal(calls[0].init.method, "PUT");
+  assert.equal(calls[0].init.headers["If-Match"], "ctag-1");
+  assert.equal(calls[0].init.headers["Content-Type"], "application/octet-stream");
+  assert.equal(calls[0].init.body, bytes);
+  assert.equal(calls[0].authorization, `Bearer ${ACCESS}`);
+});
+
+test("a stale content tag is a conflict, asked once", async () => {
+  const { api, calls } = setup({ routes: [json(412, { error: { code: "resourceModified" } })] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-old"), { ok: false, reason: "conflict" });
+  assert.equal(calls.length, 1);
+});
+
+// The spike: `If-None-Match: *` was ignored and overwrote a file. A create fails on a taken name by
+// the query, and carries neither conditional header.
+test("a create PUTs by path asking Graph to fail on a taken name, with no If-None-Match and no If-Match", async () => {
+  const { api, calls } = setup({ routes: [json(201, { ...PLAN, id: "ITEM!9", cTag: "ctag-new" })] });
+  const answer = await api.createContent(DRIVE, "root", "Notes/New.md", Buffer.from("made"));
+  assert.equal(answer.ok, true);
+  assert.equal(answer.item.cTag, "ctag-new");
+  assert.equal(
+    calls[0].url,
+    "https://graph.microsoft.com/v1.0/drives/d0c0ffee/items/root:/Notes/New.md:/content?@microsoft.graph.conflictBehavior=fail",
+  );
+  assert.equal(calls[0].init.method, "PUT");
+  assert.equal(headerNames(calls[0]).includes("if-none-match"), false);
+  assert.equal(headerNames(calls[0]).includes("if-match"), false);
+});
+
+test("a name Graph says is taken is exists, asked once", async () => {
+  const { api, calls } = setup({ routes: [json(409, { error: { code: "nameAlreadyExists" } })] });
+  assert.deepEqual(await api.createContent(DRIVE, "root", "plan.MD", Buffer.from("x")), { ok: false, reason: "exists" });
+  assert.equal(calls.length, 1);
+});
+
+test("New Folder POSTs to the parent's children, asking Graph to fail on a taken name", async () => {
+  const { api, calls } = setup({ routes: [json(201, ARCHIVE), json(201, ARCHIVE)] });
+  assert.equal((await api.createFolder(DRIVE, "root", "", "Archive")).ok, true);
+  assert.equal((await api.createFolder(DRIVE, "root", "Notes", "Archive")).ok, true);
+  assert.equal(calls[0].url, "https://graph.microsoft.com/v1.0/drives/d0c0ffee/items/root/children");
+  assert.equal(calls[1].url, "https://graph.microsoft.com/v1.0/drives/d0c0ffee/items/root:/Notes:/children");
+  for (const call of calls) {
+    assert.equal(call.init.method, "POST");
+    assert.equal(call.init.headers["Content-Type"], "application/json");
+    assert.deepEqual(JSON.parse(call.init.body), { name: "Archive", folder: {}, "@microsoft.graph.conflictBehavior": "fail" });
+  }
+});
+
+test("rename PATCHes the name alone, by path; a taken name is exists", async () => {
+  const { api, calls } = setup({ routes: [json(200, { ...PLAN, name: "plan.md" }), json(409, { error: { code: "nameAlreadyExists" } })] });
+  assert.equal((await api.rename(DRIVE, "root", "Notes/Plan.md", "plan.md")).ok, true);
+  assert.equal(calls[0].url, "https://graph.microsoft.com/v1.0/drives/d0c0ffee/items/root:/Notes/Plan.md:");
+  assert.equal(calls[0].init.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { name: "plan.md" });
+  assert.deepEqual(await api.rename(DRIVE, "root", "Notes/Plan.md", "Other.md"), { ok: false, reason: "exists" });
+});
+
+// The carry-over from PR 2's review: `send()` takes bodies now, and must not lose the redirect refusal
+// on the way. Electron's net.fetch in `follow` mode hands the Authorization header to the redirect's
+// target - and a body with it.
+test("every write carries the token through fetch, refuses redirects, and never goes through the manual fetch", async () => {
+  const { api, calls } = setup({ routes: [json(200, PLAN), json(201, PLAN), json(201, ARCHIVE), json(200, PLAN)] });
+  await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1");
+  await api.createContent(DRIVE, "root", "New.md", Buffer.from("x"));
+  await api.createFolder(DRIVE, "root", "", "Archive");
+  await api.rename(DRIVE, "root", "Plan.md", "plan.md");
+  assert.deepEqual(calls.map((call) => call.init.method), ["PUT", "PUT", "POST", "PATCH"]);
+  for (const call of calls) {
+    assert.equal(call.via, "fetch", call.init.method);
+    assert.equal(call.authorization, `Bearer ${ACCESS}`, call.init.method);
+    assert.equal(call.init.redirect, "error", call.init.method);
+  }
+});
+
+test("a redirect answering a write is unknown, and is not followed", async () => {
+  const { api, calls } = setup({ routes: [redirect("https://elsewhere.invented.example/x")] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 1);
+});
+
+// A 401 is refused before anything is processed, so the same request goes again - If-Match and all.
+test("a write is repeated once after a 401, with a token refreshed for it", async () => {
+  const { api, calls, tokenCalls } = setup({
+    routes: [json(401, { error: { code: "InvalidAuthenticationToken" } }), json(200, PLAN)],
+    tokens: [{ ok: true, token: "access-old" }, { ok: true, token: ACCESS }],
+  });
+  assert.equal((await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1")).ok, true);
+  assert.deepEqual(tokenCalls, [{}, { force: true }]);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].authorization, `Bearer ${ACCESS}`);
+  assert.equal(calls[1].init.headers["If-Match"], "ctag-1");
+});
+
+// A 429 with Retry-After says the request was not processed: one repeat is safe.
+test("a write is repeated once after a 429, waiting what Retry-After asks, then rate-limited", async () => {
+  const { api, calls, slept } = setup({
+    routes: [json(429, {}, { "Retry-After": "3" }), json(201, PLAN), json(429, {}, { "Retry-After": "2" }), json(429, {})],
+  });
+  assert.equal((await api.createContent(DRIVE, "root", "New.md", Buffer.from("x"))).ok, true);
+  assert.deepEqual(await api.createContent(DRIVE, "root", "Other.md", Buffer.from("x")), { ok: false, reason: "rate-limited" });
+  assert.deepEqual(slept, [3_000, 2_000]);
+  assert.equal(calls.length, 4);
+});
+
+// A 503 promises nothing about whether the write landed. Repeating a create that did would answer
+// "exists"; repeating a save that did would answer "conflict" against its own write.
+test("a write is never repeated after a 503: it may have landed", async () => {
+  const { api, calls, slept } = setup({ routes: [json(503, {}, { "Retry-After": "1" }), json(503, {})] });
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "unknown" });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(slept, []);
+});
+
+test("a write is never repeated after another 5xx or a network rejection", async () => {
+  const reject = () => {
+    throw Object.assign(new Error("reset"), { code: "ECONNRESET" });
+  };
+  const { api, calls, slept } = setup({ routes: [json(500, {}), json(502, {}, { "Retry-After": "1" }), reject, reject] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "offline" });
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "offline" });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "offline" });
+  assert.deepEqual(await api.rename(DRIVE, "root", "Plan.md", "plan.md"), { ok: false, reason: "offline" });
+  assert.equal(calls.length, 4);
+  assert.deepEqual(slept, []);
+});
+
+test("a write whose answer never arrives is offline, and is never sent again", async () => {
+  const { api, calls, logs } = setup({ timeoutMs: 10, routes: [() => new Promise(() => {})] });
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "offline" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(logs, ["A request to OneDrive did not complete: ETIMEDOUT"]);
+});
+
+test("a body over four megabytes is too large with nothing sent, and a 413 names the sizes", async () => {
+  const { api, calls } = setup({ routes: [json(413, {})] });
+  const big = Buffer.alloc(ONEDRIVE_UPLOAD_LIMIT_BYTES + 1);
+  const refused = { ok: false, reason: "too-large", sizeBytes: ONEDRIVE_UPLOAD_LIMIT_BYTES + 1, limitBytes: ONEDRIVE_UPLOAD_LIMIT_BYTES };
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", big, "ctag-1"), refused);
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", big), refused);
+  assert.equal(calls.length, 0);
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("abc")), {
+    ok: false,
+    reason: "too-large",
+    sizeBytes: 3,
+    limitBytes: ONEDRIVE_UPLOAD_LIMIT_BYTES,
+  });
+});
+
+// The carry-over from PR 2's review: the tag comes from the renderer, and goes into a header.
+test("a content tag that is not one is bad-request, with nothing sent", async () => {
+  const { api, calls } = setup();
+  for (const tag of ["a\r\nX-Injected: 1", "", null, undefined, { id: "ctag-1" }]) {
+    assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), tag), { ok: false, reason: "bad-request" }, String(tag));
+  }
+  assert.equal(calls.length, 0);
+});
+
+test("a write to an address that cannot be made is refused, with nothing sent", async () => {
+  const { api, calls } = setup();
+  for (const path of ["", "a/../b", "a//b", "."]) {
+    assert.deepEqual(await api.writeContent(DRIVE, "root", path, Buffer.from("x"), "ctag-1"), { ok: false, reason: "not-found" }, path);
+    assert.deepEqual(await api.createContent(DRIVE, "root", path, Buffer.from("x")), { ok: false, reason: "not-found" }, path);
+    assert.deepEqual(await api.rename(DRIVE, "root", path, "x.md"), { ok: false, reason: "not-found" }, path);
+  }
+  assert.deepEqual(await api.createFolder(DRIVE, "root", "a//b", "x"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await api.createFolder(DRIVE, "root", "", ""), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await api.rename(DRIVE, "root", "Plan.md", ""), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await api.writeContent("../x", "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await api.createFolder(DRIVE, "a/b", "", "x"), { ok: false, reason: "not-found" });
+  assert.equal(calls.length, 0);
+});
+
+test("Graph refusing a write: 403 permission-denied, 400 bad-request, 404 not-found, 500 offline", async () => {
+  const { api } = setup({
+    routes: [
+      json(403, { error: { code: "accessDenied" } }),
+      json(400, { error: { code: "invalidRequest" } }),
+      json(404, { error: { code: "itemNotFound" } }),
+      json(500, {}),
+    ],
+  });
+  assert.deepEqual(await api.writeContent(DRIVE, "SHARED!7", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "permission-denied" });
+  assert.deepEqual(await api.createFolder(DRIVE, "root", "", "bad:name"), { ok: false, reason: "bad-request" });
+  assert.deepEqual(await api.rename(DRIVE, "root", "Gone.md", "x.md"), { ok: false, reason: "not-found" });
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "offline" });
+});
+
+// The write landed; only what it made is not known. `offline` would invite a retry of a write that
+// is already there.
+test("an answer to a write in a shape this build does not know is unknown, logged without the address", async () => {
+  const { api, logs } = setup({ routes: [json(200, { nope: true })] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "unknown" });
+  assert.deepEqual(logs, ["OneDrive answered a write in a shape this build does not recognise."]);
+});
+
+// Pre-flight F3: a body that is not JSON at all is the same case - the write landed - and must not
+// fall through to `offline`, which reads as "try again".
+test("a write answered 200 with a body that is not JSON is unknown, and is not sent again", async () => {
+  const { api, calls, logs } = setup({ routes: [new Response("<html>not json</html>", { status: 200 })] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(logs, ["OneDrive answered a write in a shape this build does not recognise."]);
+});
+
+test("no write logs the token, a path, a name, the content tag or an error's message", async () => {
+  const fail = (url, init) => {
+    throw Object.assign(new Error(`connect failed for ${url} ${init.headers["If-Match"] ?? ""} ${init.body ?? ""}`), { code: "ECONNRESET" });
+  };
+  const { api, logs } = setup({ routes: [fail, fail, fail, fail, json(200, { nope: true })] });
+  await api.writeContent(DRIVE, "root", "Secret/Plan.md", Buffer.from("private words"), "ctag-secret");
+  await api.createContent(DRIVE, "root", "Secret/New.md", Buffer.from("private words"));
+  await api.createFolder(DRIVE, "root", "Secret", "Hidden");
+  await api.rename(DRIVE, "root", "Secret/Plan.md", "Renamed.md");
+  await api.rename(DRIVE, "root", "Secret/Plan.md", "Renamed.md");
+  assert.equal(logs.length, 5);
+  const text = logs.join(" ");
+  for (const secret of [ACCESS, DRIVE, "Secret", "Hidden", "Renamed", "ctag-secret", "private words", "connect failed"]) {
+    assert.equal(text.includes(secret), false, secret);
+  }
+});
