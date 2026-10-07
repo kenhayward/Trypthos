@@ -742,7 +742,10 @@ a network, and it is the shape the next three providers should copy.
   `{ ok: false, reason: "from-the-future" }` and leave it byte for byte, since rewriting it in this
   build's shape would drop every token this build cannot see; the renderer shows
   `errors.newerVersionCredentials`. A file nothing can parse is copied to
-  `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) and then replaced.
+  `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) and then replaced; one
+  that cannot be opened refuses every change (`unopenable`). The Google, Microsoft and GitHub
+  disconnects pass a refused delete through as their answer, after dropping the in-memory access
+  token, so a sign-out that did not reach disk is never reported as done.
 - **Pinned to a commit.** Opening resolves the default branch and then that branch's head commit, and
   the tree is fetched at that SHA. A branch name would move under the user while they read.
 - **One request for the whole tree.** `?recursive=1` returns every path in the repository, so every
@@ -1448,9 +1451,17 @@ in the user's workspace.
   through and skips the chat-key sweep (the defaults hold no profiles, so the sweep would delete every
   key), and the session runs on defaults in memory. The way out is running the newer build, which
   finds its file intact. A file **no build can read** (not JSON, wrong shape, no migration path) is
-  copied to `settings.json.unreadable-<timestamp>` and then replaced, once. A file that cannot be
-  opened at all is refused until the next write. A load that falls back logs one line with the step
-  and the reason. `readStoredSettings` in the domain is the non-total reader that tells these apart.
+  copied to `settings.json.unreadable-<timestamp>` and then replaced, once; the write answers
+  `replacedUnreadable: true` and `settings:write` skips the sweep for it too. A file that cannot be
+  opened at all is refused until the next write. **A failed load is remembered** per directory: if
+  the load hit a held file (EBUSY at launch) and answered defaults, a later write over a file that
+  now reads as current is refused (`not-loaded`) until a load succeeds - otherwise the renderer's
+  write 400 ms later would put the defaults over a good file. A missing file is a successful load.
+  Writes are queued (check-then-write is one step), each uses its own temporary name, and a backup
+  collision or a failed write answers a result rather than throwing across IPC. `settings:read`
+  still answers `ok: true` with the defaults: the renderer treats `ok: false` the same way, so the
+  main-process guard is the protection. A load that falls back logs one line with the step and the
+  reason. `readStoredSettings` in the domain is the non-total reader that tells these apart.
 - **Writing is atomic**: a temporary file and a rename, so a reader sees the old file or the new one
   and never a half-written one. Settings are written whenever a panel drag settles, so "rarely" is
   not an argument.
