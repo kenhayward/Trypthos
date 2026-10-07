@@ -180,7 +180,8 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 |---|---|
 | 401 | Refresh once and retry; then `not-connected` |
 | `invalid_grant` on refresh | Forget the token, `not-connected` |
-| 403 `accessDenied` | `permission-denied` (e.g. saving into a view-only shared folder) |
+| 403, any code - on a file, a folder, or the account lookup at `/me` | `permission-denied` (e.g. saving into a view-only shared folder) |
+| Any other 4xx Graph or the token endpoint does not name, `/me` included | `unknown` - Microsoft answered, so never `offline` (PR 1 review) |
 | 404 `itemNotFound` | `not-found` |
 | 409 `nameAlreadyExists` | `exists` |
 | 412 | `conflict` (save) |

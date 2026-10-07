@@ -547,3 +547,29 @@ export {
   uploadUrl,
 } from "./googleDrive";
 export type { DriveEntry, DriveFailure, DriveFile } from "./googleDrive";
+export {
+  GRAPH_API,
+  MAX_RETRY_AFTER_MS,
+  ONEDRIVE_MY_DRIVE_URL,
+  OneDriveDriveSchema,
+  OneDriveIdSchema,
+  OneDriveItemSchema,
+  OneDrivePageSchema,
+  contentRangeMatches,
+  graphErrorCode,
+  isGraphUrl,
+  isHttpsUrl,
+  isOneDriveId,
+  oneDriveChildrenUrl,
+  oneDriveContentUrl,
+  oneDriveEntriesOf,
+  oneDriveFailure,
+  oneDriveFoldersOf,
+  oneDriveItemUrl,
+  oneDriveMetaUrl,
+  oneDrivePathUrl,
+  oneDriveSharedWithMeUrl,
+  retryAfterMs,
+  sameOneDriveId,
+} from "./oneDrive";
+export type { OneDriveEntry, OneDriveFailure, OneDriveFolder, OneDriveItem } from "./oneDrive";
