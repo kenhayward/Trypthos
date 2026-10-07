@@ -5,6 +5,25 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.104.0",
+    date: "2026-10-07",
+    pr: 234,
+    headline: "Save to OneDrive",
+    summary:
+      "Files in a OneDrive folder now open for editing and save back to OneDrive. A save goes through only if the file in OneDrive is still the version you opened: if someone changed it there meanwhile, Trypthos says so and keeps your text rather than overwriting theirs, and the saving indicator clears only once OneDrive has confirmed the save. Right-click in a OneDrive folder to make a new file or folder, or to rename a file or folder - a change of case alone included; a name already taken in that folder is refused, never replaced, and an open file's tab follows its rename. Chat can create new files in a OneDrive folder the same way, and never replaces one that is there. OneDrive takes a file of up to 4 MB in one request, so a larger file opens read-only. Making a file or folder whose name is already taken now says so in those words, in any folder.",
+    added: [
+      "Save files in OneDrive folders, refused rather than overwriting when the file changed in OneDrive since you opened it.",
+      "New File, New Folder and Rename in OneDrive folders, and chat's create-file tool there.",
+    ],
+    changed: [
+      "A file or folder that could not be made or renamed in a cloud folder now names the service it is on.",
+      "OneDrive files over 4 MB open read-only, since OneDrive takes a file of up to 4 MB in one request.",
+    ],
+    fixed: [
+      "Making a file or folder whose name was already taken said the file had changed on disk; it now says the name is taken.",
+    ],
+  },
+  {
     version: "0.103.0",
     date: "2026-10-07",
     pr: 233,
