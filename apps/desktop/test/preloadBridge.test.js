@@ -183,3 +183,18 @@ test("listing Drive folders forwards the location and nothing else", async () =>
 
   assert.deepEqual(received, [{ in: "drives" }, { in: "shared-with-me" }, { in: "folder", id: "1H60yEnI5d4" }]);
 });
+
+test("listing OneDrive folders forwards the place and nothing else", async () => {
+  const { bridge, ipcMain } = loadBridge();
+  const received = [];
+  ipcMain.handle("onedrive:folders", async (_event, payload) => {
+    received.push(payload);
+    return { ok: true, folders: [] };
+  });
+
+  await bridge.listOneDriveFolders({ in: "my-files" });
+  await bridge.listOneDriveFolders({ in: "shared-with-me" });
+  await bridge.listOneDriveFolders({ in: "folder", driveId: "beefcafe", itemId: "SHARED!8" });
+
+  assert.deepEqual(received, [{ in: "my-files" }, { in: "shared-with-me" }, { in: "folder", driveId: "beefcafe", itemId: "SHARED!8" }]);
+});

@@ -13,6 +13,7 @@ import {
   IconsRequest,
   GraphRequest,
   GoogleFoldersRequest,
+  OneDriveFoldersRequest,
   GraphSnapshotSchema,
   GraphStateSchema,
   IPC_CHANNELS,
@@ -94,6 +95,7 @@ describe("IPC_CHANNELS", () => {
       "onedrive:connect",
       "onedrive:cancelConnect",
       "onedrive:disconnect",
+      "onedrive:folders",
     ]);
   });
 
@@ -659,5 +661,27 @@ describe("GoogleFoldersRequest", () => {
     expect(GoogleFoldersRequest.safeParse({ in: "trash" }).success).toBe(false);
     expect(GoogleFoldersRequest.safeParse({ parentId: null }).success).toBe(false);
     expect(GoogleFoldersRequest.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("OneDriveFoldersRequest", () => {
+  it("names My files, Shared with me, or one folder by its drive and item", () => {
+    expect(OneDriveFoldersRequest.parse({ in: "my-files" })).toEqual({ in: "my-files" });
+    expect(OneDriveFoldersRequest.parse({ in: "shared-with-me" })).toEqual({ in: "shared-with-me" });
+    expect(OneDriveFoldersRequest.parse({ in: "folder", driveId: "beefcafe", itemId: "SHARED!7" })).toEqual({
+      in: "folder",
+      driveId: "beefcafe",
+      itemId: "SHARED!7",
+    });
+  });
+
+  // Both ids reach a Graph address.
+  it("refuses an id that could change the address, a missing one, and anything extra", () => {
+    expect(OneDriveFoldersRequest.safeParse({ in: "folder", driveId: "../x", itemId: "root" }).success).toBe(false);
+    expect(OneDriveFoldersRequest.safeParse({ in: "folder", driveId: "beefcafe", itemId: "a/b" }).success).toBe(false);
+    expect(OneDriveFoldersRequest.safeParse({ in: "folder", driveId: "beefcafe" }).success).toBe(false);
+    expect(OneDriveFoldersRequest.safeParse({ in: "my-files", extra: 1 }).success).toBe(false);
+    expect(OneDriveFoldersRequest.safeParse({ in: "drives" }).success).toBe(false);
+    expect(OneDriveFoldersRequest.safeParse({}).success).toBe(false);
   });
 });

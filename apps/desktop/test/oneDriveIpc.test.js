@@ -5,8 +5,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { registerIpcHandlers } = require("../src/ipcHandlers");
+const { registerIpcHandlers, locateMedia } = require("../src/ipcHandlers");
 const { createMicrosoftAuth } = require("../src/microsoftAuth");
+const { createOneDriveApi } = require("../src/oneDriveApi");
 
 /// The OneDrive account through the real handlers, with a real `microsoftAuth` over a fake Microsoft.
 
@@ -259,4 +260,246 @@ test("Open in OneDrive shows the item's page in the browser, and answers no addr
     },
     { createOneDrive: fakeOneDriveFactory(), openExternal: async (url) => void shown.push(url) },
   );
+});
+
+/// A OneDrive client whose places hold folders, files and shared folders, recording each call.
+function foldersFactory(calls, overrides = {}) {
+  return () => ({
+    drive: async () => {
+      calls.push(["drive"]);
+      return { ok: true, drive: { id: "d0c0ffee" } };
+    },
+    children: async (driveId, itemId, folderPath) => {
+      calls.push(["children", driveId, itemId, folderPath]);
+      return {
+        ok: true,
+        items: [
+          { id: "ITEM!2", name: "Projects", folder: {} },
+          { id: "ITEM!1", name: "Plan.md", file: {} },
+          { id: "LINK!9", name: "Joint", remoteItem: { id: "SHARED!7", folder: {}, parentReference: { driveId: "beefcafe" } } },
+        ],
+      };
+    },
+    sharedWithMe: async () => {
+      calls.push(["shared"]);
+      return {
+        ok: true,
+        items: [
+          { id: "S!1", name: "Handbook", remoteItem: { id: "SHARED!8", folder: {}, parentReference: { driveId: "beefcafe" } } },
+          { id: "S!2", name: "notes.md", remoteItem: { id: "SHARED!9", parentReference: { driveId: "beefcafe" } } },
+        ],
+      };
+    },
+    ...overrides,
+  });
+}
+
+test("onedrive:folders lists My files, Shared with me and one folder - folders only, each in its own drive", async () => {
+  const calls = [];
+  await withHandlers(
+    async ({ ipcMain }) => {
+      assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "my-files" }), {
+        ok: true,
+        driveId: "d0c0ffee",
+        folders: [
+          { driveId: "beefcafe", itemId: "SHARED!7", name: "Joint", shared: true },
+          { driveId: "d0c0ffee", itemId: "ITEM!2", name: "Projects", shared: false },
+        ],
+      });
+      assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "shared-with-me" }), {
+        ok: true,
+        folders: [{ driveId: "beefcafe", itemId: "SHARED!8", name: "Handbook", shared: true }],
+      });
+      assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "folder", driveId: "beefcafe", itemId: "SHARED!8" }), {
+        ok: true,
+        folders: [
+          { driveId: "beefcafe", itemId: "SHARED!7", name: "Joint", shared: true },
+          { driveId: "beefcafe", itemId: "ITEM!2", name: "Projects", shared: false },
+        ],
+      });
+      assert.deepEqual(calls, [
+        ["drive"],
+        ["children", "d0c0ffee", "root", ""],
+        ["shared"],
+        ["children", "beefcafe", "SHARED!8", ""],
+      ]);
+    },
+    { createOneDrive: foldersFactory(calls) },
+  );
+});
+
+// Spec, open questions: an error from sharedWithMe is "nothing shared" in the picker.
+test("Shared with me that cannot be listed is nothing shared, logged by its reason alone", async () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => void logged.push(args.map(String).join(" "));
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "shared-with-me" }), { ok: true, folders: [] });
+      },
+      { createOneDrive: foldersFactory([], { sharedWithMe: async () => ({ ok: false, reason: "unknown" }) }) },
+    );
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(logged, ["OneDrive's shared folders could not be listed: unknown"]);
+});
+
+test("onedrive:folders passes a failed My files or folder listing on as its reason", async () => {
+  await withHandlers(
+    async ({ ipcMain }) => {
+      assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "my-files" }), { ok: false, reason: "offline" });
+      assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "folder", driveId: "beefcafe", itemId: "SHARED!8" }), {
+        ok: false,
+        reason: "rate-limited",
+      });
+    },
+    {
+      createOneDrive: foldersFactory([], {
+        drive: async () => ({ ok: false, reason: "offline" }),
+        children: async () => ({ ok: false, reason: "rate-limited" }),
+      }),
+    },
+  );
+});
+
+test("onedrive:folders refuses a malformed request, and answers not configured without Microsoft", async () => {
+  const logged = [];
+  const original = console.error;
+  console.error = (...args) => void logged.push(args.map(String).join(" "));
+  try {
+    await withHandlers(
+      async ({ ipcMain }) => {
+        assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "folder", driveId: "../x", itemId: "root" }), {
+          ok: false,
+          reason: "bad-request",
+        });
+      },
+      { createOneDrive: foldersFactory([]) },
+    );
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(logged, ["Rejected a malformed OneDrive folder request."]);
+
+  await withHandlers(
+    async ({ ipcMain }) => {
+      assert.deepEqual(await ipcMain.invoke("onedrive:folders", { in: "my-files" }), { ok: false, reason: "not-configured" });
+    },
+    { microsoft: "none", createOneDrive: foldersFactory([]) },
+  );
+});
+
+const PRESIGNED = "https://download.invented.example/presigned-onedrive-ipc";
+
+/// Graph, scripted, for the REAL client. `seen` records every request: its address, whether it carried
+/// the token, and which of the client's two fetches sent it - `via: "fetch"` (follows redirects) or
+/// `via: "manual"` (never follows one; `manualRedirect.js` in the app).
+function scriptedGraph(seen) {
+  const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  const file = (id, name, extra = {}) => ({ id, name, size: 7, cTag: `ctag-${id}`, file: {}, webUrl: `https://onedrive.live.com/?id=${id}`, ...extra });
+  return async (url, init = {}) => {
+    seen.push({ url, authorization: init.headers?.Authorization ?? null, via: init.via });
+    if (url === PRESIGNED) {
+      const range = init.headers?.Range;
+      if (range === undefined) return new Response("# Plan\n", { status: 200 });
+      const [start, end] = range.replace("bytes=", "").split("-").map(Number);
+      return new Response(Buffer.from("0123456789").subarray(start, end + 1), {
+        status: 206,
+        headers: { "Content-Range": `bytes ${start}-${end}/10` },
+      });
+    }
+    if (url.endsWith("/content")) return new Response(null, { status: 302, headers: { Location: PRESIGNED } });
+    if (url.startsWith("https://graph.microsoft.com/v1.0/me/drive?")) return json({ id: "d0c0ffee", driveType: "personal" });
+    if (url.startsWith("https://graph.microsoft.com/v1.0/me/drive/sharedWithMe")) {
+      return json({ value: [{ id: "S!1", name: "Handbook", remoteItem: { id: "SHARED!8", folder: {}, parentReference: { driveId: "beefcafe" } } }] });
+    }
+    if (url.includes("/children?")) {
+      return json({
+        value: [file("ITEM!1", "Plan.md"), file("ITEM!4", "chart.png"), file("ITEM!2", "clip.mp4", { size: 10 }), { id: "ITEM!3", name: "Archive", folder: {} }],
+      });
+    }
+    if (url.includes(":/Plan.md:?")) return json(file("ITEM!1", "Plan.md"));
+    if (url.includes(":/chart.png:?")) return json(file("ITEM!4", "chart.png"));
+    if (url.includes("/items/root?")) return json({ id: "ROOT!0", name: "root", folder: { childCount: 4 }, webUrl: "https://onedrive.live.com/" });
+    throw new Error(`unexpected ${url}`);
+  };
+}
+
+// The leak guard, extended to what PR 2 adds: every OneDrive channel and the media byte source, over
+// the REAL client and the REAL account, after a connect - so the access token, the refresh token and a
+// pre-authenticated download address have all existed. None may appear in an answer or a log line.
+test("no OneDrive channel answers with a token or a pre-authenticated download address", async () => {
+  const seen = [];
+  const logged = [];
+  const record = (...args) => void logged.push(args.map(String).join(" "));
+  const originals = { error: console.error, warn: console.warn, log: console.log, info: console.info };
+  for (const name of Object.keys(originals)) console[name] = record;
+  const browser = [];
+  try {
+    await withHandlers(
+      async ({ ipcMain, authLogged }) => {
+        await ipcMain.invoke("onedrive:connect");
+        const answers = [];
+        const ask = async (channel, payload) => {
+          const answer = await ipcMain.invoke(channel, payload);
+          answers.push(JSON.stringify(answer ?? null));
+          return answer;
+        };
+
+        const opened = await ask("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "root", name: "My files" } });
+        assert.equal(opened.ok, true);
+        const id = opened.workspace.id;
+        assert.equal((await ask("workspace:list", { path: id })).ok, true);
+        assert.equal((await ask("file:read", { path: `${id}/Plan.md` })).content, "# Plan\n");
+        assert.equal((await ask("file:readImage", { path: `${id}/chart.png` })).ok, true);
+        assert.deepEqual(await ask("workspace:reveal", { path: `${id}/Plan.md` }), { ok: true });
+        assert.deepEqual(
+          await ask("file:write", { path: `${id}/Plan.md`, content: "x", expectedRevision: { id: "ctag-ITEM!1" }, message: null }),
+          { ok: false, reason: "read-only" },
+        );
+        assert.equal((await ask("onedrive:folders", { in: "my-files" })).ok, true);
+        assert.equal((await ask("onedrive:folders", { in: "shared-with-me" })).ok, true);
+        assert.equal((await ask("onedrive:folders", { in: "folder", driveId: "beefcafe", itemId: "SHARED!8" })).ok, true);
+        assert.equal((await ask("workspace:refresh", { workspaceId: id })).ok, true);
+
+        // The byte source is what the tp-media protocol hands the window: bytes, and a size.
+        const media = await locateMedia(`${id}/clip.mp4`);
+        assert.equal(media.ok, true);
+        const range = await media.open(2, 5);
+        assert.equal(await new Response(range.body).text(), "2345");
+        answers.push(JSON.stringify({ ok: media.ok, size: media.size }));
+
+        const text = [...answers, ...logged, ...authLogged].join(" ");
+        for (const secret of [ACCESS, REFRESH, ROTATED, PRESIGNED]) assert.ok(!text.includes(secret), `leaked ${secret}`);
+      },
+      {
+        createOneDrive: (accessToken) => {
+          const graph = scriptedGraph(seen);
+          return createOneDriveApi({
+            accessToken,
+            fetch: (url, init) => graph(url, { ...init, via: "fetch" }),
+            fetchManual: (url, init) => graph(url, { ...init, via: "manual" }),
+            logger: { error: record, info: record },
+          });
+        },
+        openExternal: async (url) => void browser.push(url),
+      },
+    );
+  } finally {
+    Object.assign(console, originals);
+  }
+
+  // Only meaningful if the token and the address were really used. Graph saw the token; every
+  // `/content` request - and there were some - went through the fetch that never follows a redirect,
+  // with the token; and the pre-authenticated address was fetched without one.
+  assert.ok(seen.some((request) => request.authorization === `Bearer ${ACCESS}`));
+  const content = seen.filter((request) => request.url.endsWith("/content"));
+  assert.ok(content.length > 0, "no /content request was made, so the redirect was never exercised");
+  assert.ok(content.every((request) => request.via === "manual" && request.authorization === `Bearer ${ACCESS}`));
+  const presigned = seen.filter((request) => request.url === PRESIGNED);
+  assert.ok(presigned.length >= 3);
+  assert.ok(presigned.every((request) => request.via === "fetch" && request.authorization === null));
+  assert.deepEqual(browser, ["https://onedrive.live.com/?id=ITEM!1"]);
 });

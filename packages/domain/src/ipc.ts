@@ -5,6 +5,7 @@ import { SessionAttachmentSchema, SessionTurnSchema } from "./chatSession";
 import { SettingsSchema } from "./settings";
 import { WorkspaceRefSchema } from "./workspaceRef";
 import { DriveIdSchema } from "./googleDrive";
+import { OneDriveIdSchema } from "./oneDrive";
 import { isExternalUrl } from "./markdownLink";
 import { renameTarget } from "./entryName";
 import { ObsidianVaultIdSchema } from "./obsidianVaults";
@@ -81,6 +82,7 @@ export const IPC_CHANNELS = [
   "onedrive:connect",
   "onedrive:cancelConnect",
   "onedrive:disconnect",
+  "onedrive:folders",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.
@@ -286,6 +288,19 @@ export const GoogleFoldersRequest = z.discriminatedUnion("in", [
 ]);
 
 export type GoogleFoldersRequest = z.infer<typeof GoogleFoldersRequest>;
+
+/// The OneDrive folder picker asking what is in a place. Folders only: ids and names.
+///
+/// My files is the connected drive's root and Shared with me a place of its own; a folder is named by
+/// the drive it lives in as well as its item id, because a folder shared with the user lives in its
+/// owner's drive. Both ids reach a Graph address, so the schema is what keeps them ids.
+export const OneDriveFoldersRequest = z.discriminatedUnion("in", [
+  z.object({ in: z.literal("my-files") }).strict(),
+  z.object({ in: z.literal("shared-with-me") }).strict(),
+  z.object({ in: z.literal("folder"), driveId: OneDriveIdSchema, itemId: OneDriveIdSchema }).strict(),
+]);
+
+export type OneDriveFoldersRequest = z.infer<typeof OneDriveFoldersRequest>;
 
 /// Asking for the repositories the connected account owns.
 ///
