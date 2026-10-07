@@ -145,6 +145,30 @@ describe("OpenOneDriveDialog", () => {
     expect(await screen.findByRole("button", { name: "My files" })).toBeDefined();
   });
 
+  // A status that could not be checked is not "no account": offering to connect would send the user
+  // through a sign-in that the same outage would fail.
+  it("names an account that could not be checked as a failure, not as a missing account", async () => {
+    const bridge = fakeBridge({
+      oneDriveStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: false, email: null, reason: "offline" })),
+    });
+    render(<OpenOneDriveDialog bridge={bridge} onCancel={() => {}} onOpen={() => {}} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Microsoft");
+    expect(alert.textContent).not.toContain("GitHub");
+    expect(screen.queryByRole("button", { name: "Connect OneDrive" })).toBeNull();
+  });
+
+  it("asks to connect when the account answers not-connected", async () => {
+    const bridge = fakeBridge({
+      oneDriveStatus: vi.fn(async () => ({ ok: true as const, configured: true, connected: false, email: null, reason: "not-connected" })),
+    });
+    render(<OpenOneDriveDialog bridge={bridge} onCancel={() => {}} onOpen={() => {}} />);
+
+    expect(await screen.findByRole("button", { name: "Connect OneDrive" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "My files" })).toBeNull();
+  });
+
   it("names a failed listing in Microsoft's words", async () => {
     const bridge = fakeBridge({ listOneDriveFolders: vi.fn(async (): Promise<OneDriveFoldersResult> => ({ ok: false, reason: "offline" })) });
     render(<OpenOneDriveDialog bridge={bridge} onCancel={() => {}} onOpen={() => {}} />);

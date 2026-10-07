@@ -102,7 +102,11 @@ export function oneDriveFolderSource(bridge: OneDriveBridge | null): CloudFolder
       if (place === null) {
         const status = await bridge.oneDriveStatus();
         if (!status.configured) return { ok: false, reason: "not-configured" };
-        if (!status.connected) return { ok: false, reason: "not-connected" };
+        // An account that could not be checked - offline, say - is a failure to show, not a missing
+        // account: the connect control would send the user through a sign-in the same outage fails.
+        if (!status.connected) {
+          return { ok: false, reason: status.reason === null || status.reason === "not-connected" ? "not-connected" : status.reason };
+        }
         return { ok: true, folders: [] };
       }
       const answer = await bridge.listOneDriveFolders(oneDriveLocationOf(place));
