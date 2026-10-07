@@ -20,6 +20,7 @@ import DocumentEditor, {
 } from "./DocumentEditor";
 import MarkdownPreview from "./MarkdownPreview";
 import ImageViewer from "./ImageViewer";
+import PdfViewer from "./PdfViewer";
 import MediaPlayer from "./MediaPlayer";
 import OpenFilesMenu from "./OpenFilesMenu";
 import { formatCaret } from "../lib/caret";
@@ -296,8 +297,10 @@ export default function EditorPanel({
   const reportFit = useCallback((fit: number) => {
     pictureFit.current = fit;
   }, []);
-  // A page is drawn in place of any media, so the picture path is only taken when no page is up.
-  const picture = page === null && media?.kind === "image";
+  // A page is drawn in place of any media, so the zoom path is only taken when no page is up.
+  // A document zooms exactly as a picture does - both have a natural size, and both are read
+  // fitted to the panel - so the keys below are one handler for both surfaces.
+  const zoomable = page === null && (media?.kind === "image" || media?.kind === "pdf");
 
   /// Ctrl and plus, minus or zero - Cmd on macOS.
   ///
@@ -314,8 +317,9 @@ export default function EditorPanel({
     const onKeyDown = (event: KeyboardEvent) => {
       const command = zoomKeyCommand(event, platform);
       if (command === null) return;
-      if (picture) {
-        // A picture's reset is Fit - what it opened at - and Ctrl+1 is its own pixels.
+      if (zoomable) {
+        // A picture's or a document's reset is Fit - what it opened at - and Ctrl+1 is its own
+        // pixels, which for a page is the PDF's own points.
         event.preventDefault();
         if (command === "reset") setPictureView(FIT);
         else if (command === "actual") setPictureView({ kind: "scale", scale: 1 });
@@ -326,8 +330,8 @@ export default function EditorPanel({
           }));
         return;
       }
-      // Ctrl+1 is a picture's "actual size"; text has no such thing, so it is left for whatever
-      // else wants the key.
+      // Ctrl+1 is a picture's or a document's "actual size"; text has no such thing, so it is left
+      // for whatever else wants the key.
       if (command === "actual") return;
       event.preventDefault();
       if (command === "reset") setZooms((prev) => ({ ...prev, [key]: DEFAULT_ZOOM }));
@@ -335,7 +339,7 @@ export default function EditorPanel({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [key, stepZoom, picture, setPictureView]);
+  }, [key, stepZoom, zoomable, setPictureView]);
 
   /// The right-click menu is drawn in the shell, but its one renderer-named item can only be offered
   /// where it would land: over an editable markdown document. So every right-click reports what was
@@ -515,7 +519,23 @@ export default function EditorPanel({
         {page !== null ? (
           page
         ) : media !== null ? (
-          media.kind === "image" ? (
+          media.kind === "pdf" ? (
+            // A document, read rather than edited. It opens at fit for the picture's reason - the
+            // first question about a document is what it is, and that answer is a corner of one
+            // page - and one page is on screen at a time, because the page boundary is the whole
+            // point of a document. The page bar carries the rest of it; see PdfViewer for why.
+            //
+            // `key` matters. Without it React carries one document's measured box and scroll into
+            // the next document's tab, and the second opens at the first one's size.
+            <PdfViewer
+              key={activePath}
+              source={media.source}
+              name={activePath ?? ""}
+              view={pictureView}
+              onView={setPictureView}
+              onFit={reportFit}
+            />
+          ) : media.kind === "image" ? (
             // A picture, drawn rather than edited. It opens fitted to the panel and is zoomed from
             // there; see ImageViewer for why. `key`, so one picture's measured size and scroll are
             // never carried into the next.

@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EditorPanel from "./EditorPanel";
+import { parsed } from "./PdfViewer";
 
 const DOC = "# Title\n\nSome **bold** text and `code`.\n\n- one\n- two\n";
 
@@ -758,6 +759,67 @@ describe("EditorPanel: a recording", () => {
 
   it("puts no editing surface on screen", () => {
     withClip();
+    expect(document.querySelector(".cm-content")).toBeNull();
+  });
+});
+
+/// A document, which the editor reads.
+///
+/// It takes the same route through the panel as a picture and a recording - no views, no status bar,
+/// no editing surface - and then reaches a third surface, drawn to a canvas rather than to an element
+/// the browser scales for it or one that plays.
+///
+/// The parse is seeded rather than asked for: parsing is the engine's question, and the real window
+/// is the proof of it. What is asserted here is that a document arrives at the reading surface at
+/// all, and that it arrives at that one.
+describe("EditorPanel: a document", () => {
+  const REPORT = { source: "tp-media://workspace/Notes%2Freport.pdf", kind: "pdf" as const };
+
+  const withDocument = () => {
+    parsed.set(REPORT.source, {
+      document: {
+        numPages: 1,
+        getPage: () => ({ getViewport: () => ({ width: 612, height: 792 }), render: () => null }),
+      },
+    });
+    return render(
+      <EditorPanel
+        workspaceName="Notes"
+        paths={["Notes/report.pdf"]}
+        activePath="Notes/report.pdf"
+        dirty={false}
+        value=""
+        readOnly
+        media={REPORT}
+        fileTypes={["markdown", "pdf"]}
+        onChange={vi.fn()}
+      />,
+    );
+  };
+
+  it("draws the page to a canvas, not to an element the browser scales", () => {
+    const { container } = withDocument();
+    expect(container.querySelector("canvas")?.getAttribute("aria-label")).toBe("Notes/report.pdf");
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("video")).toBeNull();
+  });
+
+  it("offers no view to switch to", () => {
+    withDocument();
+    for (const view of ["Live", "Source", "Preview"]) {
+      expect(screen.queryByRole("button", { name: view })).toBeNull();
+    }
+  });
+
+  // A caret position and a word count are questions about text. For a document they would be
+  // fields that are lies about a file with no lines in it.
+  it("says nothing about lines or words", () => {
+    withDocument();
+    expect(screen.queryByText(/words/)).toBeNull();
+  });
+
+  it("puts no editing surface on screen", () => {
+    withDocument();
     expect(document.querySelector(".cm-content")).toBeNull();
   });
 });
