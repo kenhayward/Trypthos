@@ -351,7 +351,7 @@ you want a narrower list:
 
 | Group | Types |
 | --- | --- |
-| Documents | Markdown (always on), Plain text |
+| Documents | Markdown (always on), Plain text, PDF |
 | Markup and data | JSON, YAML, TOML, INI and properties, XML and SVG, HTML, CSS and preprocessors |
 | Pictures, video and audio | Images: PNG, JPEG, GIF, WebP, BMP, AVIF, ICO. Video: MP4, M4V, MOV, WebM, MKV, 3GP. Audio: MP3, M4A, AAC, WAV, FLAC, OGG, OGA, Opus, WEBA |
 | Programming languages | JavaScript and TypeScript, Python, Shell, PowerShell, Batch, SQL, Rust, Go, C and C++, C#, Java and Kotlin, PHP, Ruby |
@@ -390,6 +390,20 @@ editing surface, because all three are questions about text, and nothing is ever
 **SVG is deliberately not an image here.** It is a picture and a text file both, and the catalogue
 cannot let two rows claim one extension - so it stays with XML, where you can edit it, which is the
 more useful of the two answers.
+
+**A PDF is read, not edited.** Click a `.pdf` and it opens in the centre panel as a page: drawn at
+the panel's size and never enlarged, with a bar under it that answers how many pages the file has.
+Click along that bar where the page you want is, and it turns to the nearest one; or press Page Down
+and Page Up. Fit, 100%, the zoom buttons, Ctrl+wheel (Cmd on macOS) or a pinch, and a drag to move
+the page are the same answers a picture gives, because a page is zoomed exactly as a picture is.
+There are no view buttons, no word count and no editing surface, because a page is not text, and
+nothing is ever written back. A file that needs a password says so rather than showing a blank page,
+and one that is not a PDF says that too.
+
+**A PDF is never offered as a new file**, because an empty `.pdf` is not a PDF - the New file dialog
+offers only the kinds Trypthos writes into. A wiki link or a markdown link that names a `.pdf`
+follows to the document while the row is on, and refuses while it is off: the tree and the links
+read the same catalogue, so they cannot disagree about which names open.
 
 **An image is not sent to a chat model.** Asking about a folder still lists it by name, and the
 picture itself stays on your machine. The same holds for a recording.
