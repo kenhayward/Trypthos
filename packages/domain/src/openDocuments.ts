@@ -15,10 +15,12 @@ import type { Revision } from "./provider";
 ///
 /// The kind travels WITH the source because the two cannot be derived from one another: a picture
 /// arrives as a base64 data URL and a recording as a `tp-media://` URL the main process serves in
-/// ranges, and a bare URL cannot say whether a window should draw it, play it, or sound it.
+/// ranges, and a bare URL cannot say whether a window should draw it, play it, or sound it. A PDF
+/// travels like a recording - the same URL, the same ranges - and what shows it is an engine the
+/// window brings in, so the kind has to say that too.
 export interface MediaSource {
   readonly source: string;
-  readonly kind: "image" | "video" | "audio";
+  readonly kind: "image" | "video" | "audio" | "pdf";
 }
 
 export interface OpenDocument {

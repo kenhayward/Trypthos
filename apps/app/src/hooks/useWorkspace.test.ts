@@ -3962,6 +3962,37 @@ describe("opening a recording", () => {
     expect(result.current.state.media).toBeNull();
     expect(result.current.state.documents).toHaveLength(0);
   });
+
+  // A PDF takes the recording's route: the same protocol, the same refusal, and no read either.
+  it("points the viewer at the protocol without reading the document", async () => {
+    const { result, reads } = await withWorkspace();
+
+    await act(async () => {
+      await result.current.actions.openPath("ws/report.pdf");
+    });
+
+    expect(result.current.state.media).toEqual({
+      source: "tp-media://workspace/ws%2Freport.pdf",
+      kind: "pdf",
+    });
+    expect(reads).toEqual([]);
+  });
+
+  it("says plainly that a repository cannot view a document", async () => {
+    const { client } = fakeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef({ kind: "github", owner: "ada", repo: "Repo" });
+    });
+
+    await act(async () => {
+      await result.current.actions.openPath("Repo/report.pdf");
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.mediaNotLocal");
+    expect(result.current.state.media).toBeNull();
+    expect(result.current.state.documents).toHaveLength(0);
+  });
 });
 
 /// What the tree shows a spinner for: the file `openPath` is waiting on.
