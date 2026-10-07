@@ -194,3 +194,90 @@ test("a write that fails does not stop the next one", async () => {
     assert.equal(await store.getToken("google"), null);
   });
 });
+
+// ---- Issue #235: an older build must never write over a newer build's file ----
+
+/// What a newer build would leave behind. This build reads it as "no tokens" - and before the fix,
+/// the next sign-in wrote a file holding only the new token over every token the newer build kept.
+const FUTURE_TEXT = JSON.stringify({ schemaVersion: 99, tokens: { github: "c2VhbGVkOmdocF9pbnZlbnRlZA==" } });
+
+test("a newer build's token file survives a store and a delete, byte for byte", async () => {
+  await withStore(async (store, dir) => {
+    await fs.writeFile(accountsPath(dir), FUTURE_TEXT, "utf8");
+
+    assert.deepEqual(await store.setToken("google", "google-invented"), {
+      ok: false,
+      reason: "from-the-future",
+    });
+    assert.deepEqual(await store.deleteToken("github"), { ok: false, reason: "from-the-future" });
+
+    assert.equal(await fs.readFile(accountsPath(dir), "utf8"), FUTURE_TEXT);
+    assert.deepEqual(await fs.readdir(dir), ["providerAccounts.json"]);
+  });
+});
+
+test("a refused credential write logs one line, naming the step and the reason and nothing stored", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const lines = [];
+    const record = (...args) => lines.push(args.join(" "));
+    const store = createAccountStore({ userDataDir: dir, encryptor: fakeEncryptor(), logger: { warn: record, error: record } });
+    await fs.writeFile(accountsPath(dir), FUTURE_TEXT, "utf8");
+
+    await store.setToken("google", "google-invented");
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /write/i);
+    assert.match(lines[0], /from-the-future/);
+    assert.doesNotMatch(lines[0], /providerAccounts|c2VhbGVk|google-invented/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+/// A file nothing can parse holds no token any build could use, and refusing would leave the user
+/// unable to connect anything ever again. The bytes are kept beside it, then the file is replaced.
+test("an unparseable token file is backed up beside itself, then replaced", async () => {
+  await withStore(async (store, dir) => {
+    const corrupt = "{ this is not json";
+    await fs.writeFile(accountsPath(dir), corrupt, "utf8");
+
+    assert.deepEqual(await store.setToken("github", "ghp_invented"), { ok: true });
+    assert.equal(await store.getToken("github"), "ghp_invented");
+
+    const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("providerAccounts.json.unreadable-"));
+    assert.equal(backups.length, 1);
+    assert.equal(await fs.readFile(path.join(dir, backups[0]), "utf8"), corrupt);
+
+    // Once replaced the file is current, so the next write is an ordinary one.
+    await store.setToken("google", "google-invented");
+    assert.equal((await fs.readdir(dir)).length, 2);
+  });
+});
+
+test("a current token file still stores and deletes normally", async () => {
+  await withStore(async (store, dir) => {
+    assert.deepEqual(await store.setToken("github", "ghp_invented"), { ok: true });
+    assert.deepEqual(await store.setToken("google", "google-invented"), { ok: true });
+    assert.deepEqual(await store.deleteToken("github"), { ok: true });
+    assert.deepEqual(await store.connectedProviders(), ["google"]);
+    assert.deepEqual(await fs.readdir(dir), ["providerAccounts.json"]);
+  });
+});
+
+/// The settings write sweeps the chat keys by the profiles it holds. A sweep over a newer build's
+/// key file would rewrite it in this build's shape, losing whatever it could not read.
+test("sweeping a newer build's key file leaves it byte for byte", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const secrets = createSecretStore({ userDataDir: dir, encryptor: fakeEncryptor(), logger: silent });
+    const future = JSON.stringify({ schemaVersion: 99, keys: { "https://api.example.com/v1": "c2VhbGVk" } });
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, future, "utf8");
+
+    assert.deepEqual(await secrets.retainOnly([]), { ok: false, reason: "from-the-future" });
+    assert.equal(await fs.readFile(file, "utf8"), future);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

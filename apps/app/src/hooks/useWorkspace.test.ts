@@ -192,6 +192,12 @@ describe("failureKey", () => {
     expect(failureKey("encryption-unavailable")).toBe("errors.encryptionUnavailable");
   });
 
+  // Issue #235. The credential store refuses to write over a newer build's file, and the user has
+  // to be told why the sign-in did not stick - "something went wrong" sends them nowhere.
+  it("names the credential store refusing a newer version's file", () => {
+    expect(failureKey("from-the-future")).toBe("errors.newerVersionCredentials");
+  });
+
   it("names the three Google sign-in refusals", () => {
     expect(failureKey("scope-denied")).toBe("errors.scopeDenied");
     expect(failureKey("timed-out")).toBe("errors.timedOut");

@@ -344,6 +344,10 @@ export function failureKey(reason: string): string | null {
     // user has to be told their token was not saved - not that it was rejected.
     case "encryption-unavailable":
       return "errors.encryptionUnavailable";
+    // The credential store refusing to write over a file a newer build left (issue #235). Its own
+    // key, because the way out is to open that newer version, which still has every sign-in.
+    case "from-the-future":
+      return "errors.newerVersionCredentials";
     // A tab that could not move into its own window. Its own key, because the question a user has
     // after a move that did not happen is where their text went - and the answer is "still here".
     case "window-failed":

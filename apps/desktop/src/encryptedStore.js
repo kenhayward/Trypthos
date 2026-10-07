@@ -18,7 +18,8 @@ const path = require("node:path");
 ///     machines least able to protect it, silently.
 ///   - **The file is versioned, and a version from the future is not guessed at.** Answering "no
 ///     credentials" costs the user a re-paste; misreading a shape we do not know could write a
-///     mangled file back over the real one.
+///     mangled file back over the real one. Nor is it ever WRITTEN over: every change refuses
+///     while the file is a newer build's (issue #235, and `readForChange` below).
 ///   - **A value that will not decrypt reads as absent.** safeStorage blobs are bound to the machine
 ///     and the OS user, so a restored profile or a new machine invalidates every one at once. That
 ///     is a re-paste, not a crash.
@@ -28,6 +29,12 @@ const path = require("node:path");
 ///
 /// Losing a credential is recoverable. Leaking one is not, so every ambiguous case here resolves
 /// towards "no credential".
+
+/// A file name suffix safe on every platform: an ISO time with the colons and the dot that Windows
+/// refuses in a file name swapped for hyphens.
+function backupStamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
 
 /// Builds a store over one file.
 ///
@@ -49,27 +56,75 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
   }
   let written = 0;
 
-  /// Every read answers with an object, however badly the file has gone wrong.
-  async function readAll() {
+  /// The file, classified. Total: every failure is a `state`, never a throw.
+  ///
+  ///   "missing"          - no file yet, the overwhelmingly common case
+  ///   "current"          - this build's version, with its `values`
+  ///   "from-the-future"  - a newer build's version
+  ///   "unreadable"       - not JSON, not an object, or a version and shape no build here reads
+  ///   "unopenable"       - present, but could not be read (held by another process, permissions)
+  async function inspect() {
     let text;
     try {
       text = await fs.readFile(file, "utf8");
-    } catch {
-      return {}; // No file yet. The overwhelmingly common case.
+    } catch (error) {
+      if (error?.code === "ENOENT") return { state: "missing", values: {} };
+      return { state: "unopenable", reason: error?.code ?? error?.name, values: {} };
     }
 
+    let stored;
     try {
-      const stored = JSON.parse(text);
-      if (stored?.schemaVersion !== schemaVersion) {
-        logger.warn?.(`Ignoring ${path.basename(file)} at schema version ${stored?.schemaVersion}.`);
-        return {};
-      }
-      const values = stored[field];
-      return values && typeof values === "object" ? values : {};
+      stored = JSON.parse(text);
     } catch {
-      logger.error?.(`The stored ${path.basename(file)} could not be read, and was ignored.`);
-      return {};
+      return { state: "unreadable", reason: "not-json", values: {} };
     }
+
+    const version = stored?.schemaVersion;
+    if (typeof version === "number" && version > schemaVersion) {
+      return { state: "from-the-future", reason: "from-the-future", values: {} };
+    }
+    const values = stored?.[field];
+    if (version !== schemaVersion || !values || typeof values !== "object" || Array.isArray(values)) {
+      return { state: "unreadable", reason: version === schemaVersion ? "invalid" : "unknown-version", values: {} };
+    }
+    return { state: "current", values };
+  }
+
+  /// Every read answers with an object, however badly the file has gone wrong. One line when it has,
+  /// naming the step and the reason - never the file's contents or its path.
+  async function readAll() {
+    const found = await inspect();
+    if (found.state !== "current" && found.state !== "missing") {
+      logger.warn?.(`Credential store (${field}) read: ignored the file (${found.reason}).`);
+    }
+    return found.values;
+  }
+
+  /// The read half of every change, and the guard on it (issue #235).
+  ///
+  /// Answers `{ ok: true, values }` when the file may be replaced, or `{ ok: false, reason }`:
+  ///
+  ///   - **From the future**: REFUSED, and the file is never touched. Reads already answer "no
+  ///     credentials" for it; a write would replace every token the newer build holds with this
+  ///     build's handful. Refusing costs a sign-in that does not stick on this build. The way out is
+  ///     to run the newer build again, which finds every token where it left it.
+  ///   - **Unreadable**: copied aside to `<file>.unreadable-<timestamp>`, then replaced. No build can
+  ///     use a token in a file nobody can parse, so nothing is lost by moving it, and refusing would
+  ///     leave the user unable to connect anything ever again. The copy is ciphertext still bound to
+  ///     this machine and OS user, so it holds nothing readable anywhere else.
+  ///   - **Unopenable**: refused - there is nothing to copy and no telling what it holds.
+  async function readForChange() {
+    const found = await inspect();
+    if (found.state === "current" || found.state === "missing") return { ok: true, values: found.values };
+
+    if (found.state === "unreadable") {
+      await fs.copyFile(file, `${file}.unreadable-${backupStamp()}`, fs.constants.COPYFILE_EXCL);
+      logger.warn?.(`Credential store (${field}) write: backed up the unreadable file (${found.reason}).`);
+      return { ok: true, values: {} };
+    }
+
+    logger.warn?.(`Credential store (${field}) write: refused (${found.reason}).`);
+    return { ok: false, reason: found.state === "from-the-future" ? "from-the-future" : "unopenable" };
   }
 
   /// Written via a temporary file and a rename, which is atomic: a reader sees the old file or the
@@ -98,7 +153,9 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
         return { ok: false, reason: "encryption-unavailable" };
       }
 
-      const values = await readAll();
+      const found = await readForChange();
+      if (!found.ok) return found;
+      const { values } = found;
       values[key] = encryptor.encryptString(value).toString("base64");
       await writeAll(values);
       return { ok: true };
@@ -127,11 +184,17 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
     return (await get(key)) !== null;
   }
 
+  /// Answers `{ ok: true }`, or the refusal from `readForChange` - a result, not a throw, so a
+  /// sign-out on a downgraded build reads as signed out (this build cannot see the token anyway)
+  /// without rewriting the newer build's file.
   function remove(key) {
     return queued(async () => {
-      const values = await readAll();
+      const found = await readForChange();
+      if (!found.ok) return found;
+      const { values } = found;
       delete values[key];
       await writeAll(values);
+      return { ok: true };
     });
   }
 
@@ -149,7 +212,9 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
   function retainOnly(keep) {
     const wanted = new Set(keep);
     return queued(async () => {
-      const values = await readAll();
+      const found = await readForChange();
+      if (!found.ok) return found;
+      const { values } = found;
       let changed = false;
 
       for (const key of Object.keys(values)) {
@@ -159,6 +224,7 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
       }
 
       if (changed) await writeAll(values);
+      return { ok: true };
     });
   }
 
