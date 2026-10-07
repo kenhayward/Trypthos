@@ -120,6 +120,7 @@ function fakeOneDrive(overrides: Partial<OneDriveBridge> = {}): OneDriveBridge {
     connectOneDrive: async () => ({ ok: true, email: "ada@example.com" }),
     cancelOneDriveConnect: async () => ({ ok: true }),
     disconnectOneDrive: async () => ({ ok: true }),
+    listOneDriveFolders: async () => ({ ok: true, folders: [] }),
     ...overrides,
   };
 }

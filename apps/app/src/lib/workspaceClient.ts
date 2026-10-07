@@ -336,6 +336,7 @@ export interface OneDriveBridge {
   connectOneDrive(): Promise<CloudConnectResult>;
   cancelOneDriveConnect(): Promise<{ ok: boolean }>;
   disconnectOneDrive(): Promise<{ ok: boolean; reason?: string }>;
+  listOneDriveFolders(location: OneDriveLocation): Promise<OneDriveFoldersResult>;
 }
 
 /// A place the Drive picker can list: the Shared drives, the folders shared with the user, or one
@@ -344,6 +345,16 @@ export type DriveLocation = { in: "drives" } | { in: "shared-with-me" } | { in: 
 
 export type DriveFoldersResult =
   | { ok: true; folders: { id: string; name: string; shared: boolean }[] }
+  | { ok: false; reason: string };
+
+/// A place the OneDrive picker can list: the user's own files (the connected drive's root), the
+/// folders shared with them, or one folder by the drive it lives in and its item id.
+export type OneDriveLocation = { in: "my-files" } | { in: "shared-with-me" } | { in: "folder"; driveId: string; itemId: string };
+
+/// What a OneDrive place holds: folders, each in the drive it lives in. My files also answers its own
+/// drive's id, which is how the picker can open My files itself.
+export type OneDriveFoldersResult =
+  | { ok: true; driveId?: string; folders: { driveId: string; itemId: string; name: string; shared: boolean }[] }
   | { ok: false; reason: string };
 
 /// The Google half of the bridge. Connecting takes no argument: the sign-in happens in the user's
@@ -472,6 +483,7 @@ export function oneDriveBridge(): OneDriveBridge | null {
     connectOneDrive: bridge.connectOneDrive,
     cancelOneDriveConnect: bridge.cancelOneDriveConnect,
     disconnectOneDrive: bridge.disconnectOneDrive,
+    listOneDriveFolders: bridge.listOneDriveFolders,
   };
 }
 

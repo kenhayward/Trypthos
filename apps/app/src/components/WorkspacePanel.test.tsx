@@ -657,6 +657,29 @@ describe("the sources a workspace can be opened from", () => {
     expect(props.onOpenWorkspace).not.toHaveBeenCalled();
   });
 
+  // Offered only in a build with OneDrive, which the panel is told by being given somewhere to send
+  // the press - the same arrangement as Obsidian's.
+  it("offers OneDrive only when there is a picker to open", () => {
+    panel();
+    expect(screen.queryByRole("button", { name: "Open OneDrive folder" })).toBeNull();
+  });
+
+  it("puts OneDrive's button after Google Drive's, and asks for its picker when pressed", async () => {
+    const onOpenOneDrive = vi.fn();
+    const props = panel({ onOpenOneDrive });
+
+    const button = screen.getByRole("button", { name: "Open OneDrive folder" });
+    expect(button.querySelector("[data-mark]")?.getAttribute("data-mark")).toBe("onedrive");
+    const names = within(button.parentElement!)
+      .getAllByRole("button")
+      .map((each) => each.getAttribute("aria-label"));
+    expect(names.indexOf("Open OneDrive folder")).toBe(names.indexOf("Open Google Drive folder") + 1);
+
+    await userEvent.setup().click(button);
+    expect(onOpenOneDrive).toHaveBeenCalledTimes(1);
+    expect(props.onOpenDrive).not.toHaveBeenCalled();
+  });
+
   // Offered only where Obsidian is installed, which the panel is told by being given somewhere to
   // send the press. A button that opened an empty picker on a machine without it would be noise.
   it("offers Obsidian's vaults only when there is a picker to open", () => {
@@ -1314,6 +1337,17 @@ describe("the menu for the empty panel", () => {
     await rightClick(screen.getByTestId("workspace-body"));
 
     expect(items()).toEqual(["Open GitHub repository", "Open Google Drive folder", "Open folder"]);
+  });
+
+  it("offers OneDrive after Google Drive when the build has it, and does what it says", async () => {
+    const onOpenOneDrive = vi.fn();
+    panel({ workspaces: [], onOpenOneDrive });
+    const user = await rightClick(screen.getByTestId("workspace-body"));
+
+    expect(items()).toEqual(["Open GitHub repository", "Open Google Drive folder", "Open OneDrive folder", "Open folder"]);
+    await user.click(screen.getByRole("menuitem", { name: "Open OneDrive folder" }));
+    expect(onOpenOneDrive).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("does what the chosen entry says, and closes", async () => {

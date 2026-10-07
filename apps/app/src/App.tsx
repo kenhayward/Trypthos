@@ -30,6 +30,7 @@ import SaveChatDialog from "./components/SaveChatDialog";
 import CommitDialog from "./components/CommitDialog";
 import OpenRepoDialog from "./components/OpenRepoDialog";
 import OpenDriveDialog from "./components/OpenDriveDialog";
+import OpenOneDriveDialog from "./components/OpenOneDriveDialog";
 import ObsidianVaultDialog from "./components/ObsidianVaultDialog";
 import RefreshRepoDialog from "./components/RefreshRepoDialog";
 import WorkspaceHome from "./components/WorkspaceHome";
@@ -47,6 +48,7 @@ import { useChat } from "./hooks/useChat";
 import { useChatHistory } from "./hooks/useChatHistory";
 import { useChatScope } from "./hooks/useChatScope";
 import { useExplorerIntegration } from "./hooks/useExplorerIntegration";
+import { attempt } from "./hooks/useGitHub";
 import { useSettings } from "./hooks/useSettings";
 import { useTheme } from "./hooks/useTheme";
 import { canOpenInNewWindow, useWorkspace } from "./hooks/useWorkspace";
@@ -156,6 +158,12 @@ export default function App() {
   /// repository is an act like opening a folder, not a preference.
   const [pickingRepo, setPickingRepo] = useState(false);
   const [pickingDrive, setPickingDrive] = useState(false);
+  const [pickingOneDrive, setPickingOneDrive] = useState(false);
+  /// Whether this build can open OneDrive folders, which is whether OneDrive's button is in the
+  /// browser's header at all. Asked once at launch, as Obsidian's is: a build without a Microsoft
+  /// client has nothing to connect, and a picker that could only say so is not worth a button. Not
+  /// gated on being connected - the picker carries the connect control, as Google's does.
+  const [oneDriveConfigured, setOneDriveConfigured] = useState(false);
   /// True while the Obsidian vault picker is open.
   const [pickingVault, setPickingVault] = useState(false);
   /// Whether Obsidian is installed, which is whether its button is in the browser's header at all.
@@ -183,6 +191,16 @@ export default function App() {
   const github = useMemo(() => githubBridge(), []);
   const google = useMemo(() => googleBridge(), []);
   const oneDrive = useMemo(() => oneDriveBridge(), []);
+  useEffect(() => {
+    if (oneDrive === null) return;
+    let current = true;
+    void attempt(() => oneDrive.oneDriveStatus()).then((status) => {
+      if (current) setOneDriveConfigured(status.ok && status.configured);
+    });
+    return () => {
+      current = false;
+    };
+  }, [oneDrive]);
   const { settings, loaded, updatePanels, update } = useSettings(bridge);
 
   const keys = useMemo(() => keyBridge(), []);
@@ -822,6 +840,7 @@ export default function App() {
           onOpenWorkspace={() => void actions.open()}
           onOpenRepo={() => setPickingRepo(true)}
           onOpenDrive={() => setPickingDrive(true)}
+          onOpenOneDrive={oneDriveConfigured ? () => setPickingOneDrive(true) : undefined}
           onOpenVault={obsidianInstalled ? () => setPickingVault(true) : undefined}
           onFilterChange={fileFilter.setFilter}
           onToggleFolder={(path) => void actions.toggleFolder(path)}
@@ -1153,6 +1172,17 @@ export default function App() {
           onCancel={() => setPickingDrive(false)}
           onOpen={(ref) => {
             setPickingDrive(false);
+            void actions.openRef(ref);
+          }}
+        />
+      )}
+
+      {pickingOneDrive && (
+        <OpenOneDriveDialog
+          bridge={oneDrive}
+          onCancel={() => setPickingOneDrive(false)}
+          onOpen={(ref) => {
+            setPickingOneDrive(false);
             void actions.openRef(ref);
           }}
         />
