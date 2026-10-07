@@ -203,7 +203,9 @@ function createMicrosoftAuth({
         }),
         "sign-in",
       );
-      if (!exchanged.ok) return exchanged;
+      // invalid_grant here is a code Microsoft would not take, not an account that was connected
+      // and is no longer: "no longer connected" would be wrong on a first sign-in.
+      if (!exchanged.ok) return exchanged.reason === "not-connected" ? failure("unknown") : exchanged;
 
       const token = exchanged.token;
       if (!grantsOneDrive(token.scope)) return failure("scope-denied");

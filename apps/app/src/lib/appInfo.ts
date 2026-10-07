@@ -52,7 +52,7 @@ export const DISCLAIMERS: readonly string[] = [
   "Chat requests go directly from this app to the endpoint you configure. No Trypthos server is involved.",
   "GitHub requests go directly from this app to api.github.com, using the token you provide. Your token is encrypted by your operating system and never leaves this machine.",
   "Google requests go directly from this app to Google's sign-in and Drive services, using the permission you grant on Google's own page. What keeps you signed in is encrypted by your operating system and never leaves this machine.",
-  "Microsoft requests go directly from this app to Microsoft's sign-in and Microsoft Graph services, using the permission you grant on Microsoft's own page. What keeps you signed in is stored encrypted on this computer and never leaves it.",
+  "Microsoft requests go directly from this app to Microsoft's sign-in and Microsoft Graph services, using the permission you grant on Microsoft's own page. What keeps you signed in is encrypted by your operating system and never leaves this machine.",
   "The graph is drawn with Sigma.js and laid out with graphology's ForceAtlas2, loaded only when a graph is shown.",
   "Which files a folder's graph leaves out is decided with the ignore package, reading the folder's own .gitignore.",
   "Paste as markdown converts copied HTML with Turndown and its GitHub-flavoured tables plugin, loaded only when it is used.",

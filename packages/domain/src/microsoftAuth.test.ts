@@ -125,10 +125,15 @@ describe("microsoftAuthErrorFor", () => {
     [400, { error: "interaction_required" }, "not-connected"],
     [400, { error: "invalid_client" }, "not-configured"],
     [400, { error: "unauthorized_client" }, "not-configured"],
+    [401, { error: "invalid_client" }, "not-configured"],
     [401, {}, "permission-denied"],
     [429, {}, "rate-limited"],
     [500, {}, "offline"],
-    [400, "not json", "offline"],
+    [503, "not json", "offline"],
+    // Microsoft answered, so the connection is fine: a refusal it did not name is not "offline".
+    [403, {}, "unknown"],
+    [400, { error: "invalid_request" }, "unknown"],
+    [400, "not json", "unknown"],
   ])("%i %j is %s", (status, body, reason) => {
     expect(microsoftAuthErrorFor(status, body)).toBe(reason);
   });

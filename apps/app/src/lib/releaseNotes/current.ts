@@ -17,6 +17,9 @@ export const RECENT: Release[] = [
     changed: [
       "The Google Drive and OneDrive account sections in Settings share one design.",
     ],
+    fixed: [
+      "Connecting or disconnecting two accounts at the same moment could lose one of them.",
+    ],
   },
   {
     version: "0.101.1",
