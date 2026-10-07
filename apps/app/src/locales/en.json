@@ -17,7 +17,7 @@
     "filterHint": "Searches every open folder by name. * matches any characters, ? matches one.",
     "searching": "Searching...",
     "matchesCapped": "Stopped early - there may be more matches.",
-    "searchPartialDrive": "Google Drive folders are searched only where you have opened them.",
+    "searchPartialCloud": "Cloud folders are searched only where you have opened them.",
     "loading": "Loading...",
     "opening": "Opening...",
     "saving": "Saving...",
@@ -42,7 +42,8 @@
       "rename": "Rename ...",
       "revealInExplorer": "Open in Explorer",
       "revealInFinder": "Open in Finder",
-      "openInDrive": "Open in Google Drive"
+      "openInDrive": "Open in Google Drive",
+      "openInOneDrive": "Open in OneDrive"
   },
   "refreshRepo": {
     "title": "Refresh {{name}} from GitHub",
@@ -424,6 +425,8 @@
     "oneDriveScopeDenied": "Trypthos needs access to your files to open OneDrive folders. Connect again and allow it.",
     "oneDriveNotConfigured": "This build of Trypthos was made without OneDrive support, so OneDrive cannot be connected.",
     "oneDriveTimedOut": "Microsoft's sign-in page did not answer in time. Connect again to try once more.",
+    "oneDriveOtherAccount": "This OneDrive folder belongs to a different Microsoft account from the one connected now. Connect that account, or open the folder again.",
+    "oneDriveReadOnly": "OneDrive folders open read-only in this release, so this file cannot be saved there yet.",
     "googleNotConnected": "Trypthos is no longer signed in to Google. Connect again from the Accounts page of Settings.",
     "notConfigured": "Google did not accept this build's sign-in setup, so Google Drive cannot be connected. Updating Trypthos may fix it.",
     "windowFailed": "The new window did not open, so the tab is still here with your changes.",

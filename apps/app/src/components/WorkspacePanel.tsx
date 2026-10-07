@@ -416,9 +416,9 @@ export default function WorkspacePanel({
               <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.matchesCapped")}</p>
             )}
 
-            {/* Drive is searched only where it has been opened, which the list cannot show by itself. */}
+            {/* A cloud folder is searched only where it has been opened, which the list cannot show by itself. */}
             {filterStatus.kind === "results" && filterStatus.partial === true && (
-              <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.searchPartialDrive")}</p>
+              <p className="px-2 py-1 text-xs text-ink-4">{t("workspace.searchPartialCloud")}</p>
             )}
 
             {shown.map(({ workspace, state, rows: tree }) => {
@@ -589,7 +589,9 @@ export default function WorkspacePanel({
                   }}
                 >
                   {inBrowser
-                    ? t("workspace.openInDrive")
+                    ? menuWorkspace?.ref.kind === "onedrive"
+                      ? t("workspace.openInOneDrive")
+                      : t("workspace.openInDrive")
                     : platform === "darwin"
                       ? t("workspace.revealInFinder")
                       : t("workspace.revealInExplorer")}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
-import { GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT, cloudAccountKeys, oneDriveFailureKey } from "./cloudAccounts";
+import { GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT, cloudAccountKeys } from "./cloudAccounts";
 
 function lookup(key: string): unknown {
   return key.split(".").reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], en);
@@ -30,7 +30,7 @@ describe("the account kinds and the catalogue", () => {
   });
 });
 
-describe("oneDriveFailureKey", () => {
+describe("the OneDrive account's failures", () => {
   it.each([
     ["offline", "errors.oneDriveOffline"],
     ["rate-limited", "errors.oneDriveRateLimited"],
@@ -38,14 +38,16 @@ describe("oneDriveFailureKey", () => {
     ["scope-denied", "errors.oneDriveScopeDenied"],
     ["timed-out", "errors.oneDriveTimedOut"],
     ["not-configured", "errors.oneDriveNotConfigured"],
+    ["other-account", "errors.oneDriveOtherAccount"],
+    ["read-only", "errors.oneDriveReadOnly"],
     // A failed code exchange answers this. The shared wording names no provider.
     ["unknown", "errors.unknown"],
   ])("answers %s with %s, which exists", (reason, key) => {
-    expect(oneDriveFailureKey(reason)).toBe(key);
+    expect(ONEDRIVE_ACCOUNT.failureKey(reason)).toBe(key);
     expect(typeof lookup(key)).toBe("string");
   });
 
   it("is not an error when the browser was closed", () => {
-    expect(oneDriveFailureKey("cancelled")).toBeNull();
+    expect(ONEDRIVE_ACCOUNT.failureKey("cancelled")).toBeNull();
   });
 });

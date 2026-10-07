@@ -264,7 +264,7 @@ export default function FindDialog({
         </p>
 
         {results !== null && results.partial === true && (
-          <p className="text-xs text-ink-4">{t("workspace.searchPartialDrive")}</p>
+          <p className="text-xs text-ink-4">{t("workspace.searchPartialCloud")}</p>
         )}
 
         <div className="mt-2 flex items-center gap-2">

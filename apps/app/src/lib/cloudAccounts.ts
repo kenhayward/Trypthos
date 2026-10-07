@@ -1,4 +1,4 @@
-import { failureKey, providerFailureKey } from "../hooks/useWorkspace";
+import { providerFailureKey } from "../hooks/useWorkspace";
 
 /// What tells one cloud account apart in the shared section: its words and how its failures read.
 /// Keys, not wording, so this stays pure; the component translates.
@@ -26,28 +26,6 @@ export const GOOGLE_ACCOUNT: CloudAccountKind = {
   failureKey: (reason) => providerFailureKey("google-drive", reason),
 };
 
-/// OneDrive's account failures until `providerFailureKey` gains a OneDrive kind.
-///
-/// The generic keys for scope-denied, timed-out and not-configured name Google, so those are answered here too.
-export function oneDriveFailureKey(reason: string): string | null {
-  switch (reason) {
-    case "offline":
-      return "errors.oneDriveOffline";
-    case "rate-limited":
-      return "errors.oneDriveRateLimited";
-    case "not-connected":
-      return "errors.oneDriveNotConnected";
-    case "scope-denied":
-      return "errors.oneDriveScopeDenied";
-    case "timed-out":
-      return "errors.oneDriveTimedOut";
-    case "not-configured":
-      return "errors.oneDriveNotConfigured";
-    default:
-      return failureKey(reason);
-  }
-}
-
 export const ONEDRIVE_ACCOUNT: CloudAccountKind = {
   titleKey: "settings.accounts.oneDrive",
   checkingKey: "onedrive.checking",
@@ -56,7 +34,7 @@ export const ONEDRIVE_ACCOUNT: CloudAccountKind = {
   notConfiguredKey: "onedrive.notConfigured",
   browserOnlyKey: "onedrive.browserOnly",
   connectedNoteKey: "onedrive.removeAccess",
-  failureKey: oneDriveFailureKey,
+  failureKey: (reason) => providerFailureKey("onedrive", reason),
 };
 
 /// Every catalogue key the account kinds name. They are looked up as `t(kind.xKey)`, which the i18n
