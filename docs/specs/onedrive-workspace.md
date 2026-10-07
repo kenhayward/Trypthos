@@ -1,6 +1,6 @@
 # Spec: OneDrive workspaces (personal accounts)
 
-**Status: PR 1 delivered (0.102.0).** It is the design the work is measured against, agreed before the first line of it.
+**Status: PR 2 delivered (0.103.0).** It is the design the work is measured against, agreed before the first line of it.
 
 Trypthos opens local folders, Obsidian vaults, GitHub repositories and Google Drive folders. This
 specifies the fifth source: **a folder in a personal OneDrive** - the whole OneDrive, any folder in
