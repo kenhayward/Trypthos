@@ -129,15 +129,16 @@ export type MicrosoftAuthFailure = "not-connected" | "not-configured" | "permiss
 
 /// What a refusal from the token endpoint or `/me` means to the user.
 ///
-/// A 4xx it does not name is `unknown`, not `offline`: Microsoft answered, so telling the user to
-/// check their connection would send them to the wrong place. A 5xx still reads as `offline`.
+/// A 403 is `permission-denied`, as Graph's 403 is for a file (PR 1 review). Any other 4xx it does
+/// not name is `unknown`, not `offline`: Microsoft answered, so telling the user to check their
+/// connection would send them to the wrong place. A 5xx still reads as `offline`.
 export function microsoftAuthErrorFor(status: number, body: unknown): MicrosoftAuthFailure {
   const parsed = MicrosoftErrorBodySchema.safeParse(body);
   if (parsed.success) {
     if (parsed.data.error === "invalid_grant" || parsed.data.error === "interaction_required") return "not-connected";
     if (parsed.data.error === "invalid_client" || parsed.data.error === "unauthorized_client") return "not-configured";
   }
-  if (status === 401) return "permission-denied";
+  if (status === 401 || status === 403) return "permission-denied";
   if (status === 429) return "rate-limited";
   if (status >= 400 && status < 500) return "unknown";
   return "offline";

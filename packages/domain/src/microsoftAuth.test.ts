@@ -127,13 +127,16 @@ describe("microsoftAuthErrorFor", () => {
     [400, { error: "unauthorized_client" }, "not-configured"],
     [401, { error: "invalid_client" }, "not-configured"],
     [401, {}, "permission-denied"],
+    // Graph refusing the account lookup is a refusal, as Graph's 403 is everywhere else (PR 1 review).
+    [403, {}, "permission-denied"],
+    [403, { error: { code: "accessDenied", message: "x" } }, "permission-denied"],
     [429, {}, "rate-limited"],
     [500, {}, "offline"],
     [503, "not json", "offline"],
     // Microsoft answered, so the connection is fine: a refusal it did not name is not "offline".
-    [403, {}, "unknown"],
     [400, { error: "invalid_request" }, "unknown"],
     [400, "not json", "unknown"],
+    [404, { error: { code: "itemNotFound" } }, "unknown"],
   ])("%i %j is %s", (status, body, reason) => {
     expect(microsoftAuthErrorFor(status, body)).toBe(reason);
   });
