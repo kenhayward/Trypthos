@@ -19,7 +19,9 @@ export const ONEDRIVE_MY_DRIVE_URL = `${GRAPH_API}/me/drive?$select=id,driveType
 /// Every drive and item id this app sends back to Graph is this alphabet: a personal drive id is hex,
 /// an item id is `<drive>!<number>`, and the root has the alias `root`. An id that is not is refused
 /// before it reaches an address - from settings, from the renderer, from anywhere.
-const ONEDRIVE_ID_PATTERN = /^[A-Za-z0-9!._-]{1,256}$/;
+/// The first character is alphanumeric, so `.`, `..` and `...` are not ids: a URL parser collapses
+/// `/drives/../` and `/items/..` and the address would leave its slot.
+const ONEDRIVE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9!._-]{0,255}$/;
 
 export function isOneDriveId(value: string): boolean {
   return ONEDRIVE_ID_PATTERN.test(value);
@@ -64,7 +66,7 @@ export type OneDriveItem = z.infer<typeof OneDriveItemSchema>;
 
 export const OneDrivePageSchema = z.object({
   value: z.array(OneDriveItemSchema),
-  "@odata.nextLink": z.string().optional(),
+  "@odata.nextLink": z.string().refine(isGraphUrl).optional(),
 });
 
 export const OneDriveDriveSchema = z.object({ id: z.string().min(1), driveType: z.string().optional() });
@@ -79,10 +81,17 @@ export function graphErrorCode(body: unknown): string | null {
 
 /// A workspace path as Graph's path syntax takes it: every segment encoded on its own, so a `#`, `?`
 /// or `%` in a name can neither end the path nor start a query, and joined by the `/` it was split on.
+///
+/// Throws on an empty, `.` or `..` segment: the URL parser collapses the dots out of the anchor item
+/// and an empty segment makes `//`. The message names no path. Callers pass a guarded path already;
+/// this is the address not relying on that.
 function encodedPath(path: string): string {
   return path
     .split("/")
-    .map((segment) => encodeURIComponent(segment))
+    .map((segment) => {
+      if (segment === "" || segment === "." || segment === "..") throw new Error("unsafe OneDrive path");
+      return encodeURIComponent(segment);
+    })
     .join("/");
 }
 
@@ -209,7 +218,11 @@ function compare(one: string, other: string): number {
 export function oneDriveEntriesOf(items: readonly OneDriveItem[]): OneDriveEntry[] {
   return items
     .filter(
-      (item) => item.remoteItem === undefined && (item.folder !== undefined || item.file !== undefined) && usableName(item.name),
+      (item) =>
+        item.remoteItem === undefined &&
+        (item.folder !== undefined || item.file !== undefined) &&
+        usableName(item.name) &&
+        isOneDriveId(item.id),
     )
     .map(
       (item): OneDriveEntry => ({
@@ -242,6 +255,7 @@ export interface OneDriveFolder {
 export function oneDriveFoldersOf(items: readonly OneDriveItem[], driveId: string | null): OneDriveFolder[] {
   const folders: OneDriveFolder[] = [];
   for (const item of items) {
+    if (!usableName(item.name)) continue;
     const remote = item.remoteItem;
     if (remote !== undefined) {
       const owner = remote.parentReference?.driveId;
