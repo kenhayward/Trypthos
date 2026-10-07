@@ -136,3 +136,12 @@ describe("translation keys", () => {
     expect(values).not.toMatch(/\{\{\s*\d+\s*\}\}/);
   });
 });
+
+describe("the catalogue file", () => {
+  // A lone byte outside UTF-8 (a Latin-1 middle dot, say) renders as the replacement character and
+  // breaks no other test, so the bytes are decoded strictly.
+  it("is valid UTF-8", () => {
+    const bytes = readFileSync(join(SRC, "locales", "en.json"));
+    expect(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).not.toThrow();
+  });
+});

@@ -152,7 +152,7 @@
         "properties": "Obsidian properties"
       }
     },
-    "stats": "{{caret}} · {{words}} words"
+    "stats": "{{caret}} Â· {{words}} words"
   },
   "newFile": {
     "title": "New file",
