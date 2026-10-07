@@ -550,3 +550,29 @@ test("a sign-in whose code Microsoft refuses as invalid_grant is unknown, not 'n
   assert.deepEqual(await h.instance.connect(), { ok: false, reason: "unknown" });
   assert.equal(h.accounts.tokens.size, 0);
 });
+
+// PR 1 review: the cancelled sign-in's own generation bump, pinned on its own. The refresh starts
+// while the sign-in's SAVE is held, so its read is queued behind the save and reads the token the
+// cancelled sign-in stored; the DELETE is held too, so the refresh's rotation is ready to save the
+// moment the delete lands. Only the bump before that delete stops the save. Removing the bump makes
+// this fail (seen when it was written).
+test("a refresh that read a cancelled sign-in's token cannot store its rotation after the delete", async () => {
+  const accounts = gatedAccounts();
+  const save = accounts.hold("set");
+  const removal = accounts.hold("delete");
+  const h = harness({ accounts, microsoft: twoAccountMicrosoft() });
+
+  const connecting = h.instance.connect();
+  await save.reached;
+  const refreshing = h.instance.accessToken(); // queued behind the save: it will read Grace's token
+  h.instance.cancelConnect();
+  save.release();
+  await removal.reached;
+  for (let i = 0; i < 10; i += 1) await tick();
+  removal.release();
+
+  assert.deepEqual(await connecting, { ok: false, reason: "cancelled" });
+  await refreshing;
+  for (let i = 0; i < 10; i += 1) await tick();
+  assert.equal(accounts.tokens.has("onedrive"), false);
+});
