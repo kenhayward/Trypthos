@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DriveIdSchema } from "./googleDrive";
+import { OneDriveIdSchema } from "./oneDrive";
 
 /// Which place a workspace is, named in a way both processes and the settings file can carry.
 ///
@@ -64,10 +65,28 @@ export const GoogleDriveWorkspaceRefSchema = z
   })
   .strict();
 
+export const OneDriveWorkspaceRefSchema = z
+  .object({
+    kind: z.literal("onedrive"),
+    /// The drive the folder lives in: the connected account's own, or - for a folder shared with the
+    /// user - its owner's.
+    driveId: OneDriveIdSchema,
+    /// The folder's item id, or the alias `root` for My files.
+    itemId: OneDriveIdSchema,
+    /// Present when the folder was shared with the user. Its `driveId` is someone else's by design, so
+    /// it is not checked against the connected account; an own-drive folder is, and answers
+    /// `other-account` under a different one. Not part of `workspaceRefKey`.
+    shared: z.literal(true).optional(),
+    /// What the folder was called when it was chosen. Display only, as Drive's.
+    name: z.string().min(1),
+  })
+  .strict();
+
 export const WorkspaceRefSchema = z.discriminatedUnion("kind", [
   LocalWorkspaceRefSchema,
   GitHubWorkspaceRefSchema,
   GoogleDriveWorkspaceRefSchema,
+  OneDriveWorkspaceRefSchema,
 ]);
 
 export type WorkspaceRef = z.infer<typeof WorkspaceRefSchema>;
@@ -78,7 +97,7 @@ export type ProviderKind = WorkspaceRef["kind"];
 /// Walked by the shell's registry test and by the interface's source picker, so a kind added to the
 /// schema and forgotten in either shows up as a failing test rather than as a row that can be
 /// chosen and never opened.
-export const PROVIDER_KINDS = ["local", "github", "google-drive"] as const satisfies readonly ProviderKind[];
+export const PROVIDER_KINDS = ["local", "github", "google-drive", "onedrive"] as const satisfies readonly ProviderKind[];
 
 /// The last segment of a path, whichever separator wrote it. "" when there is none to take.
 function lastSegment(value: string): string {
@@ -97,6 +116,8 @@ export function workspaceRefName(ref: WorkspaceRef): string {
     case "github":
       return ref.repo;
     case "google-drive":
+      return ref.name;
+    case "onedrive":
       return ref.name;
     case "local":
       // A drive root has no segment to take, and an empty name would leave the workspace called
@@ -129,6 +150,9 @@ export function workspaceRefKey(ref: WorkspaceRef): string {
       return `github:${ref.owner.toLowerCase()}/${ref.repo.toLowerCase()}`;
     case "google-drive":
       return `google-drive:${ref.folderId}`;
+    // Graph ids are case-sensitive, so neither is folded.
+    case "onedrive":
+      return `onedrive:${ref.driveId}:${ref.itemId}`;
     case "local":
       return `local:${ref.root}`;
   }
@@ -173,6 +197,8 @@ export function workspaceRefLabel(ref: WorkspaceRef): string {
       return `${ref.owner}/${ref.repo}`;
     case "google-drive":
       return `Google Drive / ${ref.name}`;
+    case "onedrive":
+      return `OneDrive / ${ref.name}`;
     case "local":
       return ref.root;
   }

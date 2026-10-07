@@ -49,7 +49,7 @@ function fakeClient(overrides: Partial<WorkspaceClient> = {}) {
       workspace:
         ref.kind === "github"
           ? { id: ref.repo, name: ref.repo, ref, truncated: false }
-          : ref.kind === "google-drive"
+          : ref.kind === "google-drive" || ref.kind === "onedrive"
             ? { id: ref.name, name: ref.name, ref, truncated: false }
             : { id: ref.root.replace(/^\//, ""), name: "ws", ref, truncated: false },
     }),

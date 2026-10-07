@@ -41,6 +41,8 @@ const { createGoogleAuth } = require("./googleAuth");
 const { loadMicrosoftClient } = require("./microsoftClient");
 const { createMicrosoftAuth } = require("./microsoftAuth");
 const { createGoogleDriveApi } = require("./googleDriveApi");
+const { createOneDriveApi } = require("./oneDriveApi");
+const { createManualFetch } = require("./manualRedirect");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
 const { enableSpellChecker } = require("./spellcheck");
@@ -467,6 +469,16 @@ if (!gotLock) {
       // and certificate reasons as GitHub.
       createGoogleDrive: (accessToken) =>
         createGoogleDriveApi({ accessToken, fetch: (url, options) => net.fetch(url, options) }),
+      // Every OneDrive call is made here, with the token microsoftAuth holds - net.fetch for the same
+      // proxy and certificate reasons as GitHub and Drive.
+      createOneDrive: (accessToken) =>
+        createOneDriveApi({
+          accessToken,
+          fetch: (url, options) => net.fetch(url, options),
+          // Never follows a redirect: Graph's /content 302 is read here, and its pre-signed target is
+          // fetched without the token. net.fetch cannot do this (measured; see the Rulings).
+          fetchManual: createManualFetch((options) => net.request(options)),
+        }),
       // The only path from the renderer to the operating system's protocol handlers, and the reason
       // the schema behind it is an allow-list rather than a deny-list.
       openExternal: (url) => shell.openExternal(url),

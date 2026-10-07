@@ -175,3 +175,40 @@ test("a Drive folder in a build without Google answers not configured", async ()
     reason: "not-configured",
   });
 });
+
+/// A OneDrive client that knows one drive and one folder.
+function oneDriveClient(myDrive = "d0c0ffee") {
+  return {
+    drive: async () => ({ ok: true, drive: { id: myDrive } }),
+    item: async (_driveId, itemId) => ({ ok: true, item: { id: itemId, name: "Notes now", folder: {} } }),
+    children: async () => ({ ok: true, items: [] }),
+  };
+}
+
+test("opens a OneDrive folder through the OneDrive client, under its current name", async () => {
+  const opened = await openWorkspaceFor(
+    { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!0", name: "Notes then" },
+    { oneDrive: oneDriveClient() },
+  );
+
+  assert.equal(opened.ok, true);
+  assert.equal(opened.workspace.name, "Notes now");
+  assert.equal(opened.workspace.root, null);
+  assert.equal(opened.workspace.guard, null);
+  assert.equal(opened.workspace.vault, false);
+  assert.equal(opened.workspace.provider.kind, "onedrive");
+});
+
+test("an own-drive OneDrive folder under another account answers other-account", async () => {
+  assert.deepEqual(
+    await openWorkspaceFor({ kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!0", name: "Notes" }, { oneDrive: oneDriveClient("beefcafe") }),
+    { ok: false, reason: "other-account" },
+  );
+});
+
+test("a OneDrive folder in a build without a Microsoft client answers not configured", async () => {
+  assert.deepEqual(await openWorkspaceFor({ kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!0", name: "Notes" }, {}), {
+    ok: false,
+    reason: "not-configured",
+  });
+});

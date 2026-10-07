@@ -19,6 +19,8 @@ export function sourceColour(mark: WorkspaceMark): string {
       return "text-obsidian";
     case "google-drive":
       return "text-drive";
+    case "onedrive":
+      return "text-onedrive";
   }
 }
 
@@ -56,6 +58,14 @@ export default function SourceGlyph({ mark, className }: { mark: WorkspaceMark; 
         <Glyph className={className} mark="google-drive">
           <path d="M8 3h8l6 11-3 6H5l-3-6Z" />
           <path d="m8 3 7 11H2m14-11-7 11-4 6m17-6H9" />
+        </Glyph>
+      );
+    case "onedrive":
+      // A cloud, drawn in the app's own outline style: a generic mark in OneDrive's blue, not
+      // Microsoft's artwork.
+      return (
+        <Glyph className={className} mark="onedrive">
+          <path d="M7 18h10.5a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.34 8.02 5 5 0 0 0 7 18Z" />
         </Glyph>
       );
   }

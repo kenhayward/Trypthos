@@ -17,7 +17,7 @@ import { WorkspaceRefSchema } from "./workspaceRef";
 /// None of this is the user's work. It is a convenience, so every failure to read it falls back to
 /// defaults rather than stopping the app.
 
-export const SETTINGS_VERSION = 24;
+export const SETTINGS_VERSION = 25;
 
 export const SettingsSchema = z
   .object({
@@ -175,6 +175,14 @@ export const DEFAULT_SETTINGS: Settings = {
 /// from 0.9.0 must arrive intact - somebody's panel widths and open folder are not worth losing over
 /// two fields that did not exist yet.
 export const SETTINGS_MIGRATIONS: Migration[] = [
+  {
+    to: 25,
+    // Version 25 lets a remembered workspace be a OneDrive folder. Nothing already remembered changes.
+    // The version is for the OTHER direction, as with 23: the reference is strict, so a file naming a
+    // OneDrive folder, read by the previous build, would fail to parse and take every remembered
+    // workspace with it - this makes that build refuse the file instead.
+    migrate: (input) => input,
+  },
   {
     to: 24,
     // Version 24 lets a remembered My Drive carry its real id. Nothing already remembered changes;

@@ -39,6 +39,11 @@ describe("a workspace's home page", () => {
     expect(screen.getByText(/^Obsidian vault/)).toBeTruthy();
   });
 
+  it("says a OneDrive folder is one", () => {
+    page({ workspace: { id: "Plans", name: "Plans", ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "ITEM!3", name: "Plans" } } });
+    expect(screen.getByText("OneDrive folder - Plans")).toBeTruthy();
+  });
+
   // Label and number rather than number and noun: "1 attachments" is wrong English, and a label
   // reads correctly at every count without plural forms the catalogue has never needed.
   it("counts what the index found", async () => {

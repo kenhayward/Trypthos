@@ -64,7 +64,7 @@ function microsoftOver(accounts, authLog = { error: () => {} }) {
   });
 }
 
-async function withHandlers(body, { microsoft = "real" } = {}) {
+async function withHandlers(body, { microsoft = "real", createOneDrive = null, openExternal } = {}) {
   const authLogged = [];
   const authLog = { error: (...args) => void authLogged.push(args.map(String).join(" ")) };
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-onedrive-ipc-"));
@@ -80,6 +80,8 @@ async function withHandlers(body, { microsoft = "real" } = {}) {
       secrets: { endpointsWithKeys: async () => [], setKey: async () => ({ ok: true }), deleteKey: async () => {}, retainOnly: async () => {} },
       accounts,
       microsoft: auth,
+      createOneDrive,
+      openExternal,
       explorerIntegration: { supported: () => false, isRegistered: async () => false },
     });
     await body({ ipcMain, accounts, auth, authLogged });
@@ -141,4 +143,120 @@ test("no channel answers with a Microsoft token", async () => {
     const last = JSON.stringify(await ipcMain.invoke("onedrive:disconnect"));
     for (const token of [REFRESH, ROTATED, ACCESS]) assert.ok(!last.includes(token));
   });
+});
+
+/// The OneDrive client factory, as `main.js` passes it: built over an access-token supplier. `seen`
+/// records the supplier, so a test can check whose token it is.
+function fakeOneDriveFactory({ myDrive = "d0c0ffee", seen = {} } = {}) {
+  return (accessToken) => {
+    seen.accessToken = accessToken;
+    const plan = { id: "ITEM!1", name: "Plan.md", size: 5, cTag: "ctag-1", file: {}, webUrl: "https://onedrive.live.com/?id=ITEM!1" };
+    return {
+      drive: async () => ({ ok: true, drive: { id: myDrive } }),
+      item: async (_driveId, itemId, filePath) => {
+        if (filePath === "") return { ok: true, item: { id: itemId, name: "Notes now", folder: {} } };
+        return filePath === "Plan.md" ? { ok: true, item: plan } : { ok: false, reason: "not-found" };
+      },
+      children: async (_driveId, _itemId, folderPath) => (folderPath === "" ? { ok: true, items: [plan] } : { ok: false, reason: "not-found" }),
+      download: async () => ({ ok: true, bytes: Buffer.from("hello") }),
+    };
+  };
+}
+
+// Each test opens its own item id: the registry of open workspaces is module-level, so a reference an
+// earlier test opened would answer the workspace already open rather than reaching the opener.
+test("opens a OneDrive folder by reference and reads it read-only, like any other workspace", async () => {
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const ref = { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!10", name: "Notes then" };
+      const opened = await ipcMain.invoke("workspace:openRef", { ref });
+      assert.equal(opened.ok, true);
+      assert.equal(opened.workspace.name, "Notes now");
+      assert.deepEqual(opened.workspace.ref, ref);
+      assert.equal("driveVariant" in opened.workspace, false);
+
+      const listed = await ipcMain.invoke("workspace:list", { path: opened.workspace.id });
+      assert.deepEqual(listed.nodes.map((node) => node.id), [`${opened.workspace.id}/Plan.md`]);
+
+      const read = await ipcMain.invoke("file:read", { path: `${opened.workspace.id}/Plan.md` });
+      assert.deepEqual(read, { ok: true, content: "hello", revision: { id: "ctag-1" }, readOnly: true });
+    },
+    { createOneDrive: fakeOneDriveFactory() },
+  );
+});
+
+test("a save into a OneDrive folder answers read-only in this release", async () => {
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!11", name: "Notes" } });
+      const written = await ipcMain.invoke("file:write", {
+        path: `${opened.workspace.id}/Plan.md`,
+        content: "changed",
+        expectedRevision: { id: "ctag-1" },
+        message: null,
+      });
+      assert.deepEqual(written, { ok: false, reason: "read-only" });
+    },
+    { createOneDrive: fakeOneDriveFactory() },
+  );
+});
+
+test("an own-drive folder of another Microsoft account is not opened under this one", async () => {
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!12", name: "Notes" } });
+      assert.deepEqual(opened, { ok: false, reason: "other-account" });
+    },
+    { createOneDrive: fakeOneDriveFactory({ myDrive: "beefcafe" }) },
+  );
+});
+
+test("a folder shared with the user lives in another drive by design, and opens", async () => {
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const ref = { kind: "onedrive", driveId: "beefcafe", itemId: "SHARED!7", shared: true, name: "Joint" };
+      const opened = await ipcMain.invoke("workspace:openRef", { ref });
+      assert.equal(opened.ok, true);
+      assert.deepEqual(opened.workspace.ref, ref);
+    },
+    { createOneDrive: fakeOneDriveFactory() },
+  );
+});
+
+// Connected first, so the supplier answers with a token: only the account's own supplier can hand
+// back the token the account was connected with. The token is compared, never printed - a failing
+// assertion names the shape, not the value.
+test("the OneDrive client is built over the Microsoft account's access token", async () => {
+  const seen = {};
+  await withHandlers(
+    async ({ ipcMain }) => {
+      assert.equal(typeof seen.accessToken, "function");
+      await ipcMain.invoke("onedrive:connect");
+      const answer = await seen.accessToken();
+      assert.ok(answer.ok === true && answer.token === ACCESS, "the supplier did not answer with the account's access token");
+    },
+    { createOneDrive: fakeOneDriveFactory({ seen }) },
+  );
+});
+
+test("a build without a OneDrive client cannot open a OneDrive folder", async () => {
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!13", name: "Notes" } });
+      assert.deepEqual(opened, { ok: false, reason: "not-configured" });
+    },
+    { microsoft: "none", createOneDrive: fakeOneDriveFactory() },
+  );
+});
+
+test("Open in OneDrive shows the item's page in the browser, and answers no address", async () => {
+  const shown = [];
+  await withHandlers(
+    async ({ ipcMain }) => {
+      const workspace = (await ipcMain.invoke("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!14", name: "Notes" } })).workspace;
+      assert.deepEqual(await ipcMain.invoke("workspace:reveal", { path: `${workspace.id}/Plan.md` }), { ok: true });
+      assert.deepEqual(shown, ["https://onedrive.live.com/?id=ITEM!1"]);
+    },
+    { createOneDrive: fakeOneDriveFactory(), openExternal: async (url) => void shown.push(url) },
+  );
 });

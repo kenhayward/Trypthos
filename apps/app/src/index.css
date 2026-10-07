@@ -46,6 +46,7 @@
   --color-leaf: var(--tp-leaf);
   --color-obsidian: var(--tp-obsidian);
   --color-drive: var(--tp-drive);
+  --color-onedrive: var(--tp-onedrive);
   --color-danger: var(--tp-danger);
   --color-danger-strong: var(--tp-danger-strong);
   --color-gutter: var(--tp-gutter);
@@ -131,6 +132,8 @@
   /* Obsidian violet: the mark on a folder opened as a vault. */
   --tp-obsidian: #7c3aed;
   --tp-drive: #1a73e8;
+  /* OneDrive blue: the mark on a OneDrive folder. */
+  --tp-onedrive: #0364b8;
 
   /* What the vault graph fades to when a selection pushes the rest of the graph back. Two values
      because a disc and a hairline recede in opposite directions: a dimmed node still has to be a
@@ -216,6 +219,7 @@
     --tp-leaf: #5fc3ab;
     --tp-obsidian: #a78bfa;
     --tp-drive: #8ab4f8;
+    --tp-onedrive: #4fa3e8;
 
     --tp-graph-dim: #2b3648;
     --tp-graph-dim-edge: #1c2536;
@@ -288,6 +292,7 @@
   --tp-leaf: #5fc3ab;
   --tp-obsidian: #a78bfa;
   --tp-drive: #8ab4f8;
+  --tp-onedrive: #4fa3e8;
 
   --tp-graph-dim: #2b3648;
   --tp-graph-dim-edge: #1c2536;
