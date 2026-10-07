@@ -428,7 +428,12 @@ plain text to GFM, so the second flavour only ever adds - which is what makes gu
   `redux-color` palette (`redux-dark-color` in the dark theme), `neo` shapes and ELK layout - and only
   the palette is chosen here. Its `chevrotain` dependency pins `lodash-es` 4.17.23, which carries
   high-severity advisories; the root `package.json` overrides `lodash-es` to 4.18.1, the patched
-  release on the same major. Remove the override once chevrotain ships a fixed pin.
+  release on the same major. Remove the override once chevrotain ships a fixed pin. Mermaid also asks
+  for KaTeX `^0.16.47`, below the 0.18.2 that fixes an advisory, so a nested override gives it the
+  app's own KaTeX 0.18.9: one copy in the bundle, and Mermaid only calls `renderToString`, whose
+  options are unchanged. `npm ls` reports that edge as "invalid", which is npm's word for an
+  overridden range and harmless to `npm ci`. Remove it once Mermaid asks for 0.18. The root also
+  overrides `shell-quote` (pinned exactly by `concurrently`, a dev tool) to 1.12.0.
 - **Embedded notes are filled in after rendering too.** A note embed renders as a
   `.md-transclusion[data-embed-note]` placeholder holding its link. `lib/transclusions.ts`
   (`useTransclusions`) resolves it with `findWikiTarget` (the same name search as a wiki link), reads it

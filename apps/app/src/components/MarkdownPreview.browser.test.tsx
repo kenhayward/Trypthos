@@ -41,6 +41,20 @@ describe("math and diagrams in Preview, rendered", () => {
     expect(svg.getBoundingClientRect().width).toBeGreaterThan(0);
   });
 
+  // Mermaid typesets a $$ label with KaTeX - and with the copy the app itself uses, which the root
+  // package.json overrides to, since the one Mermaid asks for has a published advisory. A diagram
+  // whose label holds maths still has to draw.
+  it("draws a diagram whose label holds maths", async () => {
+    const { container } = render(
+      <MarkdownPreview source={'```mermaid\ngraph TD\n  A["$$x^2$$"] --> B[Done]\n```\n'} fileTypes={["markdown"]} />,
+    );
+
+    const svg = await until(() => container.querySelector(".md-mermaid svg"));
+    expect(container.querySelector("pre")).toBeNull();
+    expect(svg.textContent).toContain("Done");
+    expect(svg.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+
   // The dark theme is a different set of colours, drawn by the real library - and its labels are
   // still SVG text after the drawing has been through the sanitiser, which is what would empty them
   // if Mermaid put them in a foreignObject.

@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.101.1",
+    date: "2026-10-07",
+    pr: 230,
+    headline: "Security updates for KaTeX and build tools",
+    summary:
+      "Diagrams now typeset maths with the same, patched KaTeX the rest of the app uses, rather than an older copy with a published advisory, so there is one copy in the app instead of two. Two tools used only to build and test Trypthos, shell-quote and source-map-js, are updated to their fixed releases. Nothing changes on screen.",
+    changed: [
+      "Mermaid diagrams use the app's own KaTeX 0.18.9 instead of an older copy with a published advisory.",
+      "Build and test tools updated: shell-quote 1.12.0 and source-map-js 1.2.2.",
+    ],
+  },
+  {
     version: "0.101.0",
     date: "2026-10-06",
     pr: 229,
