@@ -1,6 +1,6 @@
 # Spec: OneDrive workspaces (personal accounts)
 
-**Status: PR 2 delivered (0.103.0).** It is the design the work is measured against, agreed before the first line of it.
+**Status: PR 3 delivered (0.104.0).** It is the design the work is measured against, agreed before the first line of it.
 
 Trypthos opens local folders, Obsidian vaults, GitHub repositories and Google Drive folders. This
 specifies the fifth source: **a folder in a personal OneDrive** - the whole OneDrive, any folder in
@@ -34,6 +34,7 @@ Graph, not a guess.
 | What changes the tags | A content write changes both `eTag` and `cTag`. A rename changes `eTag` only. |
 | Creating without overwriting | `?@microsoft.graph.conflictBehavior=fail` on a content PUT onto an existing name answers 409. **`If-None-Match: *` is ignored** - it answered 200 and overwrote. |
 | Rename | `PATCH {name}` 200. Onto an existing sibling, with or without a case difference: 409. |
+| `If-Match` on a path renamed away since the read (PR 3 manual check) | Pending the controller's manual check: none of 412, 404 or 201 loses the user's text, and the finding is to be recorded here. |
 | Downloads | `GET /content` answers **302** to a pre-authenticated URL on `microsoftpersonalcontent.com`. A `Range` request to that URL **without a token** answers 206 with `Content-Range`. `$select=@microsoft.graph.downloadUrl` returned nothing. |
 | Delta | Works on a non-root folder of a personal drive (200 with a `deltaLink`). |
 | Web addresses | `webUrl` on items, on `onedrive.live.com`. |
@@ -59,7 +60,7 @@ Graph, not a guess.
 | Revision | **`cTag`** | Changes on a content write, not on a rename - so renaming an open file does not make its tab look changed elsewhere. Accepted by `If-Match` (spike). |
 | Save | **One conditional write: `PUT .../content` with `If-Match: <cTag>`; 412 is `conflict`** | OneDrive honours `If-Match`, so Drive's check-write-confirm sequence and its race window do not apply. |
 | Create (chat, New File) | **`?@microsoft.graph.conflictBehavior=fail`; 409 is `exists`** | `If-None-Match: *` was ignored by the server in the spike and overwrote a file. |
-| Large uploads | **Single PUT only; a file over 4 MB is refused as `too-large`** | Graph's simple upload limit. Text files are already capped below it by `MAX_TEXT_FILE_BYTES`; upload sessions are not needed. |
+| Large uploads | **Single PUT only; a file over 4 MB is refused as `too-large`** | Graph's simple upload limit; upload sessions are not needed. (Ruled in PR 3: `MAX_TEXT_FILE_BYTES` is 16 MB, not below this limit, so a OneDrive file over 4 MB opens read-only and a save that grows past it is refused before anything is sent.) |
 | Media | **The tp-media byte source asks Graph for the 302 location per playback, then fetches ranges from that URL without a token** | The URL is pre-authenticated and short-lived. It stays in main; the renderer still sees only `tp-media://`. An expired URL (401/403) is fetched again once. |
 | Office files | **Listed like any other file of their type**; Open in OneDrive opens them in Office on the web | There is no export to markdown as there is for Google Docs, and nothing here should pretend a `.docx` is text. |
 | Workspace root | **The whole OneDrive, any folder in it, or a folder shared with you**, chosen in the shared folder picker | Matches Drive. Personal OneDrive has no shared drives. |
@@ -148,16 +149,23 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
   so the 302 is read and never followed; every other token-carrying request passes
   `redirect: "error"` to `fetch`). Each call: one retry after a 401 (with a fresh
   token), one after 429/503 honouring `Retry-After` up to 10 s, a deadline on headers.
+  (Ruled in PR 3: this holds for reads. A write is repeated once after a 401 with a forced token
+  and once after a 429, and never after a 503, any other 5xx, a timeout or a network rejection,
+  because the write may have landed.)
   - Reads: `me`, `drive`, `children(driveId, itemId, path)` (all pages, capped at the tree's
     listing limit), `item(driveId, itemId, path)`, `readText(..., limitBytes)`,
     `downloadLocation(...)` (302 `Location`, never followed with the token), `sharedWithMe`.
-  - Writes: `writeText(..., cTag)`, `createText(...)`, `createFolder(...)`, `rename(..., newName)`.
+  - Writes: `writeText(..., cTag)`, `createText(...)`, `createFolder(...)`, `rename(..., newName)` (ruled in PR 3: `writeContent(driveId, itemId, path, bytes, cTag)`, `createContent(driveId, itemId, path, bytes)`, `createFolder(driveId, itemId, parentPath, name)`, `rename(driveId, itemId, path, name)` - they take bytes, and the provider keeps the byte-order mark; uploads are sent as `application/octet-stream`; `If-Match` is on a save only, a create uses `conflictBehavior=fail` and never `If-None-Match`, and a new folder and a rename carry no conditional header; a write is repeated after a 401 or a 429 only, never after a 503 or a deadline).
   - A ranged read from the pre-authenticated URL accepts 206 with a `Content-Range` matching the
     request, or 200 only for a whole-file range - the same rule as Drive's `downloadRange`.
 - **`oneDriveWorkspace.js`** (PR 2, extended in PR 3): the provider. `GUARD_ROOT = "/onedrive"`.
   `list`, `read` (revision `{ id: cTag }`), `mediaSource`, `webAddress`; then `write`, `create`,
   `createDirectory`, `rename`. A short listing cache (as Drive's TTL) is kept for the tree and
-  dropped for a folder on any write into it.
+  dropped for a folder on any write into it (ruled in PR 3: keyed by the folded path, `oneDrivePathKey`, because Graph is case-insensitive; a listing in flight across a write is not kept).
+  (Ruled in PR 3: the provider has no `create` member. The chat's create and New File use
+  `write(path, content, null)`. A create checks its parent with a fresh metadata request before
+  the upload, so a parent deleted on the web is not re-created, and a taken name reports
+  `errors.nameTaken`.)
 - **`ipcHandlers.js`**: `onedrive:status`, `onedrive:connect`, `onedrive:cancelConnect`,
   `onedrive:disconnect` (PR 1); `onedrive:folders` (PR 2) answering
   `{ ok, folders: [{ driveId, itemId, name, shared }] }` for the picker, never a token or a URL.
@@ -190,10 +198,11 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 | 403, any code - on a file, a folder, or the account lookup at `/me` | `permission-denied` (e.g. saving into a view-only shared folder) |
 | Any other 4xx Graph or the token endpoint does not name, `/me` included | `unknown` - Microsoft answered, so never `offline` (PR 1 review) |
 | 404 `itemNotFound` | `not-found` |
-| 409 `nameAlreadyExists` | `exists` |
+| 409 `nameAlreadyExists` | `exists` (ruled in PR 3: inside the provider, which answers `conflict` - the provider contract's word for a taken name) |
 | 412 | `conflict` (save) |
 | 413, or a body over 4 MB | `too-large` |
-| 429, 503 | Wait `Retry-After` (at most 10 s), retry once, then `busy` (ruled in PR 2: the reason is `rate-limited`, the app's existing word for it) |
+| 429, 503 | Wait `Retry-After` (at most 10 s), retry once, then `busy` (ruled in PR 2: the reason is `rate-limited`, the app's existing word for it; ruled in PR 3: for a write, only the 429 is retried, never a 503) |
+| 400 or 503 answering a write | `bad-request` / `unknown`, never repeated (ruled in PR 3: a 503 does not promise the write was not processed) |
 | Network failure or deadline | `offline` / `unknown` - **never** `not-found` |
 | Own-drive ref, different account | `other-account` |
 
@@ -242,7 +251,8 @@ Three PRs, each a Minor bump, each with the release checklist in CLAUDE.md:
   the Shared with me tab may ship later. **Status at PR 2:** the shared-folder listing and
   `sharedWithMe` itself are pending the user's PR 2 manual check against a real shared folder. The
   floor is already in place: a Shared with me that answers nothing, or fails, shows as an empty
-  place, never an error over the dialog.
+  place, never an error over the dialog. **Still pending at PR 3:** the PR 3 manual check also
+  covers saving into a folder shared for editing and the refusal in a view-only one.
 - **`sharedWithMe` longevity**: not verified either way; Graph endpoints for shared items have
   changed before. PR 2 treats an error from it as "nothing shared" in the picker rather than failing the
   dialog.
