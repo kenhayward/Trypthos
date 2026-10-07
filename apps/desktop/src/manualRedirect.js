@@ -12,11 +12,15 @@
 ///
 /// `request(options)` is `net.request`-shaped (injected, so this is testable without Electron).
 /// Answers a 3xx as `{ status, headers: { get }, body: null, json }` whose only header is `Location`,
-/// and anything else as a `Response` over the collected body. Errors and aborts reject; the caller
+/// a 2xx as a `Response` with no body (aborted unread - the caller wants an address, not bytes), and
+/// anything else as a `Response` over the collected body, cut at 64 KB with the request aborted. Errors and aborts reject; the caller
 /// (`oneDriveApi.js`'s `deadlined`) turns a rejection into a result. Nothing here logs.
 
 /// Statuses a `Response` refuses a body for.
 const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+
+/// The most of a non-success body collected. Graph's error bodies are a few hundred bytes.
+const MAX_BODY_BYTES = 64 * 1024;
 
 function abortError(signal) {
   const reason = signal?.reason;
@@ -85,18 +89,51 @@ function createManualFetch(request) {
       });
 
       req.on("response", (message) => {
-        const chunks = [];
-        message.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-        message.on("error", (error) => settle(reject, error));
-        message.on("end", () => {
+        const status = message.statusCode;
+        const answer = (body) => {
           try {
-            const status = message.statusCode;
-            const body = NULL_BODY_STATUSES.has(status) ? null : Buffer.concat(chunks);
-            settle(resolve, new Response(body, { status, headers: headersOf(message.headers) }));
+            settle(resolve, new Response(NULL_BODY_STATUSES.has(status) ? null : body, { status, headers: headersOf(message.headers) }));
           } catch (error) {
             settle(reject, error);
           }
+        };
+        const stop = () => {
+          try {
+            req.abort();
+          } catch {
+            // Already finished: the answer is settled either way.
+          }
+        };
+
+        // A success here is the bytes themselves, not an address, and the caller refuses it unread:
+        // answer at once with no body rather than buffer a whole file into memory.
+        if (status >= 200 && status < 300) {
+          // The abort may still surface on the message as an error; it is not an answer any more.
+          message.on("error", () => {});
+          stop();
+          answer(null);
+          return;
+        }
+
+        // Anything else is read for Graph's error code, which is small. Past the cap the rest is not
+        // worth holding: stop collecting, abort, and answer what arrived.
+        const chunks = [];
+        let size = 0;
+        message.on("data", (chunk) => {
+          if (settled) return;
+          const bytes = Buffer.from(chunk);
+          const room = MAX_BODY_BYTES - size;
+          if (bytes.length <= room) {
+            chunks.push(bytes);
+            size += bytes.length;
+            return;
+          }
+          chunks.push(bytes.subarray(0, room));
+          stop();
+          answer(Buffer.concat(chunks));
         });
+        message.on("error", (error) => settle(reject, error));
+        message.on("end", () => answer(Buffer.concat(chunks)));
       });
 
       req.on("error", (error) => settle(reject, error));
