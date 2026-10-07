@@ -296,7 +296,7 @@ test("an unreachable Google is offline, and nothing secret is logged", async () 
 
 /// A listener that counts how many it opened and how many were closed.
 function countingListen() {
-  const { listenOnce } = require("../src/googleAuth");
+  const { listenOnce } = require("../src/loopbackOAuth");
   const counts = { opened: 0, closed: 0 };
   const listen = async () => {
     const listener = await listenOnce();

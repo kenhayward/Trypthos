@@ -1,6 +1,5 @@
 "use strict";
 
-const http = require("node:http");
 const nodeCrypto = require("node:crypto");
 const {
   GOOGLE_REVOKE_URL,
@@ -16,6 +15,7 @@ const {
   revokeRequestBody,
   tokenRequestBody,
 } = require("@trypthos/domain");
+const { listenOnce, pkcePair } = require("./loopbackOAuth");
 
 /// A Google account: signing in, staying signed in, and signing out.
 ///
@@ -37,47 +37,8 @@ const CONSENT_TIMEOUT_MS = 5 * 60_000;
 /// An access token this close to expiry is refreshed rather than used.
 const EXPIRY_MARGIN_MS = 60_000;
 
-/// What the browser tab shows after Google redirects back. English, like the shell's menus: this
-/// page is drawn before the renderer and its catalogue are involved.
-const DONE_PAGE =
-  '<!doctype html><meta charset="utf-8"><title>Trypthos</title>' +
-  '<p style="font-family:system-ui,sans-serif">You can close this tab and return to Trypthos.</p>';
-
 function failure(reason) {
   return { ok: false, reason };
-}
-
-/// A listener on a free loopback port that resolves `arrived` with the first request to `/`.
-///
-/// Only `/` counts: a browser also asks for /favicon.ico, and that must not be taken for Google.
-function listenOnce() {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      const origin = `http://127.0.0.1:${port}`;
-      let settle;
-      const arrived = new Promise((done) => (settle = done));
-      server.on("request", (request, response) => {
-        const url = new URL(request.url ?? "/", origin);
-        if (url.pathname !== "/") {
-          response.writeHead(404).end();
-          return;
-        }
-        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(DONE_PAGE);
-        settle(url.toString());
-      });
-      resolve({
-        redirectUri: origin,
-        arrived,
-        close: () => {
-          server.closeAllConnections?.();
-          server.close();
-        },
-      });
-    });
-  });
 }
 
 function createGoogleAuth({
@@ -198,9 +159,7 @@ function createGoogleAuth({
       return failure(mine.reason);
     }
 
-    const verifier = randomBytes(32).toString("base64url");
-    const challenge = nodeCrypto.createHash("sha256").update(verifier).digest("base64url");
-    const state = randomBytes(16).toString("base64url");
+    const { verifier, challenge, state } = pkcePair(randomBytes);
 
     const timer = setTimeout(() => mine.cancel("timed-out"), consentTimeoutMs);
 
@@ -339,4 +298,4 @@ function createGoogleAuth({
   return { connect, cancelConnect, accessToken, status, disconnect };
 }
 
-module.exports = { createGoogleAuth, listenOnce, GOOGLE_PROVIDER };
+module.exports = { createGoogleAuth, GOOGLE_PROVIDER };
