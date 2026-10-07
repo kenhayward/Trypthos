@@ -271,3 +271,83 @@ export function oneDriveFoldersOf(items: readonly OneDriveItem[], driveId: strin
   }
   return folders.sort((one, other) => compare(one.name.toLowerCase(), other.name.toLowerCase()) || compare(one.name, other.name));
 }
+
+/// The most Graph takes in one simple upload. A larger file needs an upload session, which this app
+/// does not make (spec, "Large uploads"): a OneDrive file larger than this opens read-only, and a save
+/// that grows past it is refused before anything is sent. `MAX_TEXT_FILE_BYTES` (16 MB) is the read
+/// limit and does not keep text below this one.
+export const ONEDRIVE_UPLOAD_LIMIT_BYTES = 4 * 1024 * 1024;
+
+/// A content tag as it may go back to Graph in an `If-Match` header: printable ASCII, no leading or
+/// trailing space, at most 256 characters. Graph's tags are quoted strings of that alphabet; one that
+/// is not - a line break above all - would make the header something else. A tag comes back from the
+/// renderer as the revision a save presents, so it is untrusted input, checked before it is sent.
+const ONEDRIVE_TAG_PATTERN = /^[!-~](?:[ -~]{0,254}[!-~])?$/;
+
+export function isOneDriveTag(value: unknown): value is string {
+  return typeof value === "string" && ONEDRIVE_TAG_PATTERN.test(value);
+}
+
+export const OneDriveTagSchema = z.string().regex(ONEDRIVE_TAG_PATTERN);
+
+/// The key a folder's listing is held under: its workspace path, folded. OneDrive compares names
+/// without regard to case, so one folder reached by two spellings - the tree's, a wiki link's, the
+/// chat's - is one folder, and a write through either spelling must drop the one listing.
+/// `toLowerCase` rather than a locale's folding: a pair Graph treats as one name and this does not
+/// costs at worst a listing up to a minute stale, never a lost write - every write is conditional on
+/// Graph's side.
+export function oneDrivePathKey(path: string): string {
+  return path.toLowerCase();
+}
+
+/// An item that is not the anchor itself, by its path: `oneDrivePathUrl` answers "" with the item, so
+/// a caller that must never address the workspace's own folder refuses it first.
+function oneDriveBelowUrl(driveId: string, itemId: string, path: string): string {
+  if (path === "") throw new Error("unsafe OneDrive path");
+  return oneDrivePathUrl(driveId, itemId, path);
+}
+
+/// A file's content, by its path below `itemId`, for a save (with `If-Match`). The workspace root is
+/// never a file, so `""` throws like any other unaddressable path.
+export function oneDriveUploadUrl(driveId: string, itemId: string, path: string): string {
+  return `${oneDriveBelowUrl(driveId, itemId, path)}/content`;
+}
+
+/// A new file's content. Graph refuses a name already in use - case-insensitively - with 409
+/// `nameAlreadyExists` rather than replacing it. `If-None-Match: *` was ignored in the spike and
+/// overwrote a file, so this query is the only guard a create has.
+export function oneDriveCreateUrl(driveId: string, itemId: string, path: string): string {
+  return `${oneDriveUploadUrl(driveId, itemId, path)}?@microsoft.graph.conflictBehavior=fail`;
+}
+
+/// Where a new folder is made: among the children of the folder at `parentPath` ("" is `itemId`).
+export function oneDriveCreateFolderUrl(driveId: string, itemId: string, parentPath: string): string {
+  return `${oneDrivePathUrl(driveId, itemId, parentPath)}/children`;
+}
+
+/// An item by its path, for a rename. The workspace's own folder is never renamed, so `""` throws.
+export function oneDriveRenameUrl(driveId: string, itemId: string, path: string): string {
+  return oneDriveBelowUrl(driveId, itemId, path);
+}
+
+/// A new folder, failing on a name already in use. In the body, which is Graph's documented form for
+/// creating a folder; a content PUT carries the same instruction in its query (`oneDriveCreateUrl`).
+export function oneDriveFolderBody(name: string): {
+  name: string;
+  folder: Record<string, never>;
+  "@microsoft.graph.conflictBehavior": "fail";
+} {
+  return { name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" };
+}
+
+export type OneDriveWriteFailure = OneDriveFailure | "bad-request";
+
+/// What a refusal of a WRITE means. Two rows differ from a read's (`oneDriveFailure`): a 400 is
+/// `bad-request` - Graph refused the request, a name it will not take, and did nothing - and a 503 is
+/// `unknown`, because unlike a 429 it does not promise the write was not processed. The client never
+/// repeats a write on it; the next save's `If-Match` says what happened.
+export function oneDriveWriteFailure(status: number, code: string | null): OneDriveWriteFailure {
+  if (status === 400) return "bad-request";
+  if (status === 503) return "unknown";
+  return oneDriveFailure(status, code);
+}
