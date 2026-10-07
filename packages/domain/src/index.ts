@@ -389,6 +389,7 @@ export {
   PROVIDER_KINDS,
   GitHubWorkspaceRefSchema,
   GoogleDriveWorkspaceRefSchema,
+  OneDriveWorkspaceRefSchema,
   LocalWorkspaceRefSchema,
   WorkspaceRefSchema,
   identicalWorkspaceRefs,

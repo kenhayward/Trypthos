@@ -196,6 +196,41 @@ describe("a Google Drive folder", () => {
   });
 });
 
+describe("a OneDrive folder", () => {
+  const ref = { kind: "onedrive" as const, driveId: "d0c0ffee", itemId: "ITEM!3", name: "Notes" };
+
+  it("parses, own or shared with the user", () => {
+    expect(WorkspaceRefSchema.parse(ref)).toEqual(ref);
+    const shared = { ...ref, driveId: "beefcafe", shared: true as const };
+    expect(WorkspaceRefSchema.parse(shared)).toEqual(shared);
+  });
+
+  // Both ids reach a Graph address; the schema is the boundary that keeps them ids.
+  it("refuses an id that is not a OneDrive id, a shared flag that is not true, and an unknown field", () => {
+    expect(WorkspaceRefSchema.safeParse({ ...ref, itemId: "../x" }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, driveId: "a/b" }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, shared: false }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, name: "" }).success).toBe(false);
+    expect(WorkspaceRefSchema.safeParse({ ...ref, extra: 1 }).success).toBe(false);
+  });
+
+  it("is named, keyed, labelled and marked as a OneDrive folder", () => {
+    expect(workspaceRefName(ref)).toBe("Notes");
+    expect(workspaceRefKey(ref)).toBe("onedrive:d0c0ffee:ITEM!3");
+    expect(workspaceRefLabel(ref)).toBe("OneDrive / Notes");
+    expect(workspaceRefMark(ref)).toBe("onedrive");
+    expect(PROVIDER_KINDS).toContain("onedrive");
+  });
+
+  // Graph ids are case-sensitive, so the key is not folded. The name is only what it was called, and
+  // whether it was shared is a fact about how it was reached, not which place it is.
+  it("is the same workspace whatever it was called, and another one for another item", () => {
+    expect(sameWorkspaceRef(ref, { ...ref, name: "Renamed" })).toBe(true);
+    expect(sameWorkspaceRef(ref, { ...ref, shared: true as const })).toBe(true);
+    expect(sameWorkspaceRef(ref, { ...ref, itemId: "item!3" })).toBe(false);
+  });
+});
+
 // "The same place" is not "nothing to write": a ref that gained a field is the same place with
 // something new to remember, and a key comparison would never let it reach the settings file.
 describe("identicalWorkspaceRefs", () => {

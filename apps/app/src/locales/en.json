@@ -615,6 +615,7 @@
     "kindVault": "Obsidian vault",
     "kindRepository": "GitHub repository",
     "kindDrive": "Google Drive folder",
+    "kindOneDrive": "OneDrive folder",
     "sections": "Sections",
     "sectionGraph": "Graph",
     "sectionReadme": "Readme",

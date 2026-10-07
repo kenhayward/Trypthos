@@ -268,6 +268,9 @@ function registerIpcHandlers({
   /// A factory, like `createGitHub`, so a test can hand in a fake. No client without `google`: a
   /// build with no OAuth client has no token to make one with.
   createGoogleDrive = null,
+  /// Builds the OneDrive client over an access-token supplier - `oneDriveApi.js` in the app. A
+  /// factory, like `createGoogleDrive`, so a test can hand in a fake. No client without `microsoft`.
+  createOneDrive = null,
   chat,
   openExternal = async () => {},
   /// Shows an absolute path in the operating system's file manager: a folder opened, a file shown
@@ -672,7 +675,12 @@ function registerIpcHandlers({
       ? null
       : createGoogleDrive((options) => google.accessToken(options));
 
-  const providerDeps = { github, drive };
+  const oneDrive =
+    microsoft === null || createOneDrive === null
+      ? null
+      : createOneDrive((options) => microsoft.accessToken(options));
+
+  const providerDeps = { github, drive, oneDrive };
 
   /// The repositories the account owns, held for the session.
   ///

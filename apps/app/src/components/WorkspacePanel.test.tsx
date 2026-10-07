@@ -726,6 +726,24 @@ describe("the sources a workspace can be opened from", () => {
     expect(mark?.getAttribute("class") ?? "").toContain("text-drive");
   });
 
+  it("marks a OneDrive folder with OneDrive's glyph and colour, and names it as OneDrive's", () => {
+    panel({
+      workspaces: [
+        {
+          id: "Plans",
+          name: "Plans",
+          ref: { kind: "onedrive" as const, driveId: "d0c0ffee", itemId: "ITEM!3", name: "Plans" },
+          truncated: false,
+        },
+      ],
+    });
+    const row = screen.getByRole("button", { name: "Plans" });
+    const mark = [...row.querySelectorAll("svg")].at(-1);
+    expect(mark?.getAttribute("data-mark")).toBe("onedrive");
+    expect(mark?.getAttribute("class") ?? "").toContain("text-onedrive");
+    expect(row.getAttribute("title")).toBe("OneDrive / Plans");
+  });
+
   it("marks each Drive workspace with the kind of place it is", () => {
     const variants = ["my-drive", "shared-drive", "shared-folder", "folder"] as const;
     panel({

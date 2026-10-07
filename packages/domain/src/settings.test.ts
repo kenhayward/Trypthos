@@ -1021,8 +1021,31 @@ describe("version 24", () => {
   it("leaves workspaces remembered at version 23 exactly as they were", () => {
     const before = { ...DEFAULT_SETTINGS, schemaVersion: 23, workspaces: [{ kind: "google-drive" as const, folderId: "root", name: "My Drive" }] };
     const loaded = loadSettings(before);
-    expect(SETTINGS_VERSION).toBe(24);
-    expect(loaded.schemaVersion).toBe(24);
+    expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(24);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
+    expect(loaded.workspaces).toEqual(before.workspaces);
+  });
+});
+
+describe("version 25", () => {
+  it("remembers a OneDrive folder, own or shared", () => {
+    const mine = { kind: "onedrive" as const, driveId: "d0c0ffee", itemId: "root", name: "My files" };
+    const shared = { kind: "onedrive" as const, driveId: "beefcafe", itemId: "SHARED!7", shared: true as const, name: "Joint" };
+    expect(loadSettings({ ...DEFAULT_SETTINGS, workspaces: [mine, shared] }).workspaces).toEqual([mine, shared]);
+  });
+
+  it("leaves workspaces remembered at version 24 exactly as they were", () => {
+    const before = {
+      ...DEFAULT_SETTINGS,
+      schemaVersion: 24,
+      workspaces: [
+        { kind: "google-drive" as const, folderId: "root", rootId: "0ARealRootId", name: "My Drive" },
+        { kind: "local" as const, root: "/v/Notes" },
+      ],
+    };
+    const loaded = loadSettings(before);
+    expect(SETTINGS_VERSION).toBe(25);
+    expect(loaded.schemaVersion).toBe(25);
     expect(loaded.workspaces).toEqual(before.workspaces);
   });
 });

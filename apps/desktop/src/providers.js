@@ -6,6 +6,7 @@ const { createPathGuard, workspaceRefName } = require("@trypthos/domain");
 const { createLocalWorkspace } = require("./localWorkspace");
 const { openGitHubWorkspace } = require("./githubWorkspace");
 const { openGoogleDriveWorkspace } = require("./googleDriveWorkspace");
+const { openOneDriveWorkspace } = require("./oneDriveWorkspace");
 
 /// The provider registry: a reference in, an open workspace out.
 ///
@@ -139,10 +140,24 @@ async function openGoogleDrive(ref, { drive }) {
   };
 }
 
+/// A OneDrive folder. Read through the OneDrive client the handlers built over the Microsoft account;
+/// a build without a Microsoft client has none, which is "not configured", as for Google Drive. The
+/// opener checks an own-drive reference against the connected account (`other-account`).
+async function openOneDrive(ref, { oneDrive }) {
+  if (!oneDrive) return { ok: false, reason: "not-configured" };
+  const opened = await openOneDriveWorkspace({ ref, api: oneDrive });
+  if (!opened.ok) return opened;
+  return {
+    ok: true,
+    workspace: { ref, name: opened.name, root: null, guard: null, provider: opened.provider, vault: false },
+  };
+}
+
 const OPENERS = {
   local: openLocal,
   github: openGitHub,
   "google-drive": openGoogleDrive,
+  onedrive: openOneDrive,
 };
 
 /// Opens whatever a reference names, or explains why it could not be opened.
