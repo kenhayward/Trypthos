@@ -393,6 +393,11 @@
     "scala": "Scala",
     "dart": "Dart"
   },
+  "pdfViewer": {
+    "pageOf": "Page {{page}} of {{pages}}",
+    "couldNotOpen": "This file could not be opened as a PDF.",
+    "needsPassword": "This file needs a password to open."
+  },
   "errors": {
     "notDesktop": "Opening folders needs the desktop app. This is the browser preview.",
     "noWorkspace": "No folder is open yet.",
