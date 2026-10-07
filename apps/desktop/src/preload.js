@@ -170,6 +170,12 @@ contextBridge.exposeInMainWorld("trypthos", {
   connectGoogle: () => ipcRenderer.invoke("google:connect"),
   cancelGoogleConnect: () => ipcRenderer.invoke("google:cancelConnect"),
   disconnectGoogle: () => ipcRenderer.invoke("google:disconnect"),
+  /// OneDrive, as an account. Write-only like Google: `status` answers with an EMAIL and never a
+  /// token, and connecting takes no argument.
+  oneDriveStatus: () => ipcRenderer.invoke("onedrive:status"),
+  connectOneDrive: () => ipcRenderer.invoke("onedrive:connect"),
+  cancelOneDriveConnect: () => ipcRenderer.invoke("onedrive:cancelConnect"),
+  disconnectOneDrive: () => ipcRenderer.invoke("onedrive:disconnect"),
   /// The folders inside one Drive folder, or the top level when `parentId` is null. Ids and names
   /// only - the picker chooses a folder, and opening it goes through `openWorkspaceRef`.
   listDriveFolders: (location) => ipcRenderer.invoke("google:folders", location),

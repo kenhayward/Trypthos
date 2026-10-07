@@ -43,6 +43,7 @@ jobs:
         shell: bash
         env:
           GOOGLE_OAUTH_CLIENT_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
+          ONEDRIVE_CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
         run: |
           if [ -n "$GOOGLE_OAUTH_CLIENT_JSON" ]; then
             mkdir -p apps/desktop/build
@@ -50,6 +51,13 @@ jobs:
             echo "ok: Google OAuth client written"
           else
             echo "::warning::GOOGLE_OAUTH_CLIENT_JSON is not set, so this build has no Google Drive sign-in."
+          fi
+          if [ -n "$ONEDRIVE_CLIENT_ID" ]; then
+            mkdir -p apps/desktop/build
+            printf '{ "clientId": "%s" }' "$ONEDRIVE_CLIENT_ID" > apps/desktop/build/onedrive-client.json
+            echo "ok: OneDrive client written"
+          else
+            echo "::warning::ONEDRIVE_CLIENT_ID is not set, so this build has no OneDrive sign-in."
           fi
 
       # --publish never, deliberately. Letting each matrix job publish for itself is what produced

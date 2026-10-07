@@ -77,6 +77,10 @@ export const IPC_CHANNELS = [
   "google:cancelConnect",
   "google:disconnect",
   "google:folders",
+  "onedrive:status",
+  "onedrive:connect",
+  "onedrive:cancelConnect",
+  "onedrive:disconnect",
 ] as const;
 
 /// There is no channel that returns an API key, and there must never be one.

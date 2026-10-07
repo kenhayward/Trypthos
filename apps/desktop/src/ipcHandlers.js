@@ -262,6 +262,8 @@ function registerIpcHandlers({
   /// An instance rather than a factory, unlike GitHub: there is no token to verify before storing,
   /// because the sign-in itself is the verification and happens entirely in the main process.
   google = null,
+  /// The Microsoft account - `microsoftAuth.js` - or null in a build without a OneDrive client id.
+  microsoft = null,
   /// Builds the Google Drive client over an access-token supplier - `googleDriveApi.js` in the app.
   /// A factory, like `createGitHub`, so a test can hand in a fake. No client without `google`: a
   /// build with no OAuth client has no token to make one with.
@@ -748,6 +750,25 @@ function registerIpcHandlers({
   });
 
   ipcMain.handle("google:disconnect", async () => (google === null ? { ok: true } : google.disconnect()));
+
+  /// OneDrive, as an account. The same rules as Google: answers carry an email, never a token, and
+  /// none of these takes a payload - there is nothing of the renderer's to validate.
+  ipcMain.handle("onedrive:status", async () =>
+    microsoft === null
+      ? { ok: true, configured: false, connected: false, email: null, reason: null }
+      : microsoft.status(),
+  );
+
+  ipcMain.handle("onedrive:connect", async () =>
+    microsoft === null ? { ok: false, reason: "not-configured" } : microsoft.connect(),
+  );
+
+  ipcMain.handle("onedrive:cancelConnect", async () => {
+    microsoft?.cancelConnect();
+    return { ok: true };
+  });
+
+  ipcMain.handle("onedrive:disconnect", async () => (microsoft === null ? { ok: true } : microsoft.disconnect()));
 
   /// The Drive folder picker's only window onto Drive: the shared drives, the folders shared with the
   /// user, or the folders inside one folder (My Drive is `root`), by id and name.

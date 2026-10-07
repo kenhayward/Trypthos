@@ -123,6 +123,29 @@ test("an unforced close from the title bar still asks about unsaved work", async
   assert.equal(window.closed, false);
 });
 
+test("the OneDrive account calls reach their handlers, carrying nothing from the renderer", async () => {
+  const { bridge, ipcMain } = loadBridge();
+  const received = [];
+  for (const channel of ["onedrive:status", "onedrive:connect", "onedrive:cancelConnect", "onedrive:disconnect"]) {
+    ipcMain.handle(channel, async (_event, payload) => {
+      received.push([channel, payload]);
+      return { ok: true };
+    });
+  }
+
+  await bridge.oneDriveStatus();
+  await bridge.connectOneDrive();
+  await bridge.cancelOneDriveConnect();
+  await bridge.disconnectOneDrive();
+
+  assert.deepEqual(received, [
+    ["onedrive:status", undefined],
+    ["onedrive:connect", undefined],
+    ["onedrive:cancelConnect", undefined],
+    ["onedrive:disconnect", undefined],
+  ]);
+});
+
 test("the Google account calls reach their handlers, carrying nothing from the renderer", async () => {
   const { bridge, ipcMain } = loadBridge();
   const received = [];

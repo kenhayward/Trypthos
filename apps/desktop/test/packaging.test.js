@@ -67,8 +67,8 @@ test("only the tray icons and google-oauth-client are packed as resources, by na
   assert.ok(Array.isArray(entry.filter) && entry.filter.length > 0, "the entry must filter");
   for (const pattern of entry.filter) {
     assert.ok(
-      pattern.match(/^tray/) || pattern === "google-oauth-client.json",
-      `resource filter "${pattern}" must be tray* or google-oauth-client.json`,
+      pattern.match(/^tray/) || pattern === "google-oauth-client.json" || pattern === "onedrive-client.json",
+      `resource filter "${pattern}" must be tray*, google-oauth-client.json or onedrive-client.json`,
     );
   }
 });

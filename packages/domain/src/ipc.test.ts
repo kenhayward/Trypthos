@@ -90,6 +90,10 @@ describe("IPC_CHANNELS", () => {
       "google:cancelConnect",
       "google:disconnect",
       "google:folders",
+      "onedrive:status",
+      "onedrive:connect",
+      "onedrive:cancelConnect",
+      "onedrive:disconnect",
     ]);
   });
 
