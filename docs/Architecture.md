@@ -743,7 +743,8 @@ a network, and it is the shape the next three providers should copy.
   build's shape would drop every token this build cannot see; the renderer shows
   `errors.newerVersionCredentials`. A file nothing can parse is copied to
   `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) and then replaced; one
-  that cannot be opened refuses every change (`unopenable`). The Google, Microsoft and GitHub
+  that cannot be opened refuses every change (`unopenable`), and a backup that collides answers
+  `backup-failed` rather than throwing across IPC. The Google, Microsoft and GitHub
   disconnects pass a refused delete through as their answer, after dropping the in-memory access
   token, so a sign-out that did not reach disk is never reported as done.
 - **Pinned to a commit.** Opening resolves the default branch and then that branch's head commit, and
@@ -1452,7 +1453,9 @@ in the user's workspace.
   key), and the session runs on defaults in memory. The way out is running the newer build, which
   finds its file intact. A file **no build can read** (not JSON, wrong shape, no migration path) is
   copied to `settings.json.unreadable-<timestamp>` and then replaced, once; the write answers
-  `replacedUnreadable: true` and `settings:write` skips the sweep for it too. A file that cannot be
+  `replacedUnreadable: true` and `settings:write` skips the sweep for it - and for every later write
+  in that run of the app (`sweepHeld`), since the session's profiles started from defaults; an
+  unreferenced key is swept on a later launch, once settings load cleanly. A file that cannot be
   opened at all is refused until the next write. **A failed load is remembered** per directory: if
   the load hit a held file (EBUSY at launch) and answered defaults, a later write over a file that
   now reads as current is refused (`not-loaded`) until a load succeeds - otherwise the renderer's
