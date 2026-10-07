@@ -37,11 +37,11 @@ function fakeAccounts() {
 
 const json = (status, body) => ({ ok: status < 300, status, json: async () => body });
 
-function microsoftOver(accounts) {
+function microsoftOver(accounts, authLog = { error: () => {} }) {
   return createMicrosoftAuth({
     client: { clientId: "00000000-1111-2222-3333-444444444444" },
     accounts,
-    logger: { error: () => {} },
+    logger: authLog,
     fetch: async (url, init = {}) => {
       if (url.endsWith("/token")) {
         const grant = new URLSearchParams(init.body).get("grant_type");
@@ -65,10 +65,13 @@ function microsoftOver(accounts) {
 }
 
 async function withHandlers(body, { microsoft = "real" } = {}) {
+  const authLogged = [];
+  const authLog = { error: (...args) => void authLogged.push(args.map(String).join(" ")) };
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-onedrive-ipc-"));
   try {
     const ipcMain = fakeIpcMain();
     const accounts = fakeAccounts();
+    const auth = microsoft === "none" ? null : microsoftOver(accounts, authLog);
     registerIpcHandlers({
       ipcMain,
       dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }), showSaveDialog: async () => ({ canceled: true }) },
@@ -76,10 +79,10 @@ async function withHandlers(body, { microsoft = "real" } = {}) {
       userDataDir: userData,
       secrets: { endpointsWithKeys: async () => [], setKey: async () => ({ ok: true }), deleteKey: async () => {}, retainOnly: async () => {} },
       accounts,
-      microsoft: microsoft === "none" ? null : microsoftOver(accounts),
+      microsoft: auth,
       explorerIntegration: { supported: () => false, isRegistered: async () => false },
     });
-    await body({ ipcMain, accounts });
+    await body({ ipcMain, accounts, auth, authLogged });
   } finally {
     await fs.rm(userData, { recursive: true, force: true });
   }
@@ -107,12 +110,15 @@ test("a build without a client says so on every channel", async () => {
   );
 });
 
-// The leak guard. Every channel, with an empty payload, after a connect and a refresh - so both the
-// first refresh token and the rotated one have existed - must answer without any token in it, in its
-// answer, in a thrown error, or in a log line.
+// The leak guard. Every channel, with an empty payload, after a connect and a FORCED refresh - connect
+// caches the access token, so only a forced refresh issues the refresh_token grant and rotates the
+// stored token - so the first refresh token, the rotated one and the access token have all existed.
+// No answer, thrown error or log line (the console's, or microsoftAuth's own logger) may carry one.
 test("no channel answers with a Microsoft token", async () => {
-  await withHandlers(async ({ ipcMain }) => {
+  await withHandlers(async ({ ipcMain, accounts, auth, authLogged }) => {
     await ipcMain.invoke("onedrive:connect");
+    await auth.accessToken({ force: true });
+    assert.equal(accounts.tokens.get("onedrive"), ROTATED, "the refresh did not rotate the stored token");
     const logged = [];
     const realConsoleError = console.error;
     console.error = (...args) => void logged.push(args.map(String).join(" "));
@@ -130,7 +136,7 @@ test("no channel answers with a Microsoft token", async () => {
     } finally {
       console.error = realConsoleError;
     }
-    const leaked = logged.join(" ");
+    const leaked = [...logged, ...authLogged].join(" ");
     for (const token of [REFRESH, ROTATED, ACCESS]) assert.ok(!leaked.includes(token), "a log line carried a Microsoft token");
     const last = JSON.stringify(await ipcMain.invoke("onedrive:disconnect"));
     for (const token of [REFRESH, ROTATED, ACCESS]) assert.ok(!last.includes(token));
