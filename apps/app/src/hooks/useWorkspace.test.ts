@@ -453,6 +453,172 @@ describe("a Google Drive workspace", () => {
     });
   });
 
+  // Issue #236. A second Ctrl+S while the first save is still on its way would present the revision
+  // the first save is about to replace, and the provider would answer "changed elsewhere" about the
+  // user's own save. A save of a path already in flight waits, and becomes ONE follow-up.
+  describe("a save pressed while the same file is still saving", () => {
+    async function gatedDrive(paths: readonly string[] = ["Notes/Plan.md"]) {
+      const writes: { path: string; content: string; revision: string | null }[] = [];
+      const settle: ((value: WriteResult) => void)[] = [];
+      const { client } = fakeClient({
+        readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
+        writeFile: (path, content, revision) => {
+          writes.push({ path, content, revision: revision?.id ?? null });
+          return new Promise<WriteResult>((resolve) => settle.push(resolve));
+        },
+      });
+      const hook = renderHook(() => useWorkspace(client));
+      await act(async () => {
+        await hook.result.current.actions.openRef(driveRef);
+      });
+      const opened: string[] = [];
+      for (const path of paths) {
+        await act(async () => {
+          await hook.result.current.actions.openPath(path);
+        });
+        opened.push(hook.result.current.state.activePath ?? "");
+        act(() => {
+          hook.result.current.actions.edit(`# Two of ${path}\n`);
+        });
+      }
+      return { result: hook.result, writes, settle, opened };
+    }
+
+    function press(result: { current: { actions: WorkspaceActions } }, path?: string) {
+      let saving: Promise<boolean> = Promise.resolve(false);
+      act(() => {
+        saving = result.current.actions.save(path);
+      });
+      return saving;
+    }
+
+    it("sends nothing until the first answers, then one write of the latest text at the NEW revision", async () => {
+      const { result, writes, settle } = await gatedDrive();
+      const first = press(result);
+      act(() => {
+        result.current.actions.edit("# Three\n");
+      });
+      const second = press(result);
+
+      expect(writes).toHaveLength(1);
+
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "h2" } });
+        expect(await first).toBe(true);
+      });
+      expect(writes).toHaveLength(2);
+      expect(writes[1]).toMatchObject({ content: "# Three\n", revision: "h2" });
+      // Still saving, and still unsaved: the follow-up has not landed yet.
+      expect(result.current.state.savingPaths).toEqual([result.current.state.activePath]);
+      expect(result.current.state.dirty).toBe(true);
+
+      await act(async () => {
+        settle[1]?.({ ok: true, revision: { id: "h3" } });
+        expect(await second).toBe(true);
+      });
+      expect(writes).toHaveLength(2);
+      expect(result.current.state.dirty).toBe(false);
+      expect(result.current.state.file?.revision.id).toBe("h3");
+      expect(result.current.state.savingPaths).toEqual([]);
+      expect(result.current.state.errorKey).toBeNull();
+    });
+
+    it("makes three presses during one save into exactly one follow-up", async () => {
+      const { result, writes, settle } = await gatedDrive();
+      const first = press(result);
+      const later: Promise<boolean>[] = [];
+      for (const text of ["# A\n", "# B\n", "# C\n"]) {
+        act(() => {
+          result.current.actions.edit(text);
+        });
+        later.push(press(result));
+      }
+
+      expect(writes).toHaveLength(1);
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "h2" } });
+        await first;
+      });
+      expect(writes).toHaveLength(2);
+      expect(writes[1]).toMatchObject({ content: "# C\n", revision: "h2" });
+
+      await act(async () => {
+        settle[1]?.({ ok: true, revision: { id: "h3" } });
+        expect(await Promise.all(later)).toEqual([true, true, true]);
+      });
+      expect(writes).toHaveLength(2);
+      expect(result.current.state.dirty).toBe(false);
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+
+    it("drops the queued save when the first fails, and leaves the document dirty", async () => {
+      const { result, writes, settle } = await gatedDrive();
+      const first = press(result);
+      act(() => {
+        result.current.actions.edit("# Three\n");
+      });
+      const second = press(result);
+
+      await act(async () => {
+        settle[0]?.({ ok: false, reason: "offline" });
+        expect(await first).toBe(false);
+      });
+      // Asserted before awaiting the second press, which a stale write would leave hanging.
+      expect(writes).toHaveLength(1);
+      await act(async () => {
+        expect(await second).toBe(false);
+      });
+      expect(result.current.state.dirty).toBe(true);
+      expect(result.current.state.content).toBe("# Three\n");
+      expect(result.current.state.file?.revision.id).toBe("h1");
+      // The first save's own failure, and nothing claiming the file changed elsewhere.
+      expect(result.current.state.errorKey).toBe(providerFailureKey("google-drive", "offline", "save"));
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+
+    it("sends no follow-up when nothing changed since the first save went out", async () => {
+      const { result, writes, settle } = await gatedDrive();
+      const first = press(result);
+      const second = press(result);
+
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "h2" } });
+        expect(await first).toBe(true);
+      });
+      expect(writes).toHaveLength(1);
+      await act(async () => {
+        expect(await second).toBe(true);
+      });
+      expect(result.current.state.dirty).toBe(false);
+      expect(result.current.state.file?.revision.id).toBe("h2");
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+
+    it("keeps two different files saving independently", async () => {
+      const { result, writes, settle, opened } = await gatedDrive(["Notes/Plan.md", "Notes/Other.md"]);
+      const [plan = "", other = ""] = opened;
+      const savingPlan = press(result, plan);
+      const savingOther = press(result, other);
+
+      expect(writes.map((write) => write.path)).toEqual([plan, other]);
+      expect(writes.map((write) => write.revision)).toEqual(["h1", "h1"]);
+      expect(result.current.state.savingPaths).toEqual([plan, other]);
+
+      await act(async () => {
+        settle[1]?.({ ok: true, revision: { id: "o2" } });
+        expect(await savingOther).toBe(true);
+      });
+      expect(result.current.state.savingPaths).toEqual([plan]);
+
+      await act(async () => {
+        settle[0]?.({ ok: true, revision: { id: "p2" } });
+        expect(await savingPlan).toBe(true);
+      });
+      expect(writes).toHaveLength(2);
+      expect(result.current.state.savingPaths).toEqual([]);
+    });
+  });
+
   it("keeps the edit, stays dirty and says conflict when Drive moved on", async () => {
     const { client } = fakeClient({
       readFile: async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "h1" } }),
