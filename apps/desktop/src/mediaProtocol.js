@@ -1,9 +1,9 @@
 "use strict";
 
-const { MEDIA_SCHEME, mediaPathFromUrl, mediaTypeFor } = require("@trypthos/domain");
+const { MEDIA_SCHEME, mediaPathFromUrl, mediaTypeFor, pdfMediaTypeFor } = require("@trypthos/domain");
 const { parseRange } = require("./mediaRange");
 
-/// Serving video and audio to the window.
+/// Serving video, audio and PDFs to the window.
 ///
 /// The second route out of the shell, after IPC, and it exists because the first one cannot do this
 /// job. A picture crosses IPC as a base64 data URL; a clip is a hundred times too large for that,
@@ -91,8 +91,9 @@ function createMediaHandler({ locate }) {
 
     // **Decided HERE, from the name.** A declared media type is an instruction to the engine about
     // how to read the bytes that follow, so it is never taken from the renderer - and a name no
-    // catalogue row claims is refused rather than guessed at.
-    const mediaType = mediaTypeFor(qualified);
+    // catalogue row claims is refused rather than guessed at. A PDF is claimed by its own row, and
+    // the engine that reads it is chosen by the window, not by this header.
+    const mediaType = mediaTypeFor(qualified) ?? pdfMediaTypeFor(qualified);
     if (mediaType === null) return refuse(404);
 
     const found = await locate(qualified);
