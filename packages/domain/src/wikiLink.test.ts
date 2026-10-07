@@ -28,6 +28,12 @@ describe("wikiLinkFileName", () => {
   it("treats a dot that ends no known extension as part of the name", () => {
     expect(wikiLinkFileName("v1.2 release")).toBe("v1.2 release.md");
   });
+
+  // A document the catalogue has a row for is named by its extension like every other type - the
+  // row is what answers this, and there is no second list beside it that could answer otherwise.
+  it("keeps the extension of a document the catalogue has a row for", () => {
+    expect(wikiLinkFileName("Notes/report.pdf")).toBe("Notes/report.pdf");
+  });
 });
 
 /// Which file a wiki link means, among the files whose name matches.

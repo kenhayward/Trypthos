@@ -1,4 +1,4 @@
-import { type FileTypeId, enabledFileTypes } from "./fileTypes";
+import { type FileTypeId, enabledFileTypes, type FileTypeKind } from "./fileTypes";
 
 /// Making a file that does not exist yet.
 ///
@@ -35,14 +35,18 @@ export interface NewFileType {
   readonly extension: string;
 }
 
+/// The kinds a new file can be: the ones this app writes into. A picture, a recording and a
+/// document are opened, never written - an empty .pdf is not a PDF and an empty .png is not a
+/// picture - so their rows are not on the list. This is the catalogue's own answer about what
+/// exists, narrowed by one question about what can be made; it is a filter that is seen working,
+/// which is why the media rows the app already opened needed it too.
+const WRITABLE: readonly FileTypeKind[] = ["prose", "plain", "code"];
+
 /// The types a new file can be, in the catalogue's own order - markdown first, because that is what
 /// the app is.
-///
-/// A type with no extension of its own would have nothing to put on a new file, so it is left out.
-/// None currently, which is why this is a guard rather than a filter anybody sees working.
 export function newFileTypes(enabled: readonly string[]): NewFileType[] {
   return enabledFileTypes(enabled)
-    .filter((type) => type.extensions.length > 0)
+    .filter((type) => WRITABLE.includes(type.kind) && type.extensions.length > 0)
     .map((type) => ({ id: type.id, labelKey: type.labelKey, extension: type.extensions[0]! }));
 }
 

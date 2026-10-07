@@ -88,6 +88,13 @@ describe("newFileTypes", () => {
     }
   });
 
+  // A new file is written into, so the kinds the app only opens are not on the list: an empty
+  // .pdf is not a PDF, and an empty .png is not a picture. The catalogue's rows are the answer
+  // about what exists; this one is about what can be made.
+  it("offers no kind the app cannot write into", () => {
+    expect(newFileTypes(["markdown", "pdf", "image", "video", "audio"]).map((type) => type.id)).toEqual(["markdown"]);
+  });
+
   // Markdown is pinned - it is what the app is and cannot be turned off - so it is offered even
   // when nothing else is.
   it("still offers markdown when nothing else is turned on", () => {

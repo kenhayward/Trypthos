@@ -31,11 +31,12 @@ export function parseWikiLink(inner: string): WikiLink {
   };
 }
 
-/// Extensions a wiki link names a file by: everything the app knows a type for, plus what Obsidian
-/// embeds that the app does not open. A dot followed by anything else is part of a note's name.
+/// Extensions a wiki link names a file by: everything the catalogue has a type for, plus what
+/// Obsidian embeds that this app has no type for. A dot followed by anything else is part of a
+/// note's name. Nothing is listed here that the catalogue already answers - a second copy of a row
+/// is a copy that can disagree with the row.
 const FILE_EXTENSIONS = new Set([
   ...FILE_TYPES.flatMap((type) => type.extensions),
-  "pdf",
   "canvas",
   "mp3",
   "wav",
