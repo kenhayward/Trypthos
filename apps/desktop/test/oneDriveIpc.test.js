@@ -384,7 +384,22 @@ function scriptedGraph(seen) {
   const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
   const file = (id, name, extra = {}) => ({ id, name, size: 7, cTag: `ctag-${id}`, file: {}, webUrl: `https://onedrive.live.com/?id=${id}`, ...extra });
   return async (url, init = {}) => {
-    seen.push({ url, authorization: init.headers?.Authorization ?? null, via: init.via, redirect: init.redirect });
+    const method = init.method ?? "GET";
+    seen.push({
+      url,
+      method,
+      authorization: init.headers?.Authorization ?? null,
+      ifMatch: init.headers?.["If-Match"] ?? null,
+      headerNames: Object.keys(init.headers ?? {}).map((name) => name.toLowerCase()),
+      via: init.via,
+      redirect: init.redirect,
+    });
+    // The writes, answered as Graph does: the item as it now is, with its new content tag. Before the
+    // `/content` branch below, which is the GET's 302.
+    if (method === "PUT" && url.includes("conflictBehavior=fail")) return json(file("ITEM!6", "New.md", { cTag: "ctag-new" }));
+    if (method === "PUT") return json(file("ITEM!1", "Plan.md", { cTag: "ctag-saved" }));
+    if (method === "POST") return json({ id: "ITEM!7", name: "Ideas", folder: {} });
+    if (method === "PATCH") return json(file("ITEM!1", "Plan 2.md"));
     if (url === PRESIGNED) {
       const range = init.headers?.Range;
       if (range === undefined) return new Response("# Plan\n", { status: 200 });
@@ -443,6 +458,17 @@ test("no OneDrive channel answers with a token or a pre-authenticated download a
         assert.equal((await ask("file:read", { path: `${id}/Plan.md` })).content, "# Plan\n");
         assert.equal((await ask("file:readImage", { path: `${id}/chart.png` })).ok, true);
         assert.deepEqual(await ask("workspace:reveal", { path: `${id}/Plan.md` }), { ok: true });
+        // The writes: a save against the read's tag, a new file, a new folder and a rename.
+        assert.deepEqual(
+          await ask("file:write", { path: `${id}/Plan.md`, content: "x", expectedRevision: { id: "ctag-ITEM!1" }, message: null }),
+          { ok: true, revision: { id: "ctag-saved" } },
+        );
+        assert.deepEqual(await ask("file:write", { path: `${id}/New.md`, content: "", expectedRevision: null, message: null }), {
+          ok: true,
+          revision: { id: "ctag-new" },
+        });
+        assert.deepEqual(await ask("workspace:createDirectory", { path: `${id}/Ideas` }), { ok: true });
+        assert.deepEqual(await ask("workspace:rename", { path: `${id}/Plan.md`, name: "Plan 2.md" }), { ok: true, path: `${id}/Plan 2.md` });
         assert.equal((await ask("onedrive:folders", { in: "my-files" })).ok, true);
         assert.equal((await ask("onedrive:folders", { in: "shared-with-me" })).ok, true);
         assert.equal((await ask("onedrive:folders", { in: "folder", driveId: "beefcafe", itemId: "SHARED!8" })).ok, true);
@@ -479,7 +505,7 @@ test("no OneDrive channel answers with a token or a pre-authenticated download a
   // `/content` request - and there were some - went through the fetch that never follows a redirect,
   // with the token; and the pre-authenticated address was fetched without one.
   assert.ok(seen.some((request) => request.authorization === `Bearer ${ACCESS}`));
-  const content = seen.filter((request) => request.url.endsWith("/content"));
+  const content = seen.filter((request) => request.method === "GET" && request.url.endsWith("/content"));
   assert.ok(content.length > 0, "no /content request was made, so the redirect was never exercised");
   assert.ok(content.every((request) => request.via === "manual" && request.authorization === `Bearer ${ACCESS}`));
   const presigned = seen.filter((request) => request.url === PRESIGNED);
@@ -491,4 +517,110 @@ test("no OneDrive channel answers with a token or a pre-authenticated download a
   const bearing = seen.filter((request) => request.via === "fetch" && request.authorization !== null);
   assert.ok(bearing.length > 0);
   for (const request of bearing) assert.equal(request.redirect, "error", "a token-carrying request would follow a redirect");
+
+  // The writes went out as Graph needs them and never anywhere else: through the fetch that refuses
+  // redirects (the `bearing` check above covers every one, since each is a Bearer fetch), with the
+  // token; a save with the tag it read, and a create with neither conditional header (the spike:
+  // `If-None-Match: *` is ignored and overwrites).
+  const writes = seen.filter((request) => request.method !== "GET");
+  assert.deepEqual(writes.map((request) => request.method), ["PUT", "PUT", "POST", "PATCH"]);
+  for (const request of writes) {
+    assert.equal(request.via, "fetch", "a write went through the fetch that reads redirects");
+    assert.equal(request.authorization, `Bearer ${ACCESS}`);
+  }
+  assert.equal(writes[0].ifMatch, "ctag-ITEM!1");
+  assert.ok(writes[1].url.endsWith(":/New.md:/content?@microsoft.graph.conflictBehavior=fail"));
+  assert.equal(writes[1].headerNames.includes("if-match"), false);
+  assert.equal(writes[1].headerNames.includes("if-none-match"), false);
+});
+
+/// Graph for one folder, through the REAL client, whose every write is refused with `refusal`: what a
+/// save, a new file, a new folder and a rename reach the window as. `seen` records each method.
+function refusingGraph(seen, refusal) {
+  const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  const plan = { id: "ITEM!1", name: "Plan.md", size: 7, cTag: "ctag-1", file: {} };
+  return async (url, init = {}) => {
+    const method = init.method ?? "GET";
+    seen.push(method);
+    if (method !== "GET") return json(refusal.status, refusal.code === null ? {} : { error: { code: refusal.code } });
+    if (url.startsWith("https://graph.microsoft.com/v1.0/me/drive?")) return json(200, { id: "d0c0ffee", driveType: "personal" });
+    if (url.includes("/children?")) return json(200, { value: [plan] });
+    return json(200, { id: "ROOT!0", name: "Notes", folder: {} });
+  };
+}
+
+/// Opens a OneDrive folder through the real handlers over `refusingGraph`, runs `body`, and answers the
+/// methods of every write that reached Graph. Each caller opens its own item id: the registry of open
+/// workspaces is module-level.
+async function refusedWrites(itemId, refusal, body) {
+  const seen = [];
+  await withHandlers(
+    async ({ ipcMain }) => {
+      await ipcMain.invoke("onedrive:connect");
+      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId, name: "Notes" } });
+      assert.equal(opened.ok, true);
+      await body(ipcMain, opened.workspace.id);
+    },
+    {
+      createOneDrive: (accessToken) => {
+        const graph = refusingGraph(seen, refusal);
+        return createOneDriveApi({ accessToken, fetch: graph, fetchManual: graph, logger: { error: () => {}, info: () => {} } });
+      },
+    },
+  );
+  return seen.filter((method) => method !== "GET");
+}
+
+test("a save OneDrive refuses as stale is a conflict at the window, asked once", async () => {
+  const writes = await refusedWrites("ROOT!20", { status: 412, code: null }, async (ipcMain, id) => {
+    assert.deepEqual(
+      await ipcMain.invoke("file:write", { path: `${id}/Plan.md`, content: "mine", expectedRevision: { id: "ctag-1" }, message: null }),
+      { ok: false, reason: "conflict", theirs: null },
+    );
+  });
+  assert.deepEqual(writes, ["PUT"]);
+});
+
+test("a name OneDrive says is taken is a conflict for New File, New Folder and Rename, each asked once", async () => {
+  const writes = await refusedWrites("ROOT!21", { status: 409, code: "nameAlreadyExists" }, async (ipcMain, id) => {
+    assert.deepEqual(
+      await ipcMain.invoke("file:write", { path: `${id}/plan.MD`, content: "", expectedRevision: null, message: null }),
+      { ok: false, reason: "conflict", theirs: null },
+    );
+    assert.deepEqual(await ipcMain.invoke("workspace:createDirectory", { path: `${id}/Ideas` }), { ok: false, reason: "conflict" });
+    assert.deepEqual(await ipcMain.invoke("workspace:rename", { path: `${id}/Plan.md`, name: "Old.md" }), { ok: false, reason: "conflict" });
+  });
+  assert.deepEqual(writes, ["PUT", "POST", "PATCH"]);
+});
+
+// A folder shared with the user to view only.
+test("a save into a folder OneDrive will not let the user write is permission denied", async () => {
+  const writes = await refusedWrites("ROOT!22", { status: 403, code: "accessDenied" }, async (ipcMain, id) => {
+    assert.deepEqual(
+      await ipcMain.invoke("file:write", { path: `${id}/Plan.md`, content: "mine", expectedRevision: { id: "ctag-1" }, message: null }),
+      { ok: false, reason: "permission-denied" },
+    );
+  });
+  assert.deepEqual(writes, ["PUT"]);
+});
+
+// A 503 does not promise the write was not processed; sending it again could conflict with itself.
+test("a save answered 503 is unknown and is not sent again", async () => {
+  const writes = await refusedWrites("ROOT!23", { status: 503, code: null }, async (ipcMain, id) => {
+    assert.deepEqual(
+      await ipcMain.invoke("file:write", { path: `${id}/Plan.md`, content: "mine", expectedRevision: { id: "ctag-1" }, message: null }),
+      { ok: false, reason: "unknown" },
+    );
+  });
+  assert.deepEqual(writes, ["PUT"]);
+});
+
+test("a save presenting a revision that is not a content tag is refused at the window, with nothing sent", async () => {
+  const writes = await refusedWrites("ROOT!24", { status: 500, code: null }, async (ipcMain, id) => {
+    assert.deepEqual(
+      await ipcMain.invoke("file:write", { path: `${id}/Plan.md`, content: "x", expectedRevision: { id: "a\r\nX-Injected: 1" }, message: null }),
+      { ok: false, reason: "bad-request" },
+    );
+  });
+  assert.deepEqual(writes, []);
 });
