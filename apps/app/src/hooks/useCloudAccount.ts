@@ -11,7 +11,7 @@ import { attempt } from "./useGitHub";
 export interface CloudAccountState {
   /// False outside the desktop shell.
   supported: boolean;
-  /// False in a build without a OAuth client. Known only after the first status answer.
+  /// False in a build without an OAuth client. Known only after the first status answer.
   configured: boolean;
   checking: boolean;
   connected: boolean;

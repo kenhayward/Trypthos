@@ -28,7 +28,7 @@ export const GOOGLE_ACCOUNT: CloudAccountKind = {
 
 /// OneDrive's account failures until `providerFailureKey` gains a OneDrive kind.
 ///
-/// The generic keys for scope-denied and timed-out name Google, so those are answered here too.
+/// The generic keys for scope-denied, timed-out and not-configured name Google, so those are answered here too.
 export function oneDriveFailureKey(reason: string): string | null {
   switch (reason) {
     case "offline":
@@ -41,6 +41,8 @@ export function oneDriveFailureKey(reason: string): string | null {
       return "errors.oneDriveScopeDenied";
     case "timed-out":
       return "errors.oneDriveTimedOut";
+    case "not-configured":
+      return "errors.oneDriveNotConfigured";
     default:
       return failureKey(reason);
   }
@@ -56,3 +58,13 @@ export const ONEDRIVE_ACCOUNT: CloudAccountKind = {
   connectedNoteKey: "onedrive.removeAccess",
   failureKey: oneDriveFailureKey,
 };
+
+/// Every catalogue key the account kinds name. They are looked up as `t(kind.xKey)`, which the i18n
+/// guard cannot see as a call, so it reads this set instead: exactly these keys, not a prefix.
+export function cloudAccountKeys(): string[] {
+  return [GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT].flatMap((kind) =>
+    [kind.titleKey, kind.checkingKey, kind.connectKey, kind.connectBlurbKey, kind.notConfiguredKey, kind.browserOnlyKey, kind.connectedNoteKey].filter(
+      (key): key is string => key !== null,
+    ),
+  );
+}
