@@ -66,7 +66,8 @@ export type OneDriveItem = z.infer<typeof OneDriveItemSchema>;
 
 export const OneDrivePageSchema = z.object({
   value: z.array(OneDriveItemSchema),
-  "@odata.nextLink": z.string().refine(isGraphUrl).optional(),
+  /// Any string: whether it may be followed is the client's one check (`isGraphUrl`), not the shape's.
+  "@odata.nextLink": z.string().optional(),
 });
 
 export const OneDriveDriveSchema = z.object({ id: z.string().min(1), driveType: z.string().optional() });
