@@ -343,11 +343,12 @@ export function oneDriveFolderBody(name: string): {
 export type OneDriveWriteFailure = OneDriveFailure | "bad-request";
 
 /// What a refusal of a WRITE means. Two rows differ from a read's (`oneDriveFailure`): a 400 is
-/// `bad-request` - Graph refused the request, a name it will not take, and did nothing - and a 503 is
-/// `unknown`, because unlike a 429 it does not promise the write was not processed. The client never
-/// repeats a write on it; the next save's `If-Match` says what happened.
+/// `bad-request` - Graph refused the request, a name it will not take, and did nothing - and every
+/// 5xx is `unknown`: Microsoft answered, so it is not `offline`, and unlike a 429 a 5xx does not
+/// promise the write was not processed. The client never repeats a write on it; the next save's
+/// `If-Match` says what happened.
 export function oneDriveWriteFailure(status: number, code: string | null): OneDriveWriteFailure {
   if (status === 400) return "bad-request";
-  if (status === 503) return "unknown";
+  if (status >= 500) return "unknown";
   return oneDriveFailure(status, code);
 }

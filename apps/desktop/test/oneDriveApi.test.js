@@ -536,18 +536,47 @@ test("a write is never repeated after a 503: it may have landed", async () => {
   assert.deepEqual(slept, []);
 });
 
-test("a write is never repeated after another 5xx or a network rejection", async () => {
+// Microsoft answered a 5xx, so the write is not "could not reach": it may have landed.
+test("a write answered 500, 502 or 504 is unknown, and is never repeated", async () => {
+  const { api, calls, slept } = setup({ routes: [json(500, {}), json(502, {}, { "Retry-After": "1" }), json(504, {})] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(await api.rename(DRIVE, "root", "Plan.md", "plan.md"), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 3);
+  assert.deepEqual(slept, []);
+});
+
+test("a write rejected by the network with no answer is offline, and is never repeated", async () => {
   const reject = () => {
     throw Object.assign(new Error("reset"), { code: "ECONNRESET" });
   };
-  const { api, calls, slept } = setup({ routes: [json(500, {}), json(502, {}, { "Retry-After": "1" }), reject, reject] });
-  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "offline" });
-  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "offline" });
-  assert.equal(calls.length, 2);
+  const { api, calls, slept } = setup({ routes: [reject, reject] });
   assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "offline" });
   assert.deepEqual(await api.rename(DRIVE, "root", "Plan.md", "plan.md"), { ok: false, reason: "offline" });
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 2);
   assert.deepEqual(slept, []);
+});
+
+// The status says the write landed; only the item it made never arrived.
+test("a write answered 2xx whose body then stalls is unknown, asked once", async () => {
+  const stalled = () => new Response(new ReadableStream({ start() {} }), { status: 200 });
+  const { api, calls, logs } = setup({ timeoutMs: 10, routes: [stalled] });
+  assert.deepEqual(await api.writeContent(DRIVE, "root", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(logs, ["A request to OneDrive did not complete: ETIMEDOUT"]);
+});
+
+// A slow uplink spends the deadline sending the body: a write's deadline grows a second for every
+// 32 KiB it carries, on top of the base. A read keeps the base.
+test("a write's deadline grows with its body; a read's does not", async () => {
+  const late = (answer) => () => new Promise((resolve) => setTimeout(() => resolve(answer), 100));
+  const { api, calls } = setup({ timeoutMs: 20, routes: [late(json(200, PLAN)), late(json(200, PLAN))] });
+  const written = await api.writeContent(DRIVE, "root", "Plan.md", Buffer.alloc(64 * 1024), "ctag-1");
+  assert.equal(written.ok, true);
+  assert.deepEqual(await api.item(DRIVE, "root", "Plan.md"), { ok: false, reason: "offline" });
+  assert.equal(calls.length, 2);
 });
 
 test("a write whose answer never arrives is offline, and is never sent again", async () => {
@@ -596,7 +625,7 @@ test("a write to an address that cannot be made is refused, with nothing sent", 
   assert.equal(calls.length, 0);
 });
 
-test("Graph refusing a write: 403 permission-denied, 400 bad-request, 404 not-found, 500 offline", async () => {
+test("Graph refusing a write: 403 permission-denied, 400 bad-request, 404 not-found, 500 unknown", async () => {
   const { api } = setup({
     routes: [
       json(403, { error: { code: "accessDenied" } }),
@@ -608,7 +637,7 @@ test("Graph refusing a write: 403 permission-denied, 400 bad-request, 404 not-fo
   assert.deepEqual(await api.writeContent(DRIVE, "SHARED!7", "Plan.md", Buffer.from("x"), "ctag-1"), { ok: false, reason: "permission-denied" });
   assert.deepEqual(await api.createFolder(DRIVE, "root", "", "bad:name"), { ok: false, reason: "bad-request" });
   assert.deepEqual(await api.rename(DRIVE, "root", "Gone.md", "x.md"), { ok: false, reason: "not-found" });
-  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "offline" });
+  assert.deepEqual(await api.createContent(DRIVE, "root", "New.md", Buffer.from("x")), { ok: false, reason: "unknown" });
 });
 
 // The write landed; only what it made is not known. `offline` would invite a retry of a write that
