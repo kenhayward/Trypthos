@@ -119,6 +119,12 @@ function createOneDriveApi({
   /// and one after a 429 or 503, waiting what `Retry-After` asks up to ten seconds. `read(response)`
   /// makes the value of an answer below 400 - a 302 included, when `manual` sent the request through
   /// the fetch that never follows one. Answers `{ ok: true, value }` or a failure.
+  ///
+  /// Every other request refuses redirects up front (`redirect: "error"`). Measured with this repo's
+  /// Electron: `net.fetch` in its default `follow` mode delivers the Authorization header to the
+  /// redirect's target, and `"error"` rejects - answered here as offline - without contacting it. A
+  /// 3xx check after the fact cannot protect the token; the one below is for a fetch that ignores the
+  /// option. The manual fetch is told nothing about redirects: it never follows one.
   async function send(url, read, { manual = false } = {}) {
     let token = await tokenFrom();
     if (!token.ok) return token;
@@ -129,11 +135,21 @@ function createOneDriveApi({
     for (;;) {
       const bearer = token.token;
       const got = await deadlined(async (signal) => {
-        const response = await request(url, { method: "GET", signal, headers: { Authorization: `Bearer ${bearer}` } });
+        const response = await request(url, {
+          method: "GET",
+          signal,
+          headers: { Authorization: `Bearer ${bearer}` },
+          ...(manual ? {} : { redirect: "error" }),
+        });
+        if (!manual && response.status >= 300 && response.status < 400) return { response, value: null, redirected: true };
         if (response.status < 400) return { response, value: await read(response) };
         return { response, value: await response.json().catch(() => null) };
       });
       if (got === null) return failure("offline");
+      if (got.redirected === true) {
+        logger.error?.("OneDrive answered a Graph request with a redirect; it was not followed.");
+        return failure("unknown");
+      }
       const { response } = got;
       if (response.status < 400) return { ok: true, value: got.value };
 

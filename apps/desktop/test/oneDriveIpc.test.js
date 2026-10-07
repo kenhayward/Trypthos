@@ -400,7 +400,7 @@ function scriptedGraph(seen) {
   const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
   const file = (id, name, extra = {}) => ({ id, name, size: 7, cTag: `ctag-${id}`, file: {}, webUrl: `https://onedrive.live.com/?id=${id}`, ...extra });
   return async (url, init = {}) => {
-    seen.push({ url, authorization: init.headers?.Authorization ?? null, via: init.via });
+    seen.push({ url, authorization: init.headers?.Authorization ?? null, via: init.via, redirect: init.redirect });
     if (url === PRESIGNED) {
       const range = init.headers?.Range;
       if (range === undefined) return new Response("# Plan\n", { status: 200 });
@@ -439,14 +439,18 @@ test("no OneDrive channel answers with a token or a pre-authenticated download a
   const browser = [];
   try {
     await withHandlers(
-      async ({ ipcMain, authLogged }) => {
+      async ({ ipcMain, accounts, auth, authLogged }) => {
         await ipcMain.invoke("onedrive:connect");
+        await auth.accessToken({ force: true });
         const answers = [];
         const ask = async (channel, payload) => {
           const answer = await ipcMain.invoke(channel, payload);
           answers.push(JSON.stringify(answer ?? null));
           return answer;
         };
+
+        // Rotated before the walk, so ROTATED has really existed and its absence below means something.
+        assert.equal(accounts.tokens.get("onedrive"), ROTATED, "the refresh did not rotate the stored token");
 
         const opened = await ask("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "root", name: "My files" } });
         assert.equal(opened.ok, true);
@@ -502,4 +506,9 @@ test("no OneDrive channel answers with a token or a pre-authenticated download a
   assert.ok(presigned.length >= 3);
   assert.ok(presigned.every((request) => request.via === "fetch" && request.authorization === null));
   assert.deepEqual(browser, ["https://onedrive.live.com/?id=ITEM!1"]);
+  // Every token-carrying request through the following fetch refuses redirects: in `follow` mode
+  // Electron's net.fetch hands the Authorization header to the redirect's target.
+  const bearing = seen.filter((request) => request.via === "fetch" && request.authorization !== null);
+  assert.ok(bearing.length > 0);
+  for (const request of bearing) assert.equal(request.redirect, "error", "a token-carrying request would follow a redirect");
 });

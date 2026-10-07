@@ -190,6 +190,46 @@ test("headers that never arrive answer offline, and the request is aborted", asy
   assert.deepEqual(logs, ["A request to OneDrive did not complete: ETIMEDOUT"]);
 });
 
+// Measured with this repo's Electron: `net.fetch` in its default `follow` mode delivers the
+// Authorization header to a redirect's target, and `redirect: "error"` rejects without contacting it.
+// A 3xx check after the fact cannot help - follow mode has already sent the token - so every Graph
+// request that carries the token through `fetch` refuses redirects up front.
+test("every request carrying the token through fetch refuses redirects", async () => {
+  const { api, calls } = setup({
+    routes: [
+      json(200, { id: DRIVE, driveType: "personal" }),
+      json(401, {}),
+      json(200, PLAN),
+      json(200, { value: [PLAN], "@odata.nextLink": "https://graph.microsoft.com/v1.0/next-page" }),
+      json(200, { value: [ARCHIVE] }),
+      json(200, { value: [] }),
+    ],
+    tokens: [{ ok: true, token: ACCESS }],
+  });
+  await api.drive();
+  await api.item(DRIVE, "root", "Plan.md");
+  await api.children(DRIVE, "root", "Notes");
+  await api.sharedWithMe();
+  const bearing = calls.filter((call) => call.via === "fetch" && call.authorization !== null);
+  assert.equal(bearing.length, 6);
+  for (const call of bearing) assert.equal(call.init.redirect, "error", call.url);
+});
+
+test("a redirect on a Graph JSON request is unknown, and is not followed", async () => {
+  const { api, calls } = setup({ routes: [redirect("https://elsewhere.invented.example/x")] });
+  assert.deepEqual(await api.drive(), { ok: false, reason: "unknown" });
+  assert.equal(calls.length, 1);
+});
+
+test("a redirect refused by the fetch itself is offline", async () => {
+  const { api, logs } = setup({
+    routes: [() => { throw new TypeError("Attempted to redirect, but redirect policy was 'error'"); }],
+  });
+  assert.deepEqual(await api.drive(), { ok: false, reason: "offline" });
+  assert.equal(logs.length, 1);
+  assert.ok(!logs[0].includes("elsewhere"));
+});
+
 // The spec: the 302 is never followed with the Authorization header. `/content` goes through the
 // fetch that never follows a redirect, and is told nothing about redirects itself.
 test("the download address is the 302's, asked for through the fetch that never follows it", async () => {
