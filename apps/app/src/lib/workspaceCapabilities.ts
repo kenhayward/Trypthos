@@ -2,12 +2,11 @@ import type { WorkspaceRef } from "@trypthos/domain";
 
 /// Whether the tree can be edited from the browser: a new file, a new folder, a rename.
 ///
-/// A folder on disk and a Drive folder both have a mutable place a name can be given; a GitHub
-/// repository has none, because a save there is a commit. A OneDrive folder will, once its writes
-/// land (PR 3) - until then it is read-only. The shell is still the one that refuses - this only
-/// decides what the menu offers.
+/// A folder on disk, a Drive folder and a OneDrive folder all have a mutable place a name can be
+/// given; a GitHub repository has none, because a save there is a commit. The shell is still the one
+/// that refuses - this only decides what the menu offers.
 export function canEditTree(ref: Pick<WorkspaceRef, "kind">): boolean {
-  return ref.kind === "local" || ref.kind === "google-drive";
+  return ref.kind === "local" || ref.kind === "google-drive" || ref.kind === "onedrive";
 }
 
 /// Whether "show this entry where it lives" means opening it in a web page rather than in the file

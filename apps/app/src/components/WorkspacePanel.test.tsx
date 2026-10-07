@@ -1233,24 +1233,41 @@ describe("the workspace menu", () => {
     };
     const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
 
-    // Read-only in this release: nothing that would write, and an entry is shown on OneDrive's site.
-    it("offers Open in OneDrive and Refresh on the workspace row, and nothing that writes", async () => {
+    // Editable since 0.104.0: the same menu as a Drive folder, with OneDrive's words for showing an entry.
+    it("offers the workspace row new file, new folder and Open in OneDrive, but not rename", async () => {
       panel({ workspaces: [PLANS], folders, selectedFolder: "Plans" });
       await rightClick(screen.getByRole("button", { name: /^Plans$/ }));
 
-      expect(items()).toEqual(["Open in OneDrive", "Refresh"]);
+      expect(items()).toEqual(["New File ...", "New Folder ...", "Open in OneDrive", "Refresh"]);
     });
 
-    it("shows a file in OneDrive through the same handler as Reveal, and offers no rename", async () => {
+    it("offers a folder rename and Open in OneDrive", async () => {
+      panel({ workspaces: [PLANS], folders, selectedFolder: "Plans" });
+      await rightClick(screen.getByRole("button", { name: /^ideas$/ }));
+
+      expect(items()).toEqual(["New File ...", "New Folder ...", "Rename ...", "Open in OneDrive", "Refresh"]);
+    });
+
+    it("shows a file in OneDrive through the same handler as Reveal, and offers its rename", async () => {
       const onRevealEntry = vi.fn();
       panel({ workspaces: [PLANS], folders, onRevealEntry });
       const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
 
-      expect(items()).not.toContain("Rename ...");
+      expect(items()).toContain("Rename ...");
       expect(items()).not.toContain("Open in Google Drive");
       await user.click(screen.getByRole("menuitem", { name: "Open in OneDrive" }));
 
       expect(onRevealEntry).toHaveBeenCalledWith("Plans/plan.md");
+    });
+
+    it("renames the entry right-clicked", async () => {
+      const onRename = vi.fn();
+      panel({ workspaces: [PLANS], folders, onRename });
+      const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      await user.click(screen.getByRole("menuitem", { name: "Rename ..." }));
+
+      expect(onRename).toHaveBeenCalledWith("Plans/plan.md");
     });
   });
 });

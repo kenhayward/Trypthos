@@ -39,7 +39,8 @@ describe("the OneDrive account's failures", () => {
     ["timed-out", "errors.oneDriveTimedOut"],
     ["not-configured", "errors.oneDriveNotConfigured"],
     ["other-account", "errors.oneDriveOtherAccount"],
-    ["read-only", "errors.oneDriveReadOnly"],
+    // Nothing in OneDrive answers this any more; the shared key stands for whatever might.
+    ["read-only", "errors.readOnly"],
     // A failed code exchange answers this. The shared wording names no provider.
     ["unknown", "errors.unknown"],
   ])("answers %s with %s, which exists", (reason, key) => {
