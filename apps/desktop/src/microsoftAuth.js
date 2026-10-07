@@ -62,7 +62,8 @@ function createMicrosoftAuth({
   let generation = 0;
   /// Every write to the account store runs through here, one at a time. The store's set and remove
   /// are read-modify-write, so two in flight can land in either order - and a refresh's save landing
-  /// after a sign-out's delete would bring the account back.
+  /// after a sign-out's delete would bring the account back. A refresh's READ runs through here too:
+  /// a write is visible only once it lands, so a read beside one could see the old token.
   let writes = Promise.resolve();
   function exclusive(operation) {
     const run = writes.then(operation, operation);
@@ -228,8 +229,14 @@ function createMicrosoftAuth({
       if (saved.value && saved.value.ok === false) return saved.value;
 
       if (mine.reason !== undefined) {
+        // As a sign-out does: the generation moves on before the delete, so a refresh that read
+        // this token cannot save its rotation after the delete lands.
         await safelyExclusive("delete", async () => {
-          if (generation === mineGeneration) await accounts.deleteToken(MICROSOFT_PROVIDER);
+          if (generation !== mineGeneration) return;
+          generation += 1;
+          access = null;
+          refreshing = null;
+          await accounts.deleteToken(MICROSOFT_PROVIDER);
         });
         return failure(mine.reason);
       }
@@ -247,8 +254,15 @@ function createMicrosoftAuth({
   }
 
   async function refresh() {
-    const began = generation;
-    const read = await safely("read", () => accounts.getToken(MICROSOFT_PROVIDER));
+    // The generation and the token are read together, inside the write lock. Outside it, a read
+    // could land while a sign-in's save is still on its way to disk: the generation already new,
+    // the token still the previous account's - which this refresh would then rotate and save over
+    // the new one. Or while a cancelled sign-in's delete is in flight, bringing the account back.
+    let began = -1;
+    const read = await safelyExclusive("read", () => {
+      began = generation;
+      return accounts.getToken(MICROSOFT_PROVIDER);
+    });
     if (!read.ok) return read;
     const refreshToken = read.value;
     if (typeof refreshToken !== "string" || refreshToken === "") return failure("not-connected");

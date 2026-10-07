@@ -445,3 +445,97 @@ test("if the PKCE pair cannot be made, the listener still closes and nothing ope
   assert.equal(opened, false);
   assert.deepEqual(logged, ["Could not prepare Microsoft sign-in: ENTROPY"]);
 });
+
+// ---- Final review C1: a write is visible only when it lands ----
+
+/// An account store whose writes become visible only when the test lets them land, as the real
+/// encrypted store's do (at the rename). `hold(op)` holds the NEXT `op` ("set" or "delete") and
+/// answers `{ reached, release }`.
+function gatedAccounts(initial = null) {
+  const accounts = fakeAccounts(initial);
+  const holds = { set: [], delete: [] };
+  const held = async (op, apply) => {
+    const next = holds[op].shift();
+    if (next !== undefined) {
+      next.reached.release();
+      await next.gate.promise;
+    }
+    return apply();
+  };
+  accounts.setToken = (provider, token) => held("set", () => (accounts.tokens.set(provider, token), { ok: true }));
+  accounts.deleteToken = (provider) => held("delete", () => void accounts.tokens.delete(provider));
+  accounts.hold = (op) => {
+    const entry = { reached: deferred(), gate: deferred() };
+    holds[op].push(entry);
+    return { reached: entry.reached.promise, release: entry.gate.release };
+  };
+  return accounts;
+}
+
+/// A fake Microsoft with two accounts. The sign-in is Grace's; a refresh rotates whichever account's
+/// refresh token it is given, so a token in the store always says whose it is.
+function twoAccountMicrosoft() {
+  const calls = [];
+  const token = (who, n) => ({
+    access_token: `access-${who}-${n}`,
+    expires_in: 3599,
+    scope: GRANTED,
+    token_type: "Bearer",
+    refresh_token: `refresh-${who}-${n}`,
+  });
+  const fetch = async (url, init = {}) => {
+    calls.push({ url, init });
+    if (url.endsWith("/token")) {
+      const body = new URLSearchParams(init.body);
+      if (body.get("grant_type") === "authorization_code") return json(200, token("grace", 1));
+      const [, who, n] = body.get("refresh_token").split("-");
+      return json(200, token(who, Number(n) + 1));
+    }
+    if (url.includes("graph.microsoft.com/v1.0/me")) {
+      const who = init.headers.Authorization.split("-")[1];
+      return json(200, { mail: `${who}@example.com` });
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+  return { fetch, calls };
+}
+
+test("a refresh begun while a reconnect's save is landing refreshes the new account, not the old", async () => {
+  const accounts = gatedAccounts("refresh-ada-0");
+  const save = accounts.hold("set");
+  const h = harness({ accounts, microsoft: twoAccountMicrosoft() });
+
+  const connecting = h.instance.connect();
+  await save.reached; // the generation has moved on; Grace's token is not on disk yet
+  const refreshing = h.instance.accessToken();
+  for (let i = 0; i < 10; i += 1) await tick();
+  save.release();
+
+  assert.deepEqual(await connecting, { ok: true, email: "grace@example.com" });
+  await refreshing;
+  assert.match(accounts.tokens.get("onedrive"), /^refresh-grace-/);
+  const now = await h.instance.accessToken();
+  assert.equal(now.ok, true);
+  assert.match(now.token, /^access-grace-/);
+});
+
+test("a refresh begun while a cancelled sign-in's token is being deleted cannot bring it back", async () => {
+  const accounts = gatedAccounts();
+  const save = accounts.hold("set");
+  const removal = accounts.hold("delete");
+  const h = harness({ accounts, microsoft: twoAccountMicrosoft() });
+
+  const connecting = h.instance.connect();
+  await save.reached;
+  h.instance.cancelConnect(); // too late to stop the save; connect deletes what it stored
+  save.release();
+  await removal.reached;
+  const refreshing = h.instance.accessToken();
+  for (let i = 0; i < 10; i += 1) await tick();
+  removal.release();
+
+  assert.deepEqual(await connecting, { ok: false, reason: "cancelled" });
+  await refreshing;
+  assert.equal(accounts.tokens.has("onedrive"), false);
+  assert.deepEqual(await h.instance.accessToken(), { ok: false, reason: "not-connected" });
+});
