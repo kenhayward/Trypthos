@@ -39,7 +39,7 @@ jobs:
       # console downloads for the Desktop app client. A Desktop client's secret is not confidential by
       # Google's own definition, but it does not belong in a public repository either. Without the
       # secret the app still builds, and says Google Drive is not available.
-      - name: Write the Google OAuth client
+      - name: Write the Google and OneDrive OAuth clients
         shell: bash
         env:
           GOOGLE_OAUTH_CLIENT_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
