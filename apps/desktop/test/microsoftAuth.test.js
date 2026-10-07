@@ -206,6 +206,21 @@ test("disconnect forgets the token locally, without calling Microsoft", async ()
   assert.deepEqual(await h.instance.status(), { ok: true, configured: true, connected: false, email: null, reason: null });
 });
 
+// Issue #235. A store refusing to rewrite a newer build's token file is passed through, so the user
+// is told the sign-in is still stored - and the access token in memory is gone regardless.
+test("a disconnect the store refuses passes the refusal through, and the access token is gone", async () => {
+  const accounts = fakeAccounts("refresh-invented-0");
+  const h = harness({ accounts });
+  assert.equal((await h.instance.accessToken()).ok, true);
+  const calls = h.microsoft.calls.length;
+  accounts.deleteToken = async () => ({ ok: false, reason: "from-the-future" });
+
+  assert.deepEqual(await h.instance.disconnect(), { ok: false, reason: "from-the-future" });
+  // Gone from memory: asking again goes back to Microsoft rather than answering the cached token.
+  await h.instance.accessToken();
+  assert.ok(h.microsoft.calls.length > calls);
+});
+
 test("no log line carries a token, a code or the state", async () => {
   const h = harness({
     accounts: fakeAccounts("refresh-invented-0"),

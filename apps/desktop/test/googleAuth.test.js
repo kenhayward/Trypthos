@@ -415,6 +415,17 @@ test("a store that cannot delete answers unknown, and the old access token is go
   assert.notDeepEqual(after, { ok: true, token: ACCESS });
 });
 
+// Issue #235. A store refusing to rewrite a newer build's token file is passed through, so the user
+// is told the sign-in is still stored - and the access token in memory is gone regardless.
+test("a disconnect the store refuses passes the refusal through, and the access token is gone", async () => {
+  const { auth: signIn, accounts } = auth();
+  await signIn.connect();
+  accounts.deleteToken = async () => ({ ok: false, reason: "from-the-future" });
+
+  assert.deepEqual(await signIn.disconnect(), { ok: false, reason: "from-the-future" });
+  assert.notDeepEqual(await signIn.accessToken(), { ok: true, token: ACCESS });
+});
+
 test("no secret reaches a log line on any failing path", async () => {
   const recording = (route) => {
     const google = fakeGoogle({ token: route });

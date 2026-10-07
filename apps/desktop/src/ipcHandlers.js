@@ -743,10 +743,13 @@ function registerIpcHandlers({
   ipcMain.handle("github:disconnect", async () => {
     if (accounts === null) return { ok: true };
 
-    await accounts.deleteToken("github");
+    const deleted = await accounts.deleteToken("github");
     // The list went with the account. Keeping it would let a picker opened after signing out show
-    // the repositories of an account the app can no longer reach.
+    // the repositories of an account the app can no longer reach. Dropped whatever the store says.
     repositories = null;
+    // The store's own refusal (a newer build's file, or one it could not open - issue #235) is the
+    // answer: the token is still on disk, and saying otherwise would be a sign-out that did not happen.
+    if (deleted?.ok === false) return deleted;
     return { ok: true };
   });
 

@@ -187,6 +187,21 @@ test("disconnecting removes the token", async () => {
   });
 });
 
+// Issue #235. On a downgraded build the store refuses to rewrite a newer build's token file, and a
+// disconnect that answered ok would tell the user a token was gone that is still on disk.
+test("a disconnect the store refuses passes the refusal through", async () => {
+  const accounts = fakeAccounts();
+  await withHandlers(
+    async ({ ipcMain }) => {
+      await ipcMain.invoke("github:connect", { token: "ghp_good" });
+      accounts.deleteToken = async () => ({ ok: false, reason: "from-the-future" });
+
+      assert.deepEqual(await ipcMain.invoke("github:disconnect"), { ok: false, reason: "from-the-future" });
+    },
+    { accounts },
+  );
+});
+
 test("lists the repositories the account owns", async () => {
   const repos = [
     { owner: "ada", name: "notes", fullName: "ada/notes", private: true, defaultBranch: "main", description: null, pushedAt: null },

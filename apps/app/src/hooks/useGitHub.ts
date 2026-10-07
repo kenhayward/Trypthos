@@ -181,8 +181,10 @@ export function useGitHub(bridge: GitHubBridge | null): GitHubState & GitHubActi
     const result = await attempt(() => bridge.disconnectGitHub().then((ok) => ({ ...ok })));
     // Reported rather than assumed. A disconnect that did not happen leaving the interface saying
     // "not connected" would be the interface lying about a credential that is still on disk.
+    // The shell's reason when it gave one: a store refusing a newer build's file (issue #235) sends
+    // the user somewhere different from a call that broke.
     if (!result.ok) {
-      setState((prev) => ({ ...prev, errorKey: failureKey("unknown") }));
+      setState((prev) => ({ ...prev, errorKey: failureKey(result.reason ?? "unknown") }));
       return;
     }
 

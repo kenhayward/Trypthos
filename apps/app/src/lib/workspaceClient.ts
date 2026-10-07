@@ -299,7 +299,7 @@ export type RepoInfoResult = { ok: true; stats: RepoStats; pin: RepoPin | null }
 export interface GitHubBridge {
   githubStatus(): Promise<GitHubStatus>;
   connectGitHub(token: string): Promise<ConnectResult>;
-  disconnectGitHub(): Promise<{ ok: boolean }>;
+  disconnectGitHub(): Promise<{ ok: boolean; reason?: string }>;
   listRepositories(refresh?: boolean): Promise<RepoListResult>;
   /// The statistics one repository's own page draws. Named by an OPEN workspace, never by owner and
   /// repository - the shell holds what is open.
