@@ -38,6 +38,7 @@ Graph, not a guess.
 | Delta | Works on a non-root folder of a personal drive (200 with a `deltaLink`). |
 | Web addresses | `webUrl` on items, on `onedrive.live.com`. |
 | Shared with me | `/me/drive/sharedWithMe` answers 200. The test account had one shared file and **no shared folder**, so listing a shared folder is **not yet verified** - see "Open questions". |
+| Electron's `net.fetch` and redirects (measured in PR 2 with this repo's Electron, 44.4.5, against two local servers, the first answering 302 to the second) | In the default **`follow`** mode the **`Authorization` header is delivered to the redirect target**. **`redirect: "error"`** rejects with "Attempted to redirect, but redirect policy was 'error'" and the target is **never contacted**. `redirect: "manual"` throws "Redirect was cancelled", so a `Location` cannot be read through `net.fetch` at all - hence `manualRedirect.js` over `net.request`. |
 
 ## Decisions taken, and why
 
@@ -108,7 +109,9 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 
 - **`workspaceRef.ts`**: the `onedrive` variant; `workspaceRefKey` is
   `onedrive:<driveId>:<itemId>`, not case-folded (Graph ids are case-sensitive); `workspaceRefName` is `name`; `workspaceRefMark` is
-  `"onedrive"`; `workspaceRefLabel` is `OneDrive: <name>`.
+  `"onedrive"`; `workspaceRefLabel` is `OneDrive: <name>` (ruled in PR 2: it is `OneDrive / <name>`,
+  matching Drive's label). Because the key is not case-folded, a driveId stored under two spellings
+  (the same drive id in different case) would open as two workspaces.
 - **`settings.ts`**: version 25 and a migration that changes nothing but the number (the new kind is
   additive), written in the PR that adds the kind.
 - **`oneDrive.ts`**:
@@ -140,7 +143,10 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
     the Settings text says to remove the app's access at account.live.com if the user wants that too.
 - **`oneDriveApi.js`** (PR 2 for reads; PR 3 for writes). PR 1 has no `oneDriveApi.js`: its only
   Graph call, `/me`, lives in `microsoftAuth.js`.
-  `createOneDriveApi({ accessToken, fetch })`. Each call: one retry after a 401 (with a fresh
+  `createOneDriveApi({ accessToken, fetch })` (ruled in PR 2: it also takes `fetchManual`, and
+  `/content` goes through it - `manualRedirect.js`, over `net.request` with `redirect: "manual"` -
+  so the 302 is read and never followed; every other token-carrying request passes
+  `redirect: "error"` to `fetch`). Each call: one retry after a 401 (with a fresh
   token), one after 429/503 honouring `Retry-After` up to 10 s, a deadline on headers.
   - Reads: `me`, `drive`, `children(driveId, itemId, path)` (all pages, capped at the tree's
     listing limit), `item(driveId, itemId, path)`, `readText(..., limitBytes)`,
@@ -167,7 +173,8 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 - **`OpenCloudFolderDialog`** (PR 2): `OpenDriveDialog` generalised over a folder source. OneDrive's
   tabs are **My files** and **Shared with me**.
 - **Header button** with OneDrive's mark (PR 2), shown only when the shell reports OneDrive
-  configured and connected - as Google's is.
+  configured and connected - as Google's is (ruled in PR 2: shown whenever OneDrive is configured;
+  with no account connected the picker offers the connect control).
 - **`SourceGlyph`**: an `onedrive` mark and colour token in `index.css`, light and dark.
 - **`workspaceCapabilities.ts`**: `canEditTree` and `opensInBrowser` include `onedrive` (PR 3 for
   editing, PR 2 for opening in the browser).
@@ -186,7 +193,7 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 | 409 `nameAlreadyExists` | `exists` |
 | 412 | `conflict` (save) |
 | 413, or a body over 4 MB | `too-large` |
-| 429, 503 | Wait `Retry-After` (at most 10 s), retry once, then `busy` |
+| 429, 503 | Wait `Retry-After` (at most 10 s), retry once, then `busy` (ruled in PR 2: the reason is `rate-limited`, the app's existing word for it) |
 | Network failure or deadline | `offline` / `unknown` - **never** `not-found` |
 | Own-drive ref, different account | `other-account` |
 
@@ -232,7 +239,10 @@ Three PRs, each a Minor bump, each with the release checklist in CLAUDE.md:
 - **Listing a shared folder** was not exercised: the test account had no folder shared with it.
   PR 2's manual check needs one (a second Microsoft account sharing a test folder is enough). If
   `sharedWithMe` or the cross-drive listing behaves differently, PR 2 records the finding here and
-  the Shared with me tab may ship later.
+  the Shared with me tab may ship later. **Status at PR 2:** the shared-folder listing and
+  `sharedWithMe` itself are pending the user's PR 2 manual check against a real shared folder. The
+  floor is already in place: a Shared with me that answers nothing, or fails, shows as an empty
+  place, never an error over the dialog.
 - **`sharedWithMe` longevity**: not verified either way; Graph endpoints for shared items have
   changed before. PR 2 treats an error from it as "nothing shared" in the picker rather than failing the
   dialog.
