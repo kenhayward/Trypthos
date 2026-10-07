@@ -404,3 +404,22 @@ test("names a page on the web only at a Microsoft host, over https, with no user
     assert.deepEqual(await provider.webAddress("web.md"), { ok: true, url: accepted }, accepted);
   }
 });
+
+// OneDrive answers a path in any case. The tree, a wiki link, a restored tab and the chat can each name
+// one folder in a different case, so a folder is cached once, under its folded spelling: a write into
+// it, through whichever spelling, can then never leave a stale listing standing under another.
+test("keeps one listing per folder, whatever case it is asked for in", async () => {
+  const { provider, calls } = await open();
+  await provider.list("Archive");
+  assert.deepEqual(await provider.list("ARCHIVE"), { ok: true, nodes: [{ id: "ARCHIVE/Old.md", name: "Old.md", kind: "file" }] });
+  assert.equal(calls.filter((call) => call[0] === "children").length, 1);
+  const known = await provider.listKnown("archive");
+  assert.equal(known.complete, true);
+  assert.deepEqual(known.nodes, [{ id: "archive/Old.md", name: "Old.md", kind: "file" }]);
+});
+
+test("two walks of one folder in two spellings at once ask OneDrive once", async () => {
+  const { provider, calls } = await open();
+  await Promise.all([provider.list("Archive"), provider.list("archive")]);
+  assert.equal(calls.filter((call) => call[0] === "children").length, 1);
+});
