@@ -54,14 +54,14 @@ test("creates the directory if it does not exist yet", async () => {
 test("falls back to defaults on a corrupt file rather than throwing", async () => {
   await withDir(async (dir) => {
     await fs.writeFile(settingsPath(dir), "{ this is not json", "utf8");
-    assert.deepEqual(await readSettings(dir), DEFAULT_SETTINGS);
+    assert.deepEqual(await readSettings(dir, { logger: silent }), DEFAULT_SETTINGS);
   });
 });
 
 test("falls back to defaults on a file of the wrong shape", async () => {
   await withDir(async (dir) => {
     await fs.writeFile(settingsPath(dir), JSON.stringify({ panels: "wrong" }), "utf8");
-    assert.deepEqual(await readSettings(dir), DEFAULT_SETTINGS);
+    assert.deepEqual(await readSettings(dir, { logger: silent }), DEFAULT_SETTINGS);
   });
 });
 
