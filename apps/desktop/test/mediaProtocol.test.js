@@ -52,6 +52,8 @@ async function withFile(body) {
     for (const reason of ["offline", "rate-limited", "not-connected"]) {
       if (qualified === `Drive/${reason}.mp4`) return { ok: false, reason };
     }
+    // A document, served by the same handler over the same protocol.
+    if (qualified === "Notes/report.pdf") return sourceOf(BODY, opened, null, signals);
     return { ok: false, reason: "not-found" };
   };
 
@@ -89,6 +91,19 @@ test("serves a whole file when nothing asks for a range", async () => {
   });
 });
 
+// A PDF takes the same route as a recording, and the same headers: a viewer wants ranges, and it
+// chooses the engine from the declared type, never from anything the renderer says.
+test("serves a whole pdf with the pdf type and ranges", async () => {
+  await withFile(async ({ handle }) => {
+    const response = await handle(get(mediaUrl("Notes/report.pdf")));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), "application/pdf");
+    assert.equal(response.headers.get("Content-Length"), "20");
+    assert.equal(response.headers.get("Accept-Ranges"), "bytes");
+    assert.equal(Buffer.from(await response.arrayBuffer()).toString(), BODY.toString());
+  });
+});
+
 test("serves exactly the bytes a range asks for", async () => {
   await withFile(async ({ handle }) => {
     const response = await handle(get(mediaUrl("Notes/clip.mp4"), { Range: "bytes=10-14" }));
@@ -107,6 +122,18 @@ test("serves an open-ended range as the rest of the file", async () => {
     assert.equal(response.status, 206);
     assert.equal(response.headers.get("Content-Range"), "bytes 0-19/20");
     assert.equal(Buffer.from(await response.arrayBuffer()).toString(), BODY.toString());
+  });
+});
+
+// A PDF is claimed by its own row, and a range is what a viewer asks for once it has looked at the
+// middle of a document.
+test("serves exactly the bytes a pdf range asks for", async () => {
+  await withFile(async ({ handle }) => {
+    const response = await handle(get(mediaUrl("Notes/report.pdf"), { Range: "bytes=10-14" }));
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get("Content-Range"), "bytes 10-14/20");
+    assert.equal(response.headers.get("Content-Length"), "5");
+    assert.equal(Buffer.from(await response.arrayBuffer()).toString(), "ABCDE");
   });
 });
 
@@ -130,6 +157,18 @@ test("serves an empty file without inventing a byte", async () => {
 test("refuses a name no media row claims, rather than guessing a type", async () => {
   await withFile(async ({ handle }) => {
     for (const name of ["Notes/clip.avi", "Notes/notes.md", "Notes/photo.png", "Notes/clip"]) {
+      const response = await handle(get(mediaUrl(name)));
+      assert.equal(response.status, 404, name);
+    }
+  });
+});
+
+// The pdf row is a second claimant on the name, so a name neither row claims still refuses.
+test("serves a pdf name and refuses the ones neither row claims", async () => {
+  await withFile(async ({ handle }) => {
+    const served = await handle(get(mediaUrl("Notes/report.pdf")));
+    assert.equal(served.status, 200, "Notes/report.pdf");
+    for (const name of ["Notes/report.pdfx", "Notes/.pdf", "Notes/report"]) {
       const response = await handle(get(mediaUrl(name)));
       assert.equal(response.status, 404, name);
     }

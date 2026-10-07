@@ -218,6 +218,7 @@ export {
   mediaUrl,
 } from "./mediaFiles";
 export type { MediaKind } from "./mediaFiles";
+export { PDF_TYPE_ID, isPdfName, pdfMediaTypeFor } from "./pdfFiles";
 export { MAX_ENTRY_NAME_LENGTH, RENAME_PROBLEMS, renameTarget } from "./entryName";
 export type { RenameProblem, RenameTarget } from "./entryName";
 export { DRAFT_PREFIX, draftPath, isDraftPath, newFileName, newFileTypes, newFolderName } from "./newFile";
