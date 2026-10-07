@@ -37,6 +37,18 @@ const path = require("node:path");
 function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = console }) {
   const directory = path.dirname(file);
 
+  /// Every change to the file runs through here, one at a time. Each is a read-modify-write of the
+  /// whole file, and one file holds every provider's token: two in flight would each write back a
+  /// file missing the other's change. A change that fails is reported to its caller and does not
+  /// stop the next one. Reads need no turn: they see the file before a rename or after it.
+  let changes = Promise.resolve();
+  function queued(operation) {
+    const run = changes.then(operation, operation);
+    changes = run.catch(() => {});
+    return run;
+  }
+  let written = 0;
+
   /// Every read answers with an object, however badly the file has gone wrong.
   async function readAll() {
     let text;
@@ -63,23 +75,34 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
   /// Written via a temporary file and a rename, which is atomic: a reader sees the old file or the
   /// new one, never a half-written one. A truncated file would read as "no credentials", so a crash
   /// mid-write would silently lose every one of them.
+  /// The temporary name is unique per write, so a write from another store over the same file (a
+  /// second instance, or a second process) cannot rename this one's half-written file into place.
   async function writeAll(values) {
-    const temporary = `${file}.tmp`;
+    written += 1;
+    const temporary = `${file}.${process.pid}.${written}.tmp`;
     await fs.mkdir(directory, { recursive: true });
-    await fs.writeFile(temporary, JSON.stringify({ schemaVersion, [field]: values }), "utf8");
-    await fs.rename(temporary, file);
+    try {
+      await fs.writeFile(temporary, JSON.stringify({ schemaVersion, [field]: values }), "utf8");
+      await fs.rename(temporary, file);
+    } catch (error) {
+      // A unique name is never overwritten by the next write, so a failed one is cleared here.
+      await fs.rm(temporary, { force: true }).catch(() => {});
+      throw error;
+    }
   }
 
-  async function set(key, value) {
-    if (!encryptor.isEncryptionAvailable()) {
-      logger.error?.("Encryption is unavailable, so the credential was not stored.");
-      return { ok: false, reason: "encryption-unavailable" };
-    }
+  function set(key, value) {
+    return queued(async () => {
+      if (!encryptor.isEncryptionAvailable()) {
+        logger.error?.("Encryption is unavailable, so the credential was not stored.");
+        return { ok: false, reason: "encryption-unavailable" };
+      }
 
-    const values = await readAll();
-    values[key] = encryptor.encryptString(value).toString("base64");
-    await writeAll(values);
-    return { ok: true };
+      const values = await readAll();
+      values[key] = encryptor.encryptString(value).toString("base64");
+      await writeAll(values);
+      return { ok: true };
+    });
   }
 
   /// The value for a key. **Main process only** - never reachable over IPC.
@@ -104,10 +127,12 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
     return (await get(key)) !== null;
   }
 
-  async function remove(key) {
-    const values = await readAll();
-    delete values[key];
-    await writeAll(values);
+  function remove(key) {
+    return queued(async () => {
+      const values = await readAll();
+      delete values[key];
+      await writeAll(values);
+    });
   }
 
   /// Which keys hold a usable value. Keys, never values.
@@ -121,18 +146,20 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
   }
 
   /// Drops every key not in `keep`.
-  async function retainOnly(keep) {
+  function retainOnly(keep) {
     const wanted = new Set(keep);
-    const values = await readAll();
-    let changed = false;
+    return queued(async () => {
+      const values = await readAll();
+      let changed = false;
 
-    for (const key of Object.keys(values)) {
-      if (wanted.has(key)) continue;
-      delete values[key];
-      changed = true;
-    }
+      for (const key of Object.keys(values)) {
+        if (wanted.has(key)) continue;
+        delete values[key];
+        changed = true;
+      }
 
-    if (changed) await writeAll(values);
+      if (changed) await writeAll(values);
+    });
   }
 
   return { set, get, has, remove, keys, retainOnly };
