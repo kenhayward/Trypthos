@@ -47,9 +47,20 @@ const {
 const DEFAULT_TIMEOUT_MS = 30_000;
 /// A bound on effort, as Drive's: 50 pages of 200 is far past what a tree can usefully show.
 const MAX_PAGES = 50;
+/// What a write's deadline grows by for each slice of its body: a second per 32 KiB, so a 4 MB
+/// upload on a slow uplink is not cut off while it is still being sent. 32 KiB a second is a floor
+/// of about 256 kbit/s.
+const UPLOAD_SLICE_BYTES = 32 * 1024;
+const UPLOAD_SLICE_MS = 1000;
 
 function failure(reason) {
   return { ok: false, reason };
+}
+
+/// The deadline of a write carrying `body`: the base, plus a second for every 32 KiB (or part).
+function writeDeadlineMs(baseMs, body) {
+  const bytes = typeof body === "string" ? Buffer.byteLength(body) : (body?.length ?? 0);
+  return Math.max(baseMs, baseMs + Math.ceil(bytes / UPLOAD_SLICE_BYTES) * UPLOAD_SLICE_MS);
 }
 
 async function noManualFetch() {
@@ -83,8 +94,10 @@ function createOneDriveApi({
   /// settle. `outer` is the caller's own signal - the window's request for a range - and aborting it
   /// aborts the request at once. Once `work` has answered the deadline stands down, so a body that is
   /// streamed afterwards is never cut off by it. Answers what `work` answered, or null.
-  async function deadlined(work, outer = null) {
-    const controller = new AbortController();
+  ///
+  /// `ms` is the deadline (the client's own by default). `controller` lets a second deadline - over a
+  /// body read once the status is known - abort the same request as the first.
+  async function deadlined(work, { outer = null, ms = timeoutMs, controller = new AbortController() } = {}) {
     let timer;
     let onAbort = null;
     const stop = new Promise((_, reject) => {
@@ -92,7 +105,7 @@ function createOneDriveApi({
         const error = Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
         controller.abort(error);
         reject(error);
-      }, timeoutMs);
+      }, ms);
       if (outer !== null) {
         onAbort = () => {
           const error = Object.assign(new Error("aborted"), { name: "AbortError", abandoned: true });
@@ -138,36 +151,52 @@ function createOneDriveApi({
   ///
   /// `write` marks a request that changes OneDrive. Its refusals are read by `oneDriveWriteFailure`,
   /// and it is repeated only where Graph promises it was not processed: after a 401, and after a 429.
-  /// A 503 maps to `unknown` and a deadline to `offline`, and neither is repeated - the write may have
-  /// landed, and a second attempt would read as a taken name or a conflict against itself.
+  /// A 5xx maps to `unknown` and a deadline before any answer to `offline`, and neither is repeated -
+  /// the write may have landed, and a second attempt would read as a taken name or a conflict against
+  /// itself.
+  ///
+  /// A write's deadline grows with its body (`writeDeadlineMs`), and it covers the request up to the
+  /// status. Its answer's body is then read under a second deadline of its own: once Graph has said
+  /// 2xx the write landed, so a body that stalls is `unknown`, never `offline`.
   async function send(url, read, { manual = false, method = "GET", headers = {}, body, write = false } = {}) {
     let token = await tokenFrom();
     if (!token.ok) return token;
 
     const request = manual ? fetchManual : fetch;
+    const ms = write && body !== undefined ? writeDeadlineMs(timeoutMs, body) : timeoutMs;
+    const readAnswer = (response) => (response.status < 400 ? read(response) : response.json().catch(() => null));
     let refreshed = false;
     let waited = false;
     for (;;) {
       const bearer = token.token;
-      const got = await deadlined(async (signal) => {
-        const response = await request(url, {
-          method,
-          signal,
-          // The token last, so no caller's header can stand in for it.
-          headers: { ...headers, Authorization: `Bearer ${bearer}` },
-          ...(body === undefined ? {} : { body }),
-          ...(manual ? {} : { redirect: "error" }),
-        });
-        if (!manual && response.status >= 300 && response.status < 400) return { response, value: null, redirected: true };
-        if (response.status < 400) return { response, value: await read(response) };
-        return { response, value: await response.json().catch(() => null) };
-      });
+      const controller = new AbortController();
+      const got = await deadlined(
+        async (signal) => {
+          const response = await request(url, {
+            method,
+            signal,
+            // The token last, so no caller's header can stand in for it.
+            headers: { ...headers, Authorization: `Bearer ${bearer}` },
+            ...(body === undefined ? {} : { body }),
+            ...(manual ? {} : { redirect: "error" }),
+          });
+          if (!manual && response.status >= 300 && response.status < 400) return { response, value: null, redirected: true };
+          if (write) return { response, unread: true };
+          return { response, value: await readAnswer(response) };
+        },
+        { ms, controller },
+      );
       if (got === null) return failure("offline");
       if (got.redirected === true) {
         logger.error?.("OneDrive answered a Graph request with a redirect; it was not followed.");
         return failure("unknown");
       }
       const { response } = got;
+      if (got.unread === true) {
+        const answer = await deadlined(async () => ({ value: await readAnswer(response) }), { controller });
+        if (answer === null && response.status < 400) return failure("unknown");
+        got.value = answer?.value ?? null;
+      }
       if (response.status < 400) return { ok: true, value: got.value };
 
       if (response.status === 401 && !refreshed) {
@@ -307,7 +336,7 @@ function createOneDriveApi({
     if (signal?.aborted) return failure("offline");
     const response = await deadlined(
       (inner) => fetch(url, { method: "GET", signal: inner, headers: { Range: `bytes=${start}-${end}` } }),
-      signal ?? null,
+      { outer: signal ?? null },
     );
     if (response === null) return failure("offline");
     if (response.status === 206 && contentRangeMatches(response.headers.get("content-range"), start, end)) {

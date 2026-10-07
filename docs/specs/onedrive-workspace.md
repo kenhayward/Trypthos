@@ -202,7 +202,8 @@ permissions) and set `ONEDRIVE_CLIENT_ID`.
 | 412 | `conflict` (save) |
 | 413, or a body over 4 MB | `too-large` |
 | 429, 503 | Wait `Retry-After` (at most 10 s), retry once, then `busy` (ruled in PR 2: the reason is `rate-limited`, the app's existing word for it; ruled in PR 3: for a write, only the 429 is retried, never a 503) |
-| 400 or 503 answering a write | `bad-request` / `unknown`, never repeated (ruled in PR 3: a 503 does not promise the write was not processed) |
+| 400 or any 5xx answering a write | `bad-request` / `unknown`, never repeated (ruled in PR 3: a 5xx does not promise the write was not processed, and Microsoft answered, so it is never `offline`) |
+| 2xx answering a write whose body then stalls | `unknown`, never repeated (ruled in PR 3: the write landed; the body is read under a second deadline once the status is known) |
 | Network failure or deadline | `offline` / `unknown` - **never** `not-found` |
 | Own-drive ref, different account | `other-account` |
 

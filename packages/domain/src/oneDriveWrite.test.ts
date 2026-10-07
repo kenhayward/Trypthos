@@ -96,7 +96,8 @@ describe("oneDrivePathKey", () => {
 });
 
 // A write's refusals, which differ from a read's in two rows: Graph refusing the request outright
-// did nothing, and a 503 may have come after the write landed.
+// did nothing, and any 5xx may have come after the write landed - Microsoft answered, so it is
+// never "could not reach".
 describe("oneDriveWriteFailure", () => {
   it.each([
     [400, "invalidRequest", "bad-request"],
@@ -109,7 +110,10 @@ describe("oneDriveWriteFailure", () => {
     [413, null, "too-large"],
     [429, "activityLimitReached", "rate-limited"],
     [503, null, "unknown"],
-    [500, null, "offline"],
+    [500, null, "unknown"],
+    [502, null, "unknown"],
+    [504, null, "unknown"],
+    [507, "insufficientStorage", "unknown"],
     [418, null, "unknown"],
   ])("%i %s is %s", (status, code, reason) => {
     expect(oneDriveWriteFailure(status, code)).toBe(reason);
