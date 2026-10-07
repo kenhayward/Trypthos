@@ -17,6 +17,7 @@ import {
   homePagePath,
   isImageName,
   isOpen,
+  isPdfName,
   mediaKindFor,
   mediaUrl,
   markSaved,
@@ -1360,6 +1361,33 @@ export function useWorkspace(
             revision: { id: "media" },
             readOnly: true,
             media: { source: mediaUrl(path), kind: mediaKind },
+          }),
+          opening: arrived(prev),
+          busy: false,
+        }));
+
+        reportIfLocal(reportOpened, stateRef.current.workspaces, path);
+        return;
+      }
+
+      // A PDF is read by nothing at all, exactly as a recording is. The main process serves it in
+      // ranges over the same protocol, so all the renderer needs is where to point the engine - and
+      // that is derivable from the qualified path it already has. The refusal is the recording's
+      // because it is the same question: a repository has no ranges to serve.
+      if (isPdfName(path)) {
+        if (cannotStream(stateRef.current.workspaces, path)) {
+          return failOpening({ reason: "media-not-local" }, path);
+        }
+
+        setInternal((prev) => ({
+          ...prev,
+          documents: openDocument(prev.documents, {
+            path,
+            // Nothing in it, deliberately: `content` is what chat sends and what the editor holds.
+            content: "",
+            revision: { id: "pdf" },
+            readOnly: true,
+            media: { source: mediaUrl(path), kind: "pdf" },
           }),
           opening: arrived(prev),
           busy: false,
