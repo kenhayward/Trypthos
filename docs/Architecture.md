@@ -1467,8 +1467,10 @@ in the user's workspace.
   is destroyed, and only that window's own `settings:read` sets or clears its entry. If its load hit
   a held file (EBUSY at launch) or a newer build's file, the window holds defaults, and every
   `settings:write` from it is refused (`not-loaded`, nothing swept) whatever the file looks like by
-  then - readable, or gone - until that window's own re-read succeeds. Otherwise the renderer's write
-  400 ms later would put the defaults over a good file. A window that loaded an unreadable file may
+  then - readable, or gone. Only that window's own `settings:read` could clear it, and the renderer
+  reads settings once, at mount, so in practice the refusal lasts until that window is reloaded or
+  the app restarts. Otherwise the renderer's write 400 ms later would put the defaults over a good
+  file. A window that loaded an unreadable file may
   replace that file and nothing else (`writeSettings` `replaceOnly`). Main-process reads (chat:send,
   the outline, startup) go to the store directly and neither set nor clear an entry; the store
   itself remembers no load (`loadSettingsFile` only reports how one went). A missing file is a

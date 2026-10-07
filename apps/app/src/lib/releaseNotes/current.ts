@@ -5,6 +5,19 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.104.1",
+    date: "2026-10-07",
+    pr: 238,
+    headline: "Safer upgrades, saves and sign-ins",
+    summary:
+      "Three fixes that protect your work and your credentials. Running an older Trypthos no longer wipes the settings, sign-ins or chat API keys that a newer version saved, and a file the app cannot read is backed up before it is replaced. Pressing save again while a save to a cloud folder is still in progress no longer reports a conflict with your own save. And if a service redirects a request, a sign-in token or an AI API key is never sent on to a different server.",
+    fixed: [
+      "Running an older Trypthos no longer wipes the settings, sign-ins or chat API keys a newer version saved. A file the app cannot read is backed up before it is replaced.",
+      "Pressing save again while a save is still in progress in a cloud folder no longer shows a conflict about your own save.",
+      "A sign-in token or AI API key is never sent to a different server if a service redirects a request.",
+    ],
+  },
+  {
     version: "0.104.0",
     date: "2026-10-07",
     pr: 234,

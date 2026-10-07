@@ -469,11 +469,11 @@ if (!gotLock) {
       // GitHub and never holds the token - the same rule as the chat provider, for the same reason.
       // A factory rather than a client, so connecting can verify a token before it is stored.
       //
-      // **Electron's `net.fetch`, not Node's.** Node's knows nothing about the machine's proxy
-      // settings or its certificate store; Chromium's networking stack knows both. Behind a
-      // corporate proxy or a VPN that is the difference between a request that answers and one that
-      // hangs - and a hung request left the picker spinning with nothing to say. providerFetch runs
-      // on that same stack, and keeps the token off a redirect to another host.
+      // **`providerFetch` over Electron's `net.request`, not Node's fetch.** Node's knows nothing
+      // about the machine's proxy settings or its certificate store; Chromium's networking stack
+      // knows both. Behind a corporate proxy or a VPN that is the difference between a request that
+      // answers and one that hangs - and a hung request left the picker spinning with nothing to
+      // say. providerFetch runs on that stack, and keeps the token off a redirect to another host.
       createGitHub: (getToken) =>
         createGitHubApi({ getToken, fetch: providerFetch }),
       google,
