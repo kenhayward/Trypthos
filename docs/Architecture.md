@@ -738,6 +738,11 @@ a network, and it is the shape the next three providers should copy.
   name before an atomic rename: one `providerAccounts.json` holds every provider's token, and two
   unqueued read-modify-writes (a OneDrive refresh, which writes every time, beside a Google sign-in)
   would each write back a file missing the other's change. A failed change does not block the next.
+  **No change writes over a newer build's file** (issue #235): set, remove and retainOnly answer
+  `{ ok: false, reason: "from-the-future" }` and leave it byte for byte, since rewriting it in this
+  build's shape would drop every token this build cannot see; the renderer shows
+  `errors.newerVersionCredentials`. A file nothing can parse is copied to
+  `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) and then replaced.
 - **Pinned to a commit.** Opening resolves the default branch and then that branch's head commit, and
   the tree is fetched at that SHA. A branch name would move under the user while they read.
 - **One request for the whole tree.** `?recursive=1` returns every path in the repository, so every
@@ -1436,6 +1441,16 @@ in the user's workspace.
 - **Reading is total.** A corrupt file, a file from a newer build, a file that is not an object -
   every one answers with defaults. None of this is the user's work, and refusing to start because a
   remembered panel width is malformed would be far worse than forgetting the width.
+- **Reading as defaults is not leave to write (issue #235).** `settingsStore.writeSettings` inspects
+  the file on disk before every write, in the main process, because the renderer writes its state
+  back 400 ms after loading it and is untrusted anyway. A file **from a newer build** is never
+  touched: the write answers `{ ok: false, reason: "from-the-future" }`, `settings:write` passes that
+  through and skips the chat-key sweep (the defaults hold no profiles, so the sweep would delete every
+  key), and the session runs on defaults in memory. The way out is running the newer build, which
+  finds its file intact. A file **no build can read** (not JSON, wrong shape, no migration path) is
+  copied to `settings.json.unreadable-<timestamp>` and then replaced, once. A file that cannot be
+  opened at all is refused until the next write. A load that falls back logs one line with the step
+  and the reason. `readStoredSettings` in the domain is the non-total reader that tells these apart.
 - **Writing is atomic**: a temporary file and a rename, so a reader sees the old file or the new one
   and never a half-written one. Settings are written whenever a panel drag settles, so "rarely" is
   not an argument.
