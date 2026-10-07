@@ -2,6 +2,7 @@
 
 const {
   ONEDRIVE_MY_DRIVE_URL,
+  ONEDRIVE_UPLOAD_LIMIT_BYTES,
   OneDriveDriveSchema,
   OneDriveItemSchema,
   OneDrivePageSchema,
@@ -10,15 +11,23 @@ const {
   isGraphUrl,
   isHttpsUrl,
   isOneDriveId,
+  isOneDriveTag,
   oneDriveChildrenUrl,
   oneDriveContentUrl,
+  oneDriveCreateFolderUrl,
+  oneDriveCreateUrl,
   oneDriveFailure,
+  oneDriveFolderBody,
   oneDriveMetaUrl,
+  oneDriveRenameUrl,
   oneDriveSharedWithMeUrl,
+  oneDriveUploadUrl,
+  oneDriveWriteFailure,
   retryAfterMs,
 } = require("@trypthos/domain");
 
-/// The calls to OneDrive (Microsoft Graph), read side, and nothing else. PR 3 adds the writes.
+/// The calls to OneDrive (Microsoft Graph), and nothing else: the reads, and four writes - a save, a
+/// new file, a new folder and a rename.
 ///
 /// **Main process only.** The access token comes from `microsoftAuth.js` and never leaves this
 /// process; neither does a pre-authenticated download address, which is a credential in all but name
@@ -116,16 +125,22 @@ function createOneDriveApi({
   }
 
   /// One Graph request with the token. At most one retry after a 401, with a token refreshed for it,
-  /// and one after a 429 or 503, waiting what `Retry-After` asks up to ten seconds. `read(response)`
+  /// and one after a rate limit, waiting what `Retry-After` asks up to ten seconds. `read(response)`
   /// makes the value of an answer below 400 - a 302 included, when `manual` sent the request through
   /// the fetch that never follows one. Answers `{ ok: true, value }` or a failure.
   ///
-  /// Every other request refuses redirects up front (`redirect: "error"`). Measured with this repo's
-  /// Electron: `net.fetch` in its default `follow` mode delivers the Authorization header to the
-  /// redirect's target, and `"error"` rejects - answered here as offline - without contacting it. A
-  /// 3xx check after the fact cannot protect the token; the one below is for a fetch that ignores the
-  /// option. The manual fetch is told nothing about redirects: it never follows one.
-  async function send(url, read, { manual = false } = {}) {
+  /// Every other request refuses redirects up front (`redirect: "error"`), writes included. Measured
+  /// with this repo's Electron: `net.fetch` in its default `follow` mode delivers the Authorization
+  /// header to the redirect's target, and `"error"` rejects - answered here as offline - without
+  /// contacting it. A 3xx check after the fact cannot protect the token; the one below is for a fetch
+  /// that ignores the option. The manual fetch is told nothing about redirects: it never follows one,
+  /// and nothing with a body is ever sent through it.
+  ///
+  /// `write` marks a request that changes OneDrive. Its refusals are read by `oneDriveWriteFailure`,
+  /// and it is repeated only where Graph promises it was not processed: after a 401, and after a 429.
+  /// A 503 maps to `unknown` and a deadline to `offline`, and neither is repeated - the write may have
+  /// landed, and a second attempt would read as a taken name or a conflict against itself.
+  async function send(url, read, { manual = false, method = "GET", headers = {}, body, write = false } = {}) {
     let token = await tokenFrom();
     if (!token.ok) return token;
 
@@ -136,9 +151,11 @@ function createOneDriveApi({
       const bearer = token.token;
       const got = await deadlined(async (signal) => {
         const response = await request(url, {
-          method: "GET",
+          method,
           signal,
-          headers: { Authorization: `Bearer ${bearer}` },
+          // The token last, so no caller's header can stand in for it.
+          headers: { ...headers, Authorization: `Bearer ${bearer}` },
+          ...(body === undefined ? {} : { body }),
           ...(manual ? {} : { redirect: "error" }),
         });
         if (!manual && response.status >= 300 && response.status < 400) return { response, value: null, redirected: true };
@@ -159,7 +176,8 @@ function createOneDriveApi({
         if (!token.ok) return token;
         continue;
       }
-      const reason = oneDriveFailure(response.status, graphErrorCode(got.value));
+      const code = graphErrorCode(got.value);
+      const reason = write ? oneDriveWriteFailure(response.status, code) : oneDriveFailure(response.status, code);
       if (reason === "rate-limited" && !waited) {
         waited = true;
         await sleep(retryAfterMs(response.headers?.get("retry-after") ?? null));
@@ -306,7 +324,81 @@ function createOneDriveApi({
     return failure(oneDriveFailure(response.status, null));
   }
 
-  return { drive, children, item, sharedWithMe, downloadLocation, download, rangeFrom };
+  /// A write's answer: the item as Graph now has it. An answer in a shape this build cannot read is
+  /// `unknown`, not `offline` - the write landed, and only what it made is not known. A body that is
+  /// not JSON at all is the same case, so its parse failure is caught here: thrown inside the
+  /// deadline, it would read as a request that never completed (`offline`).
+  async function sendItem(url, init) {
+    const got = await send(url, (response) => response.json().catch(() => null), { ...init, write: true });
+    if (!got.ok) return got;
+    const parsed = OneDriveItemSchema.safeParse(got.value);
+    if (!parsed.success) {
+      logger.error?.("OneDrive answered a write in a shape this build does not recognise.");
+      return failure("unknown");
+    }
+    return { ok: true, item: parsed.data };
+  }
+
+  /// Graph's simple upload takes at most four megabytes; a larger body is refused before it is sent.
+  function tooLarge(bytes) {
+    return { ok: false, reason: "too-large", sizeBytes: bytes.length, limitBytes: ONEDRIVE_UPLOAD_LIMIT_BYTES };
+  }
+
+  /// A 413 names no sizes; the ones this request had are given, so it reads like the refusal made
+  /// before sending.
+  function sized(answer, bytes) {
+    return !answer.ok && answer.reason === "too-large" ? tooLarge(bytes) : answer;
+  }
+
+  /// The body type of an upload. Graph decides the file's own type from its name's extension.
+  const OCTETS = { "Content-Type": "application/octet-stream" };
+  const JSON_BODY = { "Content-Type": "application/json" };
+
+  /// New content for the file at `path`, only if it is still at `cTag`: one conditional request, which
+  /// Graph refuses with 412 (a conflict) when anyone has written the file since. The tag comes back
+  /// from the renderer, so it is checked before it goes into a header.
+  async function writeContent(driveId, itemId, path, bytes, cTag) {
+    if (!ids(driveId, itemId)) return failure("not-found");
+    if (!isOneDriveTag(cTag)) return failure("bad-request");
+    if (bytes.length > ONEDRIVE_UPLOAD_LIMIT_BYTES) return tooLarge(bytes);
+    const url = addressOf(() => oneDriveUploadUrl(driveId, itemId, path));
+    if (url === null) return failure("not-found");
+    const answer = await sendItem(url, { method: "PUT", headers: { ...OCTETS, "If-Match": cTag }, body: bytes });
+    return sized(answer, bytes);
+  }
+
+  /// A new file at `path`, which Graph refuses with 409 `nameAlreadyExists` (`exists`) rather than
+  /// replacing one already there. No `If-None-Match`: the spike saw Graph ignore it and overwrite.
+  async function createContent(driveId, itemId, path, bytes) {
+    if (!ids(driveId, itemId)) return failure("not-found");
+    if (bytes.length > ONEDRIVE_UPLOAD_LIMIT_BYTES) return tooLarge(bytes);
+    const url = addressOf(() => oneDriveCreateUrl(driveId, itemId, path));
+    if (url === null) return failure("not-found");
+    const answer = await sendItem(url, { method: "PUT", headers: OCTETS, body: bytes });
+    return sized(answer, bytes);
+  }
+
+  /// A new folder called `name` in the folder at `parentPath` ("" is `itemId` itself), refused on a
+  /// taken name.
+  async function createFolder(driveId, itemId, parentPath, name) {
+    if (!ids(driveId, itemId)) return failure("not-found");
+    if (typeof name !== "string" || name === "") return failure("bad-request");
+    const url = addressOf(() => oneDriveCreateFolderUrl(driveId, itemId, parentPath));
+    if (url === null) return failure("not-found");
+    return sendItem(url, { method: "POST", headers: JSON_BODY, body: JSON.stringify(oneDriveFolderBody(name)) });
+  }
+
+  /// A new name for the item at `path`, in the folder it is already in. A change of case alone is a
+  /// rename like any other; a name another item has is refused (`exists`).
+  async function rename(driveId, itemId, path, name) {
+    if (!ids(driveId, itemId)) return failure("not-found");
+    if (typeof name !== "string" || name === "") return failure("bad-request");
+    const url = addressOf(() => oneDriveRenameUrl(driveId, itemId, path));
+    if (url === null) return failure("not-found");
+    return sendItem(url, { method: "PATCH", headers: JSON_BODY, body: JSON.stringify({ name }) });
+  }
+
+  return { drive, children, item, sharedWithMe, downloadLocation, download, rangeFrom, writeContent, createContent, createFolder, rename };
 }
 
 module.exports = { createOneDriveApi };
