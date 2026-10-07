@@ -424,6 +424,25 @@ export {
 export type { GoogleAuthFailure, GoogleClientConfig, GoogleToken, GoogleUserInfo, RedirectResult } from "./googleAuth";
 
 export {
+  GRAPH_ME_URL,
+  GraphMeSchema,
+  MICROSOFT_AUTHORITY,
+  MICROSOFT_AUTHORIZE_URL,
+  MICROSOFT_TOKEN_URL,
+  MicrosoftClientConfigSchema,
+  MicrosoftTokenSchema,
+  ONEDRIVE_PROVIDER,
+  ONEDRIVE_SCOPES,
+  accountEmail,
+  grantsOneDrive,
+  microsoftAuthErrorFor,
+  microsoftAuthorizationUrl,
+  microsoftRefreshRequestBody,
+  microsoftTokenRequestBody,
+} from "./microsoftAuth";
+export type { GraphMe, MicrosoftAuthFailure, MicrosoftClientConfig, MicrosoftToken } from "./microsoftAuth";
+
+export {
   API_VERSION,
   GITHUB_API,
   GitHubBlobSchema,
