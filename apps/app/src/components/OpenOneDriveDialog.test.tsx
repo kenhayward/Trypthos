@@ -191,11 +191,11 @@ describe("OpenOneDriveDialog", () => {
     expect(await screen.findByRole("button", { name: "Shared with me" })).toBeDefined();
   });
 
-  it("says OneDrive opens read-only in this release, and cancels", async () => {
+  it("says how large a file OneDrive saves, and cancels", async () => {
     const onCancel = vi.fn();
     render(<OpenOneDriveDialog bridge={fakeBridge()} onCancel={onCancel} onOpen={() => {}} />);
 
-    expect(await screen.findByText("OneDrive folders open read-only for now. Saving to OneDrive follows in the next release.")).toBeDefined();
+    expect(await screen.findByText("Files in OneDrive can be edited and saved, up to 4 MB each. A larger file opens read-only.")).toBeDefined();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalled();
   });

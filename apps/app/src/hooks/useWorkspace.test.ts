@@ -259,10 +259,31 @@ describe("providerFailureKey", () => {
     expect(providerFailureKey("onedrive", "timed-out")).toBe("errors.oneDriveTimedOut");
     expect(providerFailureKey("onedrive", "not-configured")).toBe("errors.oneDriveNotConfigured");
     expect(providerFailureKey("onedrive", "other-account")).toBe("errors.oneDriveOtherAccount");
-    expect(providerFailureKey("onedrive", "read-only")).toBe("errors.oneDriveReadOnly");
+    // A read's 403 keeps the generic words: "shared for viewing only" would be wrong about a read.
     expect(providerFailureKey("onedrive", "permission-denied")).toBe(failureKey("permission-denied"));
     expect(providerFailureKey("onedrive", "unknown")).toBe("errors.unknown");
     expect(providerFailureKey("onedrive", "cancelled")).toBeNull();
+  });
+
+  // A save, a create or a rename in OneDrive says what OneDrive did, and never that a file changed on disk.
+  it("words a OneDrive write's refusals for OneDrive", () => {
+    expect(providerFailureKey("onedrive", "conflict", "save")).toBe("errors.oneDriveConflict");
+    expect(providerFailureKey("onedrive", "unknown", "save")).toBe("errors.oneDriveSaveUnknown");
+    expect(providerFailureKey("onedrive", "too-large", "save")).toBe("errors.oneDriveTooLarge");
+    expect(providerFailureKey("onedrive", "permission-denied", "save")).toBe("errors.oneDrivePermissionDenied");
+    expect(providerFailureKey("onedrive", "permission-denied", "create")).toBe("errors.oneDrivePermissionDenied");
+    // A read's too-large is the app's own limit, not OneDrive's.
+    expect(providerFailureKey("onedrive", "too-large")).toBe("errors.tooLarge");
+    // Nothing in OneDrive answers read-only any more; the shared key stands for whatever might.
+    expect(providerFailureKey("onedrive", "read-only")).toBe(failureKey("read-only"));
+  });
+
+  it("says a name taken on a create as a name, for every provider", () => {
+    for (const kind of [null, "local", "google-drive", "onedrive"] as const) {
+      expect(providerFailureKey(kind, "conflict", "create")).toBe("errors.nameTaken");
+    }
+    expect(providerFailureKey("google-drive", "conflict", "save")).toBe("errors.driveConflict");
+    expect(providerFailureKey("local", "conflict", "save")).toBe("errors.conflict");
   });
 });
 
@@ -3806,5 +3827,187 @@ describe("opening, while a file is being read", () => {
       await second;
     });
     expect(result.current.state.opening).toBeNull();
+  });
+});
+
+/// A OneDrive folder, editable since 0.104.0: the same save, conflict and tree-editing flows as any
+/// other folder, worded for OneDrive where the shared words would be wrong.
+describe("a OneDrive workspace, written to", () => {
+  const oneDriveRef = { kind: "onedrive" as const, driveId: "d0c0ffee", itemId: "ITEM!3", name: "Plans" };
+  const readPlan = async (): Promise<ReadResult> => ({ ok: true, content: "# One\n", revision: { id: "ctag-1" } });
+
+  async function openPlan(client: WorkspaceClient) {
+    const hook = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await hook.result.current.actions.openRef(oneDriveRef);
+    });
+    await act(async () => {
+      await hook.result.current.actions.openPath("Plans/plan.md");
+    });
+    act(() => {
+      hook.result.current.actions.edit("# Mine\n");
+    });
+    return hook.result;
+  }
+
+  // Never let the editor pretend a save landed: the spinner and the dirty mark stay until OneDrive answers.
+  it("saves against the content tag the read answered, and holds the path until OneDrive acknowledges", async () => {
+    const settle: ((value: WriteResult) => void)[] = [];
+    const tags: (string | null)[] = [];
+    const { client } = fakeClient({
+      readFile: readPlan,
+      writeFile: (_path, _content, revision) => {
+        tags.push(revision?.id ?? null);
+        return new Promise<WriteResult>((resolve) => settle.push(resolve));
+      },
+    });
+    const result = await openPlan(client);
+    expect(result.current.state.readOnly).toBe(false);
+
+    let saving: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      saving = result.current.actions.save();
+    });
+    expect(result.current.state.savingPaths).toEqual(["Plans/plan.md"]);
+    expect(result.current.state.dirty).toBe(true);
+
+    await act(async () => {
+      settle[0]?.({ ok: true, revision: { id: "ctag-2" } });
+      await saving;
+    });
+    expect(tags).toEqual(["ctag-1"]);
+    expect(result.current.state.savingPaths).toEqual([]);
+    expect(result.current.state.dirty).toBe(false);
+    expect(result.current.state.file?.revision.id).toBe("ctag-2");
+  });
+
+  it.each([
+    ["a conflict", { ok: false, reason: "conflict", theirs: null }, "errors.oneDriveConflict"],
+    ["an unconfirmed save", { ok: false, reason: "unknown" }, "errors.oneDriveSaveUnknown"],
+    ["a view-only folder", { ok: false, reason: "permission-denied" }, "errors.oneDrivePermissionDenied"],
+    ["no connection", { ok: false, reason: "offline" }, "errors.oneDriveOffline"],
+  ])("keeps the edit and words %s for OneDrive", async (_label, refusal, key) => {
+    const { client } = fakeClient({ readFile: readPlan, writeFile: async () => refusal as WriteResult });
+    const result = await openPlan(client);
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(result.current.state.errorKey).toBe(key);
+    expect(result.current.state.content).toBe("# Mine\n");
+    expect(result.current.state.dirty).toBe(true);
+    expect(result.current.state.file?.revision.id).toBe("ctag-1");
+  });
+
+  it("says a save too large for OneDrive's one request in OneDrive's words, with both sizes", async () => {
+    const { client } = fakeClient({
+      readFile: readPlan,
+      writeFile: async () => ({ ok: false, reason: "too-large", sizeBytes: 5 * 1024 * 1024, limitBytes: 4 * 1024 * 1024 }) as WriteResult,
+    });
+    const result = await openPlan(client);
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(result.current.state.errorKey).toBe("errors.oneDriveTooLarge");
+    expect(result.current.state.errorParams).toEqual({ size: "5 MB", limit: "4 MB" });
+  });
+
+  it("makes a new file and a new folder in a OneDrive folder, and renames with the open tab following", async () => {
+    const created: string[] = [];
+    const { client, writes } = fakeClient({
+      createDirectory: async (path) => {
+        created.push(path);
+        return { ok: true as const };
+      },
+      renameEntry: async (_path, name) => ({ ok: true as const, path: `Plans/${name}` }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(oneDriveRef);
+    });
+    await act(async () => {
+      await result.current.actions.createEmptyFile("Plans", "plan.md");
+    });
+    await act(async () => {
+      await result.current.actions.createDirectory("Plans", "ideas");
+    });
+    let problem: string | null = "not called";
+    await act(async () => {
+      problem = await result.current.actions.renameEntry("Plans/plan.md", "Plan.md");
+    });
+
+    expect(writes).toEqual([{ path: "Plans/plan.md", content: "", revision: null, message: null }]);
+    expect(created).toEqual(["Plans/ideas"]);
+    expect(problem).toBeNull();
+    // A change of case alone, which OneDrive allows: the tab follows it.
+    expect(result.current.state.file?.path).toBe("Plans/Plan.md");
+    expect(result.current.state.errorKey).toBeNull();
+  });
+
+  it.each([
+    ["a folder on disk", null],
+    ["a OneDrive folder", oneDriveRef],
+  ])("says a name already taken in %s as a name, not as a changed file", async (_label, ref) => {
+    const { client } = fakeClient({
+      writeFile: async () => ({ ok: false, reason: "conflict", theirs: null }) as WriteResult,
+      createDirectory: async () => ({ ok: false as const, reason: "conflict" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      if (ref === null) await result.current.actions.open();
+      else await result.current.actions.openRef(ref);
+    });
+    const folder = ref === null ? "ws" : "Plans";
+
+    await act(async () => {
+      await result.current.actions.createEmptyFile(folder, "plan.md");
+    });
+    expect(result.current.state.errorKey).toBe("errors.nameTaken");
+    await act(async () => {
+      await result.current.actions.createDirectory(folder, "ideas");
+    });
+    expect(result.current.state.errorKey).toBe("errors.nameTaken");
+  });
+
+  it("words a New File or New Folder that could not reach OneDrive for Microsoft", async () => {
+    const { client } = fakeClient({
+      writeFile: async () => ({ ok: false, reason: "offline" }) as WriteResult,
+      createDirectory: async () => ({ ok: false as const, reason: "offline" }),
+    });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(oneDriveRef);
+    });
+
+    await act(async () => {
+      await result.current.actions.createEmptyFile("Plans", "plan.md");
+    });
+    expect(result.current.state.errorKey).toBe("errors.oneDriveOffline");
+    await act(async () => {
+      await result.current.actions.createDirectory("Plans", "ideas");
+    });
+    expect(result.current.state.errorKey).toBe("errors.oneDriveOffline");
+  });
+
+  it("words a refused OneDrive rename for OneDrive, and a taken name as the dialog does", async () => {
+    const answers: { ok: false; reason: string }[] = [
+      { ok: false, reason: "permission-denied" },
+      { ok: false, reason: "offline" },
+      { ok: false, reason: "conflict" },
+    ];
+    const { client } = fakeClient({ renameEntry: async () => answers.shift() ?? { ok: false as const, reason: "unknown" } });
+    const { result } = renderHook(() => useWorkspace(client));
+    await act(async () => {
+      await result.current.actions.openRef(oneDriveRef);
+    });
+
+    const problems: (string | null)[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await act(async () => {
+        problems.push(await result.current.actions.renameEntry("Plans/plan.md", "b.md"));
+      });
+    }
+    expect(problems).toEqual(["errors.oneDrivePermissionDenied", "errors.oneDriveOffline", "rename.problems.taken"]);
   });
 });

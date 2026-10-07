@@ -399,6 +399,7 @@
     "permissionDenied": "Trypthos is not allowed to open that.",
     "outsideWorkspace": "That folder is outside the one you have open. Trypthos saves inside the open folder only - pick a place in it, or open that folder first.",
     "conflict": "This file changed on disk since you opened it. Your edits are still here - save to a new name, or reopen the file to discard them.",
+    "nameTaken": "Something in this folder is already called that. Choose another name.",
     "tooLarge": "That file is {{size}}, and Trypthos opens files up to {{limit}}. It has been left alone.",
     "notText": "That file is not text, so Trypthos has not opened it. Editing and saving it here would write over what is inside it.",
     "unsupportedEncoding": "Trypthos reads UTF-8 text, and that file is in another encoding. Opening it would replace every character Trypthos could not read, so it has been left alone.",
@@ -427,7 +428,10 @@
     "oneDriveNotConfigured": "This build of Trypthos was made without OneDrive support, so OneDrive cannot be connected.",
     "oneDriveTimedOut": "Microsoft's sign-in page did not answer in time. Connect again to try once more.",
     "oneDriveOtherAccount": "This OneDrive folder belongs to a different Microsoft account from the one connected now. Connect that account, or open the folder again.",
-    "oneDriveReadOnly": "OneDrive folders open read-only in this release, so this file cannot be saved there yet.",
+    "oneDriveConflict": "This file was changed in OneDrive since you opened it, so Trypthos did not overwrite it. Your text is still here - copy it somewhere, then reopen the file to see OneDrive's version.",
+    "oneDriveSaveUnknown": "OneDrive did not confirm the save. Reopen the file to see what OneDrive has before saving again.",
+    "oneDriveTooLarge": "OneDrive takes a file of up to {{limit}} from Trypthos, and this one is now {{size}}, so it was not saved. Your text is still here.",
+    "oneDrivePermissionDenied": "OneDrive did not allow that change. If this folder was shared with you, it may be shared for viewing only.",
     "googleNotConnected": "Trypthos is no longer signed in to Google. Connect again from the Accounts page of Settings.",
     "notConfigured": "Google did not accept this build's sign-in setup, so Google Drive cannot be connected. Updating Trypthos may fix it.",
     "windowFailed": "The new window did not open, so the tab is still here with your changes.",
@@ -722,7 +726,7 @@
     "root": "OneDrive",
     "myFiles": "My files",
     "sharedWithMe": "Shared with me",
-    "readOnlyNote": "OneDrive folders open read-only for now. Saving to OneDrive follows in the next release."
+    "readOnlyNote": "Files in OneDrive can be edited and saved, up to 4 MB each. A larger file opens read-only."
   },
   "commit": {
     "title": "Save to GitHub",

@@ -371,14 +371,16 @@ export function failureKey(reason: string): string | null {
 /// provider for a Google Drive or OneDrive folder, or for either account. Everything else is provider-neutral.
 /// Null `kind` is a failure with no workspace to name.
 ///
-/// `during` says what was being attempted where the same reason means different things. A Drive
-/// "unknown" on a save is specific - Drive did not confirm the save - and must
-/// not be the wording for a read or a sign-in that failed for an unknown reason.
+/// `during` says what was being attempted where the same reason means different things. A cloud
+/// "unknown" on a save is specific - the service did not confirm the save - and must not be the
+/// wording for a read or a sign-in that failed for an unknown reason. A `conflict` on a create is a
+/// name already taken, never a file that changed since it was opened.
 export function providerFailureKey(
   kind: ProviderKind | null,
   reason: string,
-  during: "save" | null = null,
+  during: "save" | "create" | null = null,
 ): string | null {
+  if (during === "create" && reason === "conflict") return "errors.nameTaken";
   if (kind === "google-drive") {
     switch (reason) {
       case "unknown":
@@ -399,14 +401,26 @@ export function providerFailureKey(
         return "errors.driveReadOnly";
     }
   }
-  // OneDrive's own words: the shared keys for offline, rate-limited and not-connected name GitHub, and
-  // the sign-in's scope-denied, timed-out and not-configured name Google.
+  // OneDrive's own words: the shared keys for offline, rate-limited and not-connected name GitHub, the
+  // sign-in's scope-denied, timed-out and not-configured name Google, and the shared conflict says a
+  // file changed on disk.
   if (kind === "onedrive") {
     switch (reason) {
+      case "unknown":
+        if (during === "save") return "errors.oneDriveSaveUnknown";
+        break;
+      // Only a save's too-large is OneDrive's one-request limit; a read's is the app's own.
+      case "too-large":
+        if (during === "save") return "errors.oneDriveTooLarge";
+        break;
+      // A write refused by a folder shared for viewing only. A read's 403 keeps the generic words.
+      case "permission-denied":
+        if (during !== null) return "errors.oneDrivePermissionDenied";
+        break;
+      case "conflict":
+        return "errors.oneDriveConflict";
       case "other-account":
         return "errors.oneDriveOtherAccount";
-      case "read-only":
-        return "errors.oneDriveReadOnly";
       case "offline":
         return "errors.oneDriveOffline";
       case "rate-limited":
@@ -682,7 +696,7 @@ export function useWorkspace(
     (
       result: { reason: string; sizeBytes?: number; limitBytes?: number },
       kind: ProviderKind | null = null,
-      during: "save" | null = null,
+      during: "save" | "create" | null = null,
     ) => {
       setInternal((prev) => ({
         ...prev,
@@ -888,7 +902,8 @@ export function useWorkspace(
       setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
       const result = await client.writeFile(path, "", null);
       if (!result.ok) {
-        fail(result);
+        // Worded for the provider, and as a create: a conflict here is a name already taken.
+        fail(result, workspace.ref.kind, "create");
         return;
       }
 
@@ -937,7 +952,7 @@ export function useWorkspace(
       setInternal((prev) => ({ ...prev, busy: true, errorKey: null, errorParams: null }));
       const result = await client.createDirectory(path);
       if (!result.ok) {
-        fail(result);
+        fail(result, workspace.ref.kind, "create");
         return;
       }
 
@@ -965,9 +980,14 @@ export function useWorkspace(
 
       const result = await client.renameEntry(path, name);
       if (!result.ok) {
+        const kind = kindOf(stateRef.current.workspaces, path);
         if (result.reason === "conflict") return "rename.problems.taken";
-        if (result.reason === "permission-denied") return "rename.problems.denied";
-        return failureKey(result.reason) ?? "errors.unknown";
+        // On disk, a file another program holds open refuses a rename as a permission problem, which
+        // the dialog's words cover. In OneDrive it is a folder shared for viewing only.
+        if (result.reason === "permission-denied") {
+          return kind === "onedrive" ? "errors.oneDrivePermissionDenied" : "rename.problems.denied";
+        }
+        return providerFailureKey(kind, result.reason) ?? "errors.unknown";
       }
 
       const to = result.path;
