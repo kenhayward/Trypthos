@@ -1,7 +1,7 @@
 {
   "name": "trypthos",
   "private": true,
-  "version": "0.101.0",
+  "version": "0.101.1",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -25,6 +25,10 @@
     "typescript-eslint": "^8.70.1"
   },
   "overrides": {
-    "lodash-es": "4.18.1"
+    "lodash-es": "4.18.1",
+    "mermaid": {
+      "katex": "0.18.9"
+    },
+    "shell-quote": "1.12.0"
   }
 }
