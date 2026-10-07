@@ -408,6 +408,61 @@ test("a window that loaded an unreadable file may replace it, and nothing else",
   });
 });
 
+// What the main process hears from a refused write. A window whose load failed holds defaults that
+// are NOT what the session runs on - another window may hold the real settings - so pushing them into
+// main state would empty the recent-files menu and reset close-to-tray. A window that loaded a newer
+// build's file is different: defaults are what every window of this build runs on, so main hears them.
+async function heard(body) {
+  const { onSettingsWritten } = require("../src/settingsStore");
+  const seen = [];
+  const stop = onSettingsWritten((settings) => seen.push(settings));
+  try {
+    await body(seen);
+  } finally {
+    stop();
+  }
+}
+
+test("a write refused because the window's load failed is not pushed into main state", async () => {
+  await withQuietSettings(async ({ ipcMain, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    await window.invoke("settings:read");
+
+    await heard(async (seen) => {
+      assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+      assert.equal(seen.length, 0);
+    });
+  });
+});
+
+test("a write refused because the loaded unreadable file was since repaired is not pushed into main state", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    await window.invoke("settings:read");
+    await makeReadable(dir, file);
+
+    await heard(async (seen) => {
+      assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+      assert.equal(seen.length, 0);
+    });
+  });
+});
+
+test("a write from a window that loaded a newer build's file is still pushed into main state", async () => {
+  await withQuietSettings(async ({ ipcMain, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await fs.writeFile(file, JSON.stringify({ schemaVersion: SETTINGS_VERSION + 1 }), "utf8");
+    await window.invoke("settings:read");
+
+    await heard(async (seen) => {
+      assert.equal((await window.invoke("settings:write", DEFAULT_SETTINGS)).ok, false);
+      assert.deepEqual(seen, [DEFAULT_SETTINGS]);
+    });
+  });
+});
+
 /// The guard.
 ///
 /// Not a check that `secrets:get` is absent - that would only catch someone who named it obviously.

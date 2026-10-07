@@ -356,10 +356,10 @@ function registerIpcHandlers({
   //
   // How each window's OWN load went, keyed by its sender id (issue #235, fix round 3). Its renderer
   // writes back whatever that load gave it, so this - not any other read - decides what it may
-  // write. Absent: loaded (or never read, which the renderer never does before writing). "failed":
-  // the file could not be opened, or came from a newer build, so the window holds defaults and every
-  // write from it is refused (`not-loaded`), whatever the file looks like by then, until its own
-  // re-read succeeds. "unreadable": it holds defaults because no build can read the file, so it may
+  // write. Absent: loaded (or never read, which the renderer never does before writing). "failed" or
+  // "from-the-future": the file could not be opened, or came from a newer build, so the window holds
+  // defaults and every write from it is refused (`not-loaded`), whatever the file looks like by then,
+  // until its own re-read succeeds. "unreadable": it holds defaults because no build can read the file, so it may
   // replace that file and nothing else. Main-process reads (chat:send, the outline, startup) go
   // straight to the store and neither set nor clear this. An entry goes when its window does.
   const loads = new Map();
@@ -374,7 +374,7 @@ function registerIpcHandlers({
       loads.delete(id);
     } else {
       if (!loads.has(id)) event?.sender?.once?.("destroyed", () => loads.delete(id));
-      loads.set(id, state === "unreadable" ? "unreadable" : "failed");
+      loads.set(id, state === "unreadable" || state === "from-the-future" ? state : "failed");
     }
     return { ok: true, settings };
   });
@@ -388,7 +388,7 @@ function registerIpcHandlers({
     const id = senderId(event);
     const load = loads.get(id);
     let written;
-    if (load === "failed") {
+    if (load === "failed" || load === "from-the-future") {
       console.warn("Settings write: refused (not-loaded).");
       written = { ok: false, reason: "not-loaded" };
     } else {
@@ -397,8 +397,14 @@ function registerIpcHandlers({
       if (written.ok) loads.delete(id);
     }
     // The main process still hears the settings the renderer is running on: for this session they
-    // ARE the settings (close to tray, the recent list), stored or not.
-    notifySettingsWritten(parsed.data);
+    // ARE the settings (close to tray, the recent list), stored or not - when this build cannot store
+    // them at all (a newer build's file), defaults are what every window runs on. But NOT from a
+    // window whose own load did not succeed (`not-loaded`, other than a newer build's file): it holds
+    // defaults another window may not, and pushing them here would empty the recent-files menu and
+    // reset close-to-tray for the whole app.
+    if (written.ok || written.reason !== "not-loaded" || load === "from-the-future") {
+      notifySettingsWritten(parsed.data);
+    }
 
     // Refused (a newer build's file, a file that could not be opened, or a load that did not
     // succeed - issue #235), or written over an unreadable file. Either way these settings are the
