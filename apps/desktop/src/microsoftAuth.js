@@ -44,7 +44,7 @@ function failure(reason) {
 }
 
 function createMicrosoftAuth({
-  client,
+  client = null,
   accounts,
   fetch = globalThis.fetch,
   openExternal,
@@ -60,6 +60,15 @@ function createMicrosoftAuth({
   let pending = null;
   /// Bumped by every sign-out, so work begun before one cannot bring a token back after it.
   let generation = 0;
+  /// Every write to the account store runs through here, one at a time. The store's set and remove
+  /// are read-modify-write, so two in flight can land in either order - and a refresh's save landing
+  /// after a sign-out's delete would bring the account back.
+  let writes = Promise.resolve();
+  function exclusive(operation) {
+    const run = writes.then(operation, operation);
+    writes = run.catch(() => {});
+    return run;
+  }
 
   async function safely(step, operation) {
     try {
@@ -68,6 +77,10 @@ function createMicrosoftAuth({
       logger.error?.(`Account store ${step} failed: ${error?.code ?? error?.name}`);
       return failure("unknown");
     }
+  }
+
+  function safelyExclusive(step, operation) {
+    return safely(step, () => exclusive(operation));
   }
 
   async function call(url, { method = "GET", body = null, bearer = null }, step) {
@@ -151,10 +164,19 @@ function createMicrosoftAuth({
       return failure(mine.reason);
     }
 
-    const { verifier, challenge, state } = pkcePair(randomBytes);
-    const timer = setTimeout(() => mine.cancel("timed-out"), consentTimeoutMs);
-
+    let timer = null;
     try {
+      let verifier;
+      let challenge;
+      let state;
+      try {
+        ({ verifier, challenge, state } = pkcePair(randomBytes));
+      } catch (error) {
+        logger.error?.(`Could not prepare Microsoft sign-in: ${error?.code ?? error?.name}`);
+        return failure("unknown");
+      }
+      timer = setTimeout(() => mine.cancel("timed-out"), consentTimeoutMs);
+
       try {
         await openExternal(
           microsoftAuthorizationUrl({ clientId: client.clientId, redirectUri: listener.redirectUri, state, codeChallenge: challenge }),
@@ -190,12 +212,25 @@ function createMicrosoftAuth({
       if (mine.reason !== undefined) return failure(mine.reason);
 
       // Stored last: a credential reaches disk only once it has been shown to work.
-      const saved = await safely("save", () => accounts.setToken(MICROSOFT_PROVIDER, token.refresh_token));
+      // Inside the write lock, and the generation moves on first: any refresh begun for the previous
+      // account can no longer write over, or delete, this one.
+      let mineGeneration = -1;
+      const saved = await safelyExclusive("save", async () => {
+        if (mine.reason !== undefined) return { cancelled: true };
+        generation += 1;
+        mineGeneration = generation;
+        access = null;
+        refreshing = null;
+        return accounts.setToken(MICROSOFT_PROVIDER, token.refresh_token);
+      });
       if (!saved.ok) return saved;
+      if (saved.value?.cancelled) return failure(mine.reason);
       if (saved.value && saved.value.ok === false) return saved.value;
 
       if (mine.reason !== undefined) {
-        await safely("delete", () => accounts.deleteToken(MICROSOFT_PROVIDER));
+        await safelyExclusive("delete", async () => {
+          if (generation === mineGeneration) await accounts.deleteToken(MICROSOFT_PROVIDER);
+        });
         return failure(mine.reason);
       }
       remember(token);
@@ -221,8 +256,12 @@ function createMicrosoftAuth({
     const refreshed = await tokenCall(microsoftRefreshRequestBody({ clientId: client.clientId, refreshToken }), "refresh");
     if (!refreshed.ok) {
       // Microsoft will not take this token again: keeping it would make every launch ask and fail.
-      if (refreshed.reason === "not-connected" && generation === began) {
-        await safely("delete", () => accounts.deleteToken(MICROSOFT_PROVIDER));
+      // This also fires for interaction_required, deliberately: both mean Microsoft needs the user to
+      // consent again (ruled). Checked inside the lock, so a sign-in or sign-out since cannot be undone.
+      if (refreshed.reason === "not-connected") {
+        await safelyExclusive("delete", async () => {
+          if (generation === began) await accounts.deleteToken(MICROSOFT_PROVIDER);
+        });
       }
       return refreshed;
     }
@@ -230,8 +269,12 @@ function createMicrosoftAuth({
 
     // The new refresh token is stored BEFORE the access token is handed out. If it cannot be, the
     // refresh fails: carrying on would leave the store holding a token Microsoft may have retired.
-    const saved = await safely("save", () => accounts.setToken(MICROSOFT_PROVIDER, refreshed.token.refresh_token));
+    const saved = await safelyExclusive("save", async () => {
+      if (generation !== began) return { stale: true };
+      return accounts.setToken(MICROSOFT_PROVIDER, refreshed.token.refresh_token);
+    });
     if (!saved.ok) return saved;
+    if (saved.value?.stale) return failure("not-connected");
     if (saved.value && saved.value.ok === false) return saved.value;
     if (generation !== began) return failure("not-connected");
 
@@ -271,7 +314,7 @@ function createMicrosoftAuth({
     generation += 1;
     access = null;
     refreshing = null;
-    const deleted = await safely("delete", () => accounts.deleteToken(MICROSOFT_PROVIDER));
+    const deleted = await safelyExclusive("delete", () => accounts.deleteToken(MICROSOFT_PROVIDER));
     if (!deleted.ok) return deleted;
     return { ok: true };
   }

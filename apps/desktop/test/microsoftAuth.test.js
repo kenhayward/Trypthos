@@ -216,3 +216,232 @@ test("no log line carries a token, a code or the state", async () => {
   const text = h.logged.join("\n");
   for (const secret of ["refresh-invented-0", "access-invented", "c1"]) assert.equal(text.includes(secret), false);
 });
+
+// ---- Fix round 1: leak guard over the paths that DO log, and the write races ----
+
+/// Wraps a fake Microsoft so a test can intercept calls. `hook(url, init, inner)` answers, or returns
+/// undefined to let the inner fake answer.
+function intercept(inner, hook) {
+  return {
+    calls: inner.calls,
+    fetch: async (url, init = {}) => {
+      const answered = await hook(url, init, inner.fetch);
+      return answered === undefined ? inner.fetch(url, init) : answered;
+    },
+  };
+}
+
+function deferred() {
+  let release;
+  const promise = new Promise((resolve) => (release = resolve));
+  return { promise, release };
+}
+
+const isGrant = (init, grant) => new URLSearchParams(init.body ?? "").get("grant_type") === grant;
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test("log lines from the failing paths carry no token, code, state or verifier", async () => {
+  const secrets = new Set(["refresh-invented-0", "access-invented-1", "refresh-invented-1", "c1"]);
+  const logged = [];
+  const boom = () => Object.assign(new Error("boom refresh-invented-0 c1 access-invented-1"), { code: "ECONNRESET" });
+
+  // 1. connect: the token exchange throws.
+  let exchangeBody = null;
+  const throwing = harness({
+    microsoft: intercept(fakeMicrosoft(), (url, init) => {
+      if (url.endsWith("/token") && isGrant(init, "authorization_code")) {
+        exchangeBody = new URLSearchParams(init.body);
+        throw boom();
+      }
+    }),
+  });
+  assert.deepEqual(await throwing.instance.connect(), { ok: false, reason: "offline" });
+  secrets.add(throwing.opened().searchParams.get("state"));
+  secrets.add(exchangeBody.get("code_verifier"));
+  logged.push(...throwing.logged);
+
+  // 2. refresh: the call throws.
+  const refreshThrows = harness({
+    accounts: fakeAccounts("refresh-invented-0"),
+    microsoft: intercept(fakeMicrosoft(), (url, init) => {
+      if (url.endsWith("/token") && isGrant(init, "refresh_token")) throw boom();
+    }),
+  });
+  assert.equal((await refreshThrows.instance.accessToken()).ok, false);
+  logged.push(...refreshThrows.logged);
+
+  // 3. a malformed token body, on both the exchange and a refresh.
+  const malformed = (url) => (url.endsWith("/token") ? json(200, { access_token: "access-invented-1" }) : undefined);
+  const badExchange = harness({ microsoft: intercept(fakeMicrosoft(), malformed) });
+  assert.equal((await badExchange.instance.connect()).ok, false);
+  logged.push(...badExchange.logged);
+  const badRefresh = harness({ accounts: fakeAccounts("refresh-invented-0"), microsoft: intercept(fakeMicrosoft(), malformed) });
+  assert.equal((await badRefresh.instance.accessToken()).ok, false);
+  logged.push(...badRefresh.logged);
+
+  // 4. the account store fails, on read and on save.
+  const readFails = fakeAccounts("refresh-invented-0");
+  readFails.getToken = async () => {
+    throw Object.assign(new Error("refresh-invented-0"), { code: "EIO" });
+  };
+  const storeRead = harness({ accounts: readFails });
+  await storeRead.instance.accessToken();
+  logged.push(...storeRead.logged);
+  const saveFails = fakeAccounts();
+  saveFails.setToken = async () => {
+    throw Object.assign(new Error("refresh-invented-1 c1"), { code: "EACCES" });
+  };
+  const storeSave = harness({ accounts: saveFails });
+  assert.deepEqual(await storeSave.instance.connect(), { ok: false, reason: "unknown" });
+  logged.push(...storeSave.logged);
+
+  assert.ok(logged.length >= 6, `expected the failing paths to log, got ${logged.length}`);
+  const text = logged.join("\n");
+  for (const secret of secrets) {
+    assert.ok(secret && secret.length > 0);
+    assert.equal(text.includes(secret), false, "a log line carried a secret");
+  }
+});
+
+test("a disconnect while the refresh's token call is pending: not connected, nothing stored", async () => {
+  const gate = deferred();
+  const reached = deferred();
+  const h = harness({
+    accounts: fakeAccounts("refresh-invented-0"),
+    microsoft: intercept(fakeMicrosoft(), async (url, init, inner) => {
+      if (!isGrant(init, "refresh_token")) return undefined;
+      reached.release();
+      await gate.promise;
+      return inner(url, init);
+    }),
+  });
+  const refreshing = h.instance.accessToken();
+  await reached.promise;
+  await h.instance.disconnect();
+  gate.release();
+
+  assert.deepEqual(await refreshing, { ok: false, reason: "not-connected" });
+  assert.equal(h.accounts.tokens.has("onedrive"), false);
+  assert.deepEqual(await h.instance.accessToken(), { ok: false, reason: "not-connected" });
+});
+
+test("a disconnect while the rotated token is being saved still leaves nothing stored", async () => {
+  const accounts = fakeAccounts("refresh-invented-0");
+  const reached = deferred();
+  const gate = deferred();
+  accounts.setToken = async (provider, token) => {
+    reached.release();
+    await gate.promise;
+    accounts.tokens.set(provider, token);
+    return { ok: true };
+  };
+  const h = harness({ accounts });
+  const refreshing = h.instance.accessToken();
+  await reached.promise;
+  const disconnecting = h.instance.disconnect();
+  await tick();
+  gate.release();
+
+  assert.deepEqual(await refreshing, { ok: false, reason: "not-connected" });
+  assert.deepEqual(await disconnecting, { ok: true });
+  assert.equal(accounts.tokens.has("onedrive"), false);
+});
+
+/// An old refresh is held at Microsoft while the user signs in again. `oldAnswer` is what Microsoft
+/// then says to the old refresh.
+async function reconnectDuringRefresh(oldAnswer) {
+  const gate = deferred();
+  const reached = deferred();
+  const h = harness({
+    accounts: fakeAccounts("refresh-invented-0"),
+    microsoft: intercept(fakeMicrosoft(), async (url, init, inner) => {
+      if (!isGrant(init, "refresh_token")) return undefined;
+      reached.release();
+      await gate.promise;
+      return oldAnswer === null ? inner(url, init) : oldAnswer;
+    }),
+  });
+  const old = h.instance.accessToken();
+  await reached.promise;
+  assert.deepEqual(await h.instance.connect(), { ok: true, email: "ada@example.com" });
+  gate.release();
+  return { h, old: await old };
+}
+
+test("an old refresh refused as invalid_grant cannot delete the token a reconnect just stored", async () => {
+  const { h } = await reconnectDuringRefresh(json(400, { error: "invalid_grant" }));
+  assert.equal(h.accounts.tokens.get("onedrive"), "refresh-invented-1");
+});
+
+test("an old refresh that succeeds cannot overwrite the reconnected account's tokens", async () => {
+  const { h, old } = await reconnectDuringRefresh(null);
+  assert.deepEqual(old, { ok: false, reason: "not-connected" });
+  assert.equal(h.accounts.tokens.get("onedrive"), "refresh-invented-1");
+  assert.deepEqual(await h.instance.accessToken(), { ok: true, token: "access-invented-1" });
+});
+
+test("a refresh queued behind another write does not save once a sign-out has happened meanwhile", async () => {
+  const accounts = fakeAccounts("refresh-invented-0");
+  const realDelete = accounts.deleteToken;
+  const gate = deferred();
+  let first = true;
+  accounts.deleteToken = async (provider) => {
+    if (first) {
+      first = false;
+      await gate.promise;
+    }
+    return realDelete(provider);
+  };
+  const saves = [];
+  const realSet = accounts.setToken;
+  accounts.setToken = async (provider, token) => (saves.push(token), realSet(provider, token));
+  const h = harness({ accounts });
+
+  const firstSignOut = h.instance.disconnect(); // holds the lock open
+  const refreshing = h.instance.accessToken(); // its token call completes, then it queues for the lock
+  for (let i = 0; i < 10; i += 1) await tick();
+  const secondSignOut = h.instance.disconnect(); // happens while the refresh waits its turn
+  gate.release();
+  await Promise.all([firstSignOut, secondSignOut]);
+
+  assert.deepEqual(await refreshing, { ok: false, reason: "not-connected" });
+  assert.deepEqual(saves, []);
+  assert.equal(accounts.tokens.has("onedrive"), false);
+});
+
+test("a client of undefined is not configured rather than a crash", async () => {
+  const instance = createMicrosoftAuth({
+    client: undefined,
+    accounts: fakeAccounts(),
+    openExternal: async () => {},
+    listen: async () => {
+      throw new Error("must not listen");
+    },
+    logger: { error: () => {} },
+  });
+  assert.deepEqual(await instance.connect(), { ok: false, reason: "not-configured" });
+  assert.deepEqual(await instance.accessToken(), { ok: false, reason: "not-configured" });
+  assert.deepEqual(await instance.status(), { ok: true, configured: false, connected: false, email: null, reason: null });
+});
+
+test("if the PKCE pair cannot be made, the listener still closes and nothing opens", async () => {
+  let closed = false;
+  let opened = false;
+  const logged = [];
+  const instance = createMicrosoftAuth({
+    client: CLIENT,
+    accounts: fakeAccounts(),
+    logger: { error: (line) => logged.push(line) },
+    randomBytes: () => {
+      throw Object.assign(new Error("entropy"), { code: "ENTROPY" });
+    },
+    listen: async () => ({ redirectUri: "http://localhost:5050", arrived: new Promise(() => {}), close: () => (closed = true) }),
+    openExternal: async () => {
+      opened = true;
+    },
+  });
+  assert.deepEqual(await instance.connect(), { ok: false, reason: "unknown" });
+  assert.equal(closed, true);
+  assert.equal(opened, false);
+  assert.deepEqual(logged, ["Could not prepare Microsoft sign-in: ENTROPY"]);
+});
