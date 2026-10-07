@@ -885,8 +885,9 @@ export function useWorkspace(
       // Checked after the commit question, so it covers only presses that got past it. A press made
       // while a repository's first-save commit dialog is open does NOT queue: no flight exists yet and
       // no branch has been chosen, so it asks the commit question again and opens the dialog again.
-      // Whichever press answers its dialog second reaches here behind the first one's flight, and
-      // queues as a follow-up like any other.
+      // There is only one dialog: `askCommit` in App.tsx calls `setCommitPrompt` with a new `answer`,
+      // so the second press REPLACES the open prompt, and the first press's promise is orphaned and
+      // never settles. Only one press can ever be answered.
       const already = flights.current.get(open.path);
       if (already !== undefined) {
         already.followUp ??= deferred();
