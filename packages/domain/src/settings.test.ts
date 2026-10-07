@@ -19,6 +19,9 @@ import { DEFAULT_FILE_TYPES } from "./fileTypes";
 /// migration into five unrelated-looking failures.
 const MEDIA_ADDED = ["video", "audio"];
 
+/// What version 25 appends, for the same reason and with the same shape of test.
+const PDF_ADDED = ["pdf"];
+
 describe("SettingsSchema", () => {
   it("accepts the defaults it ships with", () => {
     expect(() => SettingsSchema.parse(DEFAULT_SETTINGS)).not.toThrow();
@@ -531,7 +534,7 @@ describe("the file types a settings file names", () => {
   // rows, because a type with no checkbox was never a choice anybody made. Everything the user
   // actually chose is still here, in the order they had it.
   it("seeds an upgraded file with markdown, and whatever later versions append", () => {
-    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED]);
+    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED, ...PDF_ADDED]);
   });
 
   it("leaves everything else version 10 stored", () => {
@@ -556,12 +559,12 @@ describe("the file types a settings file names", () => {
   });
 
   it("leaves an upgraded installation on the list it already had", () => {
-    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED]);
+    expect(loadSettings(before).fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED, ...PDF_ADDED]);
   });
 
   it("keeps a list the user has chosen", () => {
     const chosen = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "text"] } };
-    expect(loadSettings(chosen).fileTypes.enabled).toEqual(["markdown", "text", ...MEDIA_ADDED]);
+    expect(loadSettings(chosen).fileTypes.enabled).toEqual(["markdown", "text", ...MEDIA_ADDED, ...PDF_ADDED]);
   });
 
   // Strings rather than an enum, on purpose. A file written by a NEWER build names types this one
@@ -570,7 +573,7 @@ describe("the file types a settings file names", () => {
   // trip and is ignored where it is read.
   it("loads a file naming a type it does not know", () => {
     const newer = { ...before, schemaVersion: 11, fileTypes: { enabled: ["markdown", "klingon"] } };
-    expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon", ...MEDIA_ADDED]);
+    expect(loadSettings(newer).fileTypes.enabled).toEqual(["markdown", "klingon", ...MEDIA_ADDED, ...PDF_ADDED]);
     // And the rest of the file survived the migration to a list of workspaces alongside it.
     expect(loadSettings(newer).workspaces).toEqual([{ kind: "local", root: "D:/Notes" }]);
   });
@@ -655,7 +658,7 @@ describe("thinking on a profile", () => {
   it("keeps everything version 11 stored", () => {
     const migrated = loadSettings(v11);
     expect(migrated.chat.profiles[0]?.label).toBe("Local model");
-    expect(migrated.fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED]);
+    expect(migrated.fileTypes.enabled).toEqual(["markdown", ...MEDIA_ADDED, ...PDF_ADDED]);
     expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
   });
 
@@ -1069,8 +1072,19 @@ describe("version 25", () => {
       ],
     };
     const loaded = loadSettings(before);
-    expect(SETTINGS_VERSION).toBe(25);
-    expect(loaded.schemaVersion).toBe(25);
+    expect(SETTINGS_VERSION).toBeGreaterThanOrEqual(25);
+    expect(loaded.schemaVersion).toBe(SETTINGS_VERSION);
     expect(loaded.workspaces).toEqual(before.workspaces);
+  });
+});
+
+describe("migrating from version 25", () => {
+  // Nobody who already runs the app chose to exclude PDFs, so the row arrives enabled,
+  // exactly as version 22 delivered video and audio.
+  it("adds the pdf row to an existing list", () => {
+    const before = { ...DEFAULT_SETTINGS, schemaVersion: 25, fileTypes: { enabled: ["markdown"] } };
+    const migrated = loadSettings(before);
+    expect(migrated.fileTypes.enabled).toEqual(["markdown", "pdf"]);
+    expect(migrated.schemaVersion).toBe(SETTINGS_VERSION);
   });
 });
