@@ -256,6 +256,83 @@ test("an unparseable token file is backed up beside itself, then replaced", asyn
   });
 });
 
+/// settings:write sweeps chatKeys.json after every save. A sweep with nothing to drop writes nothing,
+/// so before the fix it backed an unparseable file up, left it in place, and backed it up again on
+/// the next save - without bound. The backup is taken only when a write is about to replace the file.
+test("sweeping an unparseable key file with nothing to drop takes no backup and writes nothing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    let tick = 0;
+    const secrets = createSecretStore({
+      userDataDir: dir,
+      encryptor: fakeEncryptor(),
+      logger: silent,
+      now: () => new Date(Date.UTC(2026, 0, 2, 3, 4, 5, tick++)),
+    });
+    const corrupt = "{ this is not json";
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, corrupt, "utf8");
+
+    assert.deepEqual(await secrets.retainOnly([]), { ok: true });
+    assert.deepEqual(await secrets.retainOnly([]), { ok: true });
+
+    assert.equal(await fs.readFile(file, "utf8"), corrupt);
+    assert.deepEqual(await fs.readdir(dir), ["chatKeys.json"]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("storing over an unparseable key file backs it up once, and the next store backs up nothing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    let tick = 0;
+    const secrets = createSecretStore({
+      userDataDir: dir,
+      encryptor: fakeEncryptor(),
+      logger: silent,
+      now: () => new Date(Date.UTC(2026, 0, 2, 3, 4, 5, tick++)),
+    });
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    const backups = async () => (await fs.readdir(dir)).filter((name) => name.startsWith("chatKeys.json.unreadable-"));
+
+    assert.deepEqual(await secrets.setKey("https://api.example.com/v1", "sk-invented"), { ok: true });
+    assert.equal((await backups()).length, 1);
+    assert.equal(await secrets.getKey("https://api.example.com/v1"), "sk-invented");
+
+    assert.deepEqual(await secrets.setKey("https://api.example.org/v1", "sk-invented-2"), { ok: true });
+    assert.equal((await backups()).length, 1);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+/// chatKeys.json is read on every chat turn, so a line per read of a damaged file is a line per turn.
+test("reading a damaged credential file logs once per store, per state", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const lines = [];
+    const record = (...args) => lines.push(args.join(" "));
+    const store = createAccountStore({ userDataDir: dir, encryptor: fakeEncryptor(), logger: { warn: record, error: record } });
+
+    await fs.writeFile(accountsPath(dir), FUTURE_TEXT, "utf8");
+    await store.getToken("github");
+    await store.getToken("github");
+    await store.hasToken("google");
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /from-the-future/);
+
+    await fs.writeFile(accountsPath(dir), "{ this is not json", "utf8");
+    await store.getToken("github");
+    await store.getToken("github");
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /not-json/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("a current token file still stores and deletes normally", async () => {
   await withStore(async (store, dir) => {
     assert.deepEqual(await store.setToken("github", "ghp_invented"), { ok: true });

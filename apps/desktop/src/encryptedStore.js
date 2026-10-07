@@ -101,46 +101,47 @@ function createEncryptedStore({
     return { state: "current", values };
   }
 
+  /// Which file states this store has already logged a read of. chatKeys.json is read on every chat
+  /// turn, so a line per read of a damaged file would be a line per turn; one per state is enough to
+  /// say what happened, and a change of state (repaired, then damaged differently) still logs.
+  const loggedReads = new Set();
+
   /// Every read answers with an object, however badly the file has gone wrong. One line when it has,
   /// naming the step and the reason - never the file's contents or its path.
   async function readAll() {
     const found = await inspect();
     if (found.state !== "current" && found.state !== "missing") {
-      logger.warn?.(`Credential store (${field}) read: ignored the file (${found.reason}).`);
+      const key = `${found.state}:${found.reason}`;
+      if (!loggedReads.has(key)) {
+        loggedReads.add(key);
+        logger.warn?.(`Credential store (${field}) read: ignored the file (${found.reason}).`);
+      }
     }
     return found.values;
   }
 
   /// The read half of every change, and the guard on it (issue #235).
   ///
-  /// Answers `{ ok: true, values }` when the file may be replaced, or `{ ok: false, reason }`:
+  /// Answers `{ ok: true, values, unreadable }` when the file may be replaced, or `{ ok: false, reason }`:
   ///
   ///   - **From the future**: REFUSED, and the file is never touched. Reads already answer "no
   ///     credentials" for it; a write would replace every token the newer build holds with this
   ///     build's handful. Refusing costs a sign-in that does not stick on this build. The way out is
   ///     to run the newer build again, which finds every token where it left it.
-  ///   - **Unreadable**: copied aside to `<file>.unreadable-<timestamp>`, then replaced. No build can
-  ///     use a token in a file nobody can parse, so nothing is lost by moving it, and refusing would
-  ///     leave the user unable to connect anything ever again. The copy is ciphertext still bound to
-  ///     this machine and OS user, so it holds nothing readable anywhere else.
+  ///   - **Unreadable**: answered as empty with `unreadable: true`, and replaced by the change that
+  ///     follows - which copies it aside to `<file>.unreadable-<timestamp>` first (`writeChange`).
+  ///     No build can use a token in a file nobody can parse, so nothing is lost by moving it, and
+  ///     refusing would leave the user unable to connect anything ever again. The copy is ciphertext
+  ///     still bound to this machine and OS user, so it holds nothing readable anywhere else. The copy
+  ///     is NOT taken here: a sweep with nothing to drop writes nothing, and a backup taken on every
+  ///     sweep of a file left in place would pile up without bound.
   ///   - **Unopenable**: refused - there is nothing to copy and no telling what it holds.
   async function readForChange() {
     const found = await inspect();
-    if (found.state === "current" || found.state === "missing") return { ok: true, values: found.values };
-
-    if (found.state === "unreadable") {
-      // COPYFILE_EXCL so a backup is never overwritten. A collision (a second instance, the same
-      // millisecond) answers a refusal and leaves the file as it was - a result, never a throw
-      // across IPC; the next change tries again with a fresh time.
-      try {
-        await fs.copyFile(file, `${file}.unreadable-${backupStamp(now())}`, fs.constants.COPYFILE_EXCL);
-      } catch (error) {
-        logger.error?.(`Credential store (${field}) write: could not back up the unreadable file (${error?.code ?? error?.name}).`);
-        return { ok: false, reason: "backup-failed" };
-      }
-      logger.warn?.(`Credential store (${field}) write: backed up the unreadable file (${found.reason}).`);
-      return { ok: true, values: {} };
+    if (found.state === "current" || found.state === "missing") {
+      return { ok: true, values: found.values, unreadable: false };
     }
+    if (found.state === "unreadable") return { ok: true, values: {}, unreadable: true, reason: found.reason };
 
     logger.warn?.(`Credential store (${field}) write: refused (${found.reason}).`);
     return { ok: false, reason: found.state === "from-the-future" ? "from-the-future" : "unopenable" };
@@ -165,6 +166,26 @@ function createEncryptedStore({
     }
   }
 
+  /// Replaces the file with `values`, backing an unreadable one up immediately before - so the copy is
+  /// taken once, by the write that replaces it, and never by a change that writes nothing. Answers
+  /// `{ ok: true }` or `{ ok: false, reason: "backup-failed" }`.
+  async function writeChange(found, values) {
+    if (found.unreadable) {
+      // COPYFILE_EXCL so a backup is never overwritten. A collision (a second instance, the same
+      // millisecond) answers a refusal and leaves the file as it was - a result, never a throw
+      // across IPC; the next change tries again with a fresh time.
+      try {
+        await fs.copyFile(file, `${file}.unreadable-${backupStamp(now())}`, fs.constants.COPYFILE_EXCL);
+      } catch (error) {
+        logger.error?.(`Credential store (${field}) write: could not back up the unreadable file (${error?.code ?? error?.name}).`);
+        return { ok: false, reason: "backup-failed" };
+      }
+      logger.warn?.(`Credential store (${field}) write: backed up the unreadable file (${found.reason}).`);
+    }
+    await writeAll(values);
+    return { ok: true };
+  }
+
   function set(key, value) {
     return queued(async () => {
       if (!encryptor.isEncryptionAvailable()) {
@@ -176,8 +197,7 @@ function createEncryptedStore({
       if (!found.ok) return found;
       const { values } = found;
       values[key] = encryptor.encryptString(value).toString("base64");
-      await writeAll(values);
-      return { ok: true };
+      return writeChange(found, values);
     });
   }
 
@@ -212,8 +232,7 @@ function createEncryptedStore({
       if (!found.ok) return found;
       const { values } = found;
       delete values[key];
-      await writeAll(values);
-      return { ok: true };
+      return writeChange(found, values);
     });
   }
 
@@ -227,7 +246,8 @@ function createEncryptedStore({
     return found;
   }
 
-  /// Drops every key not in `keep`.
+  /// Drops every key not in `keep`. Writes only when something was dropped - so an unreadable file,
+  /// which holds nothing to drop, is left in place with no backup.
   function retainOnly(keep) {
     const wanted = new Set(keep);
     return queued(async () => {
@@ -242,8 +262,8 @@ function createEncryptedStore({
         changed = true;
       }
 
-      if (changed) await writeAll(values);
-      return { ok: true };
+      if (!changed) return { ok: true };
+      return writeChange(found, values);
     });
   }
 
