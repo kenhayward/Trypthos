@@ -316,7 +316,8 @@ test("a listing in flight when a write lands in its folder is not kept", async (
   const first = provider.list("Archive");
   assert.deepEqual(await provider.createDirectory("Archive/Ideas"), { ok: true });
   release();
-  await first;
+  const overtaken = await first;
+  assert.ok(overtaken.nodes.some((node) => node.id === "Archive/Ideas"));
   const again = await provider.list("Archive");
   assert.equal(named(calls, "children").length, 2);
   assert.ok(again.nodes.some((node) => node.id === "Archive/Ideas"));

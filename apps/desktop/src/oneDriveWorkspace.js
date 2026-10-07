@@ -153,13 +153,15 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
     return pending.promise;
   }
 
-  /// A folder's entries as they are now: a listing that a Refresh overtook is asked for again, so a
-  /// Refresh pressed mid-listing cannot be undone by it.
+  /// A folder's entries as they are now: a listing that a Refresh, or a write into its folder,
+  /// overtook is asked for again, so neither can be undone by a listing begun before it.
   async function currentEntriesOf(path) {
+    const key = oneDrivePathKey(path);
     for (;;) {
       const started = generation;
+      const startedWrites = writesTo(key);
       const listed = await entriesOf(path);
-      if (!listed.ok || generation === started) return listed;
+      if (!listed.ok || (generation === started && writesTo(key) === startedWrites)) return listed;
     }
   }
 
