@@ -17,7 +17,7 @@ interface Props {
 ///
 /// A component of its own rather than inline in Settings, because the Drive open-folder dialog shows
 /// the same control when no account is connected yet. Nothing here displays a credential: the
-/// connected account is named by the email the shell got from Google.
+/// connected account is named by the email the shell got from the provider.
 export default function CloudAccountSection({ kind, bridge, onConnected }: Props) {
   const { t } = useTranslation();
   const account = useCloudAccount(bridge, kind.failureKey);
@@ -28,7 +28,7 @@ export default function CloudAccountSection({ kind, bridge, onConnected }: Props
       ? t("cloud.connectedAs", { email: account.email })
       : t("cloud.notConnected");
 
-  // `configured` stays false when the status check itself failed, so "this build has no Drive
+  // `configured` stays false when the status check itself failed, so "this build has no support for this provider
   // support" is only claimed when the check answered and no error is showing.
   const missingInBuild = !account.configured && account.errorKey === null;
 

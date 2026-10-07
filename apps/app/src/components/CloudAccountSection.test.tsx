@@ -157,7 +157,7 @@ describe("the OneDrive account", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Could not reach Microsoft. Check your connection and try again.");
   });
 
-  it("names Microsoft, not Google, when sign-in is refused or times out", async () => {
+  it("names Microsoft, not Google, when sign-in is refused", async () => {
     const user = userEvent.setup();
     render(
       <CloudAccountSection
@@ -168,6 +168,20 @@ describe("the OneDrive account", () => {
     await user.click(await screen.findByRole("button", { name: "Connect OneDrive" }));
     const alert = (await screen.findByRole("alert")).textContent ?? "";
     expect(alert).toContain("OneDrive");
+    expect(alert).not.toContain("Google");
+  });
+
+  it("names Microsoft, not Google, when sign-in times out", async () => {
+    const user = userEvent.setup();
+    render(
+      <CloudAccountSection
+        kind={ONEDRIVE_ACCOUNT}
+        bridge={oneDriveAccount(fakeOneDrive({ connectOneDrive: async () => ({ ok: false, reason: "timed-out" }) }))}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Connect OneDrive" }));
+    const alert = (await screen.findByRole("alert")).textContent ?? "";
+    expect(alert).toContain("Microsoft");
     expect(alert).not.toContain("Google");
   });
 

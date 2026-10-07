@@ -3,6 +3,7 @@ import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoPath } from "../testing/repoRoot";
 import en from "../locales/en.json";
+import { cloudAccountKeys } from "./cloudAccounts";
 
 /// Every key a component asks for must exist in the catalogue.
 ///
@@ -95,12 +96,6 @@ const DYNAMIC_PREFIXES = [
   // checks the other direction: every signal has both a singular and a counted wording.
   "editor.flavour.signal.",
   "editor.flavour.signals.",
-  // Named by CloudAccountKind (GOOGLE_ACCOUNT, ONEDRIVE_ACCOUNT) so one section serves every provider.
-  // `cloudAccounts.test` checks the other direction: every key a kind names exists.
-  "google.",
-  "onedrive.",
-  "settings.accounts.googleDrive",
-  "settings.accounts.oneDrive",
 ];
 
 function usedKeys(): Map<string, string[]> {
@@ -126,7 +121,8 @@ describe("translation keys", () => {
   });
 
   it("has no orphaned keys", () => {
-    const used = new Set(usedKeys().keys());
+    // The keys the account kinds name, which no t("...") call spells out: exactly these, not a prefix.
+    const used = new Set([...usedKeys().keys(), ...cloudAccountKeys()]);
     const orphans = [...CATALOGUE].filter(
       (key) => !used.has(key) && !DYNAMIC_PREFIXES.some((prefix) => key.startsWith(prefix)),
     );
