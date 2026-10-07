@@ -371,6 +371,7 @@
     "image": "Images",
     "video": "Video",
     "audio": "Audio",
+    "pdf": "PDF",
     "powershell": "PowerShell",
     "batch": "Batch",
     "sql": "SQL",

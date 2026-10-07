@@ -33,6 +33,7 @@ export type FileTypeId =
   | "image"
   | "video"
   | "audio"
+  | "pdf"
   | "sql"
   | "rust"
   | "go"
@@ -70,7 +71,10 @@ export type FileTypeGroup = "documents" | "data" | "media" | "languages" | "util
 /// `video` and `audio` are the same absence, by a different route again: a recording is served over
 /// a streaming protocol rather than crossing IPC at all, because a data URL cannot be seeked and
 /// seeking is the whole of a scrub bar.
-export type FileTypeKind = "prose" | "plain" | "code" | "image" | "video" | "audio";
+///
+/// `pdf` is the absence again, and it takes the recording's route: the bytes are streamed, never
+/// read, and what draws them is an engine in the renderer, not the window.
+export type FileTypeKind = "prose" | "plain" | "code" | "image" | "video" | "audio" | "pdf";
 
 export interface FileType {
   /// Also the key of the renderer's language loader, and what a settings file stores.
@@ -167,6 +171,21 @@ export const FILE_TYPES: readonly FileType[] = [
     filenames: [],
     modes: [],
     kind: "audio",
+    pinned: false,
+  },
+  {
+    id: "pdf",
+    labelKey: "fileTypes.pdf",
+    group: "documents",
+    // The documents a window reads with help rather than draws without it: the format is a page
+    // description, not pixels, and the reading needs an engine. One extension, and the row claims
+    // nothing else - a PDF is a PDF whatever it holds.
+    extensions: ["pdf"],
+    filenames: [],
+    // Nothing to switch between, as with a picture. Live and Preview are markdown constructs and
+    // Source is text; a PDF is none of the three.
+    modes: [],
+    kind: "pdf",
     pinned: false,
   },
   {

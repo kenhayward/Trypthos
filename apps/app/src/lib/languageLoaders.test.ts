@@ -165,14 +165,14 @@ describe("every language in the catalogue", () => {
     expect(support.language.parser.parse("a\n")).toBeDefined();
   });
 
-  // Plain text, the three media types and Makefile, for three different reasons: plain text needs
-  // no highlighting and CodeMirror's default is already that, a picture or a recording never
-  // reaches CodeMirror at all, and no Makefile grammar exists. Listed exactly, and in catalogue
+  // Plain text, the three media types, the PDF and Makefile, for three different reasons: plain text needs
+  // no highlighting and CodeMirror's default is already that, a picture, a recording or a document an
+  // engine draws never reaches CodeMirror at all, and no Makefile grammar exists. Listed exactly, and in catalogue
   // order, so one arriving by accident - a loader forgotten when a type was added - fails rather
   // than passing.
-  it("has exactly five types with nothing to load", () => {
+  it("has exactly six types with nothing to load", () => {
     const bare = FILE_TYPES.filter((type) => LANGUAGE_LOADERS[type.id] === null).map((t) => t.id);
-    expect(bare).toEqual(["text", "image", "video", "audio", "makefile"]);
+    expect(bare).toEqual(["text", "image", "video", "audio", "pdf", "makefile"]);
   });
 });
 

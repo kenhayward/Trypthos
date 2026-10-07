@@ -82,6 +82,9 @@ export const LANGUAGE_LOADERS: Record<FileTypeId, LanguageLoader | null> = {
   // is merely absent.
   video: null,
   audio: null,
+  // The same absence as a recording, by the recording's route: a PDF is streamed and drawn by an
+  // engine, and it never reaches CodeMirror either.
+  pdf: null,
   json: () => import("@codemirror/lang-json").then((m) => m.json()),
   yaml: () => import("@codemirror/lang-yaml").then((m) => m.yaml()),
   xml: () => import("@codemirror/lang-xml").then((m) => m.xml()),
