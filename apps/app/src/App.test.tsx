@@ -2114,3 +2114,39 @@ describe("a workspace's home page", () => {
     expect(element).toContain("key={homeWorkspace.id}");
   });
 });
+
+describe("opening a OneDrive folder", () => {
+  /// The GitHub shell, with a OneDrive half whose build has, or has not, a Microsoft client.
+  function oneDriveShell(configured: boolean) {
+    let asked = 0;
+    shellWithGitHub({
+      oneDriveStatus: async () => {
+        asked += 1;
+        return { ok: true as const, configured, connected: configured, email: configured ? "ada@example.com" : null, reason: null };
+      },
+      connectOneDrive: async () => ({ ok: true as const, email: "ada@example.com" }),
+      cancelOneDriveConnect: async () => ({ ok: true }),
+      disconnectOneDrive: async () => ({ ok: true }),
+      listOneDriveFolders: async () => ({ ok: true as const, driveId: "d0c0ffee", folders: [] }),
+    });
+    return { asked: () => asked };
+  }
+
+  it("offers OneDrive in a build that has it, and opens its picker", async () => {
+    oneDriveShell(true);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Open OneDrive folder" }));
+    expect(await screen.findByRole("dialog", { name: "Open a OneDrive folder" })).toBeTruthy();
+  });
+
+  it("leaves OneDrive out of a build without it", async () => {
+    const shell = oneDriveShell(false);
+    render(<App />);
+
+    await waitFor(() => expect(shell.asked()).toBeGreaterThan(0));
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Open OneDrive folder" })).toBeNull();
+  });
+});

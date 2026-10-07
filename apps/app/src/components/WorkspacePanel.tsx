@@ -58,6 +58,9 @@ interface Props {
   onOpenRepo: () => void;
   /// Opens the Google Drive folder picker.
   onOpenDrive: () => void;
+  /// Opens the OneDrive folder picker. Absent in a build without OneDrive, which takes the button and
+  /// the menu entry away - as Obsidian's are absent where Obsidian is not installed.
+  onOpenOneDrive?: () => void;
   /// Opens the Obsidian vault picker. Absent where Obsidian is not installed, which takes the button
   /// away - a picker that could only ever be empty is not worth a place in the header.
   onOpenVault?: () => void;
@@ -144,6 +147,7 @@ export default function WorkspacePanel({
   onOpenWorkspace,
   onOpenRepo,
   onOpenDrive,
+  onOpenOneDrive,
   onOpenVault,
   onFilterChange,
   onToggleFolder,
@@ -320,9 +324,9 @@ export default function WorkspacePanel({
             <path d="M15 6l-6 6 6 6" />
           </Glyph>
         </button>
-        {/* One button per source rather than a menu behind one. The panel header has room for the
-            three, and a menu would put each behind a click that says nothing about what is in it.
-            Obsidian's is there only when Obsidian is installed. A fourth is where this changes shape. */}
+        {/* One button per source rather than a menu behind one: a menu would put each behind a click
+            that says nothing about what is in it. Obsidian's is there only when Obsidian is installed,
+            and OneDrive's only in a build that has it. A sixth source is where this changes shape. */}
         {onOpenVault !== undefined && (
           <button
             type="button"
@@ -352,6 +356,17 @@ export default function WorkspacePanel({
         >
           <SourceGlyph mark="google-drive" className="size-4" />
         </button>
+        {onOpenOneDrive !== undefined && (
+          <button
+            type="button"
+            onClick={onOpenOneDrive}
+            aria-label={t("workspace.openOneDrive")}
+            title={t("workspace.openOneDrive")}
+            className="rounded p-1 text-ink-4 hover:bg-hover hover:text-ink"
+          >
+            <SourceGlyph mark="onedrive" className="size-4" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenWorkspace}
@@ -653,6 +668,16 @@ export default function WorkspacePanel({
           >
             {t("workspace.openDrive")}
           </ContextMenuItem>
+          {onOpenOneDrive !== undefined && (
+            <ContextMenuItem
+              onClick={() => {
+                setSourceMenu(null);
+                onOpenOneDrive();
+              }}
+            >
+              {t("workspace.openOneDrive")}
+            </ContextMenuItem>
+          )}
           <ContextMenuItem
             onClick={() => {
               setSourceMenu(null);

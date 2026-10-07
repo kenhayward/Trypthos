@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { repoPath } from "../testing/repoRoot";
 import en from "../locales/en.json";
 import { cloudAccountKeys } from "./cloudAccounts";
+import { cloudFolderKeys } from "../components/cloudFolderSources";
 
 /// Every key a component asks for must exist in the catalogue.
 ///
@@ -121,8 +122,9 @@ describe("translation keys", () => {
   });
 
   it("has no orphaned keys", () => {
-    // The keys the account kinds name, which no t("...") call spells out: exactly these, not a prefix.
-    const used = new Set([...usedKeys().keys(), ...cloudAccountKeys()]);
+    // The keys the account kinds and the folder sources name, which no t("...") call spells out:
+    // exactly these, not a prefix.
+    const used = new Set([...usedKeys().keys(), ...cloudAccountKeys(), ...cloudFolderKeys()]);
     const orphans = [...CATALOGUE].filter(
       (key) => !used.has(key) && !DYNAMIC_PREFIXES.some((prefix) => key.startsWith(prefix)),
     );
