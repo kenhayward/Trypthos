@@ -882,8 +882,11 @@ export function useWorkspace(
       // A save of this path is already on its way (#236). A second write now would present the
       // revision that save is about to replace, and the provider would answer "changed elsewhere"
       // about the user's own save. So it waits, and every press made meanwhile becomes ONE follow-up.
-      // Checked after the commit question rather than before it: a repository asks only on its first
-      // save, and a press made while that dialog was open has to queue behind the save it started.
+      // Checked after the commit question, so it covers only presses that got past it. A press made
+      // while a repository's first-save commit dialog is open does NOT queue: no flight exists yet and
+      // no branch has been chosen, so it asks the commit question again and opens the dialog again.
+      // Whichever press answers its dialog second reaches here behind the first one's flight, and
+      // queues as a follow-up like any other.
       const already = flights.current.get(open.path);
       if (already !== undefined) {
         already.followUp ??= deferred();

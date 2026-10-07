@@ -82,7 +82,11 @@ export default function ChatProfileForm({
     // Cleared either way. A key left in the box after a failure is a key sitting on screen, and the
     // user can paste it again.
     setKey("");
-    setKeyError(result.ok ? null : t("settings.chat.keyFailed"));
+    if (result.ok) setKeyError(null);
+    // A newer version's key file (issue #235) is refused, not insecure: say which, or the user goes
+    // looking for a keychain fault that is not there.
+    else if (result.reason === "from-the-future") setKeyError(t("errors.newerVersionCredentials"));
+    else setKeyError(t("settings.chat.keyFailed"));
   };
 
   /// A refused removal (issue #235) leaves the key on disk, so the user is told - "No key" would be

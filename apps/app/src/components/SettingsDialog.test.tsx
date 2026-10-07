@@ -500,6 +500,22 @@ describe("SettingsDialog: API keys", () => {
     expect(await screen.findByText(/could not be stored securely/)).toBeDefined();
   });
 
+  // A newer version's key file is not this version's to rewrite. "Could not be stored securely"
+  // would send the user looking at their keychain for a fault that is not there.
+  it("says a newer version holds the keys when that is why a key was not stored", async () => {
+    const user = userEvent.setup();
+    keys({ onSaveKey: vi.fn(async () => ({ ok: false, reason: "from-the-future" }) as const) });
+    await openEditor(user);
+
+    await user.type(screen.getByLabelText("API key"), "sk-test-do-not-use-90210");
+    await user.click(screen.getByRole("button", { name: "Save key" }));
+
+    expect(
+      await screen.findByText("A newer version of Trypthos saved your sign-ins. Open that version to change them."),
+    ).toBeDefined();
+    expect(screen.queryByText(/could not be stored securely/)).toBeNull();
+  });
+
   it("clears the field once the key is stored, so it is not left on screen", async () => {
     const user = userEvent.setup();
     keys();
