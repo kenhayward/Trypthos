@@ -58,7 +58,7 @@ Added while planning (each with its reason and the cost if wrong):
 - **A `remoteItem` in a listing (a shared folder added to My files) is hidden from the tree but offered in the picker** as a shared folder in its owner's drive: the tree is addressed by path, and a path cannot cross into another drive.
 - **A pre-authenticated address refused twice in a row is `permission-denied`.**
 - **The "searched only where you have opened them" line becomes provider-neutral** (`workspace.searchPartialCloud`, "Cloud folders are searched only where you have opened them."), because the OneDrive provider has `listKnown` too and a OneDrive filter would otherwise be told about Google Drive.
-- **`downloadLocation` uses `redirect: "manual"`.** If Electron's `net.fetch` turns out to hide the `Location` of a manual redirect, the manual check in Task 8 catches it; the fallback (the item's `@microsoft.graph.downloadUrl` from a plain item GET) is recorded in the spec then, not built speculatively.
+- **`downloadLocation` reads the 302 through an injected `fetchManual`, not `net.fetch`.** Measured on 2026-10-07 with the repo's Electron: `net.fetch(url, { redirect: "manual" })` THROWS "Redirect was cancelled" (no `Location` is readable), and a followed redirect carried the `Authorization` header to the target. `net.request({ url, redirect: "manual" })` emits `redirect(status, method, redirectUrl, headers)` and never contacts the target. So `createOneDriveApi` takes `fetchManual(url, init)`, a fetch that never follows redirects and answers a Response-like `{ status, headers: { get }, body, json() }` (a 3xx carries `Location`). `apps/desktop/src/manualRedirect.js` builds it over `net.request` and is unit-tested with a fake request emitter; `main.js` passes it. Every call that may redirect to another host (`/content`) goes through `fetchManual`; nothing ever follows a Graph redirect with the token.
 - **Graph's 403 at `/me` is `permission-denied`** in `microsoftAuthErrorFor` (PR 1 review); every other 4xx Microsoft does not name stays `unknown`.
 
 ## File Structure
@@ -767,6 +767,28 @@ git commit -m "Domain: OneDrive addresses, shapes and failures; Graph's 403 at /
 ---
 
 ### Task 2: Shell - `oneDriveApi.js`, the Graph reads (and the cancelled sign-in's generation bump, pinned)
+
+> **Controller amendment (binding over the code below where they differ).** See the Rulings entry on
+> `fetchManual`. Concretely:
+> 1. `createOneDriveApi({ accessToken, fetch, fetchManual, logger, timeoutMs = 30_000, sleep })`. Default
+>    `fetchManual` to `async () => { throw Object.assign(new Error("no manual fetch"), { code: "ENOMANUAL" }); }`
+>    so a build that forgets to wire it fails loudly as `offline` rather than following a redirect.
+> 2. `send(url, read, { manual = false } = {})` calls `(manual ? fetchManual : fetch)(url, { method: "GET", signal, headers })`
+>    and passes no `redirect` option. `downloadLocation` calls `send(..., { manual: true })`; the `read`
+>    callback is unchanged (it reads `headers.get("location")` from the 3xx).
+> 3. Tests: the api tests' fake for `/content` is supplied as `fetchManual` (answering 302 with a
+>    `Location`), and a test asserts `/content` is never requested through `fetch`.
+> 4. New `apps/desktop/src/manualRedirect.js`: `createManualFetch(request)` where `request(options)`
+>    is `net.request`-shaped. It sets headers, honours `init.signal` (abort -> reject with an
+>    `AbortError`), and resolves on `redirect(statusCode, method, redirectUrl, responseHeaders)` with
+>    `{ status: statusCode, headers: { get: (n) => n.toLowerCase() === "location" ? redirectUrl : null }, body: null, json: async () => null }`
+>    after calling `abort()`; on `response`, it collects the body and resolves a `Response`
+>    (`new Response(buffer, { status, headers })`). Errors reject. Test it in
+>    `apps/desktop/test/manualRedirect.test.js` with a hand-written EventEmitter fake: a redirect
+>    resolves with the location and aborts without reading further; a 404 response resolves with its
+>    JSON body; an abort signal rejects; headers set on the request include `Authorization`.
+> 5. Task 4 (where `main.js` builds `createOneDrive`) passes
+>    `fetchManual: createManualFetch((options) => net.request(options))`.
 
 **Files:**
 - Modify: `apps/desktop/test/microsoftAuth.test.js` (PR 1 review - one test, appended)
@@ -2556,7 +2578,13 @@ and in the `registerIpcHandlers({ ... })` call, after `createGoogleDrive: ...,`:
       // Every OneDrive call is made here, with the token microsoftAuth holds - net.fetch for the same
       // proxy and certificate reasons as GitHub and Drive.
       createOneDrive: (accessToken) =>
-        createOneDriveApi({ accessToken, fetch: (url, options) => net.fetch(url, options) }),
+        createOneDriveApi({
+          accessToken,
+          fetch: (url, options) => net.fetch(url, options),
+          // Never follows a redirect: Graph's /content 302 is read here, and its pre-signed target is
+          // fetched without the token. net.fetch cannot do this (measured; see the Rulings).
+          fetchManual: createManualFetch((options) => net.request(options)),
+        }),
 ```
 
 Run: `npm test --workspace trypthos-desktop` - PASS, no stderr.
@@ -4546,7 +4574,7 @@ Expected: all pass, and no stderr lines in any suite (search the output for `std
 
 Set `TRYPTHOS_ONEDRIVE_CLIENT` to the `.secrets/onedrive-client.json` path, `npm run app`, and with a connected personal account:
 1. The OneDrive button is in the header and in the empty-panel right-click menu. Open My files itself; it opens as `My files` with the cloud mark. Expand folders; open a markdown file (read-only, no save offered); a note with an embedded picture shows it; a video plays and seeks.
-2. **The redirect:** a file opens at all only if `net.fetch` exposed the 302's `Location` under `redirect: "manual"`. If files fail to open with `unknown` and the log says "OneDrive answered a download without an address this build can use", record that in the spec's "What the spike established", and switch `downloadLocation` to the item's `@microsoft.graph.downloadUrl` from a plain item GET in this PR, with its own test.
+2. **The redirect:** a file opens, and a video seeks, through `fetchManual` (`net.request` with `redirect: "manual"`). If files fail to open with `unknown` and the log says "OneDrive answered a download without an address this build can use", record that in the spec's "What the spike established" and investigate before merging.
 3. Open in OneDrive on a file, a folder and the workspace row opens onedrive.live.com. Right-click Refresh re-lists. The filter finds only opened folders and shows the cloud line.
 4. **Shared with me (spec, Open questions):** from a second personal Microsoft account, share a test folder with the first; open it through Shared with me, browse and read it. Record in the spec's Open questions whether `sharedWithMe` listed it and whether `/drives/{driveId}/items/{itemId}` listed its children. If it did not work, ship with the place showing its empty state and say so in the PR.
 5. Quit, relaunch: the OneDrive workspace comes back. Disconnect, connect the second account, relaunch: the first account's My files is greyed out and the banner says it belongs to a different Microsoft account. Reconnect the first: Retry opens it.
