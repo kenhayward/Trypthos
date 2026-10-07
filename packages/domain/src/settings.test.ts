@@ -6,6 +6,7 @@ import {
   SettingsSchema,
   chatPanelVisible,
   loadSettings,
+  readStoredSettings,
 } from "./settings";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
@@ -260,6 +261,30 @@ describe("chat profiles in settings", () => {
       chat: { ...DEFAULT_SETTINGS.chat, profiles: [{ ...profile, apiKey: "sk-live-1234" }] },
     };
     expect(loadSettings(leaked).chat.profiles).toEqual([]);
+  });
+});
+
+/// The non-total reader underneath `loadSettings`. The shell needs to know WHY a file fell back to
+/// defaults, because a file from a newer build must never be written over while a corrupt one is
+/// backed up first - and `loadSettings` answers both with the same defaults.
+describe("readStoredSettings", () => {
+  it("answers the settings for a current file", () => {
+    const stored = { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local", root: "D:/Notes" }] };
+    expect(readStoredSettings(stored)).toEqual({ ok: true, value: stored, migrated: false });
+  });
+
+  it("says a file from a newer build is from the future", () => {
+    const stored = { ...DEFAULT_SETTINGS, schemaVersion: SETTINGS_VERSION + 1 };
+    expect(readStoredSettings(stored)).toEqual({ ok: false, reason: "from-the-future" });
+  });
+
+  it("names the reason a wrong shape could not be read", () => {
+    expect(readStoredSettings("not an object")).toEqual({ ok: false, reason: "not-an-object" });
+    expect(readStoredSettings({ nothing: true })).toEqual({ ok: false, reason: "missing-version" });
+    expect(readStoredSettings({ ...DEFAULT_SETTINGS, panels: "wrong" })).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
   });
 });
 

@@ -361,8 +361,15 @@ function registerIpcHandlers({
       console.error("Rejected malformed settings write.");
       return { ok: false, reason: "bad-request" };
     }
-    await writeSettings(userDataDir, parsed.data);
+    const written = await writeSettings(userDataDir, parsed.data);
+    // The main process still hears the settings the renderer is running on: for this session they
+    // ARE the settings (close to tray, the recent list), stored or not.
     notifySettingsWritten(parsed.data);
+
+    // Refused because the file on disk came from a newer build (issue #235). The sweep is refused
+    // with it: these settings are the defaults this build fell back to, with no profiles, and
+    // sweeping by them would delete every chat key the newer build's profiles still use.
+    if (!written.ok) return written;
 
     // Saving settings is the only moment the app learns that a profile was deleted, or its endpoint
     // repointed. Without this, a live credential for a provider nothing references any more would

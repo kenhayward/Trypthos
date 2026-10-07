@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { DEFAULT_SETTINGS, IPC_CHANNELS } = require("@trypthos/domain");
+const { DEFAULT_SETTINGS, IPC_CHANNELS, SETTINGS_VERSION } = require("@trypthos/domain");
 const { createSecretStore } = require("../src/secretStore");
 const { registerIpcHandlers } = require("../src/ipcHandlers");
 
@@ -158,6 +158,30 @@ test("saving settings drops keys for endpoints no profile uses any more", async 
     });
 
     assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// Issue #235. An older build reads a newer build's settings as defaults - no profiles - and the
+// renderer writes them back. The write is refused in the main process, whatever the renderer sends,
+// and the sweep must be refused with it: otherwise "no profiles" deletes every chat key on disk.
+test("a settings write over a newer build's file is refused, and sweeps no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      const future = JSON.stringify({ ...DEFAULT_SETTINGS, schemaVersion: SETTINGS_VERSION + 1 });
+      const file = path.join(dir, "settings.json");
+      await fs.writeFile(file, future, "utf8");
+
+      const result = await ipcMain.invoke("settings:write", DEFAULT_SETTINGS);
+
+      assert.deepEqual(result, { ok: false, reason: "from-the-future" });
+      assert.equal(await fs.readFile(file, "utf8"), future);
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
   });
 });
 

@@ -5,8 +5,18 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { DEFAULT_SETTINGS } = require("@trypthos/domain");
+const { DEFAULT_SETTINGS, SETTINGS_VERSION } = require("@trypthos/domain");
 const { readSettings, writeSettings, settingsPath } = require("../src/settingsStore");
+
+const silent = { error: () => {}, warn: () => {} };
+
+/// A logger that keeps what it was told, so a test can check a line names the step and the reason
+/// and carries nothing from the file.
+function recordingLogger() {
+  const lines = [];
+  const record = (...args) => lines.push(args.join(" "));
+  return { lines, logger: { error: record, warn: record } };
+}
 
 async function withDir(body) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-settings-"));
@@ -111,4 +121,134 @@ test("tells listeners when settings are written", async () => {
   stop();
   notifySettingsWritten({ ...DEFAULT_SETTINGS, window: { closeToTray: false } });
   assert.deepEqual(seen, [true], "a removed listener must stop hearing");
+});
+
+// ---- Issue #235: an older build must never write over a newer build's settings ----
+
+/// What a newer build would leave behind: a version this build has never heard of, holding things
+/// this build cannot read. Written as exact bytes so "survives" can be checked byte for byte.
+const FUTURE_TEXT = `${JSON.stringify(
+  { ...DEFAULT_SETTINGS, schemaVersion: SETTINGS_VERSION + 1, somethingNew: { kept: true } },
+  null,
+  2,
+)}\n`;
+
+/// The downgrade: an older build reads the newer file, falls back to defaults, and the renderer
+/// writes those defaults back 400 ms later. Before the fix that write replaced every setting.
+test("a settings file from a newer build survives a load and a write, byte for byte", async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(settingsPath(dir), FUTURE_TEXT, "utf8");
+
+    assert.deepEqual(await readSettings(dir, { logger: silent }), DEFAULT_SETTINGS);
+    const result = await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent });
+
+    assert.deepEqual(result, { ok: false, reason: "from-the-future" });
+    assert.equal(await fs.readFile(settingsPath(dir), "utf8"), FUTURE_TEXT);
+    // Never touched at all: no backup, no temporary file.
+    assert.deepEqual(await fs.readdir(dir), ["settings.json"]);
+  });
+});
+
+test("a refused write says so in one line, naming the step and the reason and nothing stored", async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(settingsPath(dir), FUTURE_TEXT, "utf8");
+    const { lines, logger } = recordingLogger();
+
+    await writeSettings(dir, DEFAULT_SETTINGS, { logger });
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /settings write/i);
+    assert.match(lines[0], /from-the-future/);
+    assert.doesNotMatch(lines[0], /somethingNew|settings\.json/);
+  });
+});
+
+/// A corrupt file holds nothing this build - or any build - can read, so refusing to write would
+/// leave the user unable to save a setting ever again. It is kept, renamed aside, and then replaced.
+test("an unparseable file is backed up beside itself, then replaced", async () => {
+  await withDir(async (dir) => {
+    const corrupt = "{ this is not json";
+    await fs.writeFile(settingsPath(dir), corrupt, "utf8");
+    const settings = { ...DEFAULT_SETTINGS, panels: { ...DEFAULT_SETTINGS.panels, workspaceWidth: 271 } };
+
+    assert.deepEqual(await readSettings(dir, { logger: silent }), DEFAULT_SETTINGS);
+    const result = await writeSettings(dir, settings, { logger: silent });
+
+    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(await readSettings(dir, { logger: silent }), settings);
+
+    const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("settings.json.unreadable-"));
+    assert.equal(backups.length, 1);
+    assert.equal(await fs.readFile(path.join(dir, backups[0]), "utf8"), corrupt);
+    assert.deepEqual((await fs.readdir(dir)).sort(), ["settings.json", backups[0]].sort());
+  });
+});
+
+test("a file of the wrong shape takes the same path as a corrupt one", async () => {
+  await withDir(async (dir) => {
+    const wrong = JSON.stringify({ panels: "wrong" });
+    await fs.writeFile(settingsPath(dir), wrong, "utf8");
+
+    assert.deepEqual(await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent }), { ok: true });
+
+    const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("settings.json.unreadable-"));
+    assert.equal(backups.length, 1);
+    assert.equal(await fs.readFile(path.join(dir, backups[0]), "utf8"), wrong);
+    assert.deepEqual(await readSettings(dir), DEFAULT_SETTINGS);
+  });
+});
+
+/// Once replaced, the file is current again, so later writes are ordinary ones - one backup, not one
+/// per panel drag.
+test("the backup is taken once, not on every later write", async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(settingsPath(dir), "{ this is not json", "utf8");
+
+    await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent });
+    await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent });
+    await writeSettings(dir, DEFAULT_SETTINGS, { logger: silent });
+
+    assert.equal((await fs.readdir(dir)).length, 2);
+  });
+});
+
+test("a current file still saves normally, and says so", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, DEFAULT_SETTINGS);
+    const settings = { ...DEFAULT_SETTINGS, workspaces: [{ kind: "local", root: "D:/Notes" }] };
+
+    assert.deepEqual(await writeSettings(dir, settings), { ok: true });
+    assert.deepEqual(await readSettings(dir), settings);
+    assert.deepEqual(await fs.readdir(dir), ["settings.json"]);
+  });
+});
+
+/// One line per load that falls back, naming the step and the reason - never the file's contents or
+/// its path, which carries the user's name on every platform.
+test("a load that falls back logs one line naming the step and the reason", async () => {
+  await withDir(async (dir) => {
+    await fs.writeFile(settingsPath(dir), FUTURE_TEXT, "utf8");
+    const future = recordingLogger();
+    await readSettings(dir, { logger: future.logger });
+    assert.equal(future.lines.length, 1);
+    assert.match(future.lines[0], /settings load/i);
+    assert.match(future.lines[0], /from-the-future/);
+    assert.doesNotMatch(future.lines[0], /somethingNew|settings\.json/);
+
+    await fs.writeFile(settingsPath(dir), "{ secret-looking text", "utf8");
+    const corrupt = recordingLogger();
+    await readSettings(dir, { logger: corrupt.logger });
+    assert.equal(corrupt.lines.length, 1);
+    assert.match(corrupt.lines[0], /settings load/i);
+    assert.match(corrupt.lines[0], /not-json/);
+    assert.doesNotMatch(corrupt.lines[0], /secret-looking/);
+  });
+});
+
+test("a first run, with no file, logs nothing", async () => {
+  await withDir(async (dir) => {
+    const { lines, logger } = recordingLogger();
+    await readSettings(dir, { logger });
+    assert.deepEqual(lines, []);
+  });
 });
