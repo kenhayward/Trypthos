@@ -156,9 +156,12 @@ describe("what Graph answers", () => {
     expect(OneDrivePageSchema.safeParse({}).success).toBe(false);
   });
 
-  it("refuses a next link that is not Graph's own", () => {
+  // The page's shape is all the schema checks. Whether a next link may be followed is the client's
+  // one guard (`allPages` refuses with `isGraphUrl`), so a foreign link is a refusal it can name
+  // rather than an unreadable answer.
+  it("keeps a next link that is not Graph's own, for the client to refuse", () => {
     for (const link of ["https://evil.example/v1.0/x", "http://graph.microsoft.com/v1.0/x", "nope"]) {
-      expect(OneDrivePageSchema.safeParse({ value: [], "@odata.nextLink": link }).success).toBe(false);
+      expect(OneDrivePageSchema.parse({ value: [], "@odata.nextLink": link })["@odata.nextLink"]).toBe(link);
     }
   });
 
