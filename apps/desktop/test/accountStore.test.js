@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { createAccountStore, accountsPath } = require("../src/accountStore");
 const { createSecretStore } = require("../src/secretStore");
+const { createEncryptedStore } = require("../src/encryptedStore");
 
 /// Cloud provider credentials, kept exactly as carefully as the chat keys are.
 ///
@@ -193,4 +194,199 @@ test("a write that fails does not stop the next one", async () => {
     assert.equal(await store.getToken("onedrive"), "onedrive-invented");
     assert.equal(await store.getToken("google"), null);
   });
+});
+
+// ---- Issue #235: an older build must never write over a newer build's file ----
+
+/// What a newer build would leave behind. This build reads it as "no tokens" - and before the fix,
+/// the next sign-in wrote a file holding only the new token over every token the newer build kept.
+const FUTURE_TEXT = JSON.stringify({ schemaVersion: 99, tokens: { github: "c2VhbGVkOmdocF9pbnZlbnRlZA==" } });
+
+test("a newer build's token file survives a store and a delete, byte for byte", async () => {
+  await withStore(async (store, dir) => {
+    await fs.writeFile(accountsPath(dir), FUTURE_TEXT, "utf8");
+
+    assert.deepEqual(await store.setToken("google", "google-invented"), {
+      ok: false,
+      reason: "from-the-future",
+    });
+    assert.deepEqual(await store.deleteToken("github"), { ok: false, reason: "from-the-future" });
+
+    assert.equal(await fs.readFile(accountsPath(dir), "utf8"), FUTURE_TEXT);
+    assert.deepEqual(await fs.readdir(dir), ["providerAccounts.json"]);
+  });
+});
+
+test("a refused credential write logs one line, naming the step and the reason and nothing stored", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const lines = [];
+    const record = (...args) => lines.push(args.join(" "));
+    const store = createAccountStore({ userDataDir: dir, encryptor: fakeEncryptor(), logger: { warn: record, error: record } });
+    await fs.writeFile(accountsPath(dir), FUTURE_TEXT, "utf8");
+
+    await store.setToken("google", "google-invented");
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /write/i);
+    assert.match(lines[0], /from-the-future/);
+    assert.doesNotMatch(lines[0], /providerAccounts|c2VhbGVk|google-invented/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+/// A file nothing can parse holds no token any build could use, and refusing would leave the user
+/// unable to connect anything ever again. The bytes are kept beside it, then the file is replaced.
+test("an unparseable token file is backed up beside itself, then replaced", async () => {
+  await withStore(async (store, dir) => {
+    const corrupt = "{ this is not json";
+    await fs.writeFile(accountsPath(dir), corrupt, "utf8");
+
+    assert.deepEqual(await store.setToken("github", "ghp_invented"), { ok: true });
+    assert.equal(await store.getToken("github"), "ghp_invented");
+
+    const backups = (await fs.readdir(dir)).filter((name) => name.startsWith("providerAccounts.json.unreadable-"));
+    assert.equal(backups.length, 1);
+    assert.equal(await fs.readFile(path.join(dir, backups[0]), "utf8"), corrupt);
+
+    // Once replaced the file is current, so the next write is an ordinary one.
+    await store.setToken("google", "google-invented");
+    assert.equal((await fs.readdir(dir)).length, 2);
+  });
+});
+
+/// settings:write sweeps chatKeys.json after every save. A sweep with nothing to drop writes nothing,
+/// so before the fix it backed an unparseable file up, left it in place, and backed it up again on
+/// the next save - without bound. The backup is taken only when a write is about to replace the file.
+test("sweeping an unparseable key file with nothing to drop takes no backup and writes nothing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    let tick = 0;
+    const secrets = createSecretStore({
+      userDataDir: dir,
+      encryptor: fakeEncryptor(),
+      logger: silent,
+      now: () => new Date(Date.UTC(2026, 0, 2, 3, 4, 5, tick++)),
+    });
+    const corrupt = "{ this is not json";
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, corrupt, "utf8");
+
+    assert.deepEqual(await secrets.retainOnly([]), { ok: true });
+    assert.deepEqual(await secrets.retainOnly([]), { ok: true });
+
+    assert.equal(await fs.readFile(file, "utf8"), corrupt);
+    assert.deepEqual(await fs.readdir(dir), ["chatKeys.json"]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("storing over an unparseable key file backs it up once, and the next store backs up nothing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    let tick = 0;
+    const secrets = createSecretStore({
+      userDataDir: dir,
+      encryptor: fakeEncryptor(),
+      logger: silent,
+      now: () => new Date(Date.UTC(2026, 0, 2, 3, 4, 5, tick++)),
+    });
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    const backups = async () => (await fs.readdir(dir)).filter((name) => name.startsWith("chatKeys.json.unreadable-"));
+
+    assert.deepEqual(await secrets.setKey("https://api.example.com/v1", "sk-invented"), { ok: true });
+    assert.equal((await backups()).length, 1);
+    assert.equal(await secrets.getKey("https://api.example.com/v1"), "sk-invented");
+
+    assert.deepEqual(await secrets.setKey("https://api.example.org/v1", "sk-invented-2"), { ok: true });
+    assert.equal((await backups()).length, 1);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+/// chatKeys.json is read on every chat turn, so a line per read of a damaged file is a line per turn.
+test("reading a damaged credential file logs once per store, per state", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const lines = [];
+    const record = (...args) => lines.push(args.join(" "));
+    const store = createAccountStore({ userDataDir: dir, encryptor: fakeEncryptor(), logger: { warn: record, error: record } });
+
+    await fs.writeFile(accountsPath(dir), FUTURE_TEXT, "utf8");
+    await store.getToken("github");
+    await store.getToken("github");
+    await store.hasToken("google");
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /from-the-future/);
+
+    await fs.writeFile(accountsPath(dir), "{ this is not json", "utf8");
+    await store.getToken("github");
+    await store.getToken("github");
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /not-json/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a current token file still stores and deletes normally", async () => {
+  await withStore(async (store, dir) => {
+    assert.deepEqual(await store.setToken("github", "ghp_invented"), { ok: true });
+    assert.deepEqual(await store.setToken("google", "google-invented"), { ok: true });
+    assert.deepEqual(await store.deleteToken("github"), { ok: true });
+    assert.deepEqual(await store.connectedProviders(), ["google"]);
+    assert.deepEqual(await fs.readdir(dir), ["providerAccounts.json"]);
+  });
+});
+
+/// The settings write sweeps the chat keys by the profiles it holds. A sweep over a newer build's
+/// key file would rewrite it in this build's shape, losing whatever it could not read.
+test("sweeping a newer build's key file leaves it byte for byte", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const secrets = createSecretStore({ userDataDir: dir, encryptor: fakeEncryptor(), logger: silent });
+    const future = JSON.stringify({ schemaVersion: 99, keys: { "https://api.example.com/v1": "c2VhbGVk" } });
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, future, "utf8");
+
+    assert.deepEqual(await secrets.retainOnly([]), { ok: false, reason: "from-the-future" });
+    assert.equal(await fs.readFile(file, "utf8"), future);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+/// A file held by another process (EBUSY on Windows) cannot be read, so nothing is known about what
+/// it holds. Writing would replace every token in it with this one; backing it up is impossible.
+test("a token file that cannot be opened is refused, with no backup and the bytes unchanged", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const encryptor = fakeEncryptor();
+    const file = accountsPath(dir);
+    await createAccountStore({ userDataDir: dir, encryptor, logger: silent }).setToken("github", "ghp_invented");
+    const before = await fs.readFile(file, "utf8");
+
+    const held = createEncryptedStore({
+      file,
+      field: "tokens",
+      schemaVersion: 1,
+      encryptor,
+      logger: silent,
+      readFile: async () => {
+        throw Object.assign(new Error("held"), { code: "EBUSY" });
+      },
+    });
+
+    assert.deepEqual(await held.set("google", "google-invented"), { ok: false, reason: "unopenable" });
+    assert.deepEqual(await held.remove("github"), { ok: false, reason: "unopenable" });
+    assert.deepEqual(await held.retainOnly([]), { ok: false, reason: "unopenable" });
+    assert.equal(await fs.readFile(file, "utf8"), before);
+    assert.deepEqual(await fs.readdir(dir), ["providerAccounts.json"]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });

@@ -3,7 +3,7 @@ import { ChatProfileListSchema, DEFAULT_MAX_TOOL_CALLS, DEFAULT_TIMEOUT_MINUTES 
 import { DEFAULT_EDITOR_MODE, EditorModeSchema } from "./editorMode";
 import { DEFAULT_FILE_TYPES } from "./fileTypes";
 import { DEFAULT_OUTLINE_FILE_LIMIT, OUTLINE_PATH_LIMIT } from "./chatContext";
-import { loadPersisted, type Migration } from "./persisted";
+import { loadPersisted, type LoadResult, type Migration } from "./persisted";
 import { RecentFileSchema } from "./recentFiles";
 import { DEFAULT_SYSTEM_PROMPT, PREVIOUS_SYSTEM_PROMPTS } from "./systemPrompt";
 import { WorkspaceRefSchema } from "./workspaceRef";
@@ -466,20 +466,29 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
   },
 ];
 
-/// Reads stored settings, or the defaults.
+/// Reads stored settings, saying why when it cannot.
 ///
-/// Deliberately total: it cannot fail. A corrupt file, a file from a newer build, a file that is not
-/// an object at all - all answer with defaults, and the next save replaces it. The alternative is an
-/// app that will not open because a remembered panel width is malformed.
-export function loadSettings(raw: unknown): Settings {
-  if (raw === undefined || raw === null) return DEFAULT_SETTINGS;
-
-  const result = loadPersisted(raw, {
+/// Not total, unlike `loadSettings`: the shell needs the REASON, because the two kinds of failure
+/// are handled differently on the next write. A file from a newer build must never be written over
+/// (a downgrade would otherwise wipe every setting the newer build holds), while a corrupt one is
+/// backed up and then replaced. Both read as defaults; only this tells them apart.
+export function readStoredSettings(raw: unknown): LoadResult<Settings> {
+  return loadPersisted(raw, {
     currentVersion: SETTINGS_VERSION,
     migrations: SETTINGS_MIGRATIONS,
     parse: (value) => SettingsSchema.parse(value),
   });
+}
 
+/// Reads stored settings, or the defaults.
+///
+/// Deliberately total: it cannot fail. A corrupt file, a file from a newer build, a file that is not
+/// an object at all - all answer with defaults, so the app always opens. It does NOT follow that the
+/// next save may replace the file: the shell's settings store decides that, from `readStoredSettings`.
+export function loadSettings(raw: unknown): Settings {
+  if (raw === undefined || raw === null) return DEFAULT_SETTINGS;
+
+  const result = readStoredSettings(raw);
   return result.ok ? result.value : DEFAULT_SETTINGS;
 }
 

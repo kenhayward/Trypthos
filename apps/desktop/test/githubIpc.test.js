@@ -187,6 +187,21 @@ test("disconnecting removes the token", async () => {
   });
 });
 
+// Issue #235. On a downgraded build the store refuses to rewrite a newer build's token file, and a
+// disconnect that answered ok would tell the user a token was gone that is still on disk.
+test("a disconnect the store refuses passes the refusal through", async () => {
+  const accounts = fakeAccounts();
+  await withHandlers(
+    async ({ ipcMain }) => {
+      await ipcMain.invoke("github:connect", { token: "ghp_good" });
+      accounts.deleteToken = async () => ({ ok: false, reason: "from-the-future" });
+
+      assert.deepEqual(await ipcMain.invoke("github:disconnect"), { ok: false, reason: "from-the-future" });
+    },
+    { accounts },
+  );
+});
+
 test("lists the repositories the account owns", async () => {
   const repos = [
     { owner: "ada", name: "notes", fullName: "ada/notes", private: true, defaultBranch: "main", description: null, pushedAt: null },
@@ -437,6 +452,8 @@ test("gives the model no way to open a tab it could not address", () => {
 ///
 /// Asserted against `main.js` because that is the only place the two are joined, and nothing else
 /// can see it: the API client takes whatever fetch it is handed, and every test hands it a fake.
+/// Since issue #237 that fetch is `providerFetch` - the safe fetch over `net.request`, which is the
+/// same Chromium stack and keeps the token off a redirect to another host.
 test("the shell makes its GitHub requests through Electron's network stack", () => {
   const main = require("node:fs").readFileSync(
     require("node:path").join(__dirname, "..", "src", "main.js"),
@@ -444,10 +461,11 @@ test("the shell makes its GitHub requests through Electron's network stack", () 
   );
 
   assert.match(main, /\bnet\b[\s\S]*?= require\("electron"\)/, "main must import net from electron");
+  assert.match(main, /providerFetch = createSafeFetch\(\(options\) => net\.request\(options\)\)/);
   assert.match(
     main,
-    /createGitHubApi\(\{[^}]*fetch:[^}]*net\.fetch/,
-    "createGitHubApi must be given net.fetch",
+    /createGitHubApi\(\{[^}]*fetch: providerFetch\b/,
+    "createGitHubApi must be given providerFetch",
   );
 });
 

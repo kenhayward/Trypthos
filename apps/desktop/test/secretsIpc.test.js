@@ -5,9 +5,10 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { DEFAULT_SETTINGS, IPC_CHANNELS } = require("@trypthos/domain");
+const { DEFAULT_SETTINGS, IPC_CHANNELS, SETTINGS_VERSION, SettingsSchema } = require("@trypthos/domain");
 const { createSecretStore } = require("../src/secretStore");
 const { registerIpcHandlers } = require("../src/ipcHandlers");
+const { readSettings, writeSettings } = require("../src/settingsStore");
 
 /// The IPC side of key storage, and the guard that keeps it write-only.
 ///
@@ -158,6 +159,307 @@ test("saving settings drops keys for endpoints no profile uses any more", async 
     });
 
     assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// Issue #235. An older build reads a newer build's settings as defaults - no profiles - and the
+// renderer writes them back. The write is refused in the main process, whatever the renderer sends,
+// and the sweep must be refused with it: otherwise "no profiles" deletes every chat key on disk.
+test("a settings write over a newer build's file is refused, and sweeps no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      const future = JSON.stringify({ ...DEFAULT_SETTINGS, schemaVersion: SETTINGS_VERSION + 1 });
+      const file = path.join(dir, "settings.json");
+      await fs.writeFile(file, future, "utf8");
+
+      const result = await ipcMain.invoke("settings:write", DEFAULT_SETTINGS);
+
+      assert.deepEqual(result, { ok: false, reason: "from-the-future" });
+      assert.equal(await fs.readFile(file, "utf8"), future);
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
+  });
+});
+
+// Replacing an unreadable file is a successful write - of the DEFAULTS this build fell back to, with
+// no profiles. Sweeping by them would delete every chat key the lost file's profiles used.
+test("a settings write that replaces an unreadable file sweeps no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      await fs.writeFile(path.join(dir, "settings.json"), "{ this is not json", "utf8");
+
+      const result = await ipcMain.invoke("settings:write", DEFAULT_SETTINGS);
+
+      assert.deepEqual(result, { ok: true });
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
+  });
+});
+
+// A key file nobody can parse is backed up before it is replaced. If that backup collides (a second
+// instance of the app, the same millisecond), the store answers a result - never an exception
+// thrown across IPC - and the file is left as it was.
+test("a key-file backup that collides answers a refusal over IPC instead of throwing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-secrets-ipc-"));
+  try {
+    const instant = new Date("2026-01-02T03:04:05.006Z");
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    await fs.writeFile(`${file}.unreadable-2026-01-02T03-04-05-006Z`, "taken", "utf8");
+
+    const ipcMain = fakeIpcMain();
+    registerIpcHandlers({
+      ipcMain,
+      dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
+      getWindow: () => null,
+      userDataDir: dir,
+      secrets: createSecretStore({
+        userDataDir: dir,
+        encryptor: fakeEncryptor(),
+        logger: { error: () => {}, warn: () => {} },
+        now: () => instant,
+      }),
+    });
+
+    assert.deepEqual(await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY }), {
+      ok: false,
+      reason: "backup-failed",
+    });
+    assert.deepEqual(await ipcMain.invoke("secrets:delete", { endpoint: ENDPOINT }), {
+      ok: false,
+      reason: "backup-failed",
+    });
+    assert.equal(await fs.readFile(file, "utf8"), "{ this is not json");
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+// The replaced file held the profiles; what this session holds started from defaults. A later,
+// ordinary save sweeping by those would delete every key the lost profiles used. Held off until
+// the app restarts and settings load cleanly.
+test("after replacing an unreadable file, later settings writes in the session sweep no keys", async () => {
+  await withHandlers(async ({ ipcMain, secrets, dir }) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      await fs.writeFile(path.join(dir, "settings.json"), "{ this is not json", "utf8");
+
+      assert.deepEqual(await ipcMain.invoke("settings:write", DEFAULT_SETTINGS), { ok: true });
+      assert.deepEqual(await ipcMain.invoke("settings:write", DEFAULT_SETTINGS), { ok: true });
+
+      assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+    } finally {
+      console.warn = warnings;
+    }
+  });
+});
+
+// ---- Fix round 3: a failed load belongs to the window that will save from it ----
+//
+// The launch race: one window's settings:read hits a file it cannot open and answers defaults. That
+// window's renderer will write those defaults back. Whether IT loaded is the question - not whether
+// some other read (chat:send, the outline, another window) happened to succeed in between.
+
+/// Parsed, so it carries every default a stored profile is read back with and compares equal.
+const KEPT = SettingsSchema.parse({
+  ...DEFAULT_SETTINGS,
+  chat: {
+    ...DEFAULT_SETTINGS.chat,
+    profiles: [{ id: "one", label: "Kept", endpoint: ENDPOINT, model: "m", supportsImages: false, isDefault: true }],
+  },
+});
+
+/// A window, as the IPC layer sees one: its handler calls carry `event.sender`.
+function windowOf(ipcMain, id) {
+  return {
+    invoke: (channel, payload) => ipcMain.handlers.get(channel)({ sender: { id } }, payload),
+  };
+}
+
+/// The settings file made unopenable the portable way: a directory where the file should be reads
+/// as EISDIR on every platform, which the store treats exactly as a held file.
+async function makeUnopenable(file) {
+  await fs.rm(file, { force: true });
+  await fs.mkdir(file);
+}
+
+async function makeReadable(dir, file, settings = KEPT) {
+  await fs.rm(file, { recursive: true, force: true });
+  await writeSettings(dir, settings);
+}
+
+/// Every one of these provokes a warn line on purpose.
+async function withQuietSettings(body) {
+  await withHandlers(async (context) => {
+    const warnings = console.warn;
+    console.warn = () => {};
+    try {
+      await context.ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY });
+      await body({ ...context, file: path.join(context.dir, "settings.json") });
+    } finally {
+      console.warn = warnings;
+    }
+  });
+}
+
+// (a) The bypass the re-review found: a plain read for chat:send succeeding must not clear the flag
+// of the window that holds defaults.
+test("a window's failed load is not cleared by another read succeeding", async () => {
+  await withQuietSettings(async ({ ipcMain, secrets, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    assert.deepEqual((await window.invoke("settings:read")).settings, DEFAULT_SETTINGS);
+
+    await makeReadable(dir, file);
+    const before = await fs.readFile(file, "utf8");
+    assert.deepEqual(await readSettings(dir), KEPT); // what chat:send does
+
+    assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+    assert.equal(await fs.readFile(file, "utf8"), before);
+    assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// (b) The converse: a transient failure in a main-process read mid-session is not this window's load.
+test("a failed read for chat:send does not block a window that loaded", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeReadable(dir, file);
+    assert.deepEqual((await window.invoke("settings:read")).settings, KEPT);
+
+    await makeUnopenable(file);
+    await readSettings(dir); // chat:send, failing
+    await makeReadable(dir, file);
+
+    assert.deepEqual(await window.invoke("settings:write", KEPT), { ok: true });
+  });
+});
+
+// (c) One window's failure is its own.
+test("one window's failed load does not block another that loaded", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const loaded = windowOf(ipcMain, 1);
+    const failed = windowOf(ipcMain, 2);
+    await makeReadable(dir, file);
+    assert.deepEqual((await loaded.invoke("settings:read")).settings, KEPT);
+
+    await makeUnopenable(file);
+    await failed.invoke("settings:read");
+    await makeReadable(dir, file);
+
+    assert.deepEqual(await loaded.invoke("settings:write", KEPT), { ok: true });
+    assert.deepEqual(await failed.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+  });
+});
+
+// (d) Whatever the file's state at write time - here, gone. Defaults written and swept by would
+// otherwise delete every key.
+test("a failed load followed by the file going missing still refuses, and sweeps nothing", async () => {
+  await withQuietSettings(async ({ ipcMain, secrets, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    await window.invoke("settings:read");
+    await fs.rm(file, { recursive: true, force: true });
+
+    assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+    await assert.rejects(fs.access(file));
+    assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// (e) The window's own successful re-read is what clears it.
+test("after the window's own successful re-read, its writes work again", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    await window.invoke("settings:read");
+    await makeReadable(dir, file);
+
+    assert.deepEqual((await window.invoke("settings:read")).settings, KEPT);
+    assert.deepEqual(await window.invoke("settings:write", KEPT), { ok: true });
+  });
+});
+
+// A window that loaded an unreadable file holds defaults on purpose and replaces that file - but
+// only that file. If it has since become readable (or gone), its defaults must not land over it.
+test("a window that loaded an unreadable file may replace it, and nothing else", async () => {
+  await withQuietSettings(async ({ ipcMain, secrets, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    await window.invoke("settings:read");
+    await makeReadable(dir, file);
+    const before = await fs.readFile(file, "utf8");
+
+    assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+    assert.equal(await fs.readFile(file, "utf8"), before);
+    assert.deepEqual(await secrets.endpointsWithKeys(), [ENDPOINT]);
+  });
+});
+
+// What the main process hears from a refused write. A window whose load failed holds defaults that
+// are NOT what the session runs on - another window may hold the real settings - so pushing them into
+// main state would empty the recent-files menu and reset close-to-tray. A window that loaded a newer
+// build's file is different: defaults are what every window of this build runs on, so main hears them.
+async function heard(body) {
+  const { onSettingsWritten } = require("../src/settingsStore");
+  const seen = [];
+  const stop = onSettingsWritten((settings) => seen.push(settings));
+  try {
+    await body(seen);
+  } finally {
+    stop();
+  }
+}
+
+test("a write refused because the window's load failed is not pushed into main state", async () => {
+  await withQuietSettings(async ({ ipcMain, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await makeUnopenable(file);
+    await window.invoke("settings:read");
+
+    await heard(async (seen) => {
+      assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+      assert.equal(seen.length, 0);
+    });
+  });
+});
+
+test("a write refused because the loaded unreadable file was since repaired is not pushed into main state", async () => {
+  await withQuietSettings(async ({ ipcMain, dir, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    await window.invoke("settings:read");
+    await makeReadable(dir, file);
+
+    await heard(async (seen) => {
+      assert.deepEqual(await window.invoke("settings:write", DEFAULT_SETTINGS), { ok: false, reason: "not-loaded" });
+      assert.equal(seen.length, 0);
+    });
+  });
+});
+
+test("a write from a window that loaded a newer build's file is still pushed into main state", async () => {
+  await withQuietSettings(async ({ ipcMain, file }) => {
+    const window = windowOf(ipcMain, 1);
+    await fs.writeFile(file, JSON.stringify({ schemaVersion: SETTINGS_VERSION + 1 }), "utf8");
+    await window.invoke("settings:read");
+
+    await heard(async (seen) => {
+      assert.equal((await window.invoke("settings:write", DEFAULT_SETTINGS)).ok, false);
+      assert.deepEqual(seen, [DEFAULT_SETTINGS]);
+    });
   });
 });
 

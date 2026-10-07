@@ -465,6 +465,25 @@ test("saving the same chat again replaces it", async () => {
   });
 });
 
+// Issue #235, checked for chats as well as settings. A save names the chat it replaces, and the
+// main process only reuses that id when the chat on disk LOADS - a newer build's chat does not, so
+// the save lands under a fresh id and the newer file is never written over.
+test("saving over a newer build's chat writes a new chat and leaves that one byte for byte", async () => {
+  await withHandlers(async ({ ipcMain, userDataDir }) => {
+    const first = await ipcMain.invoke("chats:save", saveRequest());
+    const file = path.join(userDataDir, "chats", `${first.id}.json`);
+    const stored = JSON.parse(await fs.readFile(file, "utf8"));
+    const future = JSON.stringify({ ...stored, schemaVersion: CHAT_SESSION_VERSION + 1, somethingNew: true });
+    await fs.writeFile(file, future, "utf8");
+
+    const again = await ipcMain.invoke("chats:save", saveRequest({ id: first.id }));
+
+    assert.equal(again.ok, true);
+    assert.notEqual(again.id, first.id);
+    assert.equal(await fs.readFile(file, "utf8"), future);
+  });
+});
+
 test("lists saved conversations without their contents", async () => {
   await withHandlers(async ({ ipcMain }) => {
     await ipcMain.invoke("chats:save", saveRequest({ filePath: "plan.md" }));

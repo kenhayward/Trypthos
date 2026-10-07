@@ -17,7 +17,7 @@ interface Props {
   onSaveProfile: (profile: ChatProfile) => void;
   onRemoveProfile: (id: string) => void;
   onSaveKey: (endpoint: string, key: string) => Promise<SaveKeyResult>;
-  onDeleteKey: (endpoint: string) => Promise<void>;
+  onDeleteKey: (endpoint: string) => Promise<SaveKeyResult>;
 }
 
 /// The models Trypthos can chat with: a list, and one form at a time.

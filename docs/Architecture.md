@@ -708,12 +708,15 @@ addresses, the schemas someone else's JSON is checked against, the reading of a 
 listing, and what a failing status means. That split is what makes the awkward parts testable without
 a network, and it is the shape the next three providers should copy.
 
-- **Requests go through Electron's `net.fetch`, not Node's `fetch`.** The updater does the same,
-  for the same reason - between them they are every outbound request the shell makes. Node's knows nothing about the
-  machine's proxy settings or its certificate store; Chromium's networking stack knows both. Behind a
-  corporate proxy or a VPN that is the difference between a request that answers and one that hangs.
-  It is injected from `main.js` rather than reached for, so every test hands the client a fake - and
-  a test on `main.js` asserts the two are joined, because nothing else can see it.
+- **Requests go through `providerFetch` over Electron's `net.request`, not Node's `fetch`.**
+  `providerFetch` is `createSafeFetch` in `manualRedirect.js` (issue #237): Chromium's networking
+  stack, with the token kept off a redirect to another host - see "Token-carrying requests and
+  redirects" under the Drive section. The updater uses Chromium's stack too (`net.fetch`), for the
+  same reason. Node's knows nothing about the machine's proxy settings or its certificate store;
+  Chromium's networking stack knows both. Behind a corporate proxy or a VPN that is the difference
+  between a request that answers and one that hangs. It is injected from `main.js` rather than
+  reached for, so every test hands the client a fake - and a test on `main.js` asserts the two are
+  joined, because nothing else can see it.
 - **Every request is abortable and times out** (30s). A request with nothing to give up on it is
   awaited by an IPC handler the interface is waiting on, so a hung connection reaches the user as a
   dialog that spins with no error rather than as anything they can act on.
@@ -738,6 +741,20 @@ a network, and it is the shape the next three providers should copy.
   name before an atomic rename: one `providerAccounts.json` holds every provider's token, and two
   unqueued read-modify-writes (a OneDrive refresh, which writes every time, beside a Google sign-in)
   would each write back a file missing the other's change. A failed change does not block the next.
+  **No change writes over a newer build's file** (issue #235): set, remove and retainOnly answer
+  `{ ok: false, reason: "from-the-future" }` and leave it byte for byte, since rewriting it in this
+  build's shape would drop every token this build cannot see; the renderer shows
+  `errors.newerVersionCredentials`. A file nothing can parse is copied to
+  `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) by the change that
+  replaces it, immediately before the write - so it is backed up once, then replaced, and a
+  `retainOnly` sweep with nothing to drop (every settings save runs one) leaves it alone and takes no
+  backup. A damaged file read for a chat turn is logged once per store, not once per read; one
+  that cannot be opened refuses every change (`unopenable`), and a backup that collides answers
+  `backup-failed` rather than throwing across IPC. The Google and Microsoft disconnects pass a
+  refused delete through as their answer after dropping the in-memory access token; GitHub's does
+  the same after dropping its repository list (it holds no access token in memory). `secrets:delete`
+  passes a refused delete through as well, and the settings dialog then says the key is still
+  stored. A sign-out or key removal that did not reach disk is never reported as done.
 - **Pinned to a commit.** Opening resolves the default branch and then that branch's head commit, and
   the tree is fetched at that SHA. A branch name would move under the user while they read.
 - **One request for the whole tree.** `?recursive=1` returns every path in the repository, so every
@@ -896,6 +913,7 @@ and a message is per-commit, which is why only the first is held in the provider
 
 #### Drive folders as workspaces
 
+- **Token-carrying requests and redirects (issue #237).** `net.fetch` in its default `follow` mode hands the `Authorization` header to a redirect's target, whatever host it is on (measured with this repo's Electron). So `main.js` builds one `providerFetch = createSafeFetch((options) => net.request(options))` and gives it to `googleDriveApi.js`, `githubApi.js`, `googleAuth.js` and `microsoftAuth.js`; the clients are unchanged and still take an injected fetch. `createSafeFetch` (in `manualRedirect.js`, beside OneDrive's `createManualFetch`) has fetch's `(url, init) => Promise<Response>` contract and applies the fetch spec's browser rules hop by hop: every hop is a `net.request` with `redirect: "manual"`, aborted inside the `redirect` listener so Electron never follows it, then re-issued with headers chosen here. A **same-origin** hop (scheme, host and port) keeps the headers; a **cross-origin** hop drops `Authorization`, `Cookie` and `Proxy-Authorization`, and they stay dropped for the rest of the chain, so Drive or GitHub content that redirects to a pre-signed host still loads, and a target that needed the token fails with 401/403. A hop to anything but https (`ERR_REDIRECT_INSECURE`), a sixth hop (`ERR_TOO_MANY_REDIRECTS`), and a body that would be resent to another origin - a cross-origin 307/308 (`ERR_REDIRECT_BODY`) - reject without contacting the target, which each client answers as it answers any rejected request. A 303, and a 301/302 after a POST, become a GET with no body and no body headers. The answer is a `Response` over the IncomingMessage via `Readable.toWeb`, resolved at the headers, so a Drive media range streams; the signal aborts at any stage (rejecting with the signal's reason, as fetch does), and cancelling the body aborts the request. OneDrive keeps `redirect: "error"` plus `createManualFetch` below. The chat provider's API key goes through the same rules with one allowance: `main.js` gives `createChatProvider` its own `chatFetch = createSafeFetch(..., { allowHttpSameOrigin: true })`, because a local model (Ollama, llama.cpp) is plain http on the loopback. With the option an http hop is followed only when the chain began on http AND the hop is same-origin, scheme included, keeping the key; an http hop to another host or port is refused, never contacted; an upgrade to https is followed with credentials stripped (it is cross-origin); every downgrade from https is refused. SSE streams through it as it did through `net.fetch`. The updater still uses `net.fetch`; it carries no token.
 - **`googleDriveApi.js` is the only thing that speaks to Drive.** It takes the access token from `googleAuth.accessToken` on every call, so a token is never held here. Every id is checked with `isDriveId` before it reaches a URL and a failing one answers `not-found`: an id arrives from settings or the renderer and goes into a query string, so the check is what keeps it an id. One deadline covers the fetch and the body read, because a connection that stalls mid-body would otherwise hang a listing forever. A 401 gets one refresh of the token and one retry; a rate limit gets one backoff retry; anything further is answered, not looped. Writes go through `uploadContent` (a `PATCH` media upload to the file id) and `createFile` (a multipart `POST`); a 401 or rate-limit retry resends the same body, because both mean the request was not processed. **A timeout is not retried and answers `offline`**: a timed-out write may have landed, so a resend could write twice, and the next save's check reports the conflict honestly instead. Log lines carry the step and `error.code ?? error.name` only, never a URL, since a URL holds a folder id.
 - **Media from Drive is a ranged download, and the body streams.** `downloadRange(fileId, start, end)` in `googleDriveApi.js` races only the **headers** against the 30 second deadline: once they have arrived the body is handed back as a stream, because a deadline over the whole body would cut off a long recording mid-play. The retry rules of the other calls apply: a 401 gets one token refresh and one retry, and a rate limit one backoff retry. A 206 is the normal answer; **a 200 is accepted only for a whole-file range**, since a 200 to a partial range means the server ignored the range and the bytes would be wrong. The provider's `mediaSource(path)` answers `{ ok, size, open(start, end) }`: the size comes from the folder listing (so it is as old as the 60 second cache), `open` calls `downloadRange` with the token read inside main, and the media protocol maps an `open` failure to 416, 403, 404 or 502. The token never reaches the window: the renderer only holds a `tp-media://` URL.
 - **`googleDriveWorkspace.js` is the provider object, with paths over ids.** Every seam in the app is path-shaped (path guard, qualified ids, recent files, wiki-link resolution), so the workspace keeps a path-to-Drive-id map filled from listings by `childrenToEntries`, which is also where display names are made: a Google Doc is `<title>.md` (its path; the list and `listKnown` nodes also carry `googleDoc: true`, which the renderer's `lib/googleDocs.ts` uses to show the title without `.md`, with a Docs mark, in the tree, filter results and tab), slash, backslash, colon and control characters become `_`, and a duplicate sibling gets `~<6 id chars>`. A path the map has not seen is found by an on-demand walk from the root rather than refused. Listings are cached for 60 seconds per Drive folder id (`LISTING_TTL_MS`), a concurrent request for a folder already being listed joins the one in flight, and a failed listing is never cached; `refresh()` clears the path map, the listing cache and the listed-folder set together. Re-listing a folder replaces that folder's direct children and drops the descendants of any child that vanished or came back under a different id or kind, so a stale id can never be read through a reused path; a refresh clears the map. The guard root is the fake `/drive`, as GitHub's is `/repo`, so the one shared boundary module serves both.
@@ -1436,6 +1454,40 @@ in the user's workspace.
 - **Reading is total.** A corrupt file, a file from a newer build, a file that is not an object -
   every one answers with defaults. None of this is the user's work, and refusing to start because a
   remembered panel width is malformed would be far worse than forgetting the width.
+- **Reading as defaults is not leave to write (issue #235).** `settingsStore.writeSettings` inspects
+  the file on disk before every write, in the main process, because the renderer writes its state
+  back 400 ms after loading it and is untrusted anyway. A file **from a newer build** is never
+  touched: the write answers `{ ok: false, reason: "from-the-future" }`, `settings:write` passes that
+  through and skips the chat-key sweep (the defaults hold no profiles, so the sweep would delete every
+  key), and the session runs on defaults in memory. The way out is running the newer build, which
+  finds its file intact. A file **no build can read** (not JSON, wrong shape, no migration path) is
+  copied to `settings.json.unreadable-<timestamp>` and then replaced, once; the write answers
+  `replacedUnreadable: true` and `settings:write` skips the sweep for it - and for every later write
+  in that run of the app (`sweepHeld`), since the session's profiles started from defaults; an
+  unreferenced key is swept on a later launch, once settings load cleanly. A file that cannot be
+  opened at all is refused until the next write. **A failed load belongs to the window that will
+  save from it.** `ipcHandlers.js` keeps a map keyed by `event.sender.id`, dropped when that sender
+  is destroyed, and only that window's own `settings:read` sets or clears its entry. If its load hit
+  a held file (EBUSY at launch) or a newer build's file, the window holds defaults, and every
+  `settings:write` from it is refused (`not-loaded`, nothing swept) whatever the file looks like by
+  then - readable, or gone. Only that window's own `settings:read` could clear it, and the renderer
+  reads settings once, at mount, so in practice the refusal lasts until that window is reloaded or
+  the app restarts. Otherwise the renderer's write 400 ms later would put the defaults over a good
+  file. Because the refusal lasts that long, `loadSettingsFile` reads a held file (EBUSY or EPERM)
+  again twice, after 50 ms and 150 ms, before answering `unopenable`: a momentary antivirus hold no
+  longer costs the window its saves. A `not-loaded` refusal is also not passed to
+  `notifySettingsWritten` - that window's defaults are not what the session runs on, and pushing them
+  would empty the recent-files menu and reset close-to-tray - except for a window that loaded a newer
+  build's file, where defaults are exactly what this build runs on. A window that loaded an unreadable file may
+  replace that file and nothing else (`writeSettings` `replaceOnly`). Main-process reads (chat:send,
+  the outline, startup) go to the store directly and neither set nor clear an entry; the store
+  itself remembers no load (`loadSettingsFile` only reports how one went). A missing file is a
+  successful load.
+  Writes are queued (check-then-write is one step), each uses its own temporary name, and a backup
+  collision or a failed write answers a result rather than throwing across IPC. `settings:read`
+  still answers `ok: true` with the defaults: the renderer treats `ok: false` the same way, so the
+  main-process guard is the protection. A load that falls back logs one line with the step and the
+  reason. `readStoredSettings` in the domain is the non-total reader that tells these apart.
 - **Writing is atomic**: a temporary file and a rename, so a reader sees the old file or the new one
   and never a half-written one. Settings are written whenever a panel drag settles, so "rarely" is
   not an argument.
@@ -2317,8 +2369,10 @@ OpenAI-compatible response is normalised into the same reply, reasoning, usage a
 as a streamed response. The read loop therefore has one execution path after the transport has been
 decoded. Settings schema version 16 adds `stream` and migrates existing profiles to `true`.
 
-**Requests go through Electron's `net.fetch`, watched for silence.** `main.js` hands the provider
-`net.fetch` rather than Node's global `fetch`. Node's `fetch` (undici) abandons a request after 300 s
+**Requests go through Chromium's stack, watched for silence.** `main.js` hands the provider
+`chatFetch` - `createSafeFetch` over Electron's `net.request` with `allowHttpSameOrigin`, so the key
+never follows a redirect to another host (issue #237; see "Token-carrying requests and redirects") -
+rather than Node's global `fetch`. Node's `fetch` (undici) abandons a request after 300 s
 without response headers, or 300 s between body chunks, and nothing in this app could raise that - so
 a reasoning model thinking for more than five minutes before its first token could never be answered.
 Chromium's stack sets no such limit (and knows the machine's proxy and certificate store, which is why

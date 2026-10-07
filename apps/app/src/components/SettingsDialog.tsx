@@ -33,7 +33,7 @@ interface Props {
   onClose: () => void;
   onChange: (change: Partial<Settings>) => void;
   onSaveKey: (endpoint: string, key: string) => Promise<SaveKeyResult>;
-  onDeleteKey: (endpoint: string) => Promise<void>;
+  onDeleteKey: (endpoint: string) => Promise<SaveKeyResult>;
   /// Trypthos's entries in File Explorer's right-click menu. The registry is the record, so this is
   /// what the shell reports rather than anything stored in settings.
   explorer: ExplorerIntegration;

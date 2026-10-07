@@ -1,5 +1,7 @@
 "use strict";
 
+const { Readable } = require("node:stream");
+
 /// A fetch that never follows a redirect, built over Electron's `net.request`.
 ///
 /// Why it exists: Graph answers a file's `/content` with a 302 to a pre-authenticated address on
@@ -142,4 +144,225 @@ function createManualFetch(request) {
   };
 }
 
-module.exports = { createManualFetch };
+/// The fetch every other token-carrying provider call goes through: Google Drive, GitHub, Google's
+/// and Microsoft's sign-in clients (issue #237). Same `(url, init) => Promise<Response>` contract as
+/// fetch, over the same `net.request`-shaped function.
+///
+/// Why it exists: `net.fetch` follows a redirect with every header still on it, the `Authorization`
+/// header included, to whatever host the `Location` names (measured with this repo's Electron). This
+/// applies the fetch spec's browser rules instead, one hop at a time:
+///
+/// - every hop is its own `net.request` with `redirect: "manual"`, aborted INSIDE the `redirect`
+///   listener so Electron never follows it, then re-issued here with headers this module chose;
+/// - a **same-origin** hop (scheme, host and port) keeps the headers; a **cross-origin** hop drops
+///   `Authorization`, `Cookie` and `Proxy-Authorization`, and once dropped they stay dropped;
+/// - a hop to anything but https, a sixth hop, or a body that would be resent to another origin
+///   (a cross-origin 307/308, or a 301/302 that keeps its method) rejects without contacting it.
+///   `{ allowHttpSameOrigin: true }` (the chat provider's, for a loopback model) also lets an http
+///   chain follow an http hop within its own origin; see `nextHop`;
+/// - a 303 (and a 301/302 after a POST) becomes a GET with no body and no body headers.
+///
+/// The answer is a `Response` over the IncomingMessage via `Readable.toWeb`, resolved at the
+/// headers: a Drive media range streams rather than being buffered. The signal aborts the request at
+/// any stage, the body included, and cancelling the body aborts the request. A refusal rejects with
+/// a fixed message and a `code`; nothing here logs, and no error carries an address or a header.
+
+/// Redirects followed before the next one is refused.
+const MAX_REDIRECTS = 5;
+
+/// What a cross-origin hop never carries.
+const CREDENTIAL_HEADERS = ["authorization", "cookie", "proxy-authorization"];
+
+/// What describes a body, and goes when the body does.
+const BODY_HEADERS = ["content-type", "content-length", "content-encoding", "content-language", "content-location"];
+
+function refusal(code) {
+  return Object.assign(new Error("The redirect was refused."), { code });
+}
+
+/// fetch rejects with the signal's own reason, so a deadline's code reaches the caller's log line.
+function abortReason(signal) {
+  return signal?.reason ?? abortError(signal);
+}
+
+/// The body as bytes, so it can be resent on a same-origin 307/308. The shapes the clients send.
+function bodyBytes(body) {
+  if (body === undefined || body === null) return null;
+  if (typeof body === "string") return Buffer.from(body);
+  if (body instanceof URLSearchParams) return Buffer.from(body.toString());
+  if (Buffer.isBuffer(body)) return body;
+  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+  if (body instanceof ArrayBuffer) return Buffer.from(body);
+  throw Object.assign(new TypeError("The request body is not a supported type."), { code: "ERR_UNSUPPORTED_BODY" });
+}
+
+/// The next hop, or a thrown refusal. `hop` is the request about to be redirected away from;
+/// `firstUrl` is where the chain began. With `allowHttpSameOrigin`, an http hop is allowed only
+/// when the chain began on http AND the hop stays on the same origin (scheme included) - a loopback
+/// model redirecting within itself. Every other http hop is refused: a downgrade from https, and an
+/// http hop to another host or port, which is never contacted rather than contacted without the key.
+function nextHop(hop, status, location, redirects, firstUrl, allowHttpSameOrigin) {
+  if (redirects >= MAX_REDIRECTS) throw refusal("ERR_TOO_MANY_REDIRECTS");
+  let target;
+  try {
+    target = new URL(location, hop.url);
+  } catch {
+    throw refusal("ERR_REDIRECT_INVALID");
+  }
+
+  // Origin as the URL standard parses it: a default port and a host's case fold away; a trailing
+  // dot does not, so it counts as another origin (the safe direction).
+  const sameOrigin = target.origin === hop.url.origin;
+  if (target.protocol !== "https:") {
+    const httpAllowed = allowHttpSameOrigin && target.protocol === "http:" && firstUrl.protocol === "http:" && sameOrigin;
+    if (!httpAllowed) throw refusal("ERR_REDIRECT_INSECURE");
+  }
+  const headers = new Headers(hop.headers);
+  let { method, body } = hop;
+
+  const toGet = (status === 303 && method !== "GET" && method !== "HEAD") || ((status === 301 || status === 302) && method === "POST");
+  if (toGet) {
+    method = "GET";
+    body = null;
+    for (const name of BODY_HEADERS) headers.delete(name);
+  } else if (body !== null && !sameOrigin) {
+    throw refusal("ERR_REDIRECT_BODY");
+  }
+  if (!sameOrigin) for (const name of CREDENTIAL_HEADERS) headers.delete(name);
+
+  return { url: target, method, headers, body };
+}
+
+function createSafeFetch(request, { allowHttpSameOrigin = false } = {}) {
+  return function safeFetch(url, init = {}) {
+    return new Promise((resolve, reject) => {
+      const signal = init.signal ?? null;
+      if (signal?.aborted) {
+        reject(abortReason(signal));
+        return;
+      }
+
+      let hop;
+      try {
+        const headers = new Headers(init.headers ?? {});
+        if (init.body instanceof URLSearchParams && !headers.has("content-type")) {
+          headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8");
+        }
+        hop = { url: new URL(url), method: String(init.method ?? "GET").toUpperCase(), headers, body: bodyBytes(init.body) };
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      const firstUrl = hop.url;
+      // pending -> streaming (resolved, the body still arriving) -> done.
+      let state = "pending";
+      let current = null;
+      let message = null;
+      let redirects = 0;
+
+      const stop = (req) => {
+        try {
+          req.abort();
+        } catch {
+          // Already finished: nothing left to stop.
+        }
+      };
+      const done = () => {
+        state = "done";
+        message = null;
+        signal?.removeEventListener("abort", onAbort);
+      };
+      const fail = (error) => {
+        if (state === "pending") {
+          if (current !== null) stop(current);
+          done();
+          reject(error);
+        } else if (state === "streaming") {
+          const streaming = message;
+          stop(current);
+          done();
+          streaming.destroy(error);
+        }
+      };
+      function onAbort() {
+        fail(abortReason(signal));
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      const issue = () => {
+        let req;
+        try {
+          req = request({ method: hop.method, url: hop.url.href, redirect: "manual" });
+          current = req;
+          for (const [name, value] of hop.headers) req.setHeader(name, value);
+        } catch (error) {
+          fail(error);
+          return;
+        }
+
+        req.on("redirect", (status, _method, location) => {
+          // Inside the listener, before it returns: Electron would otherwise follow it with every
+          // header on it. Each hop is re-issued below with the headers chosen here.
+          stop(req);
+          if (req !== current || state !== "pending") return;
+          // Stopped already: a refusal below has nothing more to abort.
+          current = null;
+          try {
+            hop = nextHop(hop, status, location, redirects, firstUrl, allowHttpSameOrigin);
+          } catch (error) {
+            fail(error);
+            return;
+          }
+          redirects += 1;
+          issue();
+        });
+
+        req.on("response", (incoming) => {
+          if (req !== current || state !== "pending") return;
+          const status = incoming.statusCode;
+          const empty = NULL_BODY_STATUSES.has(status) || hop.method === "HEAD";
+          let response;
+          try {
+            response = new Response(empty ? null : Readable.toWeb(incoming), { status, headers: headersOf(incoming.headers) });
+          } catch (error) {
+            fail(error);
+            return;
+          }
+          if (empty) {
+            incoming.on("error", () => {});
+            incoming.resume();
+            done();
+            resolve(response);
+            return;
+          }
+          state = "streaming";
+          message = incoming;
+          let ended = false;
+          incoming.on("end", () => {
+            ended = true;
+          });
+          // A body cancelled or destroyed before its end leaves the request running: stop it.
+          incoming.on("close", () => {
+            if (state !== "streaming" || message !== incoming) return;
+            if (!ended) stop(req);
+            done();
+          });
+          resolve(response);
+        });
+
+        req.on("error", (error) => {
+          if (req !== current) return;
+          fail(error);
+        });
+
+        if (hop.body === null) req.end();
+        else req.end(hop.body);
+      };
+
+      issue();
+    });
+  };
+}
+
+module.exports = { createManualFetch, createSafeFetch, MAX_REDIRECTS };

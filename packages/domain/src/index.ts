@@ -263,6 +263,7 @@ export {
   SettingsSchema,
   chatPanelVisible,
   loadSettings,
+  readStoredSettings,
 } from "./settings";
 export type { Settings } from "./settings";
 

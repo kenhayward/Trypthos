@@ -25,7 +25,7 @@ interface Props {
   onCancel: () => void;
   onRemove: () => void;
   onSaveKey: (endpoint: string, key: string) => Promise<SaveKeyResult>;
-  onDeleteKey: (endpoint: string) => Promise<void>;
+  onDeleteKey: (endpoint: string) => Promise<SaveKeyResult>;
 }
 
 const FIELD =
@@ -82,7 +82,18 @@ export default function ChatProfileForm({
     // Cleared either way. A key left in the box after a failure is a key sitting on screen, and the
     // user can paste it again.
     setKey("");
-    setKeyError(result.ok ? null : t("settings.chat.keyFailed"));
+    if (result.ok) setKeyError(null);
+    // A newer version's key file (issue #235) is refused, not insecure: say which, or the user goes
+    // looking for a keychain fault that is not there.
+    else if (result.reason === "from-the-future") setKeyError(t("errors.newerVersionCredentials"));
+    else setKeyError(t("settings.chat.keyFailed"));
+  };
+
+  /// A refused removal (issue #235) leaves the key on disk, so the user is told - "No key" would be
+  /// the interface claiming a credential is gone that is still there.
+  const removeKey = async () => {
+    const result = await onDeleteKey(draft.endpoint.trim());
+    setKeyError(result.ok ? null : t("settings.chat.keyRemoveFailed"));
   };
 
   return (
@@ -276,7 +287,7 @@ export default function ChatProfileForm({
           {hasKey && (
             <button
               type="button"
-              onClick={() => void onDeleteKey(draft.endpoint.trim())}
+              onClick={() => void removeKey()}
               className="rounded px-2 py-1 text-ui text-ink-4 hover:text-ink"
             >
               {t("settings.chat.removeKey")}

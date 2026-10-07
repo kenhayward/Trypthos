@@ -42,7 +42,7 @@ const { loadMicrosoftClient } = require("./microsoftClient");
 const { createMicrosoftAuth } = require("./microsoftAuth");
 const { createGoogleDriveApi } = require("./googleDriveApi");
 const { createOneDriveApi } = require("./oneDriveApi");
-const { createManualFetch } = require("./manualRedirect");
+const { createManualFetch, createSafeFetch } = require("./manualRedirect");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
 const { enableSpellChecker } = require("./spellcheck");
@@ -401,9 +401,21 @@ if (!gotLock) {
       encryptor: safeStorage,
     });
 
+    // Every token-carrying provider call except OneDrive's goes through this rather than net.fetch
+    // itself (issue #237): net.fetch follows a redirect with the Authorization header still on it, to
+    // any host. This keeps the token on a same-origin hop, drops it on a cross-origin one, and refuses
+    // http, a sixth hop, and a body resent to another origin. It runs on net.request, so it is still
+    // Chromium's stack - the machine's proxy and certificate store. OneDrive keeps its own rules
+    // (redirect: "error" plus createManualFetch, below).
+    const providerFetch = createSafeFetch((options) => net.request(options));
+    // The chat key goes through the same rules, with one allowance: a model on plain http (Ollama or
+    // llama.cpp on the loopback) may redirect within its own origin. An http hop to another host or
+    // port, and every downgrade from https, is refused; credentials never cross an origin.
+    const chatFetch = createSafeFetch((options) => net.request(options), { allowHttpSameOrigin: true });
+
     // The Google account. Null in a build without an OAuth client - a fork, or a developer who has
     // not set TRYPTHOS_GOOGLE_CLIENT - which the interface reports as Google Drive being unavailable.
-    // Every Google call is made here with net.fetch, for the same proxy and certificate reasons as
+    // Every Google call is made here with providerFetch, for the same proxy and certificate reasons as
     // GitHub, and the consent page opens in the user's own browser: Google refuses sign-in inside an
     // embedded window.
     const googleClient = loadGoogleClient({ packaged: app.isPackaged, resourcesPath: process.resourcesPath });
@@ -413,12 +425,12 @@ if (!gotLock) {
         : createGoogleAuth({
             client: googleClient,
             accounts,
-            fetch: (url, options) => net.fetch(url, options),
+            fetch: providerFetch,
             openExternal: (url) => shell.openExternal(url),
           });
 
     // The Microsoft account, for OneDrive. Null in a build without a client id - a fork, or a
-    // developer who has not set TRYPTHOS_ONEDRIVE_CLIENT. Same net.fetch and browser rules as Google.
+    // developer who has not set TRYPTHOS_ONEDRIVE_CLIENT. Same providerFetch and browser rules as Google.
     const microsoftClient = loadMicrosoftClient({ packaged: app.isPackaged, resourcesPath: process.resourcesPath });
     const microsoft =
       microsoftClient === null
@@ -426,7 +438,7 @@ if (!gotLock) {
         : createMicrosoftAuth({
             client: microsoftClient,
             accounts,
-            fetch: (url, options) => net.fetch(url, options),
+            fetch: providerFetch,
             openExternal: (url) => shell.openExternal(url),
           });
 
@@ -445,30 +457,31 @@ if (!gotLock) {
       // The provider call lives here and only here. The renderer never opens a socket to a provider
       // and never holds the key.
       //
-      // **Electron's `net.fetch`, not Node's**, for two reasons. Node's gives up on any response
+      // **Chromium's network stack, not Node's**, for two reasons. Node's gives up on any response
       // after five minutes of silence, which no setting here could raise - so a large reasoning model
       // thinking before its first token could never be waited for. Chromium's stack sets no such
       // limit, and each model's own reply timeout (see `createSilenceWatch`) is the limit instead. It
       // also knows the machine's proxy and certificate store, which is why GitHub already uses it.
-      chat: createChatProvider({ secrets, fetchImpl: (url, options) => net.fetch(url, options) }),
+      // chatFetch runs on that stack (net.request) and keeps the key off a redirect to another host.
+      chat: createChatProvider({ secrets, fetchImpl: chatFetch }),
       accounts,
       // Every GitHub call happens here, where the token is. The renderer never opens a socket to
       // GitHub and never holds the token - the same rule as the chat provider, for the same reason.
       // A factory rather than a client, so connecting can verify a token before it is stored.
       //
-      // **Electron's `net.fetch`, not Node's.** Node's knows nothing about the machine's proxy
-      // settings or its certificate store; Chromium's networking stack knows both. Behind a
-      // corporate proxy or a VPN that is the difference between a request that answers and one that
-      // hangs - and a hung request left the picker spinning with nothing to say. Wrapped rather than
-      // passed by reference, so it keeps its receiver.
+      // **`providerFetch` over Electron's `net.request`, not Node's fetch.** Node's knows nothing
+      // about the machine's proxy settings or its certificate store; Chromium's networking stack
+      // knows both. Behind a corporate proxy or a VPN that is the difference between a request that
+      // answers and one that hangs - and a hung request left the picker spinning with nothing to
+      // say. providerFetch runs on that stack, and keeps the token off a redirect to another host.
       createGitHub: (getToken) =>
-        createGitHubApi({ getToken, fetch: (url, options) => net.fetch(url, options) }),
+        createGitHubApi({ getToken, fetch: providerFetch }),
       google,
       microsoft,
-      // Every Drive call is made here, with the token googleAuth holds - net.fetch for the same proxy
-      // and certificate reasons as GitHub.
+      // Every Drive call is made here, with the token googleAuth holds - providerFetch for the same
+      // proxy and certificate reasons as GitHub, and so a media redirect never carries the token.
       createGoogleDrive: (accessToken) =>
-        createGoogleDriveApi({ accessToken, fetch: (url, options) => net.fetch(url, options) }),
+        createGoogleDriveApi({ accessToken, fetch: providerFetch }),
       // Every OneDrive call is made here, with the token microsoftAuth holds - net.fetch for the same
       // proxy and certificate reasons as GitHub and Drive.
       createOneDrive: (accessToken) =>

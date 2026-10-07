@@ -259,11 +259,33 @@ interface Internal {
   errorParams: Record<string, string> | null;
 }
 
-/// `paths` without one occurrence of `path`. One, not every: two saves of the same file can overlap,
-/// and the first answer must not take the second's spinner down with it.
+/// `paths` without one occurrence of `path`. One, not every: a save of one file never overlaps
+/// another of the same file any more (see `SaveFlight`), but an answer taking down a spinner that is
+/// not its own is the failure this would hide if it ever came back.
 function withoutOne(paths: readonly string[], path: string): readonly string[] {
   const at = paths.indexOf(path);
   return at === -1 ? paths : [...paths.slice(0, at), ...paths.slice(at + 1)];
+}
+
+/// A save on its way, and the follow-up asked for while it was (#236).
+///
+/// `followUp` is shared by every press made during the flight, which is what makes several presses
+/// one write rather than several.
+interface SaveFlight {
+  followUp: Deferred<boolean> | null;
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }
 
 const INITIAL: Internal = {
@@ -344,6 +366,10 @@ export function failureKey(reason: string): string | null {
     // user has to be told their token was not saved - not that it was rejected.
     case "encryption-unavailable":
       return "errors.encryptionUnavailable";
+    // The credential store refusing to write over a file a newer build left (issue #235). Its own
+    // key, because the way out is to open that newer version, which still has every sign-in.
+    case "from-the-future":
+      return "errors.newerVersionCredentials";
     // A tab that could not move into its own window. Its own key, because the question a user has
     // after a move that did not happen is where their text went - and the answer is "still here".
     case "window-failed":
@@ -678,6 +704,12 @@ export function useWorkspace(
   /// the one with a dialog.
   const chosenBranches = useRef<Set<string>>(new Set());
 
+  /// The saves on their way, by path, each with whatever follow-up was asked for meanwhile.
+  ///
+  /// A ref rather than state for the reason `chosenBranches` is one: a second press reads it in the
+  /// same tick as the first wrote it, before any render could have carried state across.
+  const flights = useRef<Map<string, SaveFlight>>(new Map());
+
   /// The latest state, readable from an async callback.
   ///
   /// A save has to read the content and revision AFTER awaiting, and a stale closure would save the
@@ -847,6 +879,23 @@ export function useWorkspace(
         }
       }
 
+      // A save of this path is already on its way (#236). A second write now would present the
+      // revision that save is about to replace, and the provider would answer "changed elsewhere"
+      // about the user's own save. So it waits, and every press made meanwhile becomes ONE follow-up.
+      // Checked after the commit question, so it covers only presses that got past it. A press made
+      // while a repository's first-save commit dialog is open does NOT queue: no flight exists yet and
+      // no branch has been chosen, so it asks the commit question again and opens the dialog again.
+      // There is only one dialog: `askCommit` in App.tsx calls `setCommitPrompt` with a new `answer`,
+      // so the second press REPLACES the open prompt, and the first press's promise is orphaned and
+      // never settles. Only one press can ever be answered.
+      const already = flights.current.get(open.path);
+      if (already !== undefined) {
+        already.followUp ??= deferred();
+        return await already.followUp.promise;
+      }
+
+      const flight: SaveFlight = { followUp: null };
+      flights.current.set(open.path, flight);
       setInternal((prev) => ({
         ...prev,
         busy: true,
@@ -855,28 +904,86 @@ export function useWorkspace(
         savingPaths: [...prev.savingPaths, open.path],
       }));
 
-      const result = await client.writeFile(open.path, open.content, open.revision, message);
-      // Down on any answer, and only this save's entry: another tab's save may still be on its way.
-      setInternal((prev) => ({ ...prev, savingPaths: withoutOne(prev.savingPaths, open.path) }));
-      if (!result.ok) {
-        // Worded for the provider the save went to, so a Drive failure names Google, not GitHub.
-        fail(result, kindOf(stateRef.current.workspaces, open.path), "save");
-        // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
-        // document away on the strength of it. A conflict that read as a save is how the prompt would
-        // destroy the work it exists to protect.
-        return false;
-      }
+      return await fly(open.path, open.content, open.revision, message, flight);
 
-      // The editor keeps the user's text either way. On success the revision advances so the next save
-      // compares against what was just written; on a conflict nothing here changes, which is precisely
-      // what leaves their work intact for them to decide about.
-      setInternal((prev) => ({
-        ...prev,
-        // The text that went out, so an edit made while the write was pending keeps its flag.
-        documents: markSaved(prev.documents, open.path, result.revision, open.content),
-        busy: false,
-      }));
-      return true;
+      /// One write of `content` at `revision`, then - if a press arrived meanwhile and the text has
+      /// moved on - one follow-up at the revision this write answered with.
+      ///
+      /// Answers for THIS write only. A follow-up is started, not awaited, and answers the presses
+      /// that queued it, so the press that began the flight learns its own outcome as soon as it has
+      /// one. The path stays in `savingPaths` from the first write to the last: a spinner that dropped
+      /// between the two would say the work had landed while some of it was still on its way.
+      async function fly(
+        path: string,
+        content: string,
+        revision: Revision | null,
+        commitMessage: string | null,
+        current: SaveFlight,
+      ): Promise<boolean> {
+        const finish = () => {
+          flights.current.delete(path);
+          // Down on any answer, and only this save's entry: another tab's save may still be on its way.
+          setInternal((prev) => ({ ...prev, savingPaths: withoutOne(prev.savingPaths, path) }));
+        };
+
+        let result: Awaited<ReturnType<WorkspaceClient["writeFile"]>>;
+        try {
+          result = await client.writeFile(path, content, revision, commitMessage);
+        } catch {
+          finish();
+          // A write that threw is a save that did not land: the same banner as an answered failure,
+          // the spinner and busy down, the document still dirty. Reported as false rather than
+          // rethrown, so a caller that is about to close the document learns it was not saved.
+          fail({ reason: "unknown" }, kindOf(stateRef.current.workspaces, path), "save");
+          current.followUp?.resolve(false);
+          return false;
+        }
+        const waiting = current.followUp;
+        current.followUp = null;
+
+        if (!result.ok) {
+          finish();
+          // Worded for the provider the save went to, so a Drive failure names Google, not GitHub.
+          fail(result, kindOf(stateRef.current.workspaces, path), "save");
+          // The queued save is dropped. It would have presented the revision this write failed
+          // against, so all it could add is a second banner about the same failure. The document
+          // stays unsaved, which is the truth.
+          waiting?.resolve(false);
+          // Reported, not thrown - and reported as FALSE, because the caller may be about to throw the
+          // document away on the strength of it. A conflict that read as a save is how the prompt would
+          // destroy the work it exists to protect.
+          return false;
+        }
+
+        const latest = stateRef.current.documents.documents.find((document) => document.path === path);
+        const next = waiting !== null && latest !== undefined && latest.content !== content ? latest : null;
+
+        // The editor keeps the user's text either way. The revision advances so the next save compares
+        // against what was just written, and the text that went out is marked saved; a failure was
+        // answered above, where nothing changed, which is what leaves their work intact.
+        setInternal((prev) => ({
+          ...prev,
+          // The text that went out, so an edit made while the write was pending keeps its flag.
+          documents: markSaved(prev.documents, path, result.revision, content),
+          busy: next !== null,
+        }));
+
+        if (next === null || waiting === null) {
+          finish();
+          // Nothing changed since this write went out, so what the queued presses asked for has landed
+          // - unless the document is gone (closed, or renamed to another path) and there is no text
+          // left for them to have asked about.
+          waiting?.resolve(latest !== undefined);
+          return true;
+        }
+
+        const followUpMessage = commitMessage === null ? null : commitMessageFor(path, { creating: false });
+        fly(path, next.content, result.revision, followUpMessage, current).then(
+          waiting.resolve,
+          () => waiting.resolve(false),
+        );
+        return true;
+      }
     },
     [client, fail, saveAs, askCommit],
   );

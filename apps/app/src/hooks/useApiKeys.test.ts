@@ -54,6 +54,22 @@ describe("useApiKeys", () => {
     expect(result.current.keyedEndpoints).toEqual([]);
   });
 
+  // Issue #235. The shell can refuse to remove a key; the hook must not pretend it went.
+  it("does not claim a key is gone when removing it was refused", async () => {
+    const { bridge } = fakeBridge([ENDPOINT]);
+    bridge.deleteApiKey = vi.fn(async () => ({ ok: false as const, reason: "from-the-future" }));
+    const { result } = renderHook(() => useApiKeys(bridge, [ENDPOINT]));
+    await waitFor(() => expect(result.current.keyedEndpoints).toEqual([ENDPOINT]));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.deleteKey(ENDPOINT);
+    });
+
+    expect(outcome).toEqual({ ok: false, reason: "from-the-future" });
+    expect(result.current.keyedEndpoints).toEqual([ENDPOINT]);
+  });
+
   it("does not claim a key is stored when storing it failed", async () => {
     const { bridge } = fakeBridge();
     bridge.setApiKey = vi.fn(async () => ({

@@ -230,6 +230,27 @@ describe("when the shell itself fails", () => {
     expect(result.current.errorKey).toBe("errors.unknown");
   });
 
+  // Issue #235. A downgraded build's store refuses to rewrite a newer build's token file; the user is
+  // told why the account is still connected rather than "something went wrong".
+  it("names the reason a disconnect was refused, and stays connected", async () => {
+    const bridge = fakeBridge({
+      connectGitHub: vi.fn(async () => ({ ok: true as const, login: "ada" })),
+      disconnectGitHub: vi.fn(async () => ({ ok: false, reason: "from-the-future" })),
+    });
+    const { result } = renderHook(() => useGitHub(bridge));
+    await waitFor(() => expect(result.current.checking).toBe(false));
+    await act(async () => {
+      await result.current.connect("ghp_good");
+    });
+
+    await act(async () => {
+      await result.current.disconnect();
+    });
+
+    expect(result.current.errorKey).toBe("errors.newerVersionCredentials");
+    expect(result.current.connected).toBe(true);
+  });
+
   it("stops disconnecting when the disconnect call rejects", async () => {
     const bridge = fakeBridge({ disconnectGitHub: vi.fn(broken) });
     const { result } = renderHook(() => useGitHub(bridge));

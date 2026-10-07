@@ -27,13 +27,14 @@ function accountsPath(userDataDir) {
   return path.join(userDataDir, "providerAccounts.json");
 }
 
-function createAccountStore({ userDataDir, encryptor, logger = console }) {
+function createAccountStore({ userDataDir, encryptor, logger = console, now }) {
   const store = createEncryptedStore({
     file: accountsPath(userDataDir),
     field: "tokens",
     schemaVersion: SCHEMA_VERSION,
     encryptor,
     logger,
+    now,
   });
 
   return {

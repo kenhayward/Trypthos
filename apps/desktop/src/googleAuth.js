@@ -292,6 +292,9 @@ function createGoogleAuth({
     }
     const deleted = await safely("delete", () => accounts.deleteToken(GOOGLE_PROVIDER));
     if (!deleted.ok) return deleted;
+    // The store's own refusal (a newer build's file, or one it could not open - issue #235) is the
+    // answer: the token is still on disk, and saying otherwise would be a sign-out that did not happen.
+    if (deleted.value?.ok === false) return deleted.value;
     return { ok: true };
   }
 

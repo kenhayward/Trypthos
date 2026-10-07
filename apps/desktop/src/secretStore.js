@@ -28,13 +28,14 @@ function secretsPath(userDataDir) {
 /// copy here would drift and put the badge on the wrong profile.
 const normalise = normaliseEndpoint;
 
-function createSecretStore({ userDataDir, encryptor, logger = console }) {
+function createSecretStore({ userDataDir, encryptor, logger = console, now }) {
   const store = createEncryptedStore({
     file: secretsPath(userDataDir),
     field: "keys",
     schemaVersion: SCHEMA_VERSION,
     encryptor,
     logger,
+    now,
   });
 
   return {

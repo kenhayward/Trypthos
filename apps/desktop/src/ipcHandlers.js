@@ -61,7 +61,7 @@ const {
   OBSIDIAN_ICONS_FILE,
   parseObsidianIcons,
 } = require("@trypthos/domain");
-const { readSettings, writeSettings, notifySettingsWritten } = require("./settingsStore");
+const { loadSettingsFile, readSettings, writeSettings, notifySettingsWritten, sweepHeld } = require("./settingsStore");
 const { openWorkspaceFor } = require("./providers");
 const { readObsidianVaults } = require("./obsidianVaults");
 const chatStore = require("./chatStore");
@@ -353,16 +353,67 @@ function registerIpcHandlers({
 
   // Settings are not workspace-scoped, so they do not go through `guarded` - there is no workspace
   // to require, and the app needs to read them before one is open.
-  ipcMain.handle("settings:read", async () => ({ ok: true, settings: await readSettings(userDataDir) }));
+  //
+  // How each window's OWN load went, keyed by its sender id (issue #235, fix round 3). Its renderer
+  // writes back whatever that load gave it, so this - not any other read - decides what it may
+  // write. Absent: loaded (or never read, which the renderer never does before writing). "failed" or
+  // "from-the-future": the file could not be opened, or came from a newer build, so the window holds
+  // defaults and every write from it is refused (`not-loaded`), whatever the file looks like by then,
+  // until its own re-read succeeds. "unreadable": it holds defaults because no build can read the file, so it may
+  // replace that file and nothing else. Main-process reads (chat:send, the outline, startup) go
+  // straight to the store and neither set nor clear this. An entry goes when its window does.
+  const loads = new Map();
+  function senderId(event) {
+    return event?.sender?.id ?? null;
+  }
 
-  ipcMain.handle("settings:write", async (_event, payload) => {
+  ipcMain.handle("settings:read", async (event) => {
+    const { settings, state } = await loadSettingsFile(userDataDir);
+    const id = senderId(event);
+    if (state === "current" || state === "missing") {
+      loads.delete(id);
+    } else {
+      if (!loads.has(id)) event?.sender?.once?.("destroyed", () => loads.delete(id));
+      loads.set(id, state === "unreadable" || state === "from-the-future" ? state : "failed");
+    }
+    return { ok: true, settings };
+  });
+
+  ipcMain.handle("settings:write", async (event, payload) => {
     const parsed = WriteSettingsRequest.safeParse(payload);
     if (!parsed.success) {
       console.error("Rejected malformed settings write.");
       return { ok: false, reason: "bad-request" };
     }
-    await writeSettings(userDataDir, parsed.data);
-    notifySettingsWritten(parsed.data);
+    const id = senderId(event);
+    const load = loads.get(id);
+    let written;
+    if (load === "failed" || load === "from-the-future") {
+      console.warn("Settings write: refused (not-loaded).");
+      written = { ok: false, reason: "not-loaded" };
+    } else {
+      written = await writeSettings(userDataDir, parsed.data, { replaceOnly: load === "unreadable" });
+      // Replaced: the file now holds what this window holds.
+      if (written.ok) loads.delete(id);
+    }
+    // The main process still hears the settings the renderer is running on: for this session they
+    // ARE the settings (close to tray, the recent list), stored or not - when this build cannot store
+    // them at all (a newer build's file), defaults are what every window runs on. But NOT from a
+    // window whose own load did not succeed (`not-loaded`, other than a newer build's file): it holds
+    // defaults another window may not, and pushing them here would empty the recent-files menu and
+    // reset close-to-tray for the whole app.
+    if (written.ok || written.reason !== "not-loaded" || load === "from-the-future") {
+      notifySettingsWritten(parsed.data);
+    }
+
+    // Refused (a newer build's file, a file that could not be opened, or a load that did not
+    // succeed - issue #235), or written over an unreadable file. Either way these settings are the
+    // defaults this build fell back to, with no profiles, and sweeping by them would delete every
+    // chat key the stored profiles still use. So no sweep.
+    if (!written.ok) return written;
+    // And for every later write in this run once an unreadable file was replaced: the session's
+    // profiles started from defaults, not from the profiles the lost file held (see `sweepHeld`).
+    if (written.replacedUnreadable || sweepHeld(userDataDir)) return { ok: true };
 
     // Saving settings is the only moment the app learns that a profile was deleted, or its endpoint
     // repointed. Without this, a live credential for a provider nothing references any more would
@@ -406,7 +457,10 @@ function registerIpcHandlers({
     const parsed = DeleteSecretRequest.safeParse(payload);
     if (!parsed.success) return { ok: false, reason: "bad-request" };
 
-    await secrets.deleteKey(parsed.data.endpoint);
+    const deleted = await secrets.deleteKey(parsed.data.endpoint);
+    // The store's own refusal (a newer build's file, one it could not open, or a backup that could
+    // not be taken - issue #235) is the answer: the key is still on disk.
+    if (deleted?.ok === false) return deleted;
     return { ok: true };
   });
 
@@ -734,10 +788,13 @@ function registerIpcHandlers({
   ipcMain.handle("github:disconnect", async () => {
     if (accounts === null) return { ok: true };
 
-    await accounts.deleteToken("github");
+    const deleted = await accounts.deleteToken("github");
     // The list went with the account. Keeping it would let a picker opened after signing out show
-    // the repositories of an account the app can no longer reach.
+    // the repositories of an account the app can no longer reach. Dropped whatever the store says.
     repositories = null;
+    // The store's own refusal (a newer build's file, or one it could not open - issue #235) is the
+    // answer: the token is still on disk, and saying otherwise would be a sign-out that did not happen.
+    if (deleted?.ok === false) return deleted;
     return { ok: true };
   });
 
