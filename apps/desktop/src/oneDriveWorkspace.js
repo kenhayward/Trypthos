@@ -4,7 +4,6 @@ const {
   MAX_TEXT_FILE_BYTES,
   createPathGuard,
   decodeTextFile,
-  isHttpsUrl,
   oneDriveEntriesOf,
   sameOneDriveId,
 } = require("@trypthos/domain");
@@ -31,6 +30,26 @@ const LISTING_TTL_MS = 60_000;
 
 function failure(reason) {
   return { ok: false, reason };
+}
+
+/// Microsoft's own hosts for a OneDrive or SharePoint page, matched exactly or on a dot boundary, so
+/// neither `evilsharepoint.com` nor `onedrive.live.com.evil.example` passes.
+const WEB_HOSTS = ["onedrive.live.com", "1drv.ms"];
+const WEB_HOST_SUFFIXES = [".sharepoint.com"];
+
+/// Whether an item's `webUrl` may be handed to openExternal: https, no user or password in it, and a
+/// Microsoft host. Graph's answer is untrusted input like any other.
+function isOneDriveWebUrl(value) {
+  if (typeof value !== "string") return false;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return false;
+  const host = url.hostname.toLowerCase();
+  return WEB_HOSTS.includes(host) || WEB_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix) && host.length > suffix.length);
 }
 
 function parentOf(path) {
@@ -198,6 +217,9 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
           let ranged = await api.rangeFrom(where.url, start, end, { signal });
           if (!ranged.ok && ranged.reason === "expired") {
             locations.delete(itemId);
+            // Nobody is left to read the answer: no new address is asked for, and the failure is the
+            // one an abandoned range answers everywhere else.
+            if (signal?.aborted) return failure("offline");
             where = await locate(true);
             if (!where.ok) return where;
             ranged = await api.rangeFrom(where.url, start, end, { signal });
@@ -205,8 +227,9 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
           // Refused twice in a row, straight after a new address was issued: not an expiry.
           if (!ranged.ok) return failure(ranged.reason === "expired" ? "permission-denied" : ranged.reason);
           // A 200 is the whole file: only a correct answer to a range that IS the whole file. For any
-          // other, the protocol would label the full body a 206 of the wrong length.
-          if (ranged.status === 200 && end !== size - 1) {
+          // other, the protocol would label the full body a 206 of the wrong length. Checked here as
+          // well as in the client, which only knows where the range starts.
+          if (ranged.status === 200 && (start !== 0 || end !== size - 1)) {
             await ranged.body?.cancel().catch(() => {});
             return failure("offline");
           }
@@ -222,14 +245,15 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
     },
 
     /// Where an entry lives on the web, for Open in OneDrive: the item's own `webUrl`, and only an
-    /// https one. It stays in the main process: the shell opens it, the renderer never sees it.
+    /// https one at a Microsoft host. It stays in the main process: the shell opens it, the renderer
+    /// never sees it.
     async webAddress(candidate) {
       const path = relativePath(candidate);
       if (path === null) return failure("permission-denied");
       const meta = await api.item(ref.driveId, ref.itemId, path);
       if (!meta.ok) return meta;
       const url = meta.item.webUrl;
-      return typeof url === "string" && isHttpsUrl(url) ? { ok: true, url } : failure("not-found");
+      return isOneDriveWebUrl(url) ? { ok: true, url } : failure("not-found");
     },
 
     async refresh() {

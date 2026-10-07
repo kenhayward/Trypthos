@@ -35,8 +35,10 @@ function childrenOf(items, path) {
     .map(([, item]) => ({ ...item }));
 }
 
-function fakeApi({ myDrive = MINE, items = TREE, rangeFrom = null } = {}) {
+function fakeApi({ myDrive = MINE, items = TREE, rangeFrom = null, children = null } = {}) {
   const calls = [];
+  /// The options each `rangeFrom` call was handed, in order: where the window's abort signal travels.
+  const rangeOptions = [];
   let issued = 0;
   const api = {
     drive: async () => {
@@ -49,6 +51,7 @@ function fakeApi({ myDrive = MINE, items = TREE, rangeFrom = null } = {}) {
     },
     children: async (driveId, itemId, path) => {
       calls.push(["children", driveId, itemId, path]);
+      if (children !== null) return children(driveId, itemId, path);
       return items[path]?.folder === undefined ? { ok: false, reason: "not-found" } : { ok: true, items: childrenOf(items, path) };
     },
     download: async (driveId, itemId, limitBytes) => {
@@ -62,17 +65,18 @@ function fakeApi({ myDrive = MINE, items = TREE, rangeFrom = null } = {}) {
     },
     rangeFrom: async (url, start, end, options) => {
       calls.push(["range", url, start, end]);
+      rangeOptions.push(options);
       if (rangeFrom !== null) return rangeFrom(url, start, end, options);
       return { ok: true, status: 206, body: new Response(Buffer.from("0123456789").subarray(start, end + 1)).body };
     },
   };
-  return { api, calls };
+  return { api, calls, rangeOptions };
 }
 
 async function open({ ref = REF, now, ...options } = {}) {
-  const { api, calls } = fakeApi(options);
+  const { api, calls, rangeOptions } = fakeApi(options);
   const opened = await openOneDriveWorkspace({ ref, api, ...(now === undefined ? {} : { now }) });
-  return { opened, provider: opened.ok ? opened.provider : null, calls };
+  return { opened, provider: opened.ok ? opened.provider : null, calls, rangeOptions };
 }
 
 test("guards a root of its own, which exists nowhere", () => {
@@ -201,6 +205,41 @@ test("refuses a path that leaves the workspace, before asking OneDrive anything"
   assert.equal(calls.length, before);
 });
 
+test("refuses a backslash traversal that is not UNC, and a blank path, before asking OneDrive anything", async () => {
+  const { provider, calls } = await open();
+  const before = calls.length;
+  for (const refused of ["Archive\\..\\..\\x.md", "  "]) {
+    for (const answer of [provider.list(refused), provider.read(refused), provider.readBytes(refused, 10), provider.webAddress(refused)]) {
+      assert.deepEqual(await answer, { ok: false, reason: "permission-denied" }, JSON.stringify(refused));
+    }
+  }
+  assert.equal(calls.length, before);
+});
+
+test("a path that stays inside is asked for by its normalised form", async () => {
+  const { provider, calls } = await open();
+  const before = calls.length;
+  assert.equal((await provider.read("./Plan.md")).ok, true);
+  assert.equal((await provider.readBytes("Archive//Old.md", 10)).ok, true);
+  assert.deepEqual(
+    calls.slice(before).filter((call) => call[0] === "item"),
+    [
+      ["item", MINE, "ROOT!0", "Plan.md"],
+      ["item", MINE, "ROOT!0", "Archive/Old.md"],
+    ],
+  );
+});
+
+test("a failed listing is not kept: the next list asks again", async () => {
+  let failing = true;
+  const children = async (driveId, itemId, path) => (failing ? { ok: false, reason: "offline" } : { ok: true, items: childrenOf(TREE, path) });
+  const { provider, calls } = await open({ children });
+  assert.deepEqual(await provider.list(""), { ok: false, reason: "offline" });
+  failing = false;
+  assert.equal((await provider.list("")).ok, true);
+  assert.equal(calls.filter((call) => call[0] === "children").length, 2);
+});
+
 test("reads a file read-only, its revision the content tag asked for before the bytes", async () => {
   const { provider, calls } = await open();
   const before = calls.length;
@@ -278,11 +317,44 @@ test("an expired address is fetched again once, and a second refusal is permissi
   assert.equal(calls.filter((call) => call[0] === "location").length, 3);
 });
 
+test("the window's abort signal reaches the first range and the retry after an expired address", async () => {
+  let refusals = 1;
+  const rangeFrom = async (url, start, end) => {
+    if (refusals > 0) {
+      refusals -= 1;
+      return { ok: false, reason: "expired" };
+    }
+    return { ok: true, status: 206, body: new Response(Buffer.from("0123456789").subarray(start, end + 1)).body };
+  };
+  const { provider, rangeOptions } = await open({ rangeFrom });
+  const media = await provider.mediaSource("clip.mp4");
+  const { signal } = new AbortController();
+  assert.equal(await new Response((await media.open(2, 3, signal)).body).text(), "23");
+  assert.equal(rangeOptions.length, 2);
+  assert.equal(rangeOptions[0].signal, signal);
+  assert.equal(rangeOptions[1].signal, signal);
+});
+
+test("a range abandoned while its address expired asks for no new address, and answers as an abort does", async () => {
+  const controller = new AbortController();
+  const rangeFrom = async () => {
+    controller.abort();
+    return { ok: false, reason: "expired" };
+  };
+  const { provider, calls } = await open({ rangeFrom });
+  const media = await provider.mediaSource("clip.mp4");
+  assert.deepEqual(await media.open(2, 3, controller.signal), { ok: false, reason: "offline" });
+  assert.equal(calls.filter((call) => call[0] === "location").length, 1);
+  assert.equal(calls.filter((call) => call[0] === "range").length, 1);
+});
+
 test("a whole-file answer is accepted only for a whole-file range", async () => {
   const rangeFrom = async () => ({ ok: true, status: 200, body: new Response(Buffer.from("0123456789")).body });
   const { provider } = await open({ rangeFrom });
   const media = await provider.mediaSource("clip.mp4");
   assert.deepEqual(await media.open(0, 4), { ok: false, reason: "offline" });
+  // Ends at the last byte but does not start at the first: a 200 here is the wrong bytes.
+  assert.deepEqual(await media.open(3, 9), { ok: false, reason: "offline" });
   assert.equal(await new Response((await media.open(0, 9)).body).text(), "0123456789");
 });
 
@@ -307,4 +379,28 @@ test("names an entry's page on the web, and the workspace's own, but never a non
   assert.deepEqual(await provider.webAddress("Plan.md"), { ok: true, url: "https://onedrive.live.com/?id=ITEM!1" });
   assert.deepEqual(await provider.webAddress("odd.md"), { ok: false, reason: "not-found" });
   assert.deepEqual(await provider.webAddress("gone.md"), { ok: false, reason: "not-found" });
+});
+
+// The address goes to openExternal, so only Microsoft's own hosts are named.
+test("names a page on the web only at a Microsoft host, over https, with no user in it", async () => {
+  const at = (webUrl) => ({ id: "ITEM!6", name: "web.md", file: {}, webUrl });
+  for (const refused of [
+    "https://evil.example/",
+    "https://onedrive.live.com.evil.example/",
+    "https://evilsharepoint.com/",
+    "https://sharepoint.com.evil.example/",
+    "https://user@onedrive.live.com/",
+    "http://onedrive.live.com/",
+  ]) {
+    const { provider } = await open({ items: { ...TREE, "web.md": at(refused) } });
+    assert.deepEqual(await provider.webAddress("web.md"), { ok: false, reason: "not-found" }, refused);
+  }
+  for (const accepted of [
+    "https://onedrive.live.com/?id=ITEM!6",
+    "https://contoso-my.sharepoint.com/personal/ada/Documents/web.md",
+    "https://1drv.ms/t/s!invented",
+  ]) {
+    const { provider } = await open({ items: { ...TREE, "web.md": at(accepted) } });
+    assert.deepEqual(await provider.webAddress("web.md"), { ok: true, url: accepted }, accepted);
+  }
 });
