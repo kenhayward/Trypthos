@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { createAccountStore, accountsPath } = require("../src/accountStore");
 const { createSecretStore } = require("../src/secretStore");
+const { createEncryptedStore } = require("../src/encryptedStore");
 
 /// Cloud provider credentials, kept exactly as carefully as the chat keys are.
 ///
@@ -277,6 +278,37 @@ test("sweeping a newer build's key file leaves it byte for byte", async () => {
 
     assert.deepEqual(await secrets.retainOnly([]), { ok: false, reason: "from-the-future" });
     assert.equal(await fs.readFile(file, "utf8"), future);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+/// A file held by another process (EBUSY on Windows) cannot be read, so nothing is known about what
+/// it holds. Writing would replace every token in it with this one; backing it up is impossible.
+test("a token file that cannot be opened is refused, with no backup and the bytes unchanged", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-accounts-"));
+  try {
+    const encryptor = fakeEncryptor();
+    const file = accountsPath(dir);
+    await createAccountStore({ userDataDir: dir, encryptor, logger: silent }).setToken("github", "ghp_invented");
+    const before = await fs.readFile(file, "utf8");
+
+    const held = createEncryptedStore({
+      file,
+      field: "tokens",
+      schemaVersion: 1,
+      encryptor,
+      logger: silent,
+      readFile: async () => {
+        throw Object.assign(new Error("held"), { code: "EBUSY" });
+      },
+    });
+
+    assert.deepEqual(await held.set("google", "google-invented"), { ok: false, reason: "unopenable" });
+    assert.deepEqual(await held.remove("github"), { ok: false, reason: "unopenable" });
+    assert.deepEqual(await held.retainOnly([]), { ok: false, reason: "unopenable" });
+    assert.equal(await fs.readFile(file, "utf8"), before);
+    assert.deepEqual(await fs.readdir(dir), ["providerAccounts.json"]);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }

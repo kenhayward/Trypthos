@@ -41,7 +41,9 @@ function backupStamp() {
 /// `schemaVersion` and `field` belong to the caller rather than to this module: the two stores have
 /// separate files with separate histories, and a shared version number would make a migration to one
 /// look like a corruption of the other.
-function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = console }) {
+///
+/// `readFile` is injectable so a test can make a read fail the way a held file does on Windows.
+function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = console, readFile = fs.readFile }) {
   const directory = path.dirname(file);
 
   /// Every change to the file runs through here, one at a time. Each is a read-modify-write of the
@@ -66,7 +68,7 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
   async function inspect() {
     let text;
     try {
-      text = await fs.readFile(file, "utf8");
+      text = await readFile(file, "utf8");
     } catch (error) {
       if (error?.code === "ENOENT") return { state: "missing", values: {} };
       return { state: "unopenable", reason: error?.code ?? error?.name, values: {} };
