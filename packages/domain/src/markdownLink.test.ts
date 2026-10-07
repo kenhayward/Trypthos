@@ -171,10 +171,20 @@ describe("linkAction", () => {
     });
 
     // Not a security check - the main process guards the boundary regardless. This is about not
-    // pretending: a link to a PDF has nowhere to go, so nothing should happen when it is clicked.
+    // pretending: a link to a file no enabled type claims has nowhere to go, so nothing should
+    // happen when it is clicked.
     it("refuses a relative link to a file no enabled type claims", () => {
       expect(link("diagram.png", null)).toEqual({ kind: "none", reason: "not-openable" });
       expect(link("report.pdf", null)).toEqual({ kind: "none", reason: "not-openable" });
+    });
+
+    // The reach the reading surface claims: with the row turned on, a link to a document goes
+    // somewhere, and what it opens into is the reader rather than an editor.
+    it("follows a link to a document once its row is turned on", () => {
+      expect(link("report.pdf", null, ["markdown", "pdf"])).toEqual({
+        kind: "document",
+        path: inWorkspace("report.pdf"),
+      });
     });
 
     // The same rule the folder browser uses, from the same catalogue. A link the tree would not
