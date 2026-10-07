@@ -87,6 +87,18 @@ function sweepHeld(userDataDir) {
   return replacedUnreadable.has(userDataDir);
 }
 
+/// How long a load waits before each re-read of a held file. A failed load locks the window out of
+/// saving for the rest of the session (see `settings:read`), and the commonest cause on Windows is an
+/// antivirus scanner or a sync client holding the file for a moment at launch - so a hold is waited
+/// out, briefly, before it counts. Anything else (a directory, a missing permission that stays
+/// missing) fails at once.
+const HELD_RETRY_DELAYS_MS = [50, 150];
+const HELD_CODES = new Set(["EBUSY", "EPERM"]);
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /// Reads the settings and says how the load went: `{ settings, state }`, where `state` is the
 /// `inspectStored` state ("current", "missing", "from-the-future", "unreadable", "unopenable").
 ///
@@ -95,8 +107,15 @@ function sweepHeld(userDataDir) {
 /// sender - see `settings:read` in ipcHandlers.js. A store-level flag was set and cleared by every
 /// main-process read (chat:send, the outline, another window), so an unrelated read succeeding
 /// let a window holding defaults write them over a good file.
-async function loadSettingsFile(userDataDir, { logger = console, readFile } = {}) {
-  const stored = await inspectStored(userDataDir, readFile);
+///
+/// `sleep` is injectable so a test can exercise the retries without waiting for them.
+async function loadSettingsFile(userDataDir, { logger = console, readFile, sleep = wait } = {}) {
+  let stored = await inspectStored(userDataDir, readFile);
+  for (const delay of HELD_RETRY_DELAYS_MS) {
+    if (stored.state !== "unopenable" || !HELD_CODES.has(stored.code)) break;
+    await sleep(delay);
+    stored = await inspectStored(userDataDir, readFile);
+  }
 
   switch (stored.state) {
     case "current":

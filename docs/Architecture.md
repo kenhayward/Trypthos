@@ -745,7 +745,10 @@ a network, and it is the shape the next three providers should copy.
   `{ ok: false, reason: "from-the-future" }` and leave it byte for byte, since rewriting it in this
   build's shape would drop every token this build cannot see; the renderer shows
   `errors.newerVersionCredentials`. A file nothing can parse is copied to
-  `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) and then replaced; one
+  `<file>.unreadable-<timestamp>` (still ciphertext bound to this machine) by the change that
+  replaces it, immediately before the write - so it is backed up once, then replaced, and a
+  `retainOnly` sweep with nothing to drop (every settings save runs one) leaves it alone and takes no
+  backup. A damaged file read for a chat turn is logged once per store, not once per read; one
   that cannot be opened refuses every change (`unopenable`), and a backup that collides answers
   `backup-failed` rather than throwing across IPC. The Google and Microsoft disconnects pass a
   refused delete through as their answer after dropping the in-memory access token; GitHub's does
@@ -1470,7 +1473,12 @@ in the user's workspace.
   then - readable, or gone. Only that window's own `settings:read` could clear it, and the renderer
   reads settings once, at mount, so in practice the refusal lasts until that window is reloaded or
   the app restarts. Otherwise the renderer's write 400 ms later would put the defaults over a good
-  file. A window that loaded an unreadable file may
+  file. Because the refusal lasts that long, `loadSettingsFile` reads a held file (EBUSY or EPERM)
+  again twice, after 50 ms and 150 ms, before answering `unopenable`: a momentary antivirus hold no
+  longer costs the window its saves. A `not-loaded` refusal is also not passed to
+  `notifySettingsWritten` - that window's defaults are not what the session runs on, and pushing them
+  would empty the recent-files menu and reset close-to-tray - except for a window that loaded a newer
+  build's file, where defaults are exactly what this build runs on. A window that loaded an unreadable file may
   replace that file and nothing else (`writeSettings` `replaceOnly`). Main-process reads (chat:send,
   the outline, startup) go to the store directly and neither set nor clear an entry; the store
   itself remembers no load (`loadSettingsFile` only reports how one went). A missing file is a

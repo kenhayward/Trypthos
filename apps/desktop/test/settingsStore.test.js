@@ -272,7 +272,59 @@ function failingOnce(code) {
   };
 }
 
+/// A readFile that fails `times` times with the given code, then reads the real file.
+function failing(times, code) {
+  let left = times;
+  return async (file, encoding) => {
+    if (left > 0) {
+      left -= 1;
+      throw Object.assign(new Error("held"), { code });
+    }
+    return fs.readFile(file, encoding);
+  };
+}
+
+/// A sleep that records what it was asked to wait and waits for nothing, so no test sleeps for real.
+function recordingSleep() {
+  const waits = [];
+  return { waits, sleep: async (ms) => void waits.push(ms) };
+}
+
 const CUSTOM = { ...DEFAULT_SETTINGS, panels: { ...DEFAULT_SETTINGS.panels, workspaceWidth: 333 } };
+
+/// An antivirus scanner holds the file for a moment at launch. Failing the load on that would lock
+/// the window out of saving for the whole session, so a held file is read again, twice, briefly.
+test("a load retries a momentarily held file, and succeeds when the hold lets go", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, CUSTOM);
+    for (const code of ["EBUSY", "EPERM"]) {
+      const { waits, sleep } = recordingSleep();
+      const loaded = await loadSettingsFile(dir, { logger: silent, readFile: failing(1, code), sleep });
+      assert.deepEqual(loaded, { settings: CUSTOM, state: "current" });
+      assert.deepEqual(waits, [50]);
+    }
+  });
+});
+
+test("a load gives up as unopenable after three held reads, backing off between them", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, CUSTOM);
+    const { waits, sleep } = recordingSleep();
+    const loaded = await loadSettingsFile(dir, { logger: silent, readFile: failing(3, "EBUSY"), sleep });
+    assert.deepEqual(loaded, { settings: DEFAULT_SETTINGS, state: "unopenable" });
+    assert.deepEqual(waits, [50, 150]);
+  });
+});
+
+test("a load does not retry a failure that is not a hold", async () => {
+  await withDir(async (dir) => {
+    await writeSettings(dir, CUSTOM);
+    const { waits, sleep } = recordingSleep();
+    const loaded = await loadSettingsFile(dir, { logger: silent, readFile: failing(1, "EISDIR"), sleep });
+    assert.deepEqual(loaded, { settings: DEFAULT_SETTINGS, state: "unopenable" });
+    assert.deepEqual(waits, []);
+  });
+});
 
 test("a write while the file cannot be opened is refused, with no backup and the bytes unchanged", async () => {
   await withDir(async (dir) => {
@@ -293,11 +345,12 @@ test("a write while the file cannot be opened is refused, with no backup and the
 test("a load says how it went, and a failed one changes nothing a later write may do", async () => {
   await withDir(async (dir) => {
     await writeSettings(dir, CUSTOM);
-    const failed = await loadSettingsFile(dir, { logger: silent, readFile: failingOnce("EBUSY") });
+    const { sleep } = recordingSleep();
+    const failed = await loadSettingsFile(dir, { logger: silent, readFile: failing(3, "EBUSY"), sleep });
     assert.deepEqual(failed, { settings: DEFAULT_SETTINGS, state: "unopenable" });
     assert.deepEqual(await loadSettingsFile(dir), { settings: CUSTOM, state: "current" });
 
-    await readSettings(dir, { logger: silent, readFile: failingOnce("EBUSY") });
+    await readSettings(dir, { logger: silent, readFile: failing(3, "EBUSY"), sleep });
     assert.deepEqual(await writeSettings(dir, CUSTOM), { ok: true });
   });
 });
