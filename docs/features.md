@@ -125,7 +125,7 @@ it took 40 seconds across 113,000 folders.
 
 If a folder cannot be read, that folder says so on its own row and offers to try again. The rest of
 the tree keeps working, because one unreadable folder is a fact about that folder rather than about
-your workspace. Google Drive is behind the same interface, and OneDrive and Dropbox follow.
+your workspace. Google Drive and OneDrive are behind the same interface, and Dropbox follows.
 
 ## GitHub repositories
 
@@ -288,7 +288,9 @@ blanking the whole panel, so a directory that is still loading, or that failed, 
 
 ## OneDrive
 
-**Connect a personal Microsoft account from Settings > Accounts.** Connect opens Microsoft's sign-in page in your browser: sign in with your personal Microsoft account and allow access to your files, and the section shows the account you connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Microsoft directly from this machine. Disconnect forgets the sign-in on this computer; to remove Trypthos's access from your Microsoft account as well, visit account.live.com/consent/Manage. Opening OneDrive folders follows in the next release. Work and school accounts are not supported.
+**Connect a personal Microsoft account from Settings > Accounts.** Connect opens Microsoft's sign-in page in your browser: sign in with your personal Microsoft account and allow access to your files, and the section shows the account you connected. Trypthos keeps only what it needs to stay signed in, encrypted by your operating system, and talks to Microsoft directly from this machine. Disconnect forgets the sign-in on this computer; to remove Trypthos's access from your Microsoft account as well, visit account.live.com/consent/Manage. Work and school accounts are not supported.
+
+**Open a OneDrive folder beside your other folders.** With a Microsoft account connected, the folder browser has a OneDrive button (and the panel's right-click menu the same choice), in builds made with OneDrive support. It opens the same picker as Google Drive's, with My files and Shared with me and a breadcrumb to go back up: open My files itself, any folder in it, or a folder someone shared with you. It opens as another tree, marked with a OneDrive cloud, and comes back the next time you start Trypthos. Files open read-only for now - saving, New File, New Folder and rename follow in the next release. Markdown and text files open as they do anywhere else, pictures a note embeds are shown, and videos and audio play and can be seeked: they stream in ranges through the main process, from an address OneDrive hands out for a short time, so neither your sign-in nor that address reaches the window. Folders are read as you open them and a listing is kept for a minute; right-click Refresh asks OneDrive again. The filter box and Find in Files search only the folders you have opened, and say so. Open in OneDrive shows a file, a folder or the whole workspace on onedrive.live.com in your browser. A folder remembered under one Microsoft account is not opened under another: it stays in the list greyed out, with a message saying so. If OneDrive cannot list what has been shared with you, Shared with me is simply empty.
 
 ## Home page and graph
 

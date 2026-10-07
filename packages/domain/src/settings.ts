@@ -178,9 +178,8 @@ export const SETTINGS_MIGRATIONS: Migration[] = [
   {
     to: 25,
     // Version 25 lets a remembered workspace be a OneDrive folder. Nothing already remembered changes.
-    // The version is for the OTHER direction, as with 23: the reference is strict, so a file naming a
-    // OneDrive folder, read by the previous build, would fail to parse and take every remembered
-    // workspace with it - this makes that build refuse the file instead.
+    // The shape change is versioned, as with 23. A previous build answers DEFAULT_SETTINGS either way:
+    // a file from the future and a strict parse failure both fall back to defaults.
     migrate: (input) => input,
   },
   {
