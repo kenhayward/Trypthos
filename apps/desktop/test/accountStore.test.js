@@ -142,3 +142,55 @@ test("deleting every chat model does not disconnect GitHub", async () => {
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+// ---- Final review I1: one file, every provider's writes ----
+
+// Each write is a read-modify-write of the one file. Unqueued, two providers writing at once (a
+// OneDrive refresh, which writes every time, beside a Google sign-in) each wrote back a file
+// missing the other's token - or collided on one temporary name and threw.
+test("two providers storing at the same moment both keep their token", async () => {
+  await withStore(async (store) => {
+    for (let round = 0; round < 10; round += 1) {
+      await store.deleteToken("google");
+      await store.deleteToken("onedrive");
+      const results = await Promise.all([
+        store.setToken("google", `google-invented-${round}`),
+        store.setToken("onedrive", `onedrive-invented-${round}`),
+      ]);
+      assert.deepEqual(results, [{ ok: true }, { ok: true }]);
+      assert.equal(await store.getToken("google"), `google-invented-${round}`);
+      assert.equal(await store.getToken("onedrive"), `onedrive-invented-${round}`);
+    }
+  });
+});
+
+test("one provider signing out while another stores leaves the other's token", async () => {
+  await withStore(async (store) => {
+    for (let round = 0; round < 10; round += 1) {
+      await store.setToken("github", "ghp_invented");
+      await Promise.all([store.deleteToken("github"), store.setToken("onedrive", `onedrive-invented-${round}`)]);
+      assert.equal(await store.getToken("github"), null);
+      assert.equal(await store.getToken("onedrive"), `onedrive-invented-${round}`);
+    }
+  });
+});
+
+test("a write that fails does not stop the next one", async () => {
+  await withStore(async (store, dir, encryptor) => {
+    const real = encryptor.encryptString;
+    let failOnce = true;
+    encryptor.encryptString = (value) => {
+      if (failOnce) {
+        failOnce = false;
+        throw new Error("sealing failed");
+      }
+      return real(value);
+    };
+    const failing = store.setToken("google", "google-invented");
+    const next = store.setToken("onedrive", "onedrive-invented");
+    await assert.rejects(failing);
+    assert.deepEqual(await next, { ok: true });
+    assert.equal(await store.getToken("onedrive"), "onedrive-invented");
+    assert.equal(await store.getToken("google"), null);
+  });
+});
