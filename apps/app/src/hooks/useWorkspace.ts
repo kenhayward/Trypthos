@@ -368,7 +368,7 @@ export function failureKey(reason: string): string | null {
 /// `failureKey`, worded for the provider the failure came from.
 ///
 /// The shared keys for offline, rate-limited and not-connected name GitHub, which is the wrong
-/// provider for a Google Drive folder or the Google account. Everything else is provider-neutral.
+/// provider for a Google Drive or OneDrive folder, or for either account. Everything else is provider-neutral.
 /// Null `kind` is a failure with no workspace to name.
 ///
 /// `during` says what was being attempted where the same reason means different things. A Drive
@@ -397,6 +397,28 @@ export function providerFailureKey(
         return "errors.googleNotConnected";
       case "read-only":
         return "errors.driveReadOnly";
+    }
+  }
+  // OneDrive's own words: the shared keys for offline, rate-limited and not-connected name GitHub, and
+  // the sign-in's scope-denied, timed-out and not-configured name Google.
+  if (kind === "onedrive") {
+    switch (reason) {
+      case "other-account":
+        return "errors.oneDriveOtherAccount";
+      case "read-only":
+        return "errors.oneDriveReadOnly";
+      case "offline":
+        return "errors.oneDriveOffline";
+      case "rate-limited":
+        return "errors.oneDriveRateLimited";
+      case "not-connected":
+        return "errors.oneDriveNotConnected";
+      case "scope-denied":
+        return "errors.oneDriveScopeDenied";
+      case "timed-out":
+        return "errors.oneDriveTimedOut";
+      case "not-configured":
+        return "errors.oneDriveNotConfigured";
     }
   }
   return failureKey(reason);

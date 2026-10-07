@@ -248,6 +248,22 @@ describe("providerFailureKey", () => {
     expect(providerFailureKey("google-drive", "unknown")).toBe("errors.unknown");
     expect(providerFailureKey("github", "unknown", "save")).toBe("errors.unknown");
   });
+
+  // A OneDrive failure names Microsoft, and its own refusals say what to do about them. This is where
+  // PR 1's stand-alone `oneDriveFailureKey` now lives.
+  it("words a OneDrive workspace's failures for Microsoft", () => {
+    expect(providerFailureKey("onedrive", "offline")).toBe("errors.oneDriveOffline");
+    expect(providerFailureKey("onedrive", "rate-limited")).toBe("errors.oneDriveRateLimited");
+    expect(providerFailureKey("onedrive", "not-connected")).toBe("errors.oneDriveNotConnected");
+    expect(providerFailureKey("onedrive", "scope-denied")).toBe("errors.oneDriveScopeDenied");
+    expect(providerFailureKey("onedrive", "timed-out")).toBe("errors.oneDriveTimedOut");
+    expect(providerFailureKey("onedrive", "not-configured")).toBe("errors.oneDriveNotConfigured");
+    expect(providerFailureKey("onedrive", "other-account")).toBe("errors.oneDriveOtherAccount");
+    expect(providerFailureKey("onedrive", "read-only")).toBe("errors.oneDriveReadOnly");
+    expect(providerFailureKey("onedrive", "permission-denied")).toBe(failureKey("permission-denied"));
+    expect(providerFailureKey("onedrive", "unknown")).toBe("errors.unknown");
+    expect(providerFailureKey("onedrive", "cancelled")).toBeNull();
+  });
 });
 
 describe("a Google Drive workspace", () => {

@@ -573,12 +573,12 @@ describe("filtering the browser", () => {
     expect(screen.getByText(/Stopped early/)).toBeDefined();
   });
 
-  it("says when only the opened Google Drive folders were searched, and not otherwise", () => {
+  it("says when only the opened cloud folders were searched, and not otherwise", () => {
     panel({
       filter: "*",
       filterStatus: { kind: "results", paths: ["Diariz/docs/plan.md"], truncated: false, pending: false, partial: true },
     });
-    expect(screen.getByText("Google Drive folders are searched only where you have opened them.")).toBeDefined();
+    expect(screen.getByText("Cloud folders are searched only where you have opened them.")).toBeDefined();
   });
 
   it("does not say it for a complete answer", () => {
@@ -1189,6 +1189,45 @@ describe("the workspace menu", () => {
       await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
       expect(screen.queryByRole("menuitem", { name: "Open in Google Drive" })).toBeNull();
       expect(screen.getByRole("menuitem", { name: "Open in Explorer" })).toBeDefined();
+    });
+  });
+
+  describe("in a OneDrive workspace", () => {
+    const PLANS = {
+      id: "Plans",
+      name: "Plans",
+      ref: { kind: "onedrive" as const, driveId: "d0c0ffee", itemId: "ITEM!3", name: "Plans" },
+      truncated: false,
+    };
+    const folders = {
+      Plans: {
+        status: "loaded" as const,
+        children: [
+          { id: "Plans/ideas", name: "ideas", kind: "directory" as const },
+          { id: "Plans/plan.md", name: "plan.md", kind: "file" as const },
+        ],
+      },
+    };
+    const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
+
+    // Read-only in this release: nothing that would write, and an entry is shown on OneDrive's site.
+    it("offers Open in OneDrive and Refresh on the workspace row, and nothing that writes", async () => {
+      panel({ workspaces: [PLANS], folders, selectedFolder: "Plans" });
+      await rightClick(screen.getByRole("button", { name: /^Plans$/ }));
+
+      expect(items()).toEqual(["Open in OneDrive", "Refresh"]);
+    });
+
+    it("shows a file in OneDrive through the same handler as Reveal, and offers no rename", async () => {
+      const onRevealEntry = vi.fn();
+      panel({ workspaces: [PLANS], folders, onRevealEntry });
+      const user = await rightClick(screen.getByRole("button", { name: /plan\.md/ }));
+
+      expect(items()).not.toContain("Rename ...");
+      expect(items()).not.toContain("Open in Google Drive");
+      await user.click(screen.getByRole("menuitem", { name: "Open in OneDrive" }));
+
+      expect(onRevealEntry).toHaveBeenCalledWith("Plans/plan.md");
     });
   });
 });

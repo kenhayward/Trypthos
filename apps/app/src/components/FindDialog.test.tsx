@@ -138,9 +138,9 @@ describe("FindDialog", () => {
     expect(screen.getByText(/stopped early/)).toBeDefined();
   });
 
-  it("says when only the opened Google Drive folders were searched, even with no matches", () => {
+  it("says when only the opened cloud folders were searched, even with no matches", () => {
     show({ query: "cat", status: { kind: "results", total: 0, current: 0, capped: false, partial: true } });
-    expect(screen.getByText("Google Drive folders are searched only where you have opened them.")).toBeDefined();
+    expect(screen.getByText("Cloud folders are searched only where you have opened them.")).toBeDefined();
   });
 
   it("does not say it for a complete search", () => {
