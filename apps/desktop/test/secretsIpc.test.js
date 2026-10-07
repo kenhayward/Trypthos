@@ -206,6 +206,45 @@ test("a settings write that replaces an unreadable file sweeps no keys", async (
   });
 });
 
+// A key file nobody can parse is backed up before it is replaced. If that backup collides (a second
+// instance of the app, the same millisecond), the store answers a result - never an exception
+// thrown across IPC - and the file is left as it was.
+test("a key-file backup that collides answers a refusal over IPC instead of throwing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "trypthos-secrets-ipc-"));
+  try {
+    const instant = new Date("2026-01-02T03:04:05.006Z");
+    const file = path.join(dir, "chatKeys.json");
+    await fs.writeFile(file, "{ this is not json", "utf8");
+    await fs.writeFile(`${file}.unreadable-2026-01-02T03-04-05-006Z`, "taken", "utf8");
+
+    const ipcMain = fakeIpcMain();
+    registerIpcHandlers({
+      ipcMain,
+      dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
+      getWindow: () => null,
+      userDataDir: dir,
+      secrets: createSecretStore({
+        userDataDir: dir,
+        encryptor: fakeEncryptor(),
+        logger: { error: () => {}, warn: () => {} },
+        now: () => instant,
+      }),
+    });
+
+    assert.deepEqual(await ipcMain.invoke("secrets:set", { endpoint: ENDPOINT, key: KEY }), {
+      ok: false,
+      reason: "backup-failed",
+    });
+    assert.deepEqual(await ipcMain.invoke("secrets:delete", { endpoint: ENDPOINT }), {
+      ok: false,
+      reason: "backup-failed",
+    });
+    assert.equal(await fs.readFile(file, "utf8"), "{ this is not json");
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 // The replaced file held the profiles; what this session holds started from defaults. A later,
 // ordinary save sweeping by those would delete every key the lost profiles used. Held off until
 // the app restarts and settings load cleanly.

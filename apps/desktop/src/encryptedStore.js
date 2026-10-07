@@ -32,8 +32,8 @@ const path = require("node:path");
 
 /// A file name suffix safe on every platform: an ISO time with the colons and the dot that Windows
 /// refuses in a file name swapped for hyphens.
-function backupStamp() {
-  return new Date().toISOString().replace(/[:.]/g, "-");
+function backupStamp(date) {
+  return date.toISOString().replace(/[:.]/g, "-");
 }
 
 /// Builds a store over one file.
@@ -42,8 +42,17 @@ function backupStamp() {
 /// separate files with separate histories, and a shared version number would make a migration to one
 /// look like a corruption of the other.
 ///
-/// `readFile` is injectable so a test can make a read fail the way a held file does on Windows.
-function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = console, readFile = fs.readFile }) {
+/// `readFile` is injectable so a test can make a read fail the way a held file does on Windows, and
+/// `now` so a test can make a backup name collide.
+function createEncryptedStore({
+  file,
+  field,
+  schemaVersion,
+  encryptor,
+  logger = console,
+  readFile = fs.readFile,
+  now = () => new Date(),
+}) {
   const directory = path.dirname(file);
 
   /// Every change to the file runs through here, one at a time. Each is a read-modify-write of the
@@ -120,7 +129,15 @@ function createEncryptedStore({ file, field, schemaVersion, encryptor, logger = 
     if (found.state === "current" || found.state === "missing") return { ok: true, values: found.values };
 
     if (found.state === "unreadable") {
-      await fs.copyFile(file, `${file}.unreadable-${backupStamp()}`, fs.constants.COPYFILE_EXCL);
+      // COPYFILE_EXCL so a backup is never overwritten. A collision (a second instance, the same
+      // millisecond) answers a refusal and leaves the file as it was - a result, never a throw
+      // across IPC; the next change tries again with a fresh time.
+      try {
+        await fs.copyFile(file, `${file}.unreadable-${backupStamp(now())}`, fs.constants.COPYFILE_EXCL);
+      } catch (error) {
+        logger.error?.(`Credential store (${field}) write: could not back up the unreadable file (${error?.code ?? error?.name}).`);
+        return { ok: false, reason: "backup-failed" };
+      }
       logger.warn?.(`Credential store (${field}) write: backed up the unreadable file (${found.reason}).`);
       return { ok: true, values: {} };
     }

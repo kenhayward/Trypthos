@@ -417,7 +417,10 @@ function registerIpcHandlers({
     const parsed = DeleteSecretRequest.safeParse(payload);
     if (!parsed.success) return { ok: false, reason: "bad-request" };
 
-    await secrets.deleteKey(parsed.data.endpoint);
+    const deleted = await secrets.deleteKey(parsed.data.endpoint);
+    // The store's own refusal (a newer build's file, one it could not open, or a backup that could
+    // not be taken - issue #235) is the answer: the key is still on disk.
+    if (deleted?.ok === false) return deleted;
     return { ok: true };
   });
 
