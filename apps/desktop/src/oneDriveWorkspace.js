@@ -2,15 +2,18 @@
 
 const {
   MAX_TEXT_FILE_BYTES,
+  ONEDRIVE_UPLOAD_LIMIT_BYTES,
   createPathGuard,
   decodeTextFile,
+  encodeTextFile,
+  isOneDriveTag,
   oneDriveEntriesOf,
   oneDrivePathKey,
   sameOneDriveId,
 } = require("@trypthos/domain");
 
-/// A OneDrive folder, as a workspace. Read-only in this release: saving, New File, New Folder and
-/// rename are PR 3 (docs/specs/onedrive-workspace.md).
+/// A OneDrive folder, as a workspace: browsed, read and written - saves, new files, new folders and
+/// renames (docs/specs/onedrive-workspace.md).
 ///
 /// OneDrive addresses an item by its path below another and refuses two names in one folder, so -
 /// unlike Google Drive - there is no map from paths to ids, no duplicate-name suffix and no re-keying.
@@ -20,8 +23,15 @@ const {
 /// folder on disk, before anything is asked of Graph.
 ///
 /// A read asks for the item's content tag BEFORE its bytes, so the revision the editor holds is never
-/// newer than what it read. Media streams from the pre-authenticated address Graph's 302 names, kept
-/// per file until it expires; neither it nor the token ever leaves the main process.
+/// newer than what it read. A save is ONE conditional request - `If-Match` with that tag - so, unlike
+/// Drive's check-write-confirm, there is no window in which another writer's change is overwritten:
+/// Graph refuses a stale tag with 412 and the editor is told `conflict`. A create asks Graph to fail
+/// on a name already in use, and never replaces. Media streams from the pre-authenticated address
+/// Graph's 302 names, kept per file until it expires; neither it nor the token ever leaves the main
+/// process.
+///
+/// Graph compares names without regard to case, so the listing cache is keyed by `oneDrivePathKey`:
+/// one folder reached by two spellings is one entry, and a write through either drops it.
 
 const GUARD_ROOT = "/onedrive";
 
@@ -68,6 +78,21 @@ function treeNode(parent, entry) {
   return { id: parent === "" ? entry.name : `${parent}/${entry.name}`, name: entry.name, kind: entry.kind };
 }
 
+/// A refused save or create, in the provider contract's words. OneDrive's `exists` (409
+/// `nameAlreadyExists`) is a name already taken, which every other provider calls a conflict - the
+/// chat's create tool and New File read it so - and a conflict names no revision of theirs: asking for
+/// one would be another request, and the editor keeps the user's text either way.
+function writeRefusal(answer) {
+  if (answer.reason === "exists" || answer.reason === "conflict") return { ok: false, reason: "conflict", theirs: null };
+  return answer;
+}
+
+/// A refused New Folder or rename: a taken name is `conflict`, as on disk and in Drive - the rename
+/// dialog reads it as "already called that".
+function nameRefusal(answer) {
+  return answer.reason === "exists" ? failure("conflict") : answer;
+}
+
 function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_MS }) {
   const guard = createPathGuard({ root: GUARD_ROOT, caseInsensitive: false });
 
@@ -86,8 +111,16 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
   /// `oneDrivePathKey(path)` -> `{ generation, promise }` for the listing in flight, so concurrent
   /// walks of one folder - by any spelling - ask Graph once.
   const inFlight = new Map();
+  /// `oneDrivePathKey(path)` -> how many times the app has written into that folder. A listing that
+  /// began before a write is not kept: what it brings back may predate the write.
+  const writes = new Map();
+  const writesTo = (key) => writes.get(key) ?? 0;
   /// Item id -> the pre-authenticated address its bytes were last fetched from.
   const locations = new Map();
+  /// Content tag -> whether the bytes read or written at it began with a byte-order mark, so a save
+  /// keeps a mark the editor never showed. A tag names one version of one file, so the record is about
+  /// exactly the bytes a save replaces. Not cleared by `refresh()`: the editor still holds what it read.
+  const boms = new Map();
   /// Bumped by `refresh()`. A listing begun under an older generation is never cached or joined.
   let generation = 0;
 
@@ -101,13 +134,16 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
     if (joined !== undefined && joined.generation === generation) return joined.promise;
 
     const started = generation;
+    const startedWrites = writesTo(key);
     const pending = { generation: started, promise: null };
     pending.promise = (async () => {
       try {
         const listed = await api.children(ref.driveId, ref.itemId, path);
         if (!listed.ok) return listed;
         const entries = oneDriveEntriesOf(listed.items);
-        if (started === generation) listings.set(key, { at: now(), generation: started, entries });
+        if (started === generation && writesTo(key) === startedWrites) {
+          listings.set(key, { at: now(), generation: started, entries });
+        }
         return { ok: true, entries };
       } finally {
         if (inFlight.get(key) === pending) inFlight.delete(key);
@@ -124,6 +160,22 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
       const started = generation;
       const listed = await entriesOf(path);
       if (!listed.ok || generation === started) return listed;
+    }
+  }
+
+  /// Drops what is known of a folder the app has just written into, so its next listing is asked of
+  /// OneDrive: the cached listing, any listing in flight (which may predate the write and, through
+  /// `writes`, is not kept when it lands), and - with `below` - every folder under it, for a rename
+  /// that moved them all. Called after every write request, whatever it answered: one that failed
+  /// as `offline` or `unknown` may have landed.
+  function forget(path, { below = false } = {}) {
+    const key = oneDrivePathKey(path);
+    const hit = (other) => other === key || (below && other.startsWith(`${key}/`));
+    const keys = new Set([key, ...[...listings.keys(), ...inFlight.keys()].filter(hit)]);
+    for (const each of keys) {
+      listings.delete(each);
+      inFlight.delete(each);
+      writes.set(each, writesTo(each) + 1);
     }
   }
 
@@ -145,6 +197,32 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
     return api.download(ref.driveId, item.id, limitBytes);
   }
 
+  /// A write that landed, as the editor receives it: the content tag Graph answered the write with,
+  /// never one asked for afterwards - by then it could be a concurrent writer's, and the next save
+  /// would overwrite them. A write whose answer has no usable tag landed as something nobody can
+  /// name, which is `unknown`. The item's download address is dropped: it may serve the old bytes.
+  function landed(item, bom) {
+    if (!isOneDriveTag(item.cTag)) return failure("unknown");
+    boms.set(item.cTag, bom);
+    locations.delete(item.id);
+    return { ok: true, revision: { id: item.cTag } };
+  }
+
+  /// A new file at a path nobody has. Its folder is asked for first, fresh rather than through the
+  /// listing cache: Graph's path PUT may make the folders on the way, and the app makes only what it
+  /// was asked for - a folder deleted on the web since it was listed must not come back. Graph
+  /// refuses a name already in use, case-insensitively, rather than replacing it.
+  async function create(path, content) {
+    const parent = parentOf(path);
+    const folder = await api.item(ref.driveId, ref.itemId, parent);
+    if (!folder.ok) return folder;
+    if (folder.item.folder === undefined) return failure("not-found");
+    const created = await api.createContent(ref.driveId, ref.itemId, path, encodeTextFile(content, { bom: false }));
+    forget(parent);
+    if (!created.ok) return writeRefusal(created);
+    return landed(created.item, false);
+  }
+
   return {
     id: ref.itemId,
     kind: "onedrive",
@@ -159,7 +237,7 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
 
     /// A folder as far as it is already known, with no request to Graph - as Drive's: the filter and
     /// Find in Files search through this, so a large OneDrive is never read all at once. `complete`
-    /// is false for a folder nobody has opened since the last refresh.
+    /// is false for a folder nobody has opened since the last refresh or write into it.
     async listKnown(candidate) {
       const path = relativePath(candidate);
       if (path === null) return failure("permission-denied");
@@ -168,18 +246,24 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
       return { ok: true, nodes: known.entries.map((entry) => treeNode(path, entry)), complete: true };
     },
 
-    /// Read-only in this release: the shell says so per file, and the editor offers no save.
+    /// The revision is the content tag, which a save presents with If-Match. A tag that could not go
+    /// back in a header is nothing honest to hand the editor. A file larger than Graph's simple upload
+    /// takes opens read-only: it could be edited, and never saved.
     async read(candidate) {
       const found = await fileAt(candidate);
       if (!found.ok) return found;
-      // The content tag is the revision a save in PR 3 presents with If-Match. A file without one has
-      // nothing honest to hand the editor.
-      if (typeof found.item.cTag !== "string") return failure("unknown");
+      if (!isOneDriveTag(found.item.cTag)) return failure("unknown");
       const fetched = await bytesOf(found.item, MAX_TEXT_FILE_BYTES);
       if (!fetched.ok) return fetched;
       const decoded = decodeTextFile(fetched.bytes);
       if (!decoded.ok) return failure(decoded.reason);
-      return { ok: true, content: decoded.content, revision: { id: found.item.cTag }, readOnly: true };
+      boms.set(found.item.cTag, decoded.bom);
+      return {
+        ok: true,
+        content: decoded.content,
+        revision: { id: found.item.cTag },
+        ...(fetched.bytes.length > ONEDRIVE_UPLOAD_LIMIT_BYTES ? { readOnly: true } : {}),
+      };
     },
 
     async readBytes(candidate, limitBytes) {
@@ -242,10 +326,57 @@ function createOneDriveProvider({ ref, api, now = Date.now, ttlMs = LISTING_TTL_
       };
     },
 
-    /// Nothing is written to OneDrive in this release. `file:write`, Save As and the chat's
-    /// create-file tool all call this, so it exists and refuses, as Drive's did in its PR 2.
-    async write() {
-      return failure("read-only");
+    /// A save, or - with no revision - a new file. `file:write`, New File and the chat's create-file
+    /// tool all come here.
+    ///
+    /// A save is one conditional PUT: Graph writes only if the file is still at the tag the editor
+    /// read, and refuses with 412 (`conflict`) otherwise, so another writer's change is never
+    /// overwritten. The tag comes back from the renderer and is checked before it goes into a header.
+    /// `options` (Save As's `overwrite`, GitHub's commit message) means nothing here: Save As never
+    /// reaches a provider without a folder on disk.
+    async write(candidate, content, expected) {
+      const path = relativePath(candidate);
+      if (path === null || path === "") return failure("permission-denied");
+      if (expected === null) return create(path, content);
+      if (!isOneDriveTag(expected?.id)) return failure("bad-request");
+
+      const bom = boms.get(expected.id) === true;
+      const written = await api.writeContent(ref.driveId, ref.itemId, path, encodeTextFile(content, { bom }), expected.id);
+      forget(parentOf(path));
+      if (!written.ok) return writeRefusal(written);
+      return landed(written.item, bom);
+    },
+
+    /// One new folder, in a folder that is already there. Graph refuses a name already in use.
+    async createDirectory(candidate) {
+      const path = relativePath(candidate);
+      if (path === null || path === "") return failure("permission-denied");
+      const parent = parentOf(path);
+      const created = await api.createFolder(ref.driveId, ref.itemId, parent, nameOf(path));
+      forget(parent);
+      return created.ok ? { ok: true } : nameRefusal(created);
+    },
+
+    /// A new name for a file or folder, in the folder it is already in; answers its new
+    /// workspace-relative path. A change of case alone is a rename like any other. What was listed
+    /// below the old path and the new one is dropped and asked again: nothing is re-keyed.
+    async rename(candidate, name) {
+      const path = relativePath(candidate);
+      // The workspace's own folder is what was opened; renaming it would pull the root out from under
+      // every open path, exactly as on disk.
+      if (path === null || path === "") return failure("permission-denied");
+      const parent = parentOf(path);
+      const target = relativePath(parent === "" ? name : `${parent}/${name}`);
+      // A NAME, never a destination: whatever the guard reads as anything but one more segment of
+      // this folder is refused.
+      if (target === null || target === "" || parentOf(target) !== parent || nameOf(target) !== name) {
+        return failure("bad-request");
+      }
+      const renamed = await api.rename(ref.driveId, ref.itemId, path, name);
+      forget(parent);
+      forget(path, { below: true });
+      forget(target, { below: true });
+      return renamed.ok ? { ok: true, path: target } : nameRefusal(renamed);
     },
 
     /// Where an entry lives on the web, for Open in OneDrive: the item's own `webUrl`, and only an

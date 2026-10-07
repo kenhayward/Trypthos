@@ -166,7 +166,7 @@ function fakeOneDriveFactory({ myDrive = "d0c0ffee", seen = {} } = {}) {
 
 // Each test opens its own item id: the registry of open workspaces is module-level, so a reference an
 // earlier test opened would answer the workspace already open rather than reaching the opener.
-test("opens a OneDrive folder by reference and reads it read-only, like any other workspace", async () => {
+test("opens a OneDrive folder by reference and reads it, like any other workspace", async () => {
   await withHandlers(
     async ({ ipcMain }) => {
       const ref = { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!10", name: "Notes then" };
@@ -180,23 +180,7 @@ test("opens a OneDrive folder by reference and reads it read-only, like any othe
       assert.deepEqual(listed.nodes.map((node) => node.id), [`${opened.workspace.id}/Plan.md`]);
 
       const read = await ipcMain.invoke("file:read", { path: `${opened.workspace.id}/Plan.md` });
-      assert.deepEqual(read, { ok: true, content: "hello", revision: { id: "ctag-1" }, readOnly: true });
-    },
-    { createOneDrive: fakeOneDriveFactory() },
-  );
-});
-
-test("a save into a OneDrive folder answers read-only in this release", async () => {
-  await withHandlers(
-    async ({ ipcMain }) => {
-      const opened = await ipcMain.invoke("workspace:openRef", { ref: { kind: "onedrive", driveId: "d0c0ffee", itemId: "ROOT!11", name: "Notes" } });
-      const written = await ipcMain.invoke("file:write", {
-        path: `${opened.workspace.id}/Plan.md`,
-        content: "changed",
-        expectedRevision: { id: "ctag-1" },
-        message: null,
-      });
-      assert.deepEqual(written, { ok: false, reason: "read-only" });
+      assert.deepEqual(read, { ok: true, content: "hello", revision: { id: "ctag-1" } });
     },
     { createOneDrive: fakeOneDriveFactory() },
   );
@@ -459,10 +443,6 @@ test("no OneDrive channel answers with a token or a pre-authenticated download a
         assert.equal((await ask("file:read", { path: `${id}/Plan.md` })).content, "# Plan\n");
         assert.equal((await ask("file:readImage", { path: `${id}/chart.png` })).ok, true);
         assert.deepEqual(await ask("workspace:reveal", { path: `${id}/Plan.md` }), { ok: true });
-        assert.deepEqual(
-          await ask("file:write", { path: `${id}/Plan.md`, content: "x", expectedRevision: { id: "ctag-ITEM!1" }, message: null }),
-          { ok: false, reason: "read-only" },
-        );
         assert.equal((await ask("onedrive:folders", { in: "my-files" })).ok, true);
         assert.equal((await ask("onedrive:folders", { in: "shared-with-me" })).ok, true);
         assert.equal((await ask("onedrive:folders", { in: "folder", driveId: "beefcafe", itemId: "SHARED!8" })).ok, true);

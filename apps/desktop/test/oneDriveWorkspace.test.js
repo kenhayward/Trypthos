@@ -10,7 +10,7 @@ const { openOneDriveWorkspace, GUARD_ROOT } = require("../src/oneDriveWorkspace"
 /// OneDrive is addressed by path, so there is no id map to test. What is under test: the guard runs
 /// before any request; a read's revision is the content tag asked for fresh; a listing is kept for its
 /// TTL and dropped by refresh; media streams from a pre-authenticated address that is fetched again
-/// once when it has expired; nothing is ever written; and an own-drive folder is never opened under
+/// once when it has expired; and an own-drive folder is never opened under
 /// another account.
 
 const MINE = "d0c0ffee";
@@ -240,10 +240,10 @@ test("a failed listing is not kept: the next list asks again", async () => {
   assert.equal(calls.filter((call) => call[0] === "children").length, 2);
 });
 
-test("reads a file read-only, its revision the content tag asked for before the bytes", async () => {
+test("reads a file to be edited, its revision the content tag asked for before the bytes", async () => {
   const { provider, calls } = await open();
   const before = calls.length;
-  assert.deepEqual(await provider.read("Plan.md"), { ok: true, content: "hello", revision: { id: "ctag-1" }, readOnly: true });
+  assert.deepEqual(await provider.read("Plan.md"), { ok: true, content: "hello", revision: { id: "ctag-1" } });
   assert.deepEqual(calls.slice(before), [
     ["item", MINE, "ROOT!0", "Plan.md"],
     ["download", MINE, "ITEM!1", MAX_TEXT_FILE_BYTES],
@@ -275,17 +275,6 @@ test("reads a file's bytes under the limit it is given", async () => {
   assert.equal(read.ok, true);
   assert.equal(read.bytes.toString("utf8"), "old");
   assert.deepEqual(await provider.readBytes("Plan.md", 2), { ok: false, reason: "too-large", sizeBytes: 5, limitBytes: 2 });
-});
-
-test("writes nothing: a save in this release answers read-only, asking OneDrive nothing", async () => {
-  const { provider, calls } = await open();
-  const before = calls.length;
-  assert.deepEqual(await provider.write("Plan.md", "changed", { id: "ctag-1" }), { ok: false, reason: "read-only" });
-  assert.deepEqual(await provider.write("New.md", "made", null), { ok: false, reason: "read-only" });
-  assert.equal(calls.length, before);
-  // New File, New Folder and rename are PR 3: their IPC gates answer unsupported without the methods.
-  assert.equal(provider.createDirectory, undefined);
-  assert.equal(provider.rename, undefined);
 });
 
 test("streams a clip in ranges from one pre-authenticated address, its size from the listing", async () => {
