@@ -38,6 +38,8 @@ const { createAccountStore } = require("./accountStore");
 const { createGitHubApi } = require("./githubApi");
 const { loadGoogleClient } = require("./googleClient");
 const { createGoogleAuth } = require("./googleAuth");
+const { loadMicrosoftClient } = require("./microsoftClient");
+const { createMicrosoftAuth } = require("./microsoftAuth");
 const { createGoogleDriveApi } = require("./googleDriveApi");
 const { createChatProvider } = require("./chatProvider");
 const { appMenuTemplate, contextMenuTemplate, popupTemplate } = require("./menus");
@@ -413,6 +415,19 @@ if (!gotLock) {
             openExternal: (url) => shell.openExternal(url),
           });
 
+    // The Microsoft account, for OneDrive. Null in a build without a client id - a fork, or a
+    // developer who has not set TRYPTHOS_ONEDRIVE_CLIENT. Same net.fetch and browser rules as Google.
+    const microsoftClient = loadMicrosoftClient({ packaged: app.isPackaged, resourcesPath: process.resourcesPath });
+    const microsoft =
+      microsoftClient === null
+        ? null
+        : createMicrosoftAuth({
+            client: microsoftClient,
+            accounts,
+            fetch: (url, options) => net.fetch(url, options),
+            openExternal: (url) => shell.openExternal(url),
+          });
+
     registerIpcHandlers({
       ipcMain,
       dialog,
@@ -447,6 +462,7 @@ if (!gotLock) {
       createGitHub: (getToken) =>
         createGitHubApi({ getToken, fetch: (url, options) => net.fetch(url, options) }),
       google,
+      microsoft,
       // Every Drive call is made here, with the token googleAuth holds - net.fetch for the same proxy
       // and certificate reasons as GitHub.
       createGoogleDrive: (accessToken) =>
