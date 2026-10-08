@@ -13,7 +13,8 @@ import {
   type Point,
   type Size,
 } from "../lib/pictureZoom";
-import { panScroll, wheelZoomTravel, type PanStart } from "../lib/zoom";
+import { panScroll, wheelPixels, wheelZoomTravel, type PanStart } from "../lib/zoom";
+import { REST, wheelPageTurn, type PageWheelState } from "../lib/pageWheel";
 import WORKER_URL from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 /// What the viewer asks of a parsed document, and of one of its pages. This is the boundary the
@@ -197,6 +198,11 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
   /// is laid out the browser has already moved the page and clamped the scroll.
   const drawn = useRef<{ scale: number; offset: Point; scroll: Point } | null>(null);
 
+  /// The plain wheel's travel past the page's edge, carried between events (see `pageWheel`).
+  const wheeling = useRef<PageWheelState>(REST);
+  /// Where a page the wheel turned to is entered, waiting for that page to be laid out.
+  const landing = useRef<{ page: number; at: "top" | "bottom" } | null>(null);
+
   /// Where to a page, clamped to the document: a position past the end is the last page, not a
   /// page that does not exist.
   const goTo = (next: number) => {
@@ -322,8 +328,20 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
     );
   }, [scale, natural, box]);
 
-  // The picture's gestures, called rather than reimplemented: the wheel zooms about the pointer, a
-  // plain drag pans a page larger than the panel, a double-click asks for actual size.
+  // A page the wheel turned to is entered where reading continues: at its top going forward, at its
+  // bottom going back. Applied once the new page is measured and laid out, since a page of another
+  // size has another bottom.
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    const target = landing.current;
+    if (element === null || target === null || natural === null || target.page !== page) return;
+    landing.current = null;
+    element.scrollTop = target.at === "top" ? 0 : element.scrollHeight - element.clientHeight;
+  }, [natural, page]);
+
+  // The picture's gestures, called rather than reimplemented: Ctrl+wheel zooms about the pointer, a
+  // plain drag pans a page larger than the panel, a double-click asks for actual size. The plain
+  // wheel is a document's own: it scrolls the page and turns it at the edge.
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return;
@@ -336,10 +354,34 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
     // `preventDefault` would not stop the browser zooming the whole page alongside the document.
     const onWheel = (event: WheelEvent) => {
       const travel = wheelZoomTravel(event);
-      if (travel === null) return;
+      if (travel === null) {
+        turnByWheel(event);
+        return;
+      }
       event.preventDefault();
       const { view: now, fit: fitNow } = latest.current;
       change(wheelPicture(now, fitNow, travel), pointerIn(event));
+    };
+
+    // The plain wheel: the browser's while the page has somewhere to scroll, and a page turn once
+    // it is at the edge the wheel is moving past. Shift is sideways scrolling, and stays the
+    // browser's. Only a turn is prevented - anything else the browser scrolls with as it always did.
+    const turnByWheel = (event: WheelEvent) => {
+      if (event.shiftKey || event.deltaY === 0) return;
+      const { turn, next } = wheelPageTurn(wheeling.current, {
+        travel: wheelPixels(event.deltaY, event.deltaMode),
+        atTop: element.scrollTop <= 1,
+        atBottom: element.scrollTop + element.clientHeight >= element.scrollHeight - 1,
+        page: latest.current.page,
+        pages: latest.current.pages,
+        now: event.timeStamp,
+      });
+      wheeling.current = next;
+      if (turn === 0) return;
+      event.preventDefault();
+      const to = latest.current.page + turn;
+      landing.current = { page: to, at: turn > 0 ? "top" : "bottom" };
+      goTo(to);
     };
 
     const onScroll = () => {
