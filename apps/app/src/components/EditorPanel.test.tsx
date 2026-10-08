@@ -779,7 +779,7 @@ describe("EditorPanel: a document", () => {
     parsed.set(REPORT.source, {
       document: {
         numPages: 1,
-        getPage: () => ({ getViewport: () => ({ width: 612, height: 792 }), render: () => null }),
+        getPage: () => ({ getViewport: () => ({ width: 612, height: 792 }), render: () => ({ promise: Promise.resolve(), cancel: () => {} }) }),
       },
     });
     return render(
