@@ -5,6 +5,18 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.105.1",
+    date: "2026-10-07",
+    pr: 243,
+    headline: "A PDF page shows, and says when it is coming",
+    summary:
+      "Two fixes to opening a PDF, both of them about what the page does once the file is open. An opened document showed its page bar and its zoom controls over an empty white area at any zoom, for a file on disk and for one in Google Drive or OneDrive alike; the page is now drawn, at the zoom you asked for rather than a stretched copy of the one before. And a PDF that is still being read says so: a document in a cloud folder spends seconds being read before its first page is there, and the panel now turns the loading mark over that area rather than holding a blank page you cannot tell apart from one that failed.",
+    fixed: [
+      "An opened PDF shows its page rather than an empty area where the page should be, at Fit, at 100% and at any zoom.",
+      "A PDF that is still being read says it is opening, rather than holding a blank area for the whole of it.",
+    ],
+  },
+  {
     version: "0.105.0",
     date: "2026-10-07",
     pr: 240,
