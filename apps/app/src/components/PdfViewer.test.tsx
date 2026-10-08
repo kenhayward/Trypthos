@@ -26,6 +26,13 @@ const BROKEN = {
   name: "Notes/corrupt.pdf",
 };
 
+// A document whose page has not arrived: what a Drive or OneDrive read looks like from the surface's
+// side while the ranges are on their way.
+const SLOW = {
+  source: "tp-media://workspace/Notes%2Fslow.pdf",
+  name: "Notes/slow.pdf",
+};
+
 /// A hand-written document standing in for a parsed one, carrying only what the viewer asks a page
 /// for: a count, and a page that knows its own size and can be drawn. The size is a US letter page
 /// in points, invented here the way the names are.
@@ -45,6 +52,15 @@ function pages(count: number): DocumentProxy {
 /// Puts a finished parse in the cache, exactly as the engine would before the viewer is asked for it.
 function seed(source: string, document: DocumentProxy) {
   parsed.set(source, { document });
+}
+
+/// A document whose page never arrives: the parse is done and the page is still on its way, which is
+/// what a Drive or OneDrive read looks like while its ranges are in flight.
+function arriving(): DocumentProxy {
+  return {
+    numPages: 1,
+    getPage: (_page: number) => new Promise<never>(() => {}),
+  };
 }
 
 function seedFailure(source: string, error: unknown) {
@@ -140,5 +156,14 @@ describe("PdfViewer", () => {
     seedFailure(BROKEN.source, { name: "InvalidPDFException", message: "Invalid object." });
     render(<PdfViewer {...BROKEN} view={{ kind: "fit" }} onView={() => {}} />);
     expect(screen.queryAllByText(/could not be opened/i)).toHaveLength(1);
+  });
+
+  // The symptom on a cloud folder: the file was clicked, the ranges are on their way, and the panel
+  // holds an empty area for the whole of it. An empty area is what a page that failed looks like
+  // too, so the panel says which of the two it is.
+  it("says it is opening while the page is still on its way", () => {
+    seed(SLOW.source, arriving());
+    render(<PdfViewer {...SLOW} view={{ kind: "fit" }} onView={() => {}} />);
+    expect(screen.getByRole("status", { name: "Opening the document..." })).toBeDefined();
   });
 });

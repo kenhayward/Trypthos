@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Spinner from "./Spinner";
 import Glyph from "./Glyph";
 import {
   anchoredScroll,
@@ -214,6 +215,38 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
     void ask();
   }, [doc, page]);
 
+  /// The page, painted. A canvas is not an image the browser can be told to scale: it holds nothing
+  /// until something draws into it, and a page measured and sized but never asked to paint is an
+  /// empty white area - which is what a document looked like, and why nothing said which.
+  ///
+  /// The backing store carries the display's own ratio and the viewport is asked for at that ratio,
+  /// so a page is drawn at the pixels it is shown at rather than stretched to them: a page has
+  /// pixels of its own exactly as a picture does, and a zoom asks for a new drawing, not a bigger
+  /// copy of the old one.
+  useLayoutEffect(() => {
+    const paint = () => {
+      const canvas = surface.current;
+      const proxy = shown.current;
+      if (canvas === null || proxy === null || natural === null) return;
+      const context = canvas.getContext("2d");
+      // An environment with no canvas at all is nothing to draw into and nothing to say: the page is
+      // either on screen or the line above has already said it is not.
+      if (context === null) return;
+      const ratio = Math.max(1, window.devicePixelRatio || 1);
+      try {
+        const at = proxy.getViewport({ scale: scale * ratio });
+        canvas.width = Math.round(at.width);
+        canvas.height = Math.round(at.height);
+        proxy.render({ canvasContext: context, viewport: at });
+      } catch {
+        // A page the engine cannot paint is the same line as a page it cannot give: a canvas that
+        // stays blank explains nothing.
+        setPageFailed(true);
+      }
+    };
+    paint();
+  }, [natural, scale, doc, page]);
+
   useEffect(() => onFit?.(fit), [fit, onFit]);
 
   // After a new size is drawn, scroll so the point the gesture was aimed at is where it was. A
@@ -411,6 +444,10 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
                   : { width: `${natural.width * scale}px`, height: `${natural.height * scale}px` }),
               }}
             />
+            {/* While the page is still on its way - a Drive or OneDrive document spends seconds in
+                ranges before the engine has one - the panel says so rather than holding an empty
+                area, which is exactly what a page that failed looks like. */}
+            {natural === null ? <Spinner label={t("pdfViewer.opening")} /> : null}
           </div>
         </div>
       )}
