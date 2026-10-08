@@ -394,7 +394,9 @@ more useful of the two answers.
 **A PDF is read, not edited.** Click a `.pdf` and it opens in the centre panel as a page: drawn at
 the panel's size and never enlarged, with a bar under it that answers how many pages the file has.
 Click along that bar where the page you want is, and it turns to the nearest one; or press Page Down
-and Page Up. Fit, 100%, the zoom buttons, Ctrl+wheel (Cmd on macOS) or a pinch, and a drag to move
+and Page Up, or turn the mouse wheel: it scrolls a page larger than the panel, and once the page is
+at its top or bottom the next notch turns it - forward to the top of the next page, back to the
+bottom of the one before - so at Fit each notch is a page. Fit, 100%, the zoom buttons, Ctrl+wheel (Cmd on macOS) or a pinch, and a drag to move
 the page are the same answers a picture gives, because a page is zoomed exactly as a picture is.
 There are no view buttons, no word count and no editing surface, because a page is not text, and
 nothing is ever written back. A file that needs a password says so rather than showing a blank page,

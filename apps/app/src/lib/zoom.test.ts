@@ -7,6 +7,7 @@ import {
   nextZoom,
   panScroll,
   stepWheelTravel,
+  wheelPixels,
   wheelZoomTravel,
   zoomKeyCommand,
   type WheelGesture,
@@ -58,6 +59,16 @@ describe("nextZoom", () => {
   it("moves off a level that is not on the ladder", () => {
     expect(nextZoom(1.02, "in")).toBeGreaterThan(1.02);
     expect(nextZoom(1.02, "out")).toBeLessThan(1.02);
+  });
+});
+
+// The plain wheel's travel, on the zoom's scale: a mouse that reports lines or pages turns a PDF
+// page as readily as one that reports pixels.
+describe("wheelPixels", () => {
+  it("scales lines and pages to pixels, and leaves pixels alone", () => {
+    expect(wheelPixels(100, 0)).toBe(100);
+    expect(wheelPixels(3, 1)).toBe(120);
+    expect(wheelPixels(-1, 2)).toBe(-800);
   });
 });
 

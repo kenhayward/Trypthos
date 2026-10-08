@@ -60,9 +60,14 @@ export function wheelZoomTravel(event: WheelGesture): number | null {
   // reading a zero.
   const raw = event.deltaY !== 0 ? event.deltaY : event.deltaX;
   if (raw === 0) return null;
-  if (event.deltaMode === 1) return raw * PIXELS_PER_LINE;
-  if (event.deltaMode === 2) return raw * PIXELS_PER_PAGE;
-  return raw;
+  return wheelPixels(raw, event.deltaMode);
+}
+
+/// Wheel travel in pixels, whichever unit the device reported it in (`WheelEvent.deltaMode`).
+export function wheelPixels(delta: number, deltaMode: number): number {
+  if (deltaMode === 1) return delta * PIXELS_PER_LINE;
+  if (deltaMode === 2) return delta * PIXELS_PER_PAGE;
+  return delta;
 }
 
 /// Travel that makes one rung, and the size of one Chromium mouse notch is twice this.

@@ -22,9 +22,9 @@ const DOC = {
 /// A document whose page paints the rectangle it was handed, in a colour nothing else on the page
 /// is. The point of the fake is that the pixels can only be there if the surface passed a real
 /// context and a real viewport down to the page.
-function painted(): DocumentProxy {
+function painted(count = 1): DocumentProxy {
   return {
-    numPages: 1,
+    numPages: count,
     getPage: (_oneBased: number) => ({
       getViewport: ({ scale }: { scale: number }) => ({
         width: PAGE.width * scale,
@@ -198,5 +198,63 @@ describe("A PDF page, painted in a real browser", () => {
     await waitFor(() => expect(tasks).toHaveLength(1));
     tasks[0]?.fail(new Error("The page could not be drawn."));
     await waitFor(() => expect(screen.getByText(/could not be opened/i)).toBeDefined());
+  });
+});
+
+/// One notch of a mouse wheel over the page, the size Chromium reports one as. Returns whether the
+/// surface took it - a notch the browser should scroll with is left alone.
+function notch(view: HTMLElement, deltaY: number): boolean {
+  const event = new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true });
+  view.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+describe("A PDF under the mouse wheel", () => {
+  const WHEEL = { source: "tp-media://workspace/Notes%2Fwheel.pdf", name: "Notes/wheel.pdf" };
+
+  const open = (scale: number | "fit") => {
+    seed(WHEEL.source, painted(3));
+    const { container } = render(
+      <div style={{ width: "400px", height: "300px" }}>
+        <PdfViewer
+          {...WHEEL}
+          view={scale === "fit" ? { kind: "fit" } : { kind: "scale", scale }}
+          onView={() => {}}
+        />
+      </div>,
+    );
+    return container.querySelector('[data-testid="page-view"]') as HTMLElement;
+  };
+
+  // At Fit the page has no inside to scroll, so the wheel did nothing at all. A notch now turns a page.
+  it("turns a page per notch when the page fits the panel", async () => {
+    const view = open("fit");
+    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeDefined());
+    expect(notch(view, 100)).toBe(true);
+    await waitFor(() => expect(screen.getByText("Page 2 of 3")).toBeDefined());
+    notch(view, -100);
+    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeDefined());
+  });
+
+  // Zoomed in, the wheel is the browser's until the page runs out: then it turns, and the reader
+  // lands where reading continues - the top of the next page, or the bottom of the one before.
+  it("scrolls a zoomed page, and turns at its edge onto where reading continues", async () => {
+    const view = open(2);
+    await waitFor(() => expect(view.scrollHeight).toBeGreaterThan(view.clientHeight));
+    const bottom = () => view.scrollHeight - view.clientHeight;
+
+    // Halfway down, the notch is the browser's.
+    view.scrollTop = bottom() / 2;
+    expect(notch(view, 100)).toBe(false);
+    expect(screen.getByText("Page 1 of 3")).toBeDefined();
+
+    view.scrollTop = bottom();
+    expect(notch(view, 100)).toBe(true);
+    await waitFor(() => expect(screen.getByText("Page 2 of 3")).toBeDefined());
+    await waitFor(() => expect(view.scrollTop).toBe(0));
+
+    expect(notch(view, -100)).toBe(true);
+    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeDefined());
+    await waitFor(() => expect(view.scrollTop).toBeGreaterThanOrEqual(bottom() - 1));
   });
 });

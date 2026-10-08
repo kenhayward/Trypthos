@@ -5,6 +5,17 @@ import type { Release } from "./types";
 /// RECENT[0].version must equal /version.json - releases.test.ts fails the build otherwise.
 export const RECENT: Release[] = [
   {
+    version: "0.106.0",
+    date: "2026-10-08",
+    pr: 244,
+    headline: "Turn PDF pages with the mouse wheel",
+    summary:
+      "The mouse wheel now moves through a PDF. On a page larger than the panel it scrolls the page as before, and once you reach the bottom the next notch turns to the top of the next page; wheeling up from the top of a page turns back to the bottom of the one before, so reading carries on where it left off. At Fit, where a page has nothing to scroll and the wheel used to do nothing, each notch turns one page. A trackpad turns one page per stroke rather than racing through the document on a flick. Ctrl+wheel (Cmd on macOS) and a pinch still zoom.",
+    added: [
+      "The mouse wheel turns PDF pages: it scrolls a zoomed page, turns at its top or bottom, and turns a page per notch at Fit.",
+    ],
+  },
+  {
     version: "0.105.1",
     date: "2026-10-08",
     pr: 243,
