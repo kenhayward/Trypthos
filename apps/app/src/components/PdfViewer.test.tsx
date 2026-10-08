@@ -33,6 +33,12 @@ const SLOW = {
   name: "Notes/slow.pdf",
 };
 
+// A document the engine is still parsing: the head and the xref are on their way.
+const PARSING = {
+  source: "tp-media://workspace/Notes%2Fparsing.pdf",
+  name: "Notes/parsing.pdf",
+};
+
 /// A hand-written document standing in for a parsed one, carrying only what the viewer asks a page
 /// for: a count, and a page that knows its own size and can be drawn. The size is a US letter page
 /// in points, invented here the way the names are.
@@ -44,7 +50,7 @@ function pages(count: number): DocumentProxy {
         width: 612 * scale,
         height: 792 * scale,
       }),
-      render: (_: unknown) => null,
+      render: (_: unknown) => ({ promise: Promise.resolve(), cancel: () => {} }),
     }),
   };
 }
@@ -165,5 +171,16 @@ describe("PdfViewer", () => {
     seed(SLOW.source, arriving());
     render(<PdfViewer {...SLOW} view={{ kind: "fit" }} onView={() => {}} />);
     expect(screen.getByRole("status", { name: "Opening the document..." })).toBeDefined();
+  });
+
+  // Most of a cloud read is the parse itself - the head, then the xref, in ranges - not the page
+  // after it. A panel that only spoke once the parse was done would hold the empty area for most of
+  // the wait, so the line is asserted while the parse has not finished.
+  it("says it is opening while the document is still being parsed", () => {
+    parsed.set(PARSING.source, new Promise<never>(() => {}));
+    const { container } = render(<PdfViewer {...PARSING} view={{ kind: "fit" }} onView={() => {}} />);
+    expect(screen.getByRole("status", { name: "Opening the document..." })).toBeDefined();
+    // And no page bar: there is nothing to count to yet.
+    expect(container.querySelector('[data-testid="page-bar"]')).toBeNull();
   });
 });

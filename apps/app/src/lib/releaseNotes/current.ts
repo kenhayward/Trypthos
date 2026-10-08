@@ -6,7 +6,7 @@ import type { Release } from "./types";
 export const RECENT: Release[] = [
   {
     version: "0.105.1",
-    date: "2026-10-07",
+    date: "2026-10-08",
     pr: 243,
     headline: "A PDF page shows, and says when it is coming",
     summary:
@@ -14,6 +14,8 @@ export const RECENT: Release[] = [
     fixed: [
       "An opened PDF shows its page rather than an empty area where the page should be, at Fit, at 100% and at any zoom.",
       "A PDF that is still being read says it is opening, rather than holding a blank area for the whole of it.",
+      "A PDF opens fitted to the panel, as Fit says, rather than at 100%.",
+      "Zooming a PDF quickly no longer leaves a half-drawn page.",
     ],
   },
   {

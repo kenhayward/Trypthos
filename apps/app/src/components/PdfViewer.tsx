@@ -22,7 +22,15 @@ import WORKER_URL from "pdfjs-dist/build/pdf.worker.mjs?url";
 /// asks for. The one place the two meet is the cast in the parse step, below.
 interface PageProxy {
   getViewport: (at: { scale: number }) => Size;
-  render: (draw: { canvasContext: unknown; viewport: Size; transform?: unknown[] }) => unknown;
+  render: (draw: { canvasContext: unknown; viewport: Size; transform?: unknown[] }) => RenderTask;
+}
+
+/// A drawing in progress. The engine reports a drawing that failed through this promise, after the
+/// call has returned, and refuses a second drawing on a canvas whose first is still running - so a
+/// drawing is cancelled before the next one starts, and its promise is where failure is read.
+interface RenderTask {
+  promise: PromiseLike<unknown>;
+  cancel: () => void;
 }
 
 export interface DocumentProxy {
@@ -41,9 +49,32 @@ type Outcome = { document: DocumentProxy; error?: never } | { error: unknown; do
 /// reopened - must not fetch the head of the file and re-run the parser, and a PDF reader asks the
 /// transport for ranges rather than for one lump, so a second parse is a second round of them.
 ///
-/// It is exported so the surface's tests can seed it with a hand-written document: the engine is
-/// never reached from jsdom, and the real window is the proof of the engine.
-export const parsed = new Map<string, Outcome>();
+/// A parse still running is kept too, as the promise of its outcome: a second viewer of the same
+/// source waits on the first one's ranges rather than starting its own.
+///
+/// It is exported so the surface's tests can seed it with a hand-written document, or with a parse
+/// that has not finished: the engine is never reached from jsdom, and the real window is the proof
+/// of the engine.
+export const parsed = new Map<string, Outcome | PromiseLike<Outcome>>();
+
+/// The engine's parse of one source, as an outcome rather than a rejection: a failed parse is kept
+/// and answered like a finished one, so a file that is not a PDF is not re-read on every visit.
+async function parse(source: string): Promise<Outcome> {
+  try {
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = WORKER_URL;
+    const found = await pdfjs.getDocument({ url: source }).promise;
+    /// The engine's answer is wider than the boundary above, and the cast is the one place the
+    /// two meet: what the viewer reads is a viewport and a render, and nothing else of a page
+    /// proxy is asked for anywhere.
+    return { document: found as unknown as DocumentProxy };
+  } catch (error) {
+    return { error };
+  }
+}
+
+const isPending = (entry: Outcome | PromiseLike<Outcome>): entry is PromiseLike<Outcome> =>
+  typeof (entry as { then?: unknown }).then === "function";
 
 /// The padding around the page, on every side - the picture's, so a fitted page is not drawn
 /// against the panel's edge.
@@ -87,8 +118,11 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
   const bar = useRef<HTMLDivElement>(null);
   const thumb = useRef<HTMLDivElement>(null);
 
-  /// The parse: null while the document is still arriving, then the document or the reason not.
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  /// The parse, and the source it answers: null while the document is still arriving, then the
+  /// document or the reason not. An answer for another source is no answer for this one, so moving
+  /// to a new source reads as arriving without anything having to clear the old one.
+  const [answer, setAnswer] = useState<{ source: string; outcome: Outcome } | null>(null);
+  const outcome = answer?.source === source ? answer.outcome : null;
   /// The page on screen, 1-based.
   const [page, setPage] = useState(1);
   /// A page the engine could not give. Reported like a failed read rather than drawn as a blank
@@ -117,32 +151,28 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
   /// is laid out.
   const shown = useRef<PageProxy | null>(null);
 
-  /// Parse once per source. A source already in the cache is answered from it, synchronously -
-  /// which is also how a test's hand-written document arrives.
+  /// Parse once per source. A source already parsed is answered from the cache, synchronously -
+  /// which is also how a test's hand-written document arrives. One still parsing is waited on, and
+  /// an answer that lands after the viewer has moved to another source is dropped.
   useLayoutEffect(() => {
+    let current = true;
     const ask = async () => {
-      const cached = parsed.get(source);
-      if (cached !== undefined) {
-        setOutcome(cached);
-        return;
+      let entry = parsed.get(source);
+      if (entry === undefined) {
+        const running = parse(source).then((result) => {
+          parsed.set(source, result);
+          return result;
+        });
+        parsed.set(source, running);
+        entry = running;
       }
-      try {
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = WORKER_URL;
-        const found = await pdfjs.getDocument({ url: source }).promise;
-        /// The engine's answer is wider than the boundary above, and the cast is the one place the
-        /// two meet: what the viewer reads is a viewport and a render, and nothing else of a page
-        /// proxy is asked for anywhere.
-        const result: Outcome = { document: found as unknown as DocumentProxy };
-        parsed.set(source, result);
-        setOutcome(result);
-      } catch (error) {
-        const result: Outcome = { error };
-        parsed.set(source, result);
-        setOutcome(result);
-      }
+      const result = isPending(entry) ? await entry : entry;
+      if (current) setAnswer({ source, outcome: result });
     };
     void ask();
+    return () => {
+      current = false;
+    };
   }, [source]);
 
   /// The view, the fit, the page and the count as they are now, for listeners attached once. A
@@ -223,28 +253,41 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
   /// so a page is drawn at the pixels it is shown at rather than stretched to them: a page has
   /// pixels of its own exactly as a picture does, and a zoom asks for a new drawing, not a bigger
   /// copy of the old one.
+  ///
+  /// A zoom or a page turn while a drawing is running cancels it first: a wheel spin is many zooms
+  /// in a second, and the engine refuses a second drawing on a busy canvas. A cancelled drawing is
+  /// not a failure; any other is, whether it throws from the call or rejects after it.
   useLayoutEffect(() => {
-    const paint = () => {
-      const canvas = surface.current;
-      const proxy = shown.current;
-      if (canvas === null || proxy === null || natural === null) return;
-      const context = canvas.getContext("2d");
-      // An environment with no canvas at all is nothing to draw into and nothing to say: the page is
-      // either on screen or the line above has already said it is not.
-      if (context === null) return;
-      const ratio = Math.max(1, window.devicePixelRatio || 1);
-      try {
-        const at = proxy.getViewport({ scale: scale * ratio });
-        canvas.width = Math.round(at.width);
-        canvas.height = Math.round(at.height);
-        proxy.render({ canvasContext: context, viewport: at });
-      } catch {
-        // A page the engine cannot paint is the same line as a page it cannot give: a canvas that
-        // stays blank explains nothing.
-        setPageFailed(true);
-      }
+    const canvas = surface.current;
+    const proxy = shown.current;
+    if (canvas === null || proxy === null || natural === null) return;
+    const context = canvas.getContext("2d");
+    // An environment with no canvas at all is nothing to draw into and nothing to say: the page is
+    // either on screen or the line above has already said it is not.
+    if (context === null) return;
+    const ratio = Math.max(1, window.devicePixelRatio || 1);
+    let task: RenderTask | null = null;
+    let current = true;
+    // A page the engine cannot paint is the same line as a page it cannot give: a canvas that stays
+    // blank explains nothing.
+    const failedToDraw = (error: unknown) => {
+      const cancelled =
+        typeof error === "object" && error !== null && (error as { name?: string }).name === "RenderingCancelledException";
+      if (current && !cancelled) setPageFailed(true);
     };
-    paint();
+    try {
+      const at = proxy.getViewport({ scale: scale * ratio });
+      canvas.width = Math.round(at.width);
+      canvas.height = Math.round(at.height);
+      task = proxy.render({ canvasContext: context, viewport: at });
+      task.promise.then(undefined, failedToDraw);
+    } catch (error) {
+      failedToDraw(error);
+    }
+    return () => {
+      current = false;
+      task?.cancel();
+    };
   }, [natural, scale, doc, page]);
 
   useEffect(() => onFit?.(fit), [fit, onFit]);
@@ -423,7 +466,9 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
         <p data-testid="pdf-failure" className="text-sm text-ink-3">
           {needsPassword ? t("pdfViewer.needsPassword") : t("pdfViewer.couldNotOpen")}
         </p>
-      ) : doc === null ? null : (
+      ) : (
+        // On the page from the first frame, not once the document has parsed: Fit measures this box,
+        // and a box that arrived after the measuring ran would leave Fit at 100%.
         <div
           ref={scroller}
           data-testid="page-view"
@@ -444,9 +489,9 @@ export default function PdfViewer({ source, name, view, onView, onFit }: Props) 
                   : { width: `${natural.width * scale}px`, height: `${natural.height * scale}px` }),
               }}
             />
-            {/* While the page is still on its way - a Drive or OneDrive document spends seconds in
-                ranges before the engine has one - the panel says so rather than holding an empty
-                area, which is exactly what a page that failed looks like. */}
+            {/* While the document or its page is still on its way - a Drive or OneDrive document
+                spends seconds in ranges, most of them in the parse - the panel says so rather than
+                holding an empty area, which is exactly what a page that failed looks like. */}
             {natural === null ? <Spinner label={t("pdfViewer.opening")} /> : null}
           </div>
         </div>

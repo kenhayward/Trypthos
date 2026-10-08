@@ -34,7 +34,7 @@ function painted(): DocumentProxy {
         const context = draw.canvasContext as { fillStyle?: unknown; fillRect: (x: number, y: number, w: number, h: number) => void };
         context.fillStyle = "#ff0000";
         context.fillRect(0, 0, draw.viewport.width, draw.viewport.height);
-        return null;
+        return { promise: Promise.resolve(), cancel: () => {} };
       },
     }),
   };
@@ -51,6 +51,41 @@ function arriving(): DocumentProxy {
 
 function seed(source: string, document: DocumentProxy) {
   parsed.set(source, { document });
+}
+
+/// A parse that finishes when the test says so: the document arrives after the first frame, as it
+/// does from the engine, rather than synchronously from the cache.
+function parsing(source: string) {
+  let finish: (document: DocumentProxy) => void = () => {};
+  parsed.set(source, new Promise((resolve) => (finish = (document) => resolve({ document }))));
+  return (document: DocumentProxy) => finish(document);
+}
+
+/// A page whose every drawing is recorded, and finishes or fails only when the test says so - the
+/// shape of the engine's render task, which reports a failure through its promise rather than by
+/// throwing from the call.
+function recorded() {
+  const tasks: { cancelled: boolean; fail: (error: unknown) => void }[] = [];
+  const document: DocumentProxy = {
+    numPages: 1,
+    getPage: (_oneBased: number) => ({
+      getViewport: ({ scale }: { scale: number }) => ({ width: PAGE.width * scale, height: PAGE.height * scale }),
+      render: (_draw: unknown) => {
+        let fail: (error: unknown) => void = () => {};
+        const promise = new Promise<void>((_resolve, reject) => (fail = reject));
+        const task = { cancelled: false, fail };
+        tasks.push(task);
+        return {
+          promise,
+          cancel: () => {
+            task.cancelled = true;
+            fail({ name: "RenderingCancelledException" });
+          },
+        };
+      },
+    }),
+  };
+  return { document, tasks };
 }
 
 const surfaceOf = (container: HTMLElement) => {
@@ -114,5 +149,54 @@ describe("A PDF page, painted in a real browser", () => {
     // painted, so the reader is not looking at a page from a document that has not arrived.
     const canvas = document.querySelector("canvas");
     if (canvas !== null) expect(canvas.getAttribute("width")).toBeNull();
+  });
+
+  // The engine parses after the first frame, never during it. Fit measures the panel it fits into,
+  // and a panel that only appeared once the parse was done was never measured - so every real
+  // document opened at 100% while the button said Fit. The panel here is smaller than the page in
+  // both directions, so Fit and 100% cannot be the same size.
+  it("fits a document that arrives after the first frame to the panel it is in", async () => {
+    const source = "tp-media://workspace/Notes%2Flater.pdf";
+    const arrive = parsing(source);
+    const { container } = render(
+      <div style={{ width: "400px", height: "300px" }}>
+        <PdfViewer source={source} name="Notes/later.pdf" view={{ kind: "fit" }} onView={() => {}} />
+      </div>,
+    );
+    arrive(painted());
+
+    const canvas = surfaceOf(container);
+    const view = container.querySelector('[data-testid="page-view"]') as HTMLElement;
+    const fit = Math.min(1, (view.clientWidth - 32) / PAGE.width, (view.clientHeight - 32) / PAGE.height);
+    expect(fit).toBeLessThan(1);
+    await waitFor(() => expect(parseFloat(canvas.style.width)).toBeCloseTo(PAGE.width * fit, 1));
+  });
+
+  // A zoom asks for a new drawing while the last one may still be running, and the engine refuses a
+  // second drawing on a busy canvas - through the drawing's own promise, after the call returned. So
+  // the drawing in flight is cancelled before the next starts, and its cancellation is not a failure.
+  it("cancels a drawing still running when the zoom changes, and does not call that a failure", async () => {
+    const { document: doc, tasks } = recorded();
+    seed(DOC.source, doc);
+    const { rerender } = render(<PdfViewer {...DOC} view={{ kind: "scale", scale: 1 }} onView={() => {}} />);
+    await waitFor(() => expect(tasks).toHaveLength(1));
+
+    rerender(<PdfViewer {...DOC} view={{ kind: "scale", scale: 2 }} onView={() => {}} />);
+    await waitFor(() => expect(tasks).toHaveLength(2));
+    expect(tasks[0]?.cancelled).toBe(true);
+    // A turn for the cancelled promise to settle, then the page is still the page.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText(/could not be opened/i)).toBeNull();
+  });
+
+  // A drawing that fails after the call returned is still a page that is not showing, and the panel
+  // says so rather than leaving the canvas blank.
+  it("says the page could not be shown when a drawing fails after it started", async () => {
+    const { document: doc, tasks } = recorded();
+    seed(DOC.source, doc);
+    render(<PdfViewer {...DOC} view={{ kind: "scale", scale: 1 }} onView={() => {}} />);
+    await waitFor(() => expect(tasks).toHaveLength(1));
+    tasks[0]?.fail(new Error("The page could not be drawn."));
+    await waitFor(() => expect(screen.getByText(/could not be opened/i)).toBeDefined());
   });
 });
