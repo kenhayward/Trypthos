@@ -14,10 +14,10 @@
   "dependencies": {
     "@trypthos/domain": "*",
     "electron-updater": "^6.8.9",
-    "ignore": "7.0.10"
+    "ignore": "7.0.12"
   },
   "devDependencies": {
-    "electron": "44.4.5",
+    "electron": "44.7.0",
     "electron-builder": "^26.15.3",
     "sharp": "^0.35.5"
   }
